@@ -4,6 +4,7 @@ const debug = @import("../../domain/request_debugger.zig");
 const port = @import("../../ports/request_replay.zig");
 const request = @import("bedrock_request.zig");
 const strict = @import("../../domain/strict_json.zig");
+const envelope = @import("../../domain/model_envelope.zig");
 const contracts = @import("../../domain/llm_provider_contracts.zig");
 pub const Authorization = struct {
     context: *port.Context,
@@ -115,25 +116,27 @@ pub const Adapter = struct {
         }
         result.extraction = .valid;
         result.model_text = try a.dupe(u8, decoded.output.text);
-        var parsed = strict.parse(a, decoded.output.text, .{ .maximum_depth = @import("../../domain/model_result_schema.zig").max_json_depth }, false, null) catch {
+        var document = envelope.parseContent(a, decoded.output.text, null) catch |err| {
+            if (err == error.OutOfMemory) return error.OutOfMemory;
             result.json = .invalid;
             result.reason = "Invalid JSON";
             return result;
         };
-        defer parsed.deinit();
-        result.parsed = strict.decode(std.json.Value, a, decoded.output.text, .{ .maximum_depth = @import("../../domain/model_result_schema.zig").max_json_depth }) catch return error.InvalidReplay;
+        defer document.deinit();
+        result.normalization = document.normalization;
+        result.parsed = strict.decode(std.json.Value, a, document.content, .{ .maximum_depth = @import("../../domain/model_result_schema.zig").max_json_depth }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReplay;
         result.json = .valid;
         const schema = self.compiler.compileSelected(a, description.schema) catch {
             result.reason = "Captured schema is invalid";
             return result;
         };
-        if (@import("../../domain/model_payload_schema.zig").validateValue(@import("../../domain/model_envelope.zig").value(&parsed.value), schema.root())) |diagnostic| {
+        if (@import("../../domain/model_payload_schema.zig").validateValue(envelope.value(&document.parsed.value), schema.root())) |diagnostic| {
             result.schema = .invalid;
             const detail = try diagnostic.describe(a);
             result.path = detail.path;
             result.reason = @tagName(detail.reason);
             result.expected = @tagName(diagnostic.expected.*);
-            var actual = @import("../../domain/model_envelope.zig").value(&parsed.value);
+            var actual = envelope.value(&document.parsed.value);
             var valid = true;
             for (diagnostic.segments[0..diagnostic.length]) |segment| {
                 actual = switch (segment) {

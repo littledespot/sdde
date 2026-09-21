@@ -77,7 +77,7 @@ pub const Table = struct {
             .operation_id = facts.operation_id,
             .registry_entry = facts.provider_binding.registry_entry,
             .binding_id = record.binding_id,
-            .response_mode = facts.provider_binding.response_mode,
+            .response_mode = facts.provider_binding.registry_entry.responseMode(),
             .controls = facts.provider_binding.controls,
             .input_id = record.model_visible_input_id,
             .deadline = facts.deadline_monotonic_ms,
@@ -209,7 +209,7 @@ pub const Table = struct {
 
 fn matches(entry: *const Entry, provider_binding: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, deadline: u64) bool {
     return entry.registry_entry == provider_binding.registry_entry and
-        entry.response_mode == provider_binding.response_mode and
+        entry.response_mode == provider_binding.registry_entry.responseMode() and
         std.meta.eql(entry.controls, provider_binding.controls) and
         request.matchesBinding(provider_binding.*) and
         entry.binding_id.eql(provider_binding.bindingId()) and entry.binding_id.eql(request.binding_id) and

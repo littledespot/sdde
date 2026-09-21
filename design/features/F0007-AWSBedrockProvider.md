@@ -48,11 +48,17 @@ entries, never an absent entry. No model or region is a runtime default.
     "provider": "aws-bedrock",
     "models": [{
       "model": "openai.gpt-oss-20b-1:0",
+      "json": true,
       "config": {"region": "ap-southeast-2"}
     }]
   }]
 }
 ```
+
+`json: true` uses the existing `outputConfig.textFormat` schema projection for
+Converse ([AWS structured-output contract](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)).
+`false` sends complete schema guidance without that native output constraint.
+Neither changes engine validation or permits fallback after provider rejection.
 
 The initial registered contracts are:
 

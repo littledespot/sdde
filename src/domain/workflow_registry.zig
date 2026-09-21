@@ -240,6 +240,7 @@ fn cloneGraph(allocator: std.mem.Allocator, source: compilation.CompiledWorkflow
         destination.id.bytes = try allocator.dupe(u8, step.id.bytes);
         destination.operation_id.bytes = try allocator.dupe(u8, step.operation_id.bytes);
         destination.parameters = try cloneParameters(allocator, step.parameters);
+        if (step.model != null) destination.model = @import("workflow_model.zig").resolve(destination.parameters) orelse return invalid();
         destination.source_chain = try @import("workflow_source.zig").cloneChain(allocator, step.source_chain);
         destination.requires = try allocator.dupe(pipeline.DataKey, step.requires);
         destination.optional = try allocator.dupe(pipeline.DataKey, step.optional);

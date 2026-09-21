@@ -46,7 +46,12 @@ exists.
 
 - The two model configuration sources have distinct authority.
 - The `.sddproviders.json` document at `paths.providers` is the bounded catalogue of configured
-  provider/model instances.
+  provider/model instances. Every model requires `json: boolean` alongside `model`
+  and `config`: `true` selects native JSON-schema output; `false` selects prompt-only
+  schema guidance. This is a selection, not a capability claim; unsupported native
+  output rejects the whole catalogue before provider I/O. Missing/non-boolean values
+  reject. Both maintained catalogues enable it. The captured setting is immutable
+  for the invocation; corrections and repairs retain it.
 - The `models.slots` map in `.sddtoolkit.json` selects the models allowed for this repository:
   every slot's exact case-sensitive `(provider, model)` tuple must resolve to exactly one entry
   in the completely validated provider catalogue.

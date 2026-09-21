@@ -1,0 +1,1 @@
+{"metrics":{"latencyMs":400},"output":{"message":{"content":[{"reasoningContent":{"reasoningText":{"text":"Need present with value \"orchard\"."}}},{"text":"{\"{ \"kind\":\"present\",\"value\":\"orchard\"}"}],"role":"assistant"}},"stopReason":"end_turn","usage":{"inputTokens":175,"outputTokens":30,"serverToolUsage":{},"totalTokens":205}}

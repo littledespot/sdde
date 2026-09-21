@@ -55,7 +55,7 @@ const yaml =
     \\  initialize: { use: build-initial-model-request-identity-ledger, on: { ok: origin, failed: end.failed } }
     \\  origin:
     \\    use: assign-model-request-id
-    \\    with: { slot: selected, response-mode: prompt-only, prompt: prompt, result-schema: result, input: input }
+    \\    with: { slot: selected, prompt: prompt, result-schema: result, input: input }
     \\    on: { ok: validate, failed: end.failed }
     \\  validate: { use: validate-model-request-binding, on: { ok: build, failed: end.failed } }
     \\  build: { use: build-model-request, on: { ok: observe, failed: end.failed } }
@@ -186,7 +186,7 @@ test "failed consolidated selection publishes neither a ledger successor nor par
 test "native domain packets traverse generic fake provider execution without resource or request substitution" {
     const packets = @import("domain/model_input_packet.zig");
     const candidate_handoff = @import("application/model_candidate_handoff.zig");
-    for ([_][]const u8{ "{\"answer\":\"Hello, World!\"}", "{\"answer\":\"Loan renewed.\"}", "{}" }) |body| {
+    for ([_][]const u8{ "{\"answer\":\"Hello, World!\"}", "{\"answer\":\"Loan renewed.\"}", "{\"{\"answer\":\"Orchard inspected.\"}", "{}" }) |body| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
@@ -208,7 +208,9 @@ test "native domain packets traverse generic fake provider execution without res
         try std.testing.expectEqualStrings(packet.body(), request.prepared().?.content[1].user);
         const view: @import("domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
         if (expected == .ok) {
-            try std.testing.expectEqualStrings(body, (try candidate_handoff.read(&view)).body);
+            const expected_body = if (std.mem.startsWith(u8, body, "{\"{")) body[2..] else body;
+            try std.testing.expectEqualStrings(expected_body, (try candidate_handoff.read(&view)).body);
+            try std.testing.expectEqualStrings(body, (try envelopeResult(&runner)).outcome().decoded.association().result().complete.content());
         } else {
             try std.testing.expectError(error.OperationExecutionFailed, candidate_handoff.read(&view));
         }
@@ -271,9 +273,8 @@ test "compiler rejects missing preparation dependencies and consumer rebinding" 
         .{ "slot: selected, ", "" },
         .{ "prompt: prompt, ", "" },
         .{ "result-schema: result, ", "" },
-        .{ "response-mode: prompt-only, ", "" },
         .{ "slot: selected", "slot: 7" },
-        .{ "response-mode: prompt-only", "response-mode: unsupported" },
+        .{ "slot: selected", "slot: selected, response-mode: native-schema" },
         .{ "prompt: prompt, result-schema: result", "prompt: result, result-schema: result" },
         .{ "result-schema: result", "result-schema: absent" },
         .{ "use: build-model-request,", "use: build-model-request, with: {slot: selected}," },
@@ -403,7 +404,7 @@ test "consumer contracts cannot replace retained resources controls or retired s
     const descriptors = [_]@import("domain/workflow_operation.zig").ParameterDescriptor{
         .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
         .{ .id = "prompt", .kind = .resource, .resource_kind = .prompt, .required = true, .workflow_definition_safe = true },
-        .{ .id = "response-mode", .kind = .enumeration, .allowed_values = &.{"prompt-only"}, .required = true, .workflow_definition_safe = true },
+        .{ .id = "response-mode", .kind = .enumeration, .allowed_values = &.{"native-schema"}, .required = true, .workflow_definition_safe = true },
         .{ .id = "temperature", .kind = .integer, .required = false, .workflow_definition_safe = true },
         .{ .id = "input-bytes", .kind = .integer, .required = false, .workflow_definition_safe = true },
         .{ .id = "output-bytes", .kind = .integer, .required = false, .workflow_definition_safe = true },
@@ -3987,7 +3988,7 @@ test "protocol retry budget overshoot charges the response before decoding and b
 }
 
 test "corrected protocol responses pass schema validation before request closure" {
-    for ([_]bool{ false, true }) |consolidated| {
+    for ([_]bool{ false, true }) |consolidated| for ([_]bool{ false, true }) |normalize| {
         const result_schema = "{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"maxItems\":3,\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"maxLength\":40},\"text\":{\"type\":\"string\",\"maxLength\":40}},\"required\":[\"name\",\"text\"],\"additionalProperties\":false}}},\"required\":[\"items\"],\"additionalProperties\":false}";
         const corrected = "{\"items\":[{\"name\":\"first\",\"text\":\"one\"},{\"text\":\"two\",\"name\":\"second\"},{\"name\":\"third\",\"text\":\"three\"}]}";
         var fixture: Fixture = undefined;
@@ -4004,7 +4005,7 @@ test "corrected protocol responses pass schema validation before request closure
         for ([_][]const u8{ "{}", corrected }, 0..) |body, index| {
             try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
             try prepareProtocolAttempt(&runner, true);
-            fake.invocation_plan.complete.content = body;
+            fake.invocation_plan.complete.content = if (normalize and index != 0) try std.fmt.allocPrint(fixture.arena.allocator(), "{{\"{s}", .{body}) else body;
             for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step|
                 try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
             if (!consolidated) try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "decode" }).outcome);
@@ -4016,7 +4017,8 @@ test "corrected protocol responses pass schema validation before request closure
             } else {
                 try std.testing.expectEqual(.ok, validated.outcome);
                 const accepted = (try payloadResult(&runner)).outcome().valid.candidate();
-                try std.testing.expectEqualStrings(corrected, accepted.association().result().complete.content());
+                try std.testing.expectEqualStrings(fake.invocation_plan.complete.content, accepted.association().result().complete.content());
+                try std.testing.expectEqual(@as(@TypeOf(accepted.normalization()), if (normalize) .removed_leading_brace_quote else .none), accepted.normalization());
                 try std.testing.expect(accepted.association().request() == (try currentRequest(&runner)).prepared().?);
                 for ([_][]const u8{ "close-request", "observe" }) |step|
                     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
@@ -4025,7 +4027,7 @@ test "corrected protocol responses pass schema validation before request closure
         try std.testing.expectEqual(@as(usize, 3), fake.effect_count);
         try std.testing.expectEqual(@as(u128, 21), runner.tokenLedger().committed());
         try std.testing.expectEqual(.accepted, (try requestLedger(&runner)).record((try currentRequest(&runner)).id()).?.terminal_reason.?);
-    }
+    };
 }
 
 test "YAML request closure accepts only the schema-valid candidate and preserves content rejection" {
@@ -4824,6 +4826,89 @@ test "completion YAML rejects missing observations and outcome delivery or selec
     }
 }
 
+test "runner logs normalization once with call provenance and stops on log failure" {
+    const telemetry = @import("domain/telemetry.zig");
+    const Spy = struct {
+        count: usize = 0,
+        fail: bool,
+        invalid: bool = false,
+        fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            _ = @import("domain/log_event_registry.zig").validateFact(fact.fact) catch {
+                self.invalid = true;
+                return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+            };
+            if (fact.fact.event_type == .model_response_normalized) {
+                self.count += 1;
+                if (fact.fact.correlation_id == null or fact.fact.attempt != 1 or
+                    !std.mem.eql(u8, fact.fact.fields.diagnostic_code.?.bytes, "REMOVED_LEADING_BRACE_QUOTE")) self.invalid = true;
+                if (self.fail) return .{ .blocked = .LOG_FLUSH_FAILURE };
+            }
+            return .dropped;
+        }
+    };
+    for ([_]bool{ false, true }) |consolidated| for ([_]bool{ false, true }) |fail| for ([_][]const u8{ "{\"{\"answer\":\"valid\"}", "{\"{\"answer\":42}" }) |body| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try responseAdmissionYaml(&fixture, try payloadYaml(&fixture), consolidated));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        // Supply the already activated feature fact; no filesystem side effects.
+        const directory_schema = @import("application/feature_logging_workflow.zig").directory;
+        runner.envelope.slots[@intFromEnum(directory_schema.key)] = try @import("application/pipeline_values.zig").create(std.testing.allocator, directory_schema, @import("domain/feature_directory.zig").Directory, .{
+            .selector = .{ .feature_id = .{ .bytes = "selected" }, .project_relative_path = "specs/selected" },
+            .root_observation = .absent,
+            .observation = .absent,
+        });
+        var spy: Spy = .{ .fail = fail };
+        runner.barrier = .{ .context = &spy, .process_fn = Spy.process };
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fake.invocation_plan.complete.content = body;
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        const result = harness.result();
+        if (fail) {
+            try std.testing.expectEqual(.LOG_FLUSH_FAILURE, result.execution_rejected.logging);
+            try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+        } else try std.testing.expectEqual(@as(workflow.OutcomeTag, if (std.mem.indexOf(u8, body, "42") != null) .invalid else .ok), result.execution);
+        try std.testing.expect(!spy.invalid);
+        try std.testing.expectEqual(@as(usize, 1), spy.count);
+        try std.testing.expectEqualStrings(body, (try envelopeResult(&runner)).outcome().decoded.association().result().complete.content());
+        try expectResponseAccounting(&runner, &fake, 7);
+    };
+}
+
+test "normalization never bypasses schema rejection or the protocol retry allowance" {
+    for ([_]bool{ false, true }) |consolidated| for ([_][]const u8{
+        "{\"{ \"answer\":42}",
+        "{\"{ \"answer\":\"invalid remainder\",}",
+    }) |body| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try responseAdmissionYaml(&fixture, try protocolRetryYaml(&fixture), consolidated));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fake.invocation_plan.complete.content = body;
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        const exhausted = harness.result().execution_rejected.retry_limit;
+        try std.testing.expectEqual(@as(u32, 2), exhausted.limit.value);
+        try std.testing.expectEqual(@as(u64, 3), exhausted.completed_executions);
+        try std.testing.expectEqual(@as(usize, 3), fake.effect_count);
+        try std.testing.expectEqual(@as(u128, 21), runner.tokenLedger().committed());
+        try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+        // Preparing the last correction retires admission evidence; its retained
+        // original response remains available through the existing request owner.
+        const correction = (try currentRequest(&runner)).prepared().?;
+        var evidence = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, correction.content[4].evidence, .{});
+        defer evidence.deinit();
+        try std.testing.expectEqualStrings(body, evidence.value.object.get("rejected_response").?.string);
+    };
+}
+
 test "YAML payload validation uses each exact compiled schema and retains the same candidate" {
     for ([_]bool{ false, true }) |consolidated| {
         const variants =
@@ -4832,6 +4917,9 @@ test "YAML payload validation uses each exact compiled schema and retains the sa
         const Case = struct { schema: []const u8 = schema_bytes, body: []const u8, rejection: ?payload_validation.Rejection = null };
         for ([_]Case{
             .{ .body = "{\"answer\":\"é😀\"}" },
+            .{ .body = "{\"{\"answer\":\"é😀\"}" },
+            .{ .body = "{\"{\"answer\":42}", .rejection = .type_mismatch },
+            .{ .body = "{\"{\"answer\":\"ok\",\"approved\":true}", .rejection = .unknown_property },
             .{ .body = "{\"answer\":\"" ++ "x" ** 20_000 ++ "\"}" },
             .{ .body = "{}", .rejection = .missing_required_property },
             .{ .body = "{\"answer\":42}", .rejection = .type_mismatch },
@@ -4878,7 +4966,7 @@ test "YAML payload validation uses each exact compiled schema and retains the sa
 
 test "YAML payload validation preserves protocol provider cancellation and observation rejection" {
     for ([_]bool{ false, true }) |consolidated| {
-        for ([_][]const u8{ "{", "[]", "{\"answer\":1,\"answer\":2}", "{} trailing" }) |body| {
+        for ([_][]const u8{ "{", "[]", "{\"answer\":1,\"answer\":2}", "{\"{\"answer\":1,\"answer\":2}", "{\"{\"answer\":1} trailing", "{} trailing" }) |body| {
             try checkUnvalidatedPayload(.{ .complete = .{ .content = body, .input_tokens = 5, .output_tokens = 2 } }, false, consolidated);
         }
         for (std.enums.values(provider.ProviderNonCandidateStopReason)) |reason| {
@@ -6337,7 +6425,7 @@ const composition_yaml =
     \\  part:
     \\    start: prepare
     \\    steps:
-    \\      prepare: {use: prepare-model-request, with: {slot: selected, response-mode: prompt-only, prompt: prompt, protocol-prompt: prompt, composition-part: {param: part}}, on: {ok: account, failed: end.failed}}
+    \\      prepare: {use: prepare-model-request, with: {slot: selected, prompt: prompt, protocol-prompt: prompt, composition-part: {param: part}}, on: {ok: account, failed: end.failed}}
     \\      account: {use: advance-model-attempt-accounting, with: {retry-limit: 2}, on: {ok: operation, failed: end.failed}}
     \\      operation: {use: assign-provider-operation, with: {kind: inference}, on: {ok: authorize, failed: end.failed}}
     \\      authorize: {use: prepare-provider-operation-authorization, with: {timeout-ms: 1000}, on: {ok: phase, failed: end.failed, cancelled: end.cancelled}}
@@ -6558,13 +6646,13 @@ const Fixture = struct {
     registry: operations.Registry,
 
     fn init(self: *Fixture, allocator: std.mem.Allocator) !void {
-        return self.initWithProvider(allocator, null);
+        return self.initWithProvider(allocator, null, false);
     }
 
-    fn initWithProvider(self: *Fixture, allocator: std.mem.Allocator, production: ?usize) !void {
+    fn initWithProvider(self: *Fixture, allocator: std.mem.Allocator, production: ?usize, json: bool) !void {
         self.arena = .init(allocator);
         errdefer self.arena.deinit();
-        self.services = try providerServices(allocator, production, "selected");
+        self.services = try providerServices(allocator, production, "selected", json);
         errdefer self.services.deinit();
         self.roots_owner = try rootOwner(allocator);
         self.native.init(allocator);
@@ -6627,13 +6715,13 @@ const Fixture = struct {
     }
 };
 
-pub fn providerServices(allocator: std.mem.Allocator, production: ?usize, slot: []const u8) !@import("application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
+pub fn providerServices(allocator: std.mem.Allocator, production: ?usize, slot: []const u8, json: bool) !@import("application/model_provider_bootstrap_services.zig").ModelProviderBootstrapServices {
     const selected: contracts.ProviderModelContract = if (production) |index| @import("composition/provider_model_contracts.zig").registry.entries[index] else .{ .provider = .{ .bytes = "test-provider" }, .model = .{ .bytes = "test-model" }, .implementation_id = .{ .ordinal = 1 }, .config_schema = .empty_object, .capabilities = @import("model_contract_test_fixture.zig").capabilities, .supported_reasoning_efforts = &.{} };
     const registered: contracts.Registry = .{ .entries = &.{selected} };
     var candidate = try registry.Candidate.init(allocator, 1);
     defer candidate.deinit();
     const contract = registered.entries[0];
-    candidate.entries[0] = .{ .provider = contract.provider, .model = contract.model, .implementation_id = contract.implementation_id, .config = if (production != null) .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0] } } else .empty_object, .capabilities = contract.capabilities, .supported_reasoning_efforts = contract.supported_reasoning_efforts };
+    candidate.entries[0] = .{ .provider = contract.provider, .model = contract.model, .implementation_id = contract.implementation_id, .json = json, .config = if (production != null) .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0] } } else .empty_object, .capabilities = contract.capabilities, .supported_reasoning_efforts = contract.supported_reasoning_efforts };
     const owner = try registry.createValidated(allocator, candidate, registered);
     errdefer registry.deinitOwner(owner);
     var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
@@ -6730,7 +6818,7 @@ test "production request capture failure records non-delivery and response captu
     const Case = struct { direction: ModelCaptureSink.prompt.PromptDirection, overshoot: bool = false };
     for ([_]Case{ .{ .direction = .request }, .{ .direction = .response }, .{ .direction = .response, .overshoot = true } }) |case| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, 0);
+        try fixture.initWithProvider(std.testing.allocator, 0, false);
         defer fixture.deinit();
         const graph = try fixture.compile(try invocationYaml(&fixture));
         var environment = try bedrockEnvironment(std.testing.allocator);
@@ -6782,7 +6870,7 @@ test "production request capture failure records non-delivery and response captu
 test "production count capture failure blocks inference without changing token accounting" {
     for ([_]ModelCaptureSink.prompt.PromptDirection{ .request, .response }) |direction| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, 1);
+        try fixture.initWithProvider(std.testing.allocator, 1, false);
         defer fixture.deinit();
         const graph = try fixture.compile(try countInferenceYaml(&fixture));
         var environment = try bedrockEnvironment(std.testing.allocator);
@@ -6813,7 +6901,7 @@ test "production count capture failure blocks inference without changing token a
 
 test "production capture attributes count and inference bodies to the existing request ledger" {
     var fixture: Fixture = undefined;
-    try fixture.initWithProvider(std.testing.allocator, 1);
+    try fixture.initWithProvider(std.testing.allocator, 1, false);
     defer fixture.deinit();
     const a = fixture.arena.allocator();
     const yaml_source = try std.mem.concat(a, u8, &.{ try countInferenceYaml(&fixture), "\n# " ++ "source snapshot " ** 1000 });
@@ -6905,7 +6993,7 @@ test "production capture attributes count and inference bodies to the existing r
 test "production Bedrock composition executes count inference validation and request closure from YAML" {
     for ([_]bool{ false, true }) |count_first| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, if (count_first) 1 else 0);
+        try fixture.initWithProvider(std.testing.allocator, if (count_first) 1 else 0, false);
         defer fixture.deinit();
         const graph = try fixture.compile(if (count_first) try countInferenceYaml(&fixture) else try requestCompletionYaml(&fixture));
         // A fresh invocation captures its own environment snapshot and ledger.
@@ -6940,7 +7028,7 @@ test "production Bedrock composition executes count inference validation and req
 
 test "production Bedrock YAML records budget overshoot and blocks another call" {
     var fixture: Fixture = undefined;
-    try fixture.initWithProvider(std.testing.allocator, 0);
+    try fixture.initWithProvider(std.testing.allocator, 0, false);
     defer fixture.deinit();
     const graph = try fixture.compile(try invocationYaml(&fixture));
     var environment = try bedrockEnvironment(std.testing.allocator);
@@ -6971,7 +7059,7 @@ test "production Bedrock YAML records budget overshoot and blocks another call" 
 
 test "production Bedrock missing credentials follow explicit pre-call termination without effects" {
     var fixture: Fixture = undefined;
-    try fixture.initWithProvider(std.testing.allocator, 0);
+    try fixture.initWithProvider(std.testing.allocator, 0, false);
     defer fixture.deinit();
     const graph = try fixture.compile(try requestTerminationYaml(&fixture, "inference"));
     var environment: std.process.Environ.Map = .init(std.testing.allocator);
@@ -7001,7 +7089,7 @@ const bedrock_complete_body = "{\"output\":{\"message\":{\"role\":\"assistant\",
 test "production missing-answer observation retains usage and can close without correction" {
     for ([_]bool{ false, true }) |overshoot| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, 0);
+        try fixture.initWithProvider(std.testing.allocator, 0, false);
         defer fixture.deinit();
         const graph = try fixture.compile(try requestCompletionYaml(&fixture));
         var environment = try bedrockEnvironment(std.testing.allocator);
@@ -7066,9 +7154,9 @@ test "missing answers share protocol allowance through mixed failure and success
         .{ .schema = schema_bytes, .valid = "{\"answer\":\"complete\"}" },
         .{ .schema = "{\"type\":\"object\",\"properties\":{\"ready\":{\"type\":\"boolean\"},\"names\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":20},\"maxItems\":3}},\"required\":[\"ready\",\"names\"],\"additionalProperties\":false}", .valid = "{\"ready\":true,\"names\":[\"first\",\"second\"]}" },
     };
-    for (shapes) |shape| for ([_]bool{ false, true }) |consolidated| for (0..3) |sequence| {
+    for ([_]bool{ false, true }) |json| for (shapes) |shape| for ([_]bool{ false, true }) |consolidated| for (0..3) |sequence| {
         var fixture: Fixture = undefined;
-        try fixture.initWithProvider(std.testing.allocator, 0);
+        try fixture.initWithProvider(std.testing.allocator, 0, json);
         defer fixture.deinit();
         const graph = try fixture.compileWithSchema(try responseAdmissionYaml(&fixture, try protocolRetryYaml(&fixture), consolidated), shape.schema);
         var environment = try bedrockEnvironment(std.testing.allocator);
@@ -7083,7 +7171,7 @@ test "missing answers share protocol allowance through mixed failure and success
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         try runtime.bind(&runner);
-        var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{};
+        var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .expected_json = json };
         runtime.provider.?.aws_bedrock.transport = wire.port();
         var original_id: ?*const identity.ModelRequestId = null;
         for (0..3) |attempt| {
@@ -7099,6 +7187,7 @@ test "missing answers share protocol allowance through mixed failure and success
             const request = try currentRequest(&runner);
             if (original_id == null) original_id = request.id();
             try std.testing.expect(request.id() == original_id.?);
+            try std.testing.expectEqual(json, request.prepared().?.response_guidance_mode == .native_schema);
             try std.testing.expectEqual(.zero, request.prepared().?.controls.temperature.?);
             try std.testing.expectEqualStrings(shape.schema, request.prepared().?.response_schema.bytes());
             try std.testing.expectEqual(@as(u32, @intCast(attempt + 1)), (try invokedOperation(&runner)).operation().id.model_attempt_ordinal.value);

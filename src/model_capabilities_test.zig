@@ -18,37 +18,19 @@ test "temperature policy requires zero exactly when the registered model support
     }
 }
 
-test "compiled model requirements select response mode without temperature authority" {
-    const resolved = model.resolve(&fixture.compiled_parameters).?;
-    try std.testing.expectEqual(.prompt_only, resolved.response_mode);
-    inline for (.{ @as(i64, 0), 1, 100, 1000 }) |temperature| {
-        const controlled = fixture.compiled_parameters ++ [_]@import("domain/workflow_compilation.zig").CompiledParameter{
-            .{ .id = .{ .bytes = "temperature" }, .value = .{ .integer = temperature } },
-        };
-        try std.testing.expect(model.resolve(&controlled) == null);
-    }
-}
-
-test "missing malformed and duplicate model controls cannot create requirements" {
+test "workflow requirements reject response mode overrides and duplicate parameters" {
     try std.testing.expect(model.resolve(&.{}) == null);
-    var malformed = fixture.compiled_parameters;
-    malformed[0].value = .{ .integer = 1 };
-    try std.testing.expect(model.resolve(&malformed) == null);
-    malformed[0].value = .{ .enumeration = "automatic" };
-    try std.testing.expect(model.resolve(&malformed) == null);
-    const duplicate = fixture.compiled_parameters ++ .{fixture.compiled_parameters[0]};
-    try std.testing.expect(model.resolve(&duplicate) == null);
-    inline for (.{ @as(i64, -1), 1001 }) |invalid| {
-        const values = fixture.compiled_parameters ++ [_]@import("domain/workflow_compilation.zig").CompiledParameter{
-            .{ .id = .{ .bytes = "temperature" }, .value = .{ .integer = invalid } },
-        };
-        try std.testing.expect(model.resolve(&values) == null);
-    }
-    const duplicate_control = fixture.compiled_parameters ++ [_]@import("domain/workflow_compilation.zig").CompiledParameter{
-        .{ .id = .{ .bytes = "temperature" }, .value = .{ .integer = 0 } },
-        .{ .id = .{ .bytes = "temperature" }, .value = .{ .integer = 1000 } },
+    const parameter = @import("domain/workflow_compilation.zig").CompiledParameter;
+    const slot: parameter = .{ .id = .{ .bytes = "slot" }, .value = .{ .model_slot = .{ .bytes = "selected" } } };
+    try std.testing.expectEqualStrings("selected", model.resolve(&.{slot}).?.slot.bytes);
+    const duplicate = [_]parameter{
+        .{ .id = .{ .bytes = "slot" }, .value = .{ .model_slot = .{ .bytes = "selected" } } },
+        .{ .id = .{ .bytes = "slot" }, .value = .{ .model_slot = .{ .bytes = "selected" } } },
     };
-    try std.testing.expect(model.resolve(&duplicate_control) == null);
+    try std.testing.expect(model.resolve(&duplicate) == null);
+    for ([_][]const u8{ "prompt-only", "native-schema", "automatic" }) |mode| {
+        try std.testing.expect(model.resolve(&.{ slot, .{ .id = .{ .bytes = "response-mode" }, .value = .{ .enumeration = mode } } }) == null);
+    }
 }
 
 test "request result selection keeps exactly one canonical schema or configured part" {
@@ -91,6 +73,7 @@ test "catalogue candidate cannot substitute compiled capability facts" {
         .model = provider_contract.model,
         .implementation_id = provider_contract.implementation_id,
         .config = .empty_object,
+        .json = false,
         .capabilities = fixture.capabilities,
         .supported_reasoning_efforts = &.{},
     };
@@ -107,27 +90,24 @@ test "model registration requires a typed slot but no capacity configuration" {
     var registry: operations.Registry = .{ .operations = &.{entry}, .policies = &.{}, .gates = &.{} };
     try std.testing.expect(registry.validate());
     try std.testing.expect(entry.contract.requiresModelBinding());
-    entry.contract.parameters = model.parameters[0..];
-    registry.operations = &.{entry};
-    try std.testing.expect(!registry.validate());
-    entry = model_operation;
-    entry.contract.parameters = model_operation.contract.parameters[0..1];
+    entry.contract.parameters = &.{};
     registry.operations = &.{entry};
     try std.testing.expect(!registry.validate());
 }
 
 test "registered model contracts cannot restore temperature or retired size parameters" {
-    inline for (.{ "temperature", "input-bytes", "output-bytes", "input-tokens", "output-tokens" }) |retired| {
+    inline for (.{ "response-mode", "temperature", "input-bytes", "output-bytes", "input-tokens", "output-tokens" }) |retired| {
         var entry = model_operation;
         const parameters = [_]operation.ParameterDescriptor{
             .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
-        } ++ model.parameters ++ [_]operation.ParameterDescriptor{
+        } ++ [_]operation.ParameterDescriptor{
             .{ .id = retired, .kind = .integer, .required = true, .workflow_definition_safe = true },
         };
         entry.contract.parameters = &parameters;
         const registry: operations.Registry = .{ .operations = &.{entry}, .policies = &.{}, .gates = &.{} };
         try std.testing.expect(!registry.validate());
-        const values = fixture.compiled_parameters ++ [_]@import("domain/workflow_compilation.zig").CompiledParameter{
+        const values = [_]@import("domain/workflow_compilation.zig").CompiledParameter{
+            .{ .id = .{ .bytes = "slot" }, .value = .{ .model_slot = .{ .bytes = "selected" } } },
             .{ .id = .{ .bytes = retired }, .value = .{ .integer = 1 } },
         };
         try std.testing.expect(model.resolve(&values) == null);
@@ -169,7 +149,7 @@ const model_operation: operations.Entry = .{
     .contract = .{
         .id = "test.generate",
         .kind = .step,
-        .parameters = &([_]operation.ParameterDescriptor{.{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true }} ++ model.parameters),
+        .parameters = &([_]operation.ParameterDescriptor{.{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true }}),
         .outcomes = &.{.ok},
         .side_effect = .none,
     },

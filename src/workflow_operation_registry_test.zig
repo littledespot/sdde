@@ -154,24 +154,6 @@ test "one registry rejects duplicate and structurally invalid operations" {
     invalid_model_registry.operations = &.{model_without_slot};
     try std.testing.expect(!invalid_model_registry.validate());
 
-    const hidden_slot: Entry = .{
-        .contract = .{
-            .id = "model.hidden-slot",
-            .kind = .step,
-            .parameters = &.{.{
-                .id = "slot",
-                .kind = .model_slot,
-                .required = true,
-                .workflow_definition_safe = true,
-            }},
-            .outcomes = &.{.ok},
-            .side_effect = .none,
-        },
-        .binding = bindings.bind(void, null, fixture.unused),
-    };
-    invalid_model_registry.operations = &.{hidden_slot};
-    try std.testing.expect(!invalid_model_registry.validate());
-
     var zero_budget = valid;
     zero_budget.policies = &.{.{
         .id = "core.safe@1",
@@ -285,7 +267,7 @@ test "repair roles keep declared guards native and cannot acquire accounting eff
 test "pure model-binding contracts derive authority only from the typed slot" {
     const parameters = [_]operation.ParameterDescriptor{
         .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
-    } ++ @import("domain/workflow_model.zig").parameters;
+    };
     const entry: Entry = .{
         .contract = .{
             .id = "test.prepare",
@@ -312,7 +294,10 @@ test "pure model-binding contracts derive authority only from the typed slot" {
                 descriptors[0].required = false;
                 changed.contract.parameters = descriptors[0..parameters.len];
             },
-            2 => changed.contract.parameters = parameters[0..1],
+            2 => {
+                descriptors[1] = .{ .id = "response-mode", .kind = .enumeration, .required = true, .workflow_definition_safe = true, .allowed_values = &.{"native-schema"} };
+                changed.contract.parameters = &descriptors;
+            },
             3 => {
                 descriptors[0].allowed_values = &.{"hidden-slot"};
                 changed.contract.parameters = descriptors[0..parameters.len];

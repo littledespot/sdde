@@ -591,6 +591,8 @@ test "model-binding requirement is immutable data not a provider-call capability
     const operation = @import("domain/workflow_operation.zig");
     const registry = @import("ports/workflow_operation_registry.zig");
     try std.testing.expect(@FieldType(compilation.CompiledStep, "model") == ?@import("domain/workflow_model.zig").Requirements);
+    try std.testing.expect(@FieldType(@import("domain/workflow_model.zig").Requirements, "slot") == @import("domain/llm_provider_identity.zig").ModelSlotId);
+    try std.testing.expect(!@hasField(@import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding, "response_mode"));
     try std.testing.expect(@hasDecl(operation.Contract, "requiresModelBinding"));
     try std.testing.expect(!@hasField(operation.Contract, "model_capacity"));
     try std.testing.expect(@FieldType(registry.StepInput, "model_binding") == ?*const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding);

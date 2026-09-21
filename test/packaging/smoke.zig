@@ -645,10 +645,10 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         const provider_bytes = @embedFile("../../design/examples/.sddproviders.json");
         const catalogue = if (invalid_region) std.mem.replaceOwned(u8, b.allocator, provider_bytes, "ap-southeast-2", "us-west-2") catch @panic("allocate invalid deployment") else provider_bytes;
         _ = directory.add("config/.sddproviders.json", catalogue);
-        _ = directory.add(".sddtoolkit/workflows/provider-request.workflow.yaml", @embedFile("../../design/examples/provider-request.workflow.yaml"));
-        _ = directory.add(".sddtoolkit/workflows/provider-request.prompt.md", @embedFile("../../design/examples/provider-request.prompt.md"));
-        _ = directory.add(".sddtoolkit/workflows/provider-request.input.txt", @embedFile("../../design/examples/provider-request.input.txt"));
-        _ = directory.add(".sddtoolkit/workflows/provider-request.schema.json", @embedFile("../../design/examples/provider-request.schema.json"));
+        _ = directory.add(".sddtoolkit/workflows/provider-request.workflow.yaml", @embedFile("fixtures/provider-request/provider-request.workflow.yaml"));
+        _ = directory.add(".sddtoolkit/workflows/provider-request.prompt.md", @embedFile("fixtures/provider-request/provider-request.prompt.md"));
+        _ = directory.add(".sddtoolkit/workflows/provider-request.input.txt", @embedFile("fixtures/provider-request/provider-request.input.txt"));
+        _ = directory.add(".sddtoolkit/workflows/provider-request.schema.json", @embedFile("fixtures/provider-request/provider-request.schema.json"));
         const check = std.Build.Step.Run.create(b, "run packaged external Bedrock catalogue without credentials or network");
         check.addFileArg(packaged);
         check.addArg("provider-request");

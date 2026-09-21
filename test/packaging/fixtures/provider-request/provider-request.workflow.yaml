@@ -10,7 +10,7 @@ steps:
   initialize: { use: build-initial-model-request-identity-ledger, on: { ok: assign, failed: end.failed } }
   assign:
     use: assign-model-request-id
-    with: { slot: spec_generation, response-mode: prompt-only, prompt: prompt, input: input, result-schema: result }
+    with: { slot: spec_generation, prompt: prompt, input: input, result-schema: result }
     on: { ok: validate, failed: end.failed }
   validate: { use: validate-model-request-binding, on: { ok: build, failed: end.failed } }
   build: { use: build-model-request, on: { ok: account, failed: end.failed } }

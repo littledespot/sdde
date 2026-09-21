@@ -25,7 +25,7 @@ pub fn build(allocator: std.mem.Allocator, source: Source, content: []const prov
         .model_visible_input_id = source.model_visible_input_id,
         .content = content,
         .response_schema = try source.resultSchema(),
-        .response_guidance_mode = selected.response_mode,
+        .response_guidance_mode = selected.registry_entry.responseMode(),
         .controls = selected.controls,
     };
     try validateRequest(source, &request);

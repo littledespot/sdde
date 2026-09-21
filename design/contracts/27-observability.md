@@ -80,6 +80,12 @@ protocol/schema admission and current native rejection evidence. `retry.admitted
 and `retry.exhausted` use existing runner counts; `repair.*` observes accepted
 native repair transitions and does not count or authorize them. Project only each
 operation's newly produced diagnostic evidence, avoiding stale-failure attribution.
+The [§22.6 normalization](22-repair.md#226-unparseable-output) emits one warning
+`model.response_normalized`, diagnostic `REMOVED_LEADING_BRACE_QUOTE`: the first
+two bytes (`{"`) were removed after strict syntax failure. Correlation identifies
+the original request/attempt, whose raw response stays intact. Emit this when
+decoding succeeds even if subsequent schema validation fails; a separate schema
+event retains that failure. Logging rejection prevents continuation.
 
 Useful metrics:
 

@@ -156,7 +156,7 @@ fn compileOne(
     const model_parameters = [_]workflow.ParameterBinding{.{
         .id = workflow.WorkflowParameterId.parse("slot").?,
         .value = .{ .string = "implementation" },
-    }} ++ @import("model_contract_test_fixture.zig").declared_parameters;
+    }};
     steps[0] = .{
         .id = workflow.WorkflowStepId.parse("run").?,
         .operation_id = workflow.OperationId.parse(contract_id).?,
@@ -368,7 +368,7 @@ const operation_registry: operations.Registry = .{
                     .kind = .model_slot,
                     .required = true,
                     .workflow_definition_safe = true,
-                }} ++ @import("domain/workflow_model.zig").parameters),
+                }}),
                 .outcomes = &.{.ok},
                 .side_effect = .none,
             },
@@ -424,7 +424,7 @@ const compiled_provider_contracts: contracts.Registry = .{ .entries = &.{.{
 }} };
 
 const provider_document =
-    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{}}]}]}
+    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{}}]}]}
 ;
 
 const unsupported_provider_document =

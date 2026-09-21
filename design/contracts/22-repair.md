@@ -152,6 +152,28 @@ The engine never trusts a model field such as `valid: true`.
 
 ### 22.6 Unparseable output
 
+**Approved model-response normalization (21 September 2026):** first parse the
+original complete response strictly. Only after a `SyntaxError`, if its first
+three bytes are exactly `{"{`, the shared model-envelope decoder may remove the
+first two bytes (`{"`) once and strictly parse the entire remainder. Accept the
+normalization only when that remainder is one complete JSON object. Valid input
+is never altered; no other prefix, fence, suffix, duplicate key or malformed
+remainder is salvaged. Schema and domain validation remain mandatory.
+
+The candidate retains a typed `removed_leading_brace_quote` fact and its original
+invocation evidence. The runner logs `model.response_normalized` at warning level
+with that rule, node, request and attempt; logging failure remains terminal.
+Raw provider/text captures are unchanged. The shared domain handoff supplies the
+decoder-consumed bytes; composition continues to use its validated tree. Neither
+reinterprets raw malformed text or applies a second normalization.
+Debugger inspection reuses this decoder
+and displays the alteration separately from raw text. Rejected normalization
+retains the original diagnostic/bytes for existing bounded protocol correction.
+This exception changes neither provider-wire/configuration/persistence parsing
+nor request, retry, token or publication authority. It is a workaround for the
+observed Bedrock prefix, applied consistently to complete model responses without
+a provider/model/workflow branch; it does not establish a provider-side fix.
+
 For [configured response parts](../decisions/0016-configured-json-response-composition.md),
 the response/schema below is the complete assigned part. Corrections retain its
 request identity and current prerequisites; an unrelated admitted part remains

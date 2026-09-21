@@ -338,19 +338,20 @@ test "unknown operations and unguarded cycles reject the complete graph" {
     );
 }
 
-test "YAML rejects retired model size parameters missing modes and invalid controls" {
+test "YAML rejects retired model size parameters and response controls" {
     const substitutions = [_][2][]const u8{
-        .{ "response-mode: prompt-only", "response-mode: prompt-only, input-bytes: 4096" },
-        .{ "response-mode: prompt-only", "response-mode: prompt-only, output-bytes: 1024" },
-        .{ ", response-mode: prompt-only", "" },
-        .{ "response-mode: prompt-only", "response-mode: prompt-only, input-bytes: 0" },
-        .{ "response-mode: prompt-only", "response-mode: prompt-only, output-tokens: 200" },
-        .{ "response-mode: prompt-only", "response-mode: prompt-only, output-bytes: 4294967296" },
-        .{ "response-mode: prompt-only", "response-mode: prompt-only, input-tokens: 1000" },
-        .{ "response-mode: prompt-only", "response-mode: automatic" },
-        .{ "response-mode: prompt-only", "response-mode: prompt-only, temperature: 0" },
-        .{ "response-mode: prompt-only", "response-mode: prompt-only, temperature: 100" },
-        .{ "response-mode: prompt-only", "response-mode: prompt-only, temperature: 1001" },
+        .{ "slot: spec-generation", "slot: spec-generation, input-bytes: 4096" },
+        .{ "slot: spec-generation", "slot: spec-generation, output-bytes: 1024" },
+        .{ "slot: spec-generation", "slot: spec-generation, input-bytes: 0" },
+        .{ "slot: spec-generation", "slot: spec-generation, output-tokens: 200" },
+        .{ "slot: spec-generation", "slot: spec-generation, output-bytes: 4294967296" },
+        .{ "slot: spec-generation", "slot: spec-generation, input-tokens: 1000" },
+        .{ "slot: spec-generation", "slot: spec-generation, response-mode: prompt-only" },
+        .{ "slot: spec-generation", "slot: spec-generation, response-mode: native-schema" },
+        .{ "slot: spec-generation", "slot: spec-generation, response-mode: automatic" },
+        .{ "slot: spec-generation", "slot: spec-generation, temperature: 0" },
+        .{ "slot: spec-generation", "slot: spec-generation, temperature: 100" },
+        .{ "slot: spec-generation", "slot: spec-generation, temperature: 1001" },
     };
     for (substitutions) |replacement| {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -489,7 +490,7 @@ const resource_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2 }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
     \\  validate: { use: test.validate, on: { ok: generate } }
 ;
@@ -520,7 +521,7 @@ const wrong_parameter_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: two, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: two }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -536,7 +537,7 @@ const missing_retry_limit_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -552,7 +553,7 @@ const negative_retry_limit_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: -1, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: -1 }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -568,7 +569,7 @@ const excessive_retry_limit_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 4, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 4 }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
@@ -584,7 +585,7 @@ const missing_outcome_workflow =
     \\steps:
     \\  generate:
     \\    use: model.generate
-    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, response-mode: prompt-only }
+    \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2 }
     \\    on: { ok: end.ok, invalid: generate, failed: end.failed }
 ;
 
@@ -665,7 +666,7 @@ const operation_entries = [_]operation_registry.Entry{
                 .{ .id = "prompt", .kind = .resource, .required = true, .workflow_definition_safe = true, .resource_kind = .prompt },
                 .{ .id = "result-schema", .kind = .resource, .required = true, .workflow_definition_safe = true, .resource_kind = .result_schema },
                 .{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = 3 },
-            } ++ @import("domain/workflow_model.zig").parameters),
+            }),
             .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
             .side_effect = .none,
             .gates = &.{"model-ready@1"},
@@ -716,7 +717,7 @@ const reusable_workflow =
     \\    steps:
     \\      generate:
     \\        use: model.generate
-    \\        with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: {param: limit}, response-mode: prompt-only}
+    \\        with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: {param: limit}}
     \\        on: {ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled}
 ;
 
@@ -749,11 +750,11 @@ test "local reuse compiles to the identical explicit graph with separate retries
         \\  validate: {use: test.validate, on: {ok: g5-first-generate}}
         \\  g5-first-generate:
         \\    use: model.generate
-        \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 1, response-mode: prompt-only}
+        \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 1}
         \\    on: {ok: g6-second-generate, invalid: g5-first-generate, failed: end.failed, cancelled: end.cancelled}
         \\  g6-second-generate:
         \\    use: model.generate
-        \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, response-mode: prompt-only}
+        \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2}
         \\    on: {ok: end.ok, invalid: g6-second-generate, failed: end.failed, cancelled: end.cancelled}
     });
     const plain = try reusableCompile(a, explicit);
@@ -943,7 +944,7 @@ const nested_workflow =
     \\    steps:
     \\      generate:
     \\        use: model.generate
-    \\        with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: {param: limit}, response-mode: prompt-only}
+    \\        with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: {param: limit}}
     \\        on: {ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled}
 ;
 
@@ -958,11 +959,11 @@ test "nested composition forwards parameters and compiles to the same explicit o
         \\  validate: {use: test.validate, on: {ok: g14-g5-first-inner-generate}}
         \\  g14-g5-first-inner-generate:
         \\    use: model.generate
-        \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 1, response-mode: prompt-only}
+        \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 1}
         \\    on: {ok: g15-g6-second-inner-generate, invalid: g14-g5-first-inner-generate, failed: end.failed, cancelled: end.cancelled}
         \\  g15-g6-second-inner-generate:
         \\    use: model.generate
-        \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2, response-mode: prompt-only}
+        \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2}
         \\    on: {ok: end.ok, invalid: g15-g6-second-inner-generate, failed: end.failed, cancelled: end.cancelled}
     });
     const plain = try reusableCompile(a, explicit);

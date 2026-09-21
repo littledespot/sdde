@@ -856,7 +856,6 @@ subgraphs:
         use: prepare-model-request
         with:
           slot: spec_generation
-          response-mode: prompt-only
           protocol-prompt: protocol-prompt
           prompt: {param: prompt}
           result-schema: {param: schema}
@@ -873,7 +872,6 @@ subgraphs:
         use: prepare-model-request
         with:
           slot: spec_generation
-          response-mode: prompt-only
           protocol-prompt: protocol-prompt
           prompt: {param: prompt}
           composition-part: {param: composition-part}

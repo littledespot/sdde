@@ -29,7 +29,7 @@ const preparation_parameters = [_]operation.ParameterDescriptor{
     .{ .id = "composition-part", .kind = .string, .required = false, .workflow_definition_safe = true },
     .{ .id = "result-selection", .kind = .enumeration, .required = false, .allowed_values = &.{ "resource", "input" }, .workflow_definition_safe = true },
     .{ .id = "input", .kind = .resource, .resource_kind = .data, .required = false, .workflow_definition_safe = true },
-} ++ @import("../domain/workflow_model.zig").parameters;
+};
 
 pub const Initialize = struct {
     pub const Action = @import("../actions/model/build_initial_model_request_identity_ledger.zig").Action;

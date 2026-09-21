@@ -56,8 +56,9 @@ storage does not change retry eligibility or the execution-wide token ledger.
   those steps.
 
 - Native `decode-model-envelope` separately parses only complete validated content, retaining
-  its evidence with the owned tree.
-- Malformed JSON returns `invalid`, including through the inference profile's permitted
+  its evidence with the owned tree. The sole approved prefix-normalization exception
+  and its logging are defined in [§22.6](22-repair.md#226-unparseable-output).
+- JSON still malformed after that exception returns `invalid`, including through the inference profile's permitted
   `end.invalid`; non-complete observations keep their failure/cancellation outcome without
   parsing.
 - This proves syntax only and performs no provider call, accounting or payload-schema check.
@@ -215,8 +216,11 @@ control. OpenAI rubric evaluation remains outside this amendment.
 
 - The engine ships no model-route registry.
 - The originating model-request step calls a registered generic operation and declares its model
-  slot, prompt/guidance resources, result schema, response mode, allowed context behavior,
+  slot, prompt/guidance resources, result schema, allowed context behavior,
   and outcome transitions in the workflow definition.
+- Response mode comes only from the selected catalogue model’s required `json` boolean
+  (§9; ADR 0012). Bindings derive it from their immutable catalogue entry rather than
+  retaining another selector. Workflow response-mode overrides reject; schemas remain workflow-owned.
 - Large resources are declared once and referenced by concise local IDs.
 - The compiler captures and validates every declared resource before execution; there is no
   packaged route descriptor, prompt, schema, slot assignment, or fallback.

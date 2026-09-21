@@ -2537,7 +2537,7 @@ stage.started | stage.completed | stage.blocked | stage.failed |
 stage.clarification_pending
 action.started | action.completed | action.invalid | action.failed
 model.requested | model.completed | model.protocol_failed |
-model.schema_failed
+model.schema_failed | model.response_normalized
 validation.completed | validation.failed
 repair.requested | repair.applied | repair.rejected | repair.exhausted
 review.requested | review.approved | review.rejected

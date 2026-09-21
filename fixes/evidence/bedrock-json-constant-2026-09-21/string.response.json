@@ -1,0 +1,1 @@
+{"metrics":{"latencyMs":317},"output":{"message":{"content":[{"reasoningContent":{"reasoningText":{"text":"Need value \"orchard\"."}}},{"text":"{\"value\":\"orchard\"}"}],"role":"assistant"}},"stopReason":"end_turn","usage":{"inputTokens":133,"outputTokens":25,"serverToolUsage":{},"totalTokens":158}}

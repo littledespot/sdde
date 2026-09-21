@@ -39,7 +39,7 @@ Production Bedrock uses those same contracts and runner bindings.
 → [results, §8](#8-closed-request-observation-and-failure-algebra)
 → [action ownership, §9](#9-action-and-orchestration-ownership).
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md) owns request handoff;
-the [example](../examples/provider-request.workflow.yaml) shows inference,
+the [packaging test fixture](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml) shows inference,
 validation, closure and pre-call failure handling. It is test/design source,
 never a runtime fallback. The [prompt/response diagram](../diagrams/17-model-prompt-response-flow.md)
 shows input projection, evidence selection and repair.
@@ -194,7 +194,7 @@ The two project inputs have distinct responsibilities:
 | File | Responsibility |
 | --- | --- |
 | `.sddtoolkit.json` | Define the repository's allowed model set through named slots containing exact provider/model references and accepted options. F0001 remains its sole reader and decoder. |
-| `.sddproviders.json` | Catalogue the bounded configured provider/model instances and their closed provider-specific deployment configuration. It contains no repository allowlist, workflow-operation assignment, capability claim, executable implementation, or secret. |
+| `.sddproviders.json` | Catalogue the bounded configured provider/model instances, explicit JSON-output selection and their closed provider-specific deployment configuration. It contains no repository allowlist, workflow-operation assignment, capability claim, executable implementation, or secret. |
 
 - Let `C` be the exact validated catalogue tuple set and `S` the tuple set projected
   from `models.slots`.
@@ -243,6 +243,7 @@ ProviderDefinition {
 
 ProviderModelDefinition {
   model: ProviderModelId,
+  json: boolean,
   config: RegisteredProviderModelConfig
 }
 ```
@@ -267,7 +268,7 @@ ProviderModelDefinition {
 - There are no common project-authored `endpoint`, `contextWindow`, `maxOutputTokens`,
   `supportsTemperature`, `structuredOutput`, `tokenizer`, or wire-parameter fields.
 - Those are trusted compiler-registered model-contract facts described in Section 4.
-- The provider catalogue may declare only a known provider, known model, and the fields
+- The provider catalogue may declare only a known provider, known model, explicit `json` selection, and the fields
   permitted by that provider's closed `config` variant.
 - Catalogue membership alone does not make that model repository-authorized.
 
@@ -482,15 +483,20 @@ outcome through runner-owned child bindings:
 5. the request retains the complete compiled result schema under ADR 0006;
    native generation constraints derive from it through the registered profile.
 
-Request-origin contracts declare one repository slot and explicit `response-mode`
-(`prompt-only | native-schema`). Under the user-approved 2026-09-19 amendment
+Request-origin contracts declare one repository slot. Its catalogue model’s required
+`json` boolean selects native-schema output (`true`) or prompt-only guidance (`false`),
+as amended in ADR 0012 on 2026-09-21. Unsupported native selection rejects the complete
+catalogue; workflow `response-mode` overrides reject. Under the user-approved 2026-09-19 amendment
 to §12.5, temperature is engine-owned: binding selects `0` when the registered
 model supports it, otherwise omission. Workflow `temperature` parameters reject,
 including zero; neither request consumers nor retries can override the binding.
 Resources and outcomes remain in the existing concise workflow structure.
 
-- The originating step's typed slot and response-control requirements compile into the
-  existing model-binding projection.
+- The originating step's typed slot requirements compile into the
+  existing model-binding projection. Binding resolves that validated slot; graph
+  cloning rebuilds the projection from its owned parameters. Response mode is derived
+  directly from the retained catalogue entry. Requests, leases and capture records
+  retain observations of that choice for validation, not another selection authority.
 - Registered request consumers use the prepared request's typed data dependencies and
   cannot select a replacement.
 - They grant immutable binding data, not a provider port.
@@ -1002,14 +1008,15 @@ undone; it does not make any candidate workflow output successful.
 - `DecodeModelEnvelopeAction` accepts only that sealed complete branch.
 - It reuses the strict JSON syntax boundary with result-schema transport, accepts one
   object with optional JSON whitespace, and rejects duplicate decoded keys at every
-  depth, malformed JSON, non-object roots, fences and trailing content.
+  depth, malformed JSON, non-object roots, fences and trailing content, subject only
+  to the approved [§22.6 normalization](../contracts/22-repair.md#226-unparseable-output).
 - Parsing uses the schema profile's 64-level JSON nesting guard, not an output-byte
   ceiling.
 - Numeric lexemes remain exact; no rounding, coercion, JSON extraction, wrapper
   insertion or schema validation occurs here.
 
 - The decoded candidate owns one parse tree and exposes only read-only object, array and
-  scalar views.
+  scalar views, plus the typed normalization fact. Raw evidence remains unchanged.
 - It borrows the original invocation evidence, whose request/graph/observation owners
   must outlive it; it creates no competing identity or schema authority.
 - Rejection and allocation failure free partial trees without consuming that evidence or
@@ -1167,7 +1174,7 @@ F0006 does not:
    - Full host/target collision proof keeps that file role distinct from engine config
      and every configured/derived root even when loading is skipped.
 3. The document has exactly the bounded
-   `providers[] -> { provider, models[] -> { model, config } }` shape, and every
+   `providers[] -> { provider, models[] -> { model, json, config } }` shape, and every
    common object and resolved provider variant is closed at its owning boundary.
 4. Capabilities, operations, tokenization, structured response, target,
    endpoint, and data-routing facts come only from compiled model contracts.

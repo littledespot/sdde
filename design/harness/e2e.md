@@ -68,6 +68,12 @@ Run one explicitly selected live case from the repository root:
 
 ## Execution and quality assessment
 
+For a first-call HTTP 403 with an API-key authentication message, inspect the
+retained `response.json` and correct `TEST_AWS_BEARER_TOKEN_BEDROCK` in the credential
+source above. The launcher reloads `.env.e2e`, including any stale exported value.
+Authentication/authorization failures are terminal; JSON correction cannot repair
+credentials. No model answer means no evidence yet about schema conformance.
+
 - The harness captures the case's declared inputs and copies them into one new, isolated
   project.
 - It shares `composition/root.zig.Runtime` with the CLI for adapter construction,

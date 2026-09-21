@@ -35,12 +35,16 @@
     "model": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["model", "config"],
+      "required": ["model", "json", "config"],
       "properties": {
         "model": {
           "type": "string",
           "minLength": 1,
           "maxLength": 512
+        },
+        "json": {
+          "type": "boolean",
+          "description": "Enable native JSON-schema output for this model; requires registered provider support."
         },
         "config": {
           "type": "object",

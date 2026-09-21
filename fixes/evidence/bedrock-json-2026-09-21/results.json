@@ -1,0 +1,117 @@
+{
+  "purpose": "Authorized three-call diagnostic comparison; not workflow or E2E completion",
+  "model": "openai.gpt-oss-20b-1:0",
+  "region": "ap-southeast-2",
+  "api": "Converse",
+  "response_mode": "native_schema",
+  "temperature": 0,
+  "reasoning_effort": "low",
+  "replay_run": "debugger-d5621bf93f7e02cdf30b0e0fff2648f7",
+  "parent_run": "RUN-5618a467c810ac31720f1936495940ed",
+  "parent_call": "request-1-inference-1",
+  "baseline_execution": "2026-09-20T22-07-24Z-4f7e04d262338e262caad159d63ba53f",
+  "calls": [
+    {
+      "probe": "baseline",
+      "replay_id": "ea1bec99a1efcbfd9131cdd0d709cd22",
+      "files": {
+        "request": {
+          "file": "baseline.request.json",
+          "bytes": 18795,
+          "sha256": "b8a38651a505e7c171e2114c4a7e93bc466162e09de33905b557f2a85c7e9998"
+        },
+        "response": {
+          "file": "baseline.response.json",
+          "bytes": 1119,
+          "sha256": "576b15bc3becb31c16f8f0cc07755f954c8ab76e9674b24bf9182338698182f9"
+        }
+      },
+      "native_schema_bytes": 6834,
+      "http_status": 200,
+      "stop_reason": "end_turn",
+      "validation": {
+        "extraction": "valid",
+        "json": "invalid",
+        "schema": "unavailable",
+        "reason": "Invalid JSON",
+        "input_tokens": 2243,
+        "output_tokens": 197,
+        "latency_ms": 987
+      },
+      "aws_request_id": null,
+      "recorded_at_utc": "2026-09-21T00:29:01.591401+00:00"
+    },
+    {
+      "probe": "object",
+      "replay_id": "c6dfe7e715e05ed4eafccef2d2fbc774",
+      "files": {
+        "request": {
+          "file": "object.request.json",
+          "bytes": 876,
+          "sha256": "3b81944ecab6f13881c3e39929672b70a2f757444b1c1ab4416496969f36f78a"
+        },
+        "response": {
+          "file": "object.response.json",
+          "bytes": 364,
+          "sha256": "853f00fe5946b294382241b884b7e60d806e0249cf44661fa9826088363f3356"
+        }
+      },
+      "native_schema_bytes": 142,
+      "http_status": 200,
+      "stop_reason": "end_turn",
+      "validation": {
+        "extraction": "valid",
+        "json": "invalid",
+        "schema": "unavailable",
+        "reason": "Invalid JSON",
+        "input_tokens": 146,
+        "output_tokens": 36,
+        "latency_ms": 466
+      },
+      "aws_request_id": null,
+      "recorded_at_utc": "2026-09-21T00:29:02.187857+00:00"
+    },
+    {
+      "probe": "union",
+      "replay_id": "6f94e244273b33952ad9fc19e21ed04a",
+      "files": {
+        "request": {
+          "file": "union.request.json",
+          "bytes": 1156,
+          "sha256": "5c83b6283a387106e2997839d56b4067c9ca740fa2c404970117e125b2ccfd5f"
+        },
+        "response": {
+          "file": "union.response.json",
+          "bytes": 339,
+          "sha256": "809511608b7b10f6183a77e60a94431cd57a537151e807d551212f5605c2969d"
+        }
+      },
+      "native_schema_bytes": 262,
+      "http_status": 200,
+      "stop_reason": "end_turn",
+      "validation": {
+        "extraction": "valid",
+        "json": "invalid",
+        "schema": "unavailable",
+        "reason": "Invalid JSON",
+        "input_tokens": 175,
+        "output_tokens": 30,
+        "latency_ms": 400
+      },
+      "aws_request_id": null,
+      "recorded_at_utc": "2026-09-21T00:29:02.777416+00:00"
+    }
+  ],
+  "total_provider_calls": 3,
+  "actual_total_tokens": 2827,
+  "automatic_retries": 0,
+  "publication": "not_run",
+  "grading": "not_run",
+  "limitations": [
+    "One observation per condition; no reliability-rate estimate.",
+    "Minimal task and schema both differ from baseline; only object versus union isolates schema.",
+    "Existing replay records do not retain AWS response-header request IDs.",
+    "Initial local replay rejected before dispatch: missing environment credential; no AWS request or token usage."
+  ],
+  "conclusion": "The malformed prefix also occurs with a single 142-byte object schema. Root unions and complex nesting are not necessary to reproduce this failure; precise provider-side cause is unresolved."
+}

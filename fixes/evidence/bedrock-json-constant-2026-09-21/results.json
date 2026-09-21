@@ -1,0 +1,89 @@
+{
+  "purpose": "Authorized two-call comparison of a plain string and a constant field; not workflow or E2E completion",
+  "model": "openai.gpt-oss-20b-1:0",
+  "region": "ap-southeast-2",
+  "api": "Converse",
+  "response_mode": "native_schema",
+  "temperature": 0,
+  "reasoning_effort": "low",
+  "replay_run": "debugger-d6f88ffc0f2a012a138d7c5c5984319e",
+  "parent_run": "RUN-6de5a0b2ff9d25fbf78242d8527460dd",
+  "parent_call": "request-1-inference-1",
+  "baseline_execution": "2026-09-21T00-41-39Z-bfe6906d9564ba7a09113797c1bdf8d2",
+  "calls": [
+    {
+      "probe": "string",
+      "id": "9dfa80c9ed556d38962ed86ac6c6040b",
+      "recorded_at_utc": "2026-09-21T09:11:26.611852+00:00",
+      "native_schema_bytes": 108,
+      "wall_seconds": 0.642,
+      "files": {
+        "request": {
+          "file": "string.request.json",
+          "bytes": 777,
+          "sha256": "b5fa256b0d912752a57a6aa365d1bb8d8621dce602ac19d317c6762db6b7b8ad"
+        },
+        "response": {
+          "file": "string.response.json",
+          "bytes": 301,
+          "sha256": "c05dc7dc58e27c7cb33f8465fe6319b868baa3403912d6da6e61bd28c09f9f9c"
+        }
+      },
+      "http_status": 200,
+      "stop_reason": "end_turn",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null,
+        "input_tokens": 133,
+        "output_tokens": 25,
+        "latency_ms": 317
+      },
+      "aws_request_id": null
+    },
+    {
+      "probe": "constant",
+      "id": "edf2a5a0eaaa51ff3068a50654fddbcb",
+      "recorded_at_utc": "2026-09-21T09:11:27.125831+00:00",
+      "native_schema_bytes": 110,
+      "wall_seconds": 0.512,
+      "files": {
+        "request": {
+          "file": "constant.request.json",
+          "bytes": 764,
+          "sha256": "5cd96dfe557a904b05bdfd14da8c9094922cca4ec98df516dfdd82cbe40a3277"
+        },
+        "response": {
+          "file": "constant.response.json",
+          "bytes": 324,
+          "sha256": "c870a1e46cf4234e06786eab07ac74ebf867745a0f2b38e55272a25d24f9fb22"
+        }
+      },
+      "http_status": 200,
+      "stop_reason": "end_turn",
+      "validation": {
+        "extraction": "valid",
+        "json": "invalid",
+        "schema": "unavailable",
+        "reason": "Invalid JSON",
+        "input_tokens": 129,
+        "output_tokens": 27,
+        "latency_ms": 356
+      },
+      "aws_request_id": null
+    }
+  ],
+  "total_provider_calls": 2,
+  "actual_total_tokens": 314,
+  "automatic_retries": 0,
+  "publication": "not_run",
+  "grading": "not_run",
+  "limitations": [
+    "One observation per condition; no reliability-rate estimate.",
+    "Only the value property schema differs; this changes both complete-schema guidance and native constraints, so their individual effects remain unresolved.",
+    "Existing replay records do not retain AWS response-header request IDs.",
+    "No production schema or projection changed."
+  ],
+  "conclusion": "The plain string response passed JSON and schema validation; the constant-constrained response contained the malformed prefix. This narrows the reproduction to the constant-constrained request in this pair, without proving the specific provider component or an effective production remedy."
+}

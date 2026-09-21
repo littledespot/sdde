@@ -25,7 +25,7 @@ fn readAdmitted(view: *const data.View) @import("../ports/workflow_operation_reg
     const ledger = @import("pipeline_values.zig").read(view, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
     return switch (result.outcome()) {
         .valid => |proof| switch (proof.candidate().association().result()) {
-            .complete => |complete| .{ .evidence = proof, .candidate = .{ .body = complete.content(), .origin = @import("../domain/model_candidate_origin.zig").Origin.from(ledger, complete.association().operationId()) orelse return error.OperationExecutionFailed } },
+            .complete => |complete| .{ .evidence = proof, .candidate = .{ .body = proof.candidate().content(), .origin = @import("../domain/model_candidate_origin.zig").Origin.from(ledger, complete.association().operationId()) orelse return error.OperationExecutionFailed } },
             .stopped, .failed => error.OperationExecutionFailed,
         },
         .schema_rejected, .not_validated => error.OperationExecutionFailed,

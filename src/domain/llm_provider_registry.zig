@@ -16,6 +16,7 @@ pub const CandidateEntry = struct {
     model: identity.ModelId,
     implementation_id: contracts.RegisteredProviderImplementationId,
     config: contracts.ValidatedProviderConfig,
+    json: bool,
     capabilities: @import("model_capabilities.zig").Capabilities,
     supported_reasoning_efforts: []const []const u8,
 };
@@ -45,8 +46,13 @@ pub const Entry = struct {
     model: identity.ModelId,
     implementation_id: contracts.RegisteredProviderImplementationId,
     config: contracts.ValidatedProviderConfig,
+    json: bool,
     capabilities: @import("model_capabilities.zig").Capabilities,
     supported_reasoning_efforts: []const []const u8,
+
+    pub fn responseMode(self: Entry) @import("model_controls.zig").ResponseGuidanceMode {
+        return if (self.json) .native_schema else .prompt_only;
+    }
 };
 
 pub const ValidatedLLMProviderRegistry = opaque {
@@ -118,6 +124,7 @@ pub fn createValidated(
             } },
             .implementation_id = source.implementation_id,
             .config = source.config,
+            .json = source.json,
             .capabilities = source.capabilities,
             .supported_reasoning_efforts = cloneStrings(
                 owner.arena.allocator(),
@@ -170,6 +177,7 @@ fn validateCandidate(
         {
             return error.InvalidLLMProviderRegistry;
         }
+        if (entry.json and !entry.capabilities.supports(.native_schema, entry.capabilities.inferenceControls())) return error.InvalidLLMProviderRegistry;
         for (entry.supported_reasoning_efforts, 0..) |effort, effort_index| {
             if (effort.len == 0) return error.InvalidLLMProviderRegistry;
             for (entry.supported_reasoning_efforts[0..effort_index]) |previous| {

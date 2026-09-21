@@ -311,6 +311,77 @@ test "replay retains redacted partial errors and native schema modifications wit
     try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
 }
 
+test "native JSON diagnostic probes retain controls and inspect normalized and valid answers without retry" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture: Fixture = undefined;
+    try fixture.init(a);
+    defer fixture.environment.deinit();
+    fixture.wire.expected_json = true;
+    var parent = try fixture.parent(a);
+    parent.description.?.response_mode = .native_schema;
+    parent.request = try fixture.provider.provider().prepare(a, parent.description.?);
+    var previous_content: ?[]const @import("domain/llm_provider_operation.zig").ModelVisibleContent = null;
+    const Probe = struct { edit: []const u8, answer: []const u8, union_root: bool = false, constant_value: bool = false };
+    const tagged_answer = "{\"kind\":\"present\",\"value\":\"orchard\"}";
+    const plain_answer = "{\"value\":\"orchard\"}";
+    const probes = [_]Probe{
+        .{ .edit = @embedFile("test_fixtures/bedrock-json-object.edit.json"), .answer = tagged_answer },
+        .{ .edit = @embedFile("test_fixtures/bedrock-json-union.edit.json"), .answer = tagged_answer, .union_root = true },
+        .{ .edit = @embedFile("test_fixtures/bedrock-json-string.edit.json"), .answer = plain_answer },
+        .{ .edit = @embedFile("test_fixtures/bedrock-json-constant.edit.json"), .answer = plain_answer, .constant_value = true },
+    };
+    for (probes, 0..) |probe, index| {
+        const edit = try @import("domain/strict_json.zig").decode(debug.Edit, a, probe.edit, .{ .maximum_depth = 64 });
+        if (index % 2 == 0) previous_content = null;
+        if (previous_content) |content| try std.testing.expectEqualDeep(content, edit.content);
+        previous_content = edit.content;
+        const malformed = try std.fmt.allocPrint(a, "{{\"{{ {s}", .{probe.answer[1..]});
+        const different_value = try std.mem.replaceOwned(u8, a, probe.answer, "orchard", "peach");
+        for ([_][]const u8{ malformed, probe.answer, different_value }, 0..) |answer, attempt| {
+            fixture.wire.inference_body = try debugResponse(a, answer);
+            const before = fixture.wire.calls;
+            const sequence = index * 3 + attempt + 1;
+            const id = try std.fmt.allocPrint(a, "{x:0>32}", .{sequence});
+            const result = try fixture.replay().replay(a, replayIdentity(id, sequence), parent, .{ .call = 0, .mode = .modified, .edit = edit });
+            try std.testing.expectEqual(before + 1, fixture.wire.calls);
+            try std.testing.expectEqualStrings(parent.id, result.request.parent_call);
+            try std.testing.expectEqualStrings(description.model, result.request.description.model);
+            try std.testing.expectEqualDeep(description.controls, result.request.description.controls);
+            try std.testing.expectEqualDeep(description.provider_config, result.request.description.provider_config);
+            try std.testing.expectEqualStrings(description.reasoning_effort.?, result.request.description.reasoning_effort.?);
+            try std.testing.expectEqual(.native_schema, result.request.description.response_mode);
+            const wire = try std.json.parseFromSlice(std.json.Value, a, result.request.body, .{});
+            const native_bytes = wire.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
+            const native = try std.json.parseFromSlice(std.json.Value, a, native_bytes, .{});
+            try std.testing.expectEqual(probe.union_root, native.value.object.contains("anyOf"));
+            if (!probe.union_root) {
+                const fields = native.value.object.get("properties").?.object;
+                const value_schema = fields.get("value").?.object;
+                try std.testing.expectEqual(probe.constant_value, value_schema.contains("const"));
+                if (index >= 2) {
+                    try std.testing.expectEqual(@as(usize, 1), fields.count());
+                    if (probe.constant_value) {
+                        try std.testing.expectEqualStrings("orchard", value_schema.get("const").?.string);
+                    } else {
+                        try std.testing.expectEqualStrings("string", value_schema.get("type").?.string);
+                    }
+                }
+            }
+            try std.testing.expectEqual(.valid, result.validation.extraction);
+            try std.testing.expectEqual(.valid, result.validation.json);
+            try std.testing.expectEqual(@as(@TypeOf(result.validation.normalization), if (attempt == 0) .removed_leading_brace_quote else .none), result.validation.normalization);
+            try std.testing.expectEqual(@as(@TypeOf(result.validation.schema), if (attempt == 2 and probe.constant_value) .invalid else .valid), result.validation.schema);
+            try std.testing.expectEqualStrings(answer, result.validation.model_text.?);
+            try std.testing.expectEqual(@as(?u64, 10), result.validation.input_tokens);
+            try std.testing.expectEqual(@as(?u64, 2), result.validation.output_tokens);
+        }
+    }
+    try std.testing.expectEqual(@as(usize, probes.len * 3), fixture.requests);
+    try std.testing.expectEqual(fixture.requests, fixture.responses);
+}
+
 test "captured production request reconstructs exactly in both schema modes" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -324,10 +395,12 @@ test "captured production request reconstructs exactly in both schema modes" {
     production.registry_entry.provider.bytes = description.provider;
     production.registry_entry.model.bytes = description.model;
     production.registry_entry.config = description.provider_config;
+    production.registry_entry.capabilities.structured_response = .bedrock_json_schema;
     production.request.response_schema = try fixture.compiler.compiler().compile(production.schema_arena.allocator(), schema);
     for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
         production.request.response_guidance_mode = mode;
-        production.provider_binding.response_mode = mode;
+        production.registry_entry.json = mode == .native_schema;
+        try std.testing.expect(production.request.matchesBinding(production.provider_binding));
         const captured = try @import("adapters/provider/bedrock_request.zig").encode(a, &production.request, .inference);
         const projection = debug.Description.from(&production.request, &production.provider_binding, .inference);
         const serialized = try std.json.Stringify.valueAlloc(a, projection, .{});
@@ -566,11 +639,13 @@ test "selected request schemas survive capture and graph release without whole-s
             production.registry_entry.provider.bytes = description.provider;
             production.registry_entry.model.bytes = description.model;
             production.registry_entry.config = description.provider_config;
+            production.registry_entry.capabilities.structured_response = .bedrock_json_schema;
             const selected = try debuggerSelectedShape(source, fixture.compiler.compiler(), shape);
             production.request.response_schema = selected.schema;
             response_text = try a.dupe(u8, selected.response);
             production.request.response_guidance_mode = mode;
-            production.provider_binding.response_mode = mode;
+            production.registry_entry.json = mode == .native_schema;
+            try std.testing.expect(production.request.matchesBinding(production.provider_binding));
             // Force request-description fragmentation, including its schema.
             production.request.content = &.{ .{ .guidance = try source.dupe(u8, "bounded captured context " ** 500) }, .{ .user = "Generate the selected data." } };
             const projection = debug.Description.from(&production.request, &production.provider_binding, .inference);

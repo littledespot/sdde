@@ -588,7 +588,7 @@ test "Bedrock native projection retains complete guidance and registered mode wi
     try fixture.init(std.testing.allocator, .bedrock);
     defer fixture.deinit();
     fixture.base.registry_entry.capabilities = contracts.registry.entries[0].capabilities;
-    fixture.base.provider_binding.response_mode = .native_schema;
+    fixture.base.registry_entry.json = true;
     fixture.base.request.response_guidance_mode = .native_schema;
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const accepted = [_][]const u8{
@@ -603,7 +603,9 @@ test "Bedrock native projection retains complete guidance and registered mode wi
         defer std.testing.allocator.free(body);
         var parsed = try strict.parse(std.testing.allocator, body, .{ .maximum_depth = 32 }, false, null);
         defer parsed.deinit();
-        const schema = parsed.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
+        const format = parsed.value.object.get("outputConfig").?.object.get("textFormat").?;
+        try std.testing.expectEqualStrings("json_schema", format.object.get("type").?.string);
+        const schema = format.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
         try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), schema);
         try std.testing.expectEqualDeep(fixture.base.request.response_schema.root().*, (try parser.compiler().compile(fixture.base.schema_arena.allocator(), schema)).root().*);
         try std.testing.expectEqual(@as(usize, 3), parsed.value.object.get("system").?.array.items.len);
@@ -623,10 +625,10 @@ test "Bedrock native projection retains complete guidance and registered mode wi
         const projection = wire.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
         for ([_][]const u8{ "maxLength", "minimum", "maximum", "maxItems" }) |unsupported| try std.testing.expect(std.mem.indexOf(u8, projection, unsupported) == null);
         fixture.base.request.response_guidance_mode = .prompt_only;
-        fixture.base.provider_binding.response_mode = .prompt_only;
+        fixture.base.registry_entry.json = false;
         try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
         fixture.base.request.response_guidance_mode = .native_schema;
-        fixture.base.provider_binding.response_mode = .native_schema;
+        fixture.base.registry_entry.json = true;
     }
 }
 

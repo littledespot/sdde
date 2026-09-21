@@ -248,7 +248,9 @@ test "production E2E binding honors configured models and cannot succeed without
             // Claude has no registered reasoning-effort control.
             try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.mem.replaceOwned(u8, a, model_config, "\"reasoningEffort\": \"low\"", "\"reasoningEffort\": null") });
             const catalogue = try @import("../files.zig").read(io, a, project.dir, ".sddtoolkit/providers/.sddproviders.json");
-            const replaced = try std.mem.replaceOwned(u8, a, catalogue, "openai.gpt-oss-20b-1:0", model);
+            const model_catalogue = try std.mem.replaceOwned(u8, a, catalogue, "openai.gpt-oss-20b-1:0", model);
+            // This registered model only supports prompt guidance.
+            const replaced = try std.mem.replaceOwned(u8, a, model_catalogue, "\"json\": true", "\"json\": false");
             try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit/providers/.sddproviders.json", .data = try std.mem.replaceOwned(u8, a, replaced, "ap-southeast-2", "us-west-2") });
             try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/stories.md", .data = "A library user renews a loan and sees its new due date.\n" });
         }

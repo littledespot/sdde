@@ -1507,7 +1507,7 @@ test "configured specification generation YAML executes native references models
         native.bindWorkflows(boot.ready.workflows.registry());
         var principle_source: @import("../adapters/filesystem/principle_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
         native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), boot.ready.config.config(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
-        var services = try @import("../model_request_workflow_test.zig").providerServices(allocator, null, "spec_generation");
+        var services = try @import("../model_request_workflow_test.zig").providerServices(allocator, null, "spec_generation", false);
         defer services.deinit();
         const graph = boot.ready.workflows.registry().resolve(.{ .bytes = "spec-generation" }).?;
         var runner = @import("../application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{ "--feature", "chosen", "--reference", "first" } }, .graph = graph }, &native.registry, boot.ready.logs.barrier(), .{}, &services);
@@ -2905,7 +2905,7 @@ const test_provider_contracts: llm_provider_contracts.Registry = .{ .entries = &
     .capabilities = @import("../model_contract_test_fixture.zig").capabilities,
 }} };
 const test_provider_document =
-    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{}}]}]}
+    \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{}}]}]}
 ;
 const test_model_step: workflow_compilation.CompiledStep = .{
     .id = workflow.WorkflowStepId.parse("run").?,

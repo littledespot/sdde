@@ -1,0 +1,1 @@
+{"metrics":{"latencyMs":466},"output":{"message":{"content":[{"reasoningContent":{"reasoningText":{"text":"Need to output JSON with kind present and value \"orchard\"."}}},{"text":"{\"{ \"kind\":\"present\",\"value\":\"orchard\" }"}],"role":"assistant"}},"stopReason":"end_turn","usage":{"inputTokens":146,"outputTokens":36,"serverToolUsage":{},"totalTokens":182}}

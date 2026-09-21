@@ -134,10 +134,14 @@ test "validated workflow registry accepts zero definitions and owns its graph re
         .{ .id = schema_id, .name = "result.json" },
         .{ .id = composition_id, .name = "split.json" },
     };
-    const retry_parameters = [_]workflow.ParameterBinding{.{
+    const slot = try scratch.allocator().dupe(u8, "selected");
+    const retry_parameters = [_]workflow.ParameterBinding{ .{
         .id = workflow.WorkflowParameterId.parse("retry-limit").?,
         .value = .{ .integer = 2 },
-    }};
+    }, .{
+        .id = .{ .bytes = "slot" },
+        .value = .{ .string = slot },
+    } };
     const source_entry: @import("domain/workflow_source.zig").Entry = .{
         .subgraph = null,
         .id = step_id_bytes,
@@ -161,15 +165,19 @@ test "validated workflow registry accepts zero definitions and owns its graph re
         .{ .id = schema_id, .source_path = "result.json", .content = .{ .result_schema = compiled_schema } },
         .{ .id = composition_id, .source_path = "split.json", .content = .{ .json_composition = try schema_adapter.compiler().compileComposition(scratch.allocator(), composition_bytes, compiled_schema) } },
     };
-    const compiled_parameters = [_]compilation.CompiledParameter{.{
+    const compiled_parameters = [_]compilation.CompiledParameter{ .{
         .id = retry_parameters[0].id,
         .value = .{ .integer = 2 },
-    }};
+    }, .{
+        .id = retry_parameters[1].id,
+        .value = .{ .model_slot = .{ .bytes = slot } },
+    } };
     const local_compiled_steps = [_]compilation.CompiledStep{.{
         .id = local_declared_steps[0].id,
         .source_chain = &.{source_entry},
         .operation_id = local_declared_steps[0].operation_id,
         .parameters = &compiled_parameters,
+        .model = @import("domain/workflow_model.zig").resolve(&compiled_parameters).?,
         .requires = &.{},
         .produces = &.{},
         .replaces = &.{},
@@ -256,6 +264,9 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     source_candidate.graphs = &.{source_graph};
     try std.testing.expectError(error.InvalidWorkflowRegistry, registry.createValidated(std.testing.allocator, source_candidate));
     const owner = try registry.createValidated(std.testing.allocator, candidate);
+    const cloned_step = registry.registry(owner).resolve(declared.workflow_id).?.authority.steps[0];
+    try std.testing.expect(cloned_step.model.?.slot.bytes.ptr != slot.ptr);
+    try std.testing.expect(cloned_step.model.?.slot.bytes.ptr == cloned_step.parameters[1].value.model_slot.bytes.ptr);
     scratch.deinit();
     bootstrap_registry.deinitOwner(root_owner);
     root_live = false;
@@ -269,6 +280,8 @@ test "validated workflow registry accepts zero definitions and owns its graph re
     try std.testing.expectEqualStrings("abc", resolved.source.?.content);
     try std.testing.expectEqualStrings("run", resolved.authority.steps[0].source_chain[0].id);
     try std.testing.expectEqualStrings("{\"use\":\"core.noop\"}", resolved.authority.steps[0].source_chain[0].declaration);
+    try std.testing.expectEqualStrings("selected", resolved.authority.steps[0].model.?.slot.bytes);
+    try std.testing.expect(@import("domain/workflow_model.zig").validProjection(resolved.authority.steps[0]));
     const retained_schema = resolved.authority.resources[1].content.result_schema;
     try std.testing.expectEqualStrings(schema_bytes, retained_schema.bytes());
     try std.testing.expectEqualStrings("answer", retained_schema.root().object[0].name);
