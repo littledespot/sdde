@@ -28,6 +28,12 @@ unique defective producer and its smallest safe target from captured source and
 review evidence. Source absence, ambiguous ownership and stale evidence do not
 authorize repair. A review verdict itself is never a repair target.
 
+The [clarification-admission boundary](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
+does not relax that prohibition. An inconclusive finding without an identifiable
+user decision must reject when existing authority cannot correct it; completing
+its question text cannot grant clarification publication. Optional verdict
+reassessment remains a separate unapproved decision in FIX_002.
+
 - Reference extraction uses the shared replacement authorization for a chunk's coupled
   token-classification collection, one invalid source selection, or an empty claim-citation
   collection.
@@ -51,8 +57,9 @@ Configuration and environment errors never consume LLM repair attempts.
 
 - A missing or unreconciled authority is not a malformed candidate value and therefore is never
   repaired by generating a convenient replacement.
-- The only model-assisted transition permitted for unsupported asserted content is the existing
-  one-shot whole-operation-result replacement to `clarification_needed`.
+- The existing one-shot whole-operation-result no-invention replacement may yield
+  `clarification_needed` only when §12.8.1 admits a genuine authority gap. Candidate
+  loss or inconclusive review retains its own repair/rejection outcome.
 - If a later stage detects the gap, repair stops and the shared reconciliation router selects
   upstream rework.
 - Local repair resumes only after the owning stage has regenerated, passed reconciliation, and

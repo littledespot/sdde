@@ -175,10 +175,10 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 
 - A context request asks only for already-held evidence.
 - It cannot stand in for absent business authority.
-- When a workflow model operation generates specification content, if the supplied
-  reference/clarification authorities do not support a required business fact, the only valid
-  semantic alternative is `clarification_needed`; inventing a default, silently omitting the
-  affected behavior, or repeatedly asking the model to guess is invalid.
+- A required business fact genuinely absent from the supplied authorities may produce
+  `clarification_needed` only under §12.8.1. Failure to interpret available evidence
+  is a candidate/review failure. Neither route permits invented defaults, silent
+  omission or repeated guessing.
 
 ### 12.5 Low-capability model operating rules
 
@@ -192,7 +192,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 - no request to reproduce engine-known filenames, IDs, headings, checkboxes, or status;
 - no open-ended “inspect the repo” instruction;
 - no unrestricted tool use;
-- no invention of an absent business fact; return the workflow operation's typed clarification variant when available;
+- no invention of an absent business fact; admit a typed clarification only under §12.8.1;
 - no full-document retry for a local validation failure;
 - one complete schema-valid result and explicit operation-local retry limits;
 - an optional YAML-declared fallback operation only after deterministic retry exhaustion, never as hidden behavior.
@@ -427,18 +427,19 @@ control. OpenAI rubric evaluation remains outside this amendment.
 - Before the call, the engine binds `featureId` to the validated supplied directory's lossless
   `paths.specs`-relative key under [ADR 0010](../decisions/0010-explicit-feature-directory.md).
   The independent reference selector and model output cannot name or rename the feature.
-- An unsupported fact takes the YAML-declared clarification branch; a path-shaped or
-  structurally invalid value follows the normal passive-literal/atomic protocol.
+- An admitted authority gap takes the YAML-declared clarification branch under
+  §12.8.1; candidate defects follow their existing validation/repair boundary.
 
 - Specification-section, plan-unit, and task-cluster workflows declare discriminated result
   schemas that return either stage content or one `ClarificationNeedProposal`.
 - A clarification carries a bounded user-answer schema and engine-known subject authorities
   explaining the gap.
-- It is a successful semantic pause, consumes no operation-local retry, and is never sent
-  through repair to manufacture content.
-- A malformed need is an ordinary invalid model candidate; content that asserts an unsupported
-  fact is a semantic no-invention finding and must be replaced by the clarification variant
-  under one atomic authorization.
+- An admitted need is a normal semantic pause, consumes no operation-local retry,
+  and is never sent through repair to manufacture content. Returning the model's
+  clarification variant alone does not admit the need.
+- A malformed need is an invalid model candidate. The existing one-use no-invention
+  replacement may yield a clarification only for an identifiable authority gap;
+  it cannot turn an interpretation failure into a request for user information.
 - The engine validates/deduplicates the need, assigns an `SNN`, `PNN`, or `TNN` ID when
   necessary, persists its form under `clarify/`, and enters the matching clarification-pending
   state.
@@ -469,7 +470,10 @@ what the answer must add or choose. Explain why that decision is needed for this
 subject; a generic absence message and a byte limit are insufficient. Do not ask
 the user to reproduce known requirements in internal specification categories.
 If admitted evidence does not identify the semantic gap, return to the existing
-review/validation boundary; formatting must not invent a question or change a finding.
+review/validation boundary under §12.8.1; formatting must not invent a question or
+change a finding. A missing semantic decision cannot be filled by a generic
+requirement-descriptor question or a copied diagnostic. Descriptor-based questions
+remain valid for mechanically established gaps with a known required decision.
 For a claimed conflict, the evidence must identify the incompatible meanings, why
 they cannot both hold and the precise choice the answer must resolve. A conflict ID,
 an unresolved status, copied rejection prose or an answer byte limit does not supply
@@ -488,6 +492,29 @@ they retain one repair unit and retry family. Initial/insertion findings still u
 native decision-dependent validation within their existing wire shape. Generation
 uses its existing question shape. Presence and association checks are structural,
 not deterministic proof of actionability.
+
+**User-facing output:** reuse the current controlled form and fields:
+
+| Information | Existing owner/field |
+| --- | --- |
+| Known facts/preconditions, current evidence and why a choice is required | Review `detail` → `why_required`; generation's existing attributed `question` carries its context; cited excerpts shown once |
+| Exact missing decision and expected answer format | `question`; the workflow supplies the format and leaves the answer blank |
+| Permitted input and lifecycle controls | Native `answer_schema`, existing Allowed answer and editable Answer regions |
+
+Illustrative genuine gap, not a prompt example or hard-coded fixture:
+
+- **Preconditions:** customers may cancel paid bookings; the supplied source gives
+  no rule for the payment after cancellation.
+- **Question:** What should happen to the payment when a customer cancels a paid booking?
+- **Expected answer:** one sentence stating the payment outcome and any condition.
+- **User answer:** empty until supplied by the user.
+
+If the source already states the payment rule, asking this question fails semantic
+conformance. A byte limit alone is not an expected answer. No additional form field,
+summary call, answer-sharing rule or renderer-owned semantic check is introduced.
+Generation's reason enum remains a reason code; a generic enum description alone
+does not explain its missing decision. Do not parse free text into a second set of
+authority fields to force the two producers into identical internal shapes.
 
 Evidence-selection repair selects its response shape from the retained native
 evidence minimum. A `claim_required` rule selects the canonical named shape with
@@ -561,11 +588,11 @@ authenticated answer acceptance and protected history (§23.2).
   conventional-choice, model-memory, or current-stage-fallback variant.
 - Exact equality and equivalence use the registered policy for that requirement kind.
 - If deterministic comparison cannot prove equivalence, a bounded YAML-declared semantic
-  operation may classify only the supplied candidates with citations; uncertainty remains a
-  clarification and is never promoted to proof.
+  operation may classify only supplied candidates with citations. An identifiable
+  user choice follows §12.8.1; inconclusive interpretation remains a review failure.
 - Multiple directly equivalent candidates may collapse only when the policy defines canonical
-  equivalence and records total member evidence; multiple non-equivalent candidates require
-  clarification.
+  equivalence and records total member evidence. Non-equivalence requires clarification
+  only when current evidence establishes an actual unresolved authority choice.
 
 - `ClarificationOwnershipRegistry` maps every registered `(requirementKind, requiredSlotId)` to
   its earliest owner and allowed resolution policies.
@@ -632,6 +659,89 @@ This contract is deliberately domain-neutral. Adding a new requirement kind requ
 - Production generation, support review and registered publication use this boundary.
   [F0100](../features/F0100-SpecWorkflow.md#implementation-status) tracks remaining
   clarification and workflow acceptance work; the shared gate alone does not establish it.
+
+#### 12.8.1 Clarification admission and candidate-failure precedence
+
+**Corrective design requirement — 22 September 2026; implementation outstanding.**
+This section replaces blanket unsupported/uncertain → clarification interpretations
+in §§12, 17 and 21. The overall design remains Proposed. It does not authorize
+verdict reassessment prohibited by §22.1; [FIX_002](../../fixes/FIX_002.md) tracks
+that separate decision and implementation work.
+
+**Admission:** `needs_user` requires a current required subject and an identifiable
+decision the user can supply. Existing review/generation evidence must establish
+known facts, the precise missing choice, why it affects the required subject and
+the expected answer. Conflicts require the incompatible source meanings and their
+exact subject/claim/source joins. A negative enum, conflict label, copied diagnostic,
+nonempty question or absence of prewritten specification headings is insufficient.
+
+The existing admission owner checks requiredness, permitted applicability, complete
+assignment coverage, evidence identity/freshness, decision-dependent shape and
+candidate-defect disposition. Existing semantic review assesses whether the decision
+is actually absent. Text/citation checks cannot prove that semantic conclusion;
+record it as model-assisted. Do not add keyword heuristics, a second reviewer by
+default, or a parallel gap certificate/store. A known inconclusive review cannot
+enter clarification just because the wire shape has no uncertainty alternative:
+its owner must expose a closed rejection through the existing invalid-result path.
+Any needed native/wire variant is settled with the canonical contract before coding.
+
+**Diagnostic evidence:** the existing evidence owner must admit source-backed loss
+against the selected producer even when its claims are ineligible for positive
+content. The loss owner validates the exact producer/claim/source combination;
+packet guidance, selected schemas, collection and readback project those same rules.
+Source-only evidence is valid only for loss locations that permit it. Diagnostic
+eligibility never grants positive support or automatically selects citations.
+
+A reconciliation conflict starts as an unresolved candidate assertion. Only current
+review evidence for that exact subject establishing incompatible original meanings
+and a concrete user choice can classify it as a genuine source conflict. An unrelated
+negative finding, generic `unsupported`, or a positive verdict cannot discharge it.
+Native joins establish association; the incompatibility judgment remains semantic.
+
+Disagreement between model findings is not itself a source contradiction. If current
+evidence already resolves the same registered decision against the same authorities,
+a contrary need must account for that evidence. Unresolved assessment disagreement
+stays at the review boundary; it does not ask the user to repeat known facts. Match
+exact subject/purpose/dependency bindings, never similar wording or shared citations.
+Changed source or a different decision still requires its own current assessment.
+
+The shared authority owner combines the complete findings using this precedence;
+the source-loss owner selects targets and the runner executes declared operations:
+
+| Current state | Required continuation |
+| --- | --- |
+| Terminal validation/runner/provider failure, exhausted applicable retry, or token budget preventing required work | Terminal error; no new specification or clarification publication |
+| Administrative block or required upstream rework | Preserve that typed outcome; no caller-local repair or clarification bypass |
+| Repairable malformed review/need | Existing bounded correction and full admission; no authority gate on the partial result |
+| One or more uniquely authorized localized candidate repairs, with current dependencies and allowance | Select deterministically from eligible targets; repair, rebuild affected dependents and reassess the complete ledger before choosing another outcome |
+| No eligible repair remains, but candidate loss or interpretation failure remains unresolved | Terminal invalid/error with the native reason; no generic question, new forms or incomplete specification |
+| No unresolved candidate/review defect and one or more admitted user decisions | `needs_user`; validate the complete clarification output under the owning workflow policy |
+| All required authorities resolved and candidate validation passes | Continue the declared workflow; completion still requires all later gates |
+
+An earlier unlocalized finding must not hide a later authorized repair. Retain it
+for reassessment; never discard it. A genuine gap alongside a candidate defect cannot
+mask the defect or cause early publication. A missing external authority that makes
+the proposed repair unsafe prevents its authorization. Stable native ordering,
+old-value/revision checks, independent defect identities, recurrence history and the
+global actual-token limit remain with existing owners; selection cannot reset them.
+
+Need construction and formatting occur after this gate. Text/evidence repair never
+reclassifies a semantic verdict. If existing authority cannot safely correct an
+inconclusive finding, reject it; optional reassessment requires its separate decision.
+Apply this boundary to source review, generated needs, candidate review, selected
+repairs and rerun/output validation. No special Spec YAML exception owns the policy.
+
+For an admitted Spec pause, publish the validated incomplete `spec.md` and linked
+forms under ADR 0017; report `awaiting_clarification`, IDs/paths and actual publication
+status, with completed-spec grading `not_run`. Errors grant no new publication;
+preserve prior artifacts/protected forms and retain diagnostics/logs. Pending forms
+remain questions/answers, not semantic proof: readback checks current bindings and
+fresh invocations rebuild the review/gate rather than trusting stored question prose.
+
+This contract closes specified unsafe transitions once implemented. It cannot
+guarantee that every model judgment is true. False-gap recognition requires the
+offline and separately approved live evidence in §28.9; documentation alone is not
+an implementation or a reliability result.
 
 ### 12.9 Configured JSON response composition
 

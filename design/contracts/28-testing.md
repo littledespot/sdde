@@ -306,7 +306,9 @@ Stub model operations deliberately return:
 - a claim with a fabricated source citation;
 - repeated identical invalid repairs.
 
-Each test asserts that only a genuinely malformed authorized candidate reaches atomic repair; missing/unreconciled authority reaches clarification/rework/block instead, and invalid output never reaches a write/command action.
+Each test distinguishes an authorized candidate defect from an admitted authority
+gap under §12.8.1. Candidate repair, clarification/rework/block and terminal review
+failure retain separate outcomes; invalid output never reaches publication/commands.
 
 For protocol correction, inspect the serialized provider request, not only retained
 logs or diagnostics. Under [§22.6.2](22-repair.md#2262-explicit-error-guidance), cover:
@@ -479,3 +481,33 @@ dependency freshness and exact accounting; they do not establish live reliabilit
 Use measured improvements to select a change; keep unrepaired JSON/schema rejection
 terminal with no publication. A completed, published and scored run remains distinct from a
 successful isolated request, valid incomplete specification or passing fake-provider suite.
+
+### 28.9 Clarification admission conformance
+
+Prove [§12.8.1](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
+through existing packet/schema, review, authority, repair, runner, form and output
+owners. Use the same candidate/evidence across those boundaries; isolated tests
+that inject a correct diagnosis do not establish complete recovery.
+
+| Case | Required evidence |
+| --- | --- |
+| Retained false-conflict sequence | Compatible source → incorrect candidate conflict → generic unsupported findings → completed question text does not authorize publication while the candidate conflict remains unclassified |
+| Correct localized diagnosis | Feature and conflict subjects can cite the exact diagnostic claims; coupled repair rebuilds signals, coverage and reviews; positive provenance stays strict |
+| Mixed findings | Localized/unlocalized defects and genuine gaps in every ordering; eligible repairs are reachable, no finding disappears, unresolved defects prevent publication |
+| Genuine source contradiction | Exact current subject/claim/source association and explicit incompatible meanings admit a concrete choice; do not treat every conflict as repairable |
+| Supported versus missing requirement | Both source review and generation needs; complete source requires no restatement, genuine missing choice yields preconditions/question/expected answer with a blank answer region |
+| Inconclusive or malformed need | Existing bounded correction only where authorized; exhaustion or no safe correction fails with no new spec/forms, including when other valid questions exist |
+| D1 if selected | Full initial-response correction versus selected native repair; changing error locations, dropped/changed siblings, no semantic reassessment through JSON correction, exact independent allowances and actual tokens |
+| Freshness and publication | Source/policy/answer changes rebuild affected evidence; pending readback does not trust question prose; protected forms survive; logs/report distinguish error, incomplete publication and completed scoring |
+
+Include unrelated business domains and cases with no surviving positive business
+claim. Assert the actual runner branch and zero publication calls on rejection,
+then complete generation/publication on successful recovery and incomplete
+publication on a genuine gap. Retain exact accounting and cleanup assertions.
+
+Semantic judgments in scripted fixtures are declared inputs, not deterministic
+proof. Separately approved live runs must inspect whether cited source already
+answers each question and whether any necessary decision was suppressed. Report
+false questions, missed genuine gaps and terminal interpretation failures separately;
+a lower question count caused by more failures is not improved generation. Do not
+claim universal semantic correctness or successful E2E from fake-provider tests.

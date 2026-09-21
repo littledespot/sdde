@@ -11,6 +11,12 @@ implementation and known gaps are tracked in the [feature contracts](features/)
 and [FIX_001 rollout](../fixes/IMP_001.md); design requirements are not
 claims that the engine already satisfies them.
 
+**22 September corrective design:** [§12.8.1](contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
+owns clarification admission and candidate-failure precedence;
+[FIX_002](../fixes/FIX_002.md) tracks implementation and semantic validation still
+required. This documentation amendment neither implements the gate nor authorizes
+the separately proposed verdict reassessment. The overall design remains Proposed.
+
 **Reading this design:** Sections 1, 3, 4, 30–32 retain the overview, invariants,
 responsibility boundary, delivery sequence and acceptance criteria. Other sections
 link to focused contracts below. Those contracts are part of this same proposed
@@ -895,9 +901,10 @@ The new engine is ready for production evaluation when all of the following are 
 17. Persisted reference citations, provenance, claims, conflicts, and exact preserved tokens are
     mechanically verifiable across restart without a content fingerprint.
 
-18. An unsupported semantic assertion is converted only through the one-use no-invention repair
-    authorization into `clarification_needed`; the engine and model never invent a plausible
-    requirement, architecture decision, task fact, path, command, or resolution.
+18. The one-use no-invention repair may produce `clarification_needed` only for an
+    admitted authority gap under §12.8.1. Candidate loss and inconclusive review
+    retain their repair/rejection outcome. Neither engine nor model invents a
+    requirement, architecture decision, task fact, path, command or resolution.
 
 19. **Clarification identity and stage gates.**
     - Clarifications use only registered `<feature>/clarify/S01..S99.md`, `P01..P99.md`, and
@@ -907,6 +914,8 @@ The new engine is ready for production evaluation when all of the following are 
       under §12.7; equal wording across subjects does not authorize answer sharing.
     - Review diagnostics alone are not actionable questions. Do not ask users to
       restate supported behavior in the engine's internal specification categories.
+    - Combined candidate defects and genuine gaps obey §12.8.1 in every finding
+      order; §28.9 tests the complete path through publication and fresh readback.
     - Open forms expose only controlled fields; closed historical views are read-only.
     - Reruns reconsider current reference/principle/answer authorities and regenerate the
       complete owning stage.

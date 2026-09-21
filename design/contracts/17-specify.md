@@ -124,10 +124,11 @@ For each feature-brief or specification unit, the declared model operation retur
   candidate, `AuthorityReconciliationOrchestrator` builds the complete specification-owned
   requirement set from the reconciled reference claims, required specification fields,
   preservation descriptors, and conflict/open-question rules.
-- Feature intent or reference meaning that has zero current support, multiple non-equivalent
-  interpretations, missing required detail, unresolved conflict, or uncertain semantic support
-  produces an `SNN`; it cannot be downgraded to an assumption, non-goal, context-only signal,
-  generic prose, or technical-stage decision merely to complete the specification.
+- A current required business choice genuinely missing or ambiguous in the source
+  produces an `SNN` only after shared [§12.8.1 admission](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence).
+  Uncertain interpretation, missing extraction or an unverified conflict label does
+  not establish a user decision. Neither a gap nor a candidate defect may be hidden
+  in assumptions, non-goals, context or technical-stage decisions to complete Spec.
 - Entries owned by later technical stages are carried as cited context/obligations without
   asking principles to invent business intent.
 
@@ -198,7 +199,8 @@ existing policy path once its prerequisites hold; retain any cited Plan obligati
 ### 17.4 Specification clarification behavior
 
 - Both need producers follow [shared clarification preparation](12-model-boundary.md#127-workflow-defined-model-operations)
-  before the existing refresh/render/publication path; a diagnostic alone is not a question.
+  after §12.8.1 admission and before refresh/render/publication. A genuine gap beside
+  an unresolved candidate defect cannot bypass the shared precedence rule.
 - Source review assesses meaning, not whether references already contain separate
   stories, acceptance criteria or requirement headings. Known behavior must not be
   requested again merely to fill those categories. Genuine missing actors, outcomes

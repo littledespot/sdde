@@ -523,6 +523,9 @@ allocator, checkpoint or provider journal is implied.
 ### 6.1 Authority reconciliation contract
 
 - This sample illustrates the broader design, not a second wire schema.
+- Clarification outcomes require [§12.8.1 admission](contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence).
+  The sample's gap enum alone grants no publication authority; candidate/review
+  failures retain their separate native rejection path.
 - [`required_authority.zig`](../src/domain/required_authority.zig) owns H-008's
   execution-local types and compiler-locked policies.
 - Closed observations reference supplied evidence; they cannot author rules,

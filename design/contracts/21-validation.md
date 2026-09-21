@@ -18,7 +18,7 @@ This catalogue is normative for the first engine version. A project may add vali
 | Path containment | Canonical path and symlink resolution | Escape/absolute/forbidden path | Usually not model-repairable; path field may be repaired only when otherwise safe |
 | Model protocol | Exact runner-bound call association, then closed compact result schema | Unbound/stale observation or malformed result | Invalid association fails closed; malformed bound content follows only explicit YAML protocol retry/repair. |
 | Placeholder | Template/model sentinel scan | Unresolved placeholder remains | Model atomic |
-| Authority reconciliation | Closed required-slot ledger, exact candidate/currentness/cardinality checks, registered semantic assessment, and ownership routing | Any required entry is missing, ambiguous, conflicting, multiply non-equivalent, stale, unsupported, or unregistered | Earliest owning `SNN`/`PNN`/`TNN`, explicit upstream rework, or administrative block; never local/model repair |
+| Authority reconciliation | Closed required-slot ledger, current evidence, admitted gap and candidate-defect classification under §12.8.1 | Unresolved required authority or candidate/review defect | Shared §12.8.1 precedence: authorized candidate repair, terminal rejection, admitted earliest-owner clarification, upstream rework or administrative block |
 | Publication boundary | Staged-set path and membership checks | Missing/extra/outside write | Engine/workflow |
 
 ### 21.2 Specify validators
@@ -34,11 +34,11 @@ This catalogue is normative for the first engine version. A project may add vali
 | Required sections | Typed required fields and renderer contract | Whether prose is adequate |
 | Requirement IDs | Engine-assigned type/uniqueness; stable surviving IDs and monotonic new IDs | Whether the requirement is substantively correct |
 | Acceptance form | Exactly one nonempty typed `given`/`when`/`then` value; `spec.md` uses only the canonical compact `Given`/`When`/`Then` labels in that order | Whether scenario is truly testable |
-| Clarification state | No unresolved typed clarification at success | Whether all ambiguity was discovered |
+| Clarification state | Only admitted needs reach forms; no unresolved typed clarification at success | Whether a proposed decision is genuinely absent and every ambiguity was discovered |
 | Business-only lint | No obvious code/path/framework/CSS leakage | Nuanced business/technical classification |
 | Exact-copy propagation | Byte-for-byte value from source ledger | Whether source copy is actually required |
 | Visual-token propagation | Every required token ID/value rendered in sidecar | Semantic classification of required token |
-| Reference conflict gate | Every known conflict has resolution/open question | Discovery of all semantic conflicts |
+| Reference conflict gate | Every candidate conflict has current subject-bound assessment; only admitted source conflicts reach questions | Whether the source meanings are incompatible; discovery of all semantic conflicts |
 
 ### 21.3 Plan validators
 

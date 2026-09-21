@@ -9,7 +9,10 @@ clarification routes are unfinished. Phase 3 repair is verified offline. See
 
 [ADR 0015](../decisions/0015-specification-principle-review.md) adds principle
 consistency review and shared actionable-question preparation to this design.
-Those additions are **not implemented** by the supplied workflow.
+Native assessment and question-preparation owners exist; complete semantic readiness
+is outstanding. The corrective [§12.8.1 clarification gate](../contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
+is documented but not implemented. [FIX_002](../../fixes/FIX_002.md) owns its rollout;
+historical delivery notes below do not establish that new gate's conformance.
 
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) defines the
 implemented generic response-composition integration: extraction content/citations,
@@ -651,9 +654,9 @@ closed requiredness/ownership policies, current support checks and outcomes.
   reference signal/conflict; and each exact-preservation obligation.
 - Optional collections add no minimum record count.
 - The gate rebuilds this projection to reject omitted/invented entries.
-- Signals retain the existing claim/citation/token lineage and unresolved conflicts
-  force a gap; neither a citation nor reconciliation membership supplies semantic
-  support by itself.
+- Signals retain claim/citation/token lineage. Reconciliation conflict labels are
+  candidate assertions until assessed under §12.8.1; neither membership nor a
+  citation supplies semantic support or independently authorizes a user question.
 
 | Registered YAML operation | Responsibility |
 | --- | --- |

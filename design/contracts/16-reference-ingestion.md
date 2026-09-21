@@ -235,8 +235,11 @@ Under the user-approved chunk 14 amendment (18 September 2026), §22 permits rep
 only when captured evidence identifies a unique defective producer and minimal safe
 target. Repair extraction loss in extraction; repair reconciliation loss in
 reconciliation. Preserve unrelated raw units, rebuild all dependent identities and
-projections, and repeat full validation and support review. Unlocalized omissions
-remain candidate defects; genuinely missing source decisions remain clarifications.
+projections, and repeat full validation and support review. Diagnostic eligibility
+and mixed finding selection follow [§12.8.1](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence).
+Retain unlocalized findings while attempting other authorized targets; unresolved
+candidate failures cannot be published as user questions. Only admitted missing
+source decisions enter clarification.
 
 #### False-conflict repair boundary — approved extension
 
