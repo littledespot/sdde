@@ -238,6 +238,12 @@ For scored criteria, the percentage is:
   and validated actual token usage.
 - Error bodies and credentials are not retained.
 - Valid usage survives malformed judgment/output data.
+- `evaluation-report/v2` carries the judgment validator's typed diagnostic in
+  JSON and Markdown: parser byte/line/column for invalid JSON, or the affected
+  criterion, zero-based evidence index and document ID for invalid evidence.
+  Missing source and specification evidence are distinct. Valid JSON that fails
+  the closed response contract reports `invalid_shape`. Diagnostics add no retry
+  or authority to score an invalid judgment; the E2E report embeds the same value.
 
 - Only transient provider failures/rate limits with known actual usage can retry, within
   the configured count, delay and remaining allowance.

@@ -1540,7 +1540,7 @@ test "candidate review retains semantic roles and routes detected contradictions
         .{ .required = "On startup display a greeting and the current UTC date and time.", .exclusion = "Sending telemetry is outside scope and must not occur." },
         .{ .required = "A borrower renews a loan and receives the new return deadline.", .exclusion = "Charging a renewal fee is outside scope and must not occur." },
     };
-    for (cases) |case| for (std.meta.tags(Mode)) |mode| {
+    for (cases, 0..) |case, case_index| for (std.meta.tags(Mode)) |mode| {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         defer arena.deinit();
         const a = arena.allocator();
@@ -1578,7 +1578,27 @@ test "candidate review retains semantic roles and routes detected contradictions
             const unit = requirement.seed.id.unit;
             if (unit == .record and std.meta.eql(unit.record, content.records[2].id)) break index;
         } else return error.MissingRecordRequirement;
+        const focused = try support.packetFor(a, inputs, fixture.context, .{ .finding = ledger.requirements[selected].seed.id });
+        defer packets.release(focused);
+        const focused_body = (try std.json.parseFromSlice(std.json.Value, a, focused.body(), .{})).value.object;
+        try std.testing.expectEqualStrings(packet.resultDefinition().?.bytes, focused.resultDefinition().?.bytes);
+        try std.testing.expectEqual(@as(usize, 1), focused_body.get("requirements").?.array.items.len);
+        // Only assignment cardinality changes: preserve original ordinal, role,
+        // siblings, source and evidence so the experiment cannot hide a conflict.
+        for (body.keys(), body.values()) |key, original_value| {
+            const expected = if (std.mem.eql(u8, key, "requirements")) original_value.array.items[selected] else original_value;
+            const actual = if (std.mem.eql(u8, key, "requirements")) focused_body.get(key).?.array.items[0] else focused_body.get(key).?;
+            try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, expected, .{}), try std.json.Stringify.valueAlloc(a, actual, .{}));
+        }
+        // Diagnostic inputs only. No replay result is imported as workflow state.
+        for ([_]*const packets.Packet{ packet, focused }, [_][]const u8{ "all", "one" }) |request, label| {
+            const path = try std.fmt.allocPrint(a, ".zig-cache/review-assignment-{d}-{s}-{s}.json", .{ case_index, @tagName(mode), label });
+            try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = path, .data = request.body() });
+        }
         const good = try reviewFor(a, inputs);
+        const partial = (try support.collect(a, inputs, fixture.context, try json.encode(support.Review, a, .{ .entries = good.entries[selected .. selected + 1] }), null)).rejected;
+        try std.testing.expectEqual(.missing_requirement, partial.rejection.selected().?.issue);
+        try std.testing.expectEqual(good.entries.len - 1, partial.rejection.diagnostics.len);
         // A structurally valid false positive is still admitted: this is not a
         // native semantic classifier or proof of live instruction effectiveness.
         const positive = (try support.collect(a, inputs, fixture.context, try json.encode(support.Review, a, good), null)).accepted;

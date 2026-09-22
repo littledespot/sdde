@@ -30,11 +30,11 @@ test "rubric-owned scale and evidence yield stable score, not workflow authority
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    const result = try judgment.validate(allocator, try capture(allocator), good);
+    const result = try judgment.validate(allocator, null, try capture(allocator), good);
     try std.testing.expectEqual(@as(f64, 100), result.score_percent.?);
     try std.testing.expectEqual(.met, result.threshold);
     const low = try std.mem.replaceOwned(u8, allocator, good, "\"score\":3", "\"score\":1");
-    const poor = try judgment.validate(allocator, try capture(allocator), low);
+    const poor = try judgment.validate(allocator, null, try capture(allocator), low);
     try std.testing.expectEqual(.scored, poor.assessment);
     try std.testing.expectEqual(@as(f64, 0), poor.score_percent.?);
     try std.testing.expectEqual(.not_met, poor.threshold);
@@ -73,7 +73,7 @@ test "judgment rejects missing foreign duplicate forged and malformed results" {
     defer arena.deinit();
     const a = arena.allocator();
     const inputs = try capture(a);
-    try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, inputs, "{\"results\":[]}"));
+    try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, null, inputs, "{\"results\":[]}"));
     for ([_][2][]const u8{
         .{ "coverage", "foreign" },
         .{ "\"score\":3", "\"score\":4" },
@@ -90,7 +90,7 @@ test "judgment rejects missing foreign duplicate forged and malformed results" {
         .{ "\"results\":", "\"approved\":true,\"results\":" },
     }) |replacement| {
         const bytes = try std.mem.replaceOwned(u8, a, good, replacement[0], replacement[1]);
-        try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, inputs, bytes));
+        try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, null, inputs, bytes));
     }
 }
 
@@ -101,15 +101,15 @@ test "uncertainty is unscored and not applicability is explicitly rubric control
     const inputs = try capture(a);
     const nullable = try std.mem.replaceOwned(u8, a, good, "\"score\":3", "\"score\":null");
     const uncertain = try std.mem.replaceOwned(u8, a, nullable, "\"scored\"", "\"uncertain\"");
-    const result = try judgment.validate(a, inputs, uncertain);
+    const result = try judgment.validate(a, null, inputs, uncertain);
     try std.testing.expectEqual(.unresolved, result.assessment);
     try std.testing.expect(result.score_percent == null);
     try std.testing.expectEqual(.undetermined, result.threshold);
     const excluded = try std.mem.replaceOwned(u8, a, nullable, "\"scored\"", "\"not_applicable\"");
-    try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, inputs, excluded));
+    try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, null, inputs, excluded));
     var allowed = inputs;
     allowed.rubric = try c.parseRubric(a, try std.mem.replaceOwned(u8, a, rubric_bytes, "false", "true"));
-    const no_applicable = try judgment.validate(a, allowed, excluded);
+    const no_applicable = try judgment.validate(a, null, allowed, excluded);
     try std.testing.expectEqual(.no_applicable_criteria, no_applicable.assessment);
     try std.testing.expect(no_applicable.score_percent == null);
 }
@@ -135,7 +135,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     const a = arena.allocator();
     const inputs = try capture(a);
     _ = try packet.input(a, inputs);
-    _ = try judgment.validate(a, inputs, good);
+    _ = try judgment.validate(a, null, inputs, good);
     const config = try configuration.parse(a, config_bytes, test_selection);
     _ = try wire.request(a, config, inputs);
     _ = try wire.response(a, try responseBytes(a, "completed", good));
@@ -143,6 +143,12 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
     _ = try reports.json(a, report);
     _ = try reports.markdown(a, report);
+    var malformed = observed_good;
+    malformed.payload = "{\"results\":[{}},{}]}";
+    fake = .{ .observations = &.{malformed} };
+    const rejected = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+    _ = try reports.json(a, rejected);
+    _ = try reports.markdown(a, rejected);
     const bedrock_config = try configuration.parse(a, config_bytes, bedrock_selection);
     _ = try bedrock.request(a, bedrock_config, inputs);
     var observation = try bedrock.response(a, .{ .received = .{ .status = 200, .body = try bedrockResponseBytes(a, "end_turn", good) } });
@@ -729,6 +735,62 @@ test "bad judgments stay evaluator errors while provider usage is retained" {
     try std.testing.expect(std.mem.indexOf(u8, try reports.markdown(a, report), "No quality score") != null);
 }
 
+test "judgment diagnostics distinguish syntax shape and exact evidence without retries or grades" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const inputs = try capture(a);
+    const seed = (try c.decode(judgment.Proposal, a, good)).results[0];
+    const Reason = @FieldType(judgment.Diagnostic, "reason");
+    const cases = [_]struct { payload: []const u8, reason: Reason, evidence_index: ?usize = null, document_id: ?[]const u8 = null }{
+        .{ .payload = "{\"results\":[{}},{}]}", .reason = .json },
+        .{ .payload = "{\"results\":\"invalid\"}", .reason = .invalid_shape },
+        .{ .payload = try std.mem.replaceOwned(u8, a, good, "Store the message.", "Invented quotation."), .reason = .quote_not_found, .evidence_index = 0, .document_id = "requirements" },
+        .{ .payload = try std.mem.replaceOwned(u8, a, good, "The user can store the message.", "Invented quotation."), .reason = .quote_not_found, .evidence_index = 1, .document_id = "specification" },
+        .{ .payload = try std.mem.replaceOwned(u8, a, good, "\"requirements\"", "\"foreign\""), .reason = .unknown_document, .evidence_index = 0, .document_id = "foreign" },
+        .{ .payload = try std.mem.replaceOwned(u8, a, good, "Store the message.", " "), .reason = .empty_quote, .evidence_index = 0, .document_id = "requirements" },
+    };
+    for (cases) |case| {
+        var observation = observed_good;
+        observation.payload = case.payload;
+        var fake: Fake = .{ .observations = &.{observation} };
+        const report = try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), inputs);
+        try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
+        try std.testing.expectEqual(@as(usize, 1), fake.count);
+        try std.testing.expectEqual(@as(usize, 1), report.attempts.len);
+        try std.testing.expectEqualDeep(observation.usage, report.attempts[0].usage);
+        const diagnostic = report.judgment_diagnostic.?;
+        try std.testing.expectEqual(case.reason, diagnostic.reason);
+        try std.testing.expectEqual(case.evidence_index, diagnostic.evidence_index);
+        try std.testing.expectEqualDeep(case.document_id, diagnostic.document_id);
+        const encoded = (try std.json.parseFromSlice(std.json.Value, a, try reports.json(a, report), .{})).value.object;
+        try std.testing.expectEqualStrings("evaluation-report/v2", encoded.get("schema").?.string);
+        try std.testing.expectEqualStrings(@tagName(case.reason), encoded.get("judgment_diagnostic").?.object.get("reason").?.string);
+        const markdown = try reports.markdown(a, report);
+        try std.testing.expect(std.mem.indexOf(u8, markdown, "No quality score") != null);
+        try std.testing.expect(std.mem.indexOf(u8, markdown, @tagName(case.reason)) != null);
+        if (case.reason == .json) {
+            const detail = diagnostic.json.?;
+            try std.testing.expectEqual(@as(usize, 14), detail.location.?.byte_offset);
+            try std.testing.expectEqual(@as(usize, 1), detail.location.?.line);
+            try std.testing.expectEqual(@as(usize, 15), detail.location.?.column);
+            try std.testing.expect(std.mem.indexOf(u8, markdown, "at byte 14, line 1, column 15") != null);
+        } else if (case.reason != .invalid_shape) {
+            try std.testing.expectEqualStrings("coverage", diagnostic.criterion_id.?);
+        }
+    }
+    var diagnostic: ?judgment.Diagnostic = null;
+    var result = seed;
+    for ([_]bool{ true, false }) |missing_source| {
+        result.evidence = if (missing_source) seed.evidence[1..] else seed.evidence[0..1];
+        try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, &diagnostic, inputs, try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &.{result} }, .{})));
+        try std.testing.expectEqual(if (missing_source) Reason.missing_source_evidence else Reason.missing_specification_evidence, diagnostic.?.reason);
+        try std.testing.expectEqualStrings("coverage", diagnostic.?.criterion_id.?);
+    }
+    _ = try judgment.validate(a, &diagnostic, inputs, good);
+    try std.testing.expect(diagnostic == null);
+}
+
 test "each rubric result needs source evidence even when sibling judgments are complete" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -767,13 +829,16 @@ test "each rubric result needs source evidence even when sibling judgments are c
             try std.testing.expectEqualDeep(seed, results[0]);
             if (restored < 3) {
                 try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
+                try std.testing.expectEqual(.missing_source_evidence, report.judgment_diagnostic.?.reason);
+                try std.testing.expectEqualStrings(ids[restored], report.judgment_diagnostic.?.criterion_id.?);
                 try std.testing.expect(std.mem.indexOf(u8, try reports.markdown(a, report), "No quality score") != null);
                 // Claiming absence does not waive source evidence either.
                 results[3].missing_from_specification = true;
-                try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, inputs, try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &results }, .{})));
+                try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, null, inputs, try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &results }, .{})));
                 results[3].missing_from_specification = false;
             } else {
                 try std.testing.expectEqual(.scored, report.outcome.evaluated.assessment);
+                try std.testing.expect(report.judgment_diagnostic == null);
                 try std.testing.expectEqualDeep(results[0..], report.outcome.evaluated.results);
             }
         }
@@ -835,19 +900,19 @@ test "multiple criteria preserve identity order weights and explicit exclusions"
     results[0].criterion_id = "usability";
     results[1].score = 1;
     const proposal = judgment.Proposal{ .results = &results };
-    const weighted = try judgment.validate(a, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{}));
+    const weighted = try judgment.validate(a, null, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{}));
     // The high-scoring criterion has weight 3 of the combined weight 5.
     try std.testing.expectEqual(@as(f64, 60), weighted.score_percent.?);
     try std.testing.expectEqual(.met, weighted.threshold);
     try std.testing.expectEqualStrings("coverage", weighted.results[0].criterion_id);
     results[0].disposition = .not_applicable;
     results[0].score = null;
-    const excluded = try judgment.validate(a, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{}));
+    const excluded = try judgment.validate(a, null, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{}));
     try std.testing.expectEqual(@as(f64, 0), excluded.score_percent.?);
     results[0] = results[1];
-    try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{})));
+    try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, null, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{})));
     results[0].criterion_id = "foreign";
-    try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{})));
+    try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, null, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{})));
     criteria[1].id = "coverage";
     try std.testing.expectError(error.InvalidEvaluationContract, c.parseRubric(a, try std.json.Stringify.valueAlloc(a, inputs.rubric, .{})));
     inputs.case.sources = &.{ inputs.case.sources[0], inputs.case.sources[0] };
@@ -864,9 +929,9 @@ test "missing content is recorded as absence without inventing a candidate quote
     result.score = 1;
     result.evidence = result.evidence[0..1];
     const proposal = judgment.Proposal{ .results = @as(*const [1]judgment.CriterionResult, &result) };
-    try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{})));
+    try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, null, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{})));
     result.missing_from_specification = true;
-    try std.testing.expectEqual(@as(f64, 0), (try judgment.validate(a, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{}))).score_percent.?);
+    try std.testing.expectEqual(@as(f64, 0), (try judgment.validate(a, null, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{}))).score_percent.?);
 }
 
 test "the checked-in Hello World case and rubric load without a fixture-specific judge" {

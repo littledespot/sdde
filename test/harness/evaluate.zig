@@ -15,6 +15,7 @@ pub fn run(io: std.Io, a: std.mem.Allocator, port: provider.Port, config: config
     defer attempts.deinit(a);
     var ordinal: u32 = 1;
     var outcome: report.Outcome = .{ .evaluator_error = .retries_exhausted };
+    var diagnostic: ?judgment.Diagnostic = null;
     while (true) : (ordinal += 1) {
         io.checkCancel() catch {
             outcome = .{ .evaluator_error = .cancelled };
@@ -86,7 +87,7 @@ pub fn run(io: std.Io, a: std.mem.Allocator, port: provider.Port, config: config
             outcome = .{ .evaluator_error = .invalid_response };
             break;
         };
-        const result = judgment.validate(a, capture, payload) catch |err| {
+        const result = judgment.validate(a, &diagnostic, capture, payload) catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
             outcome = .{ .evaluator_error = .invalid_judgment };
             break;
@@ -94,5 +95,5 @@ pub fn run(io: std.Io, a: std.mem.Allocator, port: provider.Port, config: config
         outcome = .{ .evaluated = result };
         break;
     }
-    return .{ .capture = capture, .configuration = config, .attempts = try a.dupe(report.Attempt, attempts.items), .outcome = outcome };
+    return .{ .capture = capture, .configuration = config, .attempts = try a.dupe(report.Attempt, attempts.items), .outcome = outcome, .judgment_diagnostic = diagnostic };
 }

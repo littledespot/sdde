@@ -27,13 +27,14 @@ pub const Attempt = struct {
 };
 pub const Outcome = union(enum) { evaluated: j.Result, evaluator_error: Failure };
 pub const Report = struct {
-    schema: []const u8 = "evaluation-report/v1",
+    schema: []const u8 = "evaluation-report/v2",
     prompt_revision: []const u8 = @import("packet.zig").revision,
     judgment_schema: []const u8 = j.schema_revision,
     capture: c.Capture,
     configuration: @import("configuration.zig").Config,
     attempts: []const Attempt,
     outcome: Outcome,
+    judgment_diagnostic: ?j.Diagnostic = null,
 };
 
 pub fn json(allocator: std.mem.Allocator, report: Report) std.mem.Allocator.Error![]const u8 {
@@ -85,7 +86,28 @@ fn render(out: *std.Io.Writer, report: Report) std.Io.Writer.Error!void {
         try out.writeAll("\n\n");
     }
     switch (report.outcome) {
-        .evaluator_error => |failure| try out.print("Evaluator error: {s}. No quality score.\n", .{@tagName(failure)}),
+        .evaluator_error => |failure| {
+            try out.print("Evaluator error: {s}. No quality score.\n", .{@tagName(failure)});
+            if (report.judgment_diagnostic) |diagnostic| {
+                try out.print("\nJudgment diagnostic: {s}", .{@tagName(diagnostic.reason)});
+                if (diagnostic.criterion_id) |id| {
+                    try out.writeAll("; criterion ");
+                    try escape(out, id);
+                }
+                if (diagnostic.evidence_index) |index| try out.print("; evidence index {d}", .{index});
+                if (diagnostic.document_id) |id| {
+                    try out.writeAll("; document ");
+                    try escape(out, id);
+                }
+                if (diagnostic.json) |detail| {
+                    try out.print("; {s}", .{@tagName(detail.reason)});
+                    if (detail.location) |location| try out.print(" at byte {d}, line {d}, column {d}", .{ location.byte_offset, location.line, location.column });
+                    try out.writeAll(". ");
+                    try out.writeAll(detail.explanation());
+                }
+                try out.writeByte('\n');
+            }
+        },
         .evaluated => |result| {
             try out.print("Assessment: {s}; threshold: {s}\n\n", .{ @tagName(result.assessment), @tagName(result.threshold) });
             if (result.score_percent) |score| try out.print("Score: {d:.2}%\n\n", .{score});

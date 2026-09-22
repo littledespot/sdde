@@ -54,8 +54,9 @@ pub const Capture = struct {
 
 /// Arena-owned closed decoding. No unknown fields, duplicate keys or coercion
 /// of malformed document syntax; callers retain the arena for every result.
+pub const json_limits: strict_json.Limits = .{ .maximum_depth = 32 };
 pub fn decode(comptime T: type, allocator: std.mem.Allocator, bytes: []const u8) Error!T {
-    return strict_json.decode(T, allocator, bytes, .{ .maximum_depth = 32 }) catch |err| return map(err);
+    return strict_json.decode(T, allocator, bytes, json_limits) catch |err| return map(err);
 }
 pub fn parseCase(allocator: std.mem.Allocator, bytes: []const u8) Error!Case {
     const value = try decode(Case, allocator, bytes);
