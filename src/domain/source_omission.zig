@@ -127,16 +127,39 @@ pub fn select(a: std.mem.Allocator, sources: r.evidence.Inputs, support: Support
     unreviewed.candidates = &.{};
     const checked = try @import("specification_support.zig").Source.validate(a, unreviewed, sources, support.review);
     if (checked != .accepted or !std.meta.eql(try @import("atomic_repair.zig").snapshot(authority.Inputs, a, checked.accepted.inputs), try @import("atomic_repair.zig").snapshot(authority.Inputs, a, support.inputs))) return error.InvalidRequiredAuthority;
+    var unlocalized = false;
     for (support.result.entries) |entry| {
         const finding = (try authority.supportedOmission(a, support.inputs, support.observations, support.result, entry.requirement)) orelse continue;
         try @import("specification_support_evidence.zig").validate(a, support.inputs, sources, finding);
         for (support.review.review.entries) |review| if (review.requirement_ordinal == finding.id.ordinal) {
-            if (review.value.loss == .unlocalized) return error.UnlocalizedSourceOmission;
+            if (review.value.loss == .unlocalized) {
+                unlocalized = true;
+                continue;
+            }
             return .{ .finding = finding, .location = review.value.loss };
         };
-        return error.InvalidRequiredAuthority;
     }
-    return error.InvalidRequiredAuthority;
+    return if (unlocalized) error.UnlocalizedSourceOmission else error.InvalidRequiredAuthority;
+}
+
+/// Diagnostic claims belong to the named producer, independently of whether
+/// that producer's output is eligible as positive business content.
+pub fn diagnosticClaims(records: @import("reference_support.zig").Records, location: Location) ?[]const r.ClaimId {
+    return switch (location) {
+        .unlocalized => null,
+        .extraction_claim, .token_classification => &.{},
+        .reconciliation_signal => |id| for (records.signals) |signal| {
+            if (std.meta.eql(signal.id, id)) break signal.value.claim_ids;
+        } else null,
+        .reconciliation_conflict => |id| for (records.conflicts) |conflict| {
+            if (std.meta.eql(conflict.id, id)) break conflict.value.claim_ids;
+        } else null,
+        // A disposition loss has one claim. The caller uses the existing item
+        // storage so the returned slice does not borrow a temporary union value.
+        .reconciliation_disposition => |id| for (records.dispositions) |*disposition| {
+            if (std.meta.eql(disposition.claim_id, id)) break @as(*const [1]r.ClaimId, &disposition.claim_id)[0..];
+        } else null,
+    };
 }
 
 /// Verify all mechanical joins. Meaning and loss attribution remain explicitly

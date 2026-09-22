@@ -14,7 +14,7 @@ pub const schemas = [_]data.Schema{schema};
 pub const Authorize = struct {
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const Action = @import("../actions/specification/authorize_specification_omission_repair.zig").Action;
-    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     allocator: std.mem.Allocator,
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -23,7 +23,7 @@ pub const Authorize = struct {
         errdefer owned.destroy(owner);
         const authorization = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), try content(&input.step.data), try support(&input.step.data)) catch |err| {
             if (err == error.OutOfMemory) return error.OperationExecutionFailed;
-            return owned.publish(self.allocator, schema, owner, .blocked) catch error.OperationExecutionFailed;
+            return owned.publish(self.allocator, schema, owner, .invalid) catch error.OperationExecutionFailed;
         };
         owner.payload = .{ .omission_repair = .{ .authorization = authorization } };
         var result = owned.publish(self.allocator, schema, owner, .ok) catch return error.OperationExecutionFailed;

@@ -138,6 +138,7 @@ pub fn canonical(allocator: std.mem.Allocator, inputs: a.Inputs) Error!Canonical
 }
 pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: @import("reference_evidence.zig").Inputs, evidence: a.Evidence) Error!void {
     const review = evidence.review orelse return error.InvalidRequiredAuthority;
+    if (review.loss != null) return error.InvalidRequiredAuthority;
     if (review.principle_registry == null or !std.meta.eql(review.principle_registry.?, (inputs.principle_context orelse return error.InvalidRequiredAuthority).registry.id)) return error.InvalidRequiredAuthority;
     if (!(inputs.references orelse return error.InvalidRequiredAuthority).items.state_id.eql(sources.corpus.state_id) or evidence.method != .model_assisted or
         review.question != null or review.provenance.claim_ids.len != 0 or review.provenance.citation_ids.len != 0 or review.provenance.clarification_response_ids.len != 0 or review.source_ids.len != 0 or

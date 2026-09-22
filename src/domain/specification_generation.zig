@@ -19,9 +19,10 @@ pub fn Responses(comptime boundary: spec.Boundary) type {
             entities: fields.ApplicabilityProposal,
             records: []const fields.RecordProposal,
         };
-        pub const Response = union(enum) { content: Self.Content, clarification: Self.Need };
+        pub const Response = union(enum) { content: Self.Content, clarification: Self.Need, inconclusive: Inconclusive };
     };
 }
+pub const Inconclusive = struct { detail: []const u8 };
 const NeedReason = enum { missing, ambiguous, conflicting };
 pub const Need = Responses(.model).Need;
 pub const Content = Responses(.model).Content;
@@ -38,10 +39,12 @@ pub const ModelResponse = union(enum) {
     entities: spec.Model.ApplicabilityProposal,
     records: struct { records: []const spec.Model.RecordProposal },
     clarification: Need,
+    inconclusive: Inconclusive,
 
     pub fn from(response: Response) ModelResponse {
         return switch (response) {
             .clarification => |need| .{ .clarification = need },
+            .inconclusive => |failure| .{ .inconclusive = failure },
             .content => |content| switch (content) {
                 .records => |records| .{ .records = .{ .records = records } },
                 inline else => |value, tag| @unionInit(ModelResponse, @tagName(tag), value),
@@ -57,6 +60,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!Response {
     };
     return switch (response) {
         .clarification => |need| .{ .clarification = need },
+        .inconclusive => |failure| .{ .inconclusive = failure },
         .records => |records| .{ .content = .{ .records = records.records } },
         inline else => |value, tag| .{ .content = @unionInit(Content, @tagName(tag), value) },
     };
@@ -75,6 +79,7 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
     try provenance.bind(allocator, validator, context);
     var inspection: provenance.Inspection = .{};
     const result: CanonicalResponse = switch (proposed) {
+        .inconclusive => |failure| return .{ .invalid = .{ .unit = unit, .field = .interpretation, .rule = .interpretation, .observed = null, .blocked = .inconclusive_review, .detail = failure.detail } },
         .clarification => |need| .{ .clarification = .{
             .reason = need.reason,
             .question = provenance.inspectAttributed(boundary, allocator, validator, context, need.question, &inspection) catch |err| return rejected(unit, .clarification_question, null, inspection.text_issue, err),

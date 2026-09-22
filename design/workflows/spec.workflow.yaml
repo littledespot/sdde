@@ -747,7 +747,6 @@ subgraphs:
         on:
           ok: assemble-specification
           invalid: end.invalid
-          blocked: end.blocked
           failed: end.failed
           cancelled: end.cancelled
       gate:
@@ -1000,7 +999,7 @@ subgraphs:
     steps:
       authorize:
         use: authorize-specification-omission-repair
-        on: {ok: input, blocked: end.blocked, failed: end.failed}
+        on: {ok: input, invalid: end.invalid, failed: end.failed}
       input:
         use: build-specification-omission-repair-input
         on: {ok: model, failed: end.failed}

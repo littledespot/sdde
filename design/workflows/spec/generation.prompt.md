@@ -7,5 +7,9 @@ requirements must contain supported records; other families may be empty.
 Express each source-supported distinct observable success, invalid, empty,
 error or terminal flow as an acceptance criterion. Do not invent extra flows
 or repeat the same statement merely to fill an optional section.
-Decide entities from business data, with a cited basis. When business knowledge
-is missing, ambiguous or conflicting, return clarification, not guessed content.
+Decide entities from required business behavior, with a cited basis; displayed
+values alone do not establish entities. Return clarification only
+for an identifiable missing user decision: include known facts, the precise choice,
+its impact and an answer format that resolves it in question. The user answers.
+Return inconclusive with diagnostic detail for unresolved interpretation; do not
+turn uncertainty or missing prewritten fields into a user question.

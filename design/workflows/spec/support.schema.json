@@ -63,79 +63,51 @@
       "additionalProperties": false
     },
     "finding": {
-      "type": "object",
-      "properties": {
-        "decision": {
-          "enum": [
-            "supported",
-            "ambiguous",
-            "conflicting",
-            "unsupported",
-            "candidate_omission"
-          ]
+      "oneOf": [
+        {
+          "$ref": "#/$defs/supported"
         },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
+        {
+          "$ref": "#/$defs/ambiguous"
         },
-        "source_ids": {
-          "$ref": "#/$defs/ordinal_list"
+        {
+          "$ref": "#/$defs/conflicting"
         },
-        "detail": {
-          "$ref": "#/$defs/detail_value"
+        {
+          "$ref": "#/$defs/unsupported"
         },
-        "loss": {
-          "$ref": "#/$defs/loss"
+        {
+          "$ref": "#/$defs/candidate_omission"
         },
-        "question": {
-          "$ref": "#/$defs/question_value"
+        {
+          "$ref": "#/$defs/inconclusive"
         }
-      },
-      "required": [
-        "decision",
-        "provenance",
-        "source_ids",
-        "detail",
-        "loss"
-      ],
-      "additionalProperties": false
+      ]
     },
     "applicability_finding": {
-      "type": "object",
-      "properties": {
-        "decision": {
-          "enum": [
-            "supported",
-            "ambiguous",
-            "conflicting",
-            "unsupported",
-            "candidate_omission",
-            "not_applicable"
-          ]
+      "oneOf": [
+        {
+          "$ref": "#/$defs/supported"
         },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
+        {
+          "$ref": "#/$defs/ambiguous"
         },
-        "source_ids": {
-          "$ref": "#/$defs/ordinal_list"
+        {
+          "$ref": "#/$defs/conflicting"
         },
-        "detail": {
-          "$ref": "#/$defs/detail_value"
+        {
+          "$ref": "#/$defs/unsupported"
         },
-        "loss": {
-          "$ref": "#/$defs/loss"
+        {
+          "$ref": "#/$defs/candidate_omission"
         },
-        "question": {
-          "$ref": "#/$defs/question_value"
+        {
+          "$ref": "#/$defs/inconclusive"
+        },
+        {
+          "$ref": "#/$defs/not_applicable"
         }
-      },
-      "required": [
-        "decision",
-        "provenance",
-        "source_ids",
-        "detail",
-        "loss"
-      ],
-      "additionalProperties": false
+      ]
     },
     "ordinal": {
       "type": "object",
@@ -488,6 +460,214 @@
       "required": [
         "provenance",
         "source_ids"
+      ],
+      "additionalProperties": false
+    },
+    "supported": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "supported"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/ordinal_list"
+        },
+        "detail": {
+          "$ref": "#/$defs/detail_value"
+        },
+        "loss": {
+          "$ref": "#/$defs/loss"
+        }
+      },
+      "required": [
+        "kind",
+        "provenance",
+        "source_ids",
+        "detail",
+        "loss"
+      ],
+      "additionalProperties": false
+    },
+    "ambiguous": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "ambiguous"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/ordinal_list"
+        },
+        "detail": {
+          "$ref": "#/$defs/detail_value"
+        },
+        "loss": {
+          "$ref": "#/$defs/loss"
+        },
+        "question": {
+          "$ref": "#/$defs/question_value"
+        }
+      },
+      "required": [
+        "kind",
+        "provenance",
+        "source_ids",
+        "detail",
+        "loss",
+        "question"
+      ],
+      "additionalProperties": false
+    },
+    "conflicting": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "conflicting"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/ordinal_list"
+        },
+        "detail": {
+          "$ref": "#/$defs/detail_value"
+        },
+        "loss": {
+          "$ref": "#/$defs/loss"
+        },
+        "question": {
+          "$ref": "#/$defs/question_value"
+        }
+      },
+      "required": [
+        "kind",
+        "provenance",
+        "source_ids",
+        "detail",
+        "loss",
+        "question"
+      ],
+      "additionalProperties": false
+    },
+    "unsupported": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "unsupported"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/ordinal_list"
+        },
+        "detail": {
+          "$ref": "#/$defs/detail_value"
+        },
+        "loss": {
+          "$ref": "#/$defs/loss"
+        },
+        "question": {
+          "$ref": "#/$defs/question_value"
+        }
+      },
+      "required": [
+        "kind",
+        "provenance",
+        "source_ids",
+        "detail",
+        "loss",
+        "question"
+      ],
+      "additionalProperties": false
+    },
+    "candidate_omission": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "candidate_omission"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/ordinal_list"
+        },
+        "detail": {
+          "$ref": "#/$defs/detail_value"
+        },
+        "loss": {
+          "$ref": "#/$defs/loss"
+        }
+      },
+      "required": [
+        "kind",
+        "provenance",
+        "source_ids",
+        "detail",
+        "loss"
+      ],
+      "additionalProperties": false
+    },
+    "inconclusive": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "inconclusive"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/ordinal_list"
+        },
+        "detail": {
+          "$ref": "#/$defs/detail_value"
+        },
+        "loss": {
+          "$ref": "#/$defs/loss"
+        }
+      },
+      "required": [
+        "kind",
+        "provenance",
+        "source_ids",
+        "detail",
+        "loss"
+      ],
+      "additionalProperties": false
+    },
+    "not_applicable": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "not_applicable"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "source_ids": {
+          "$ref": "#/$defs/ordinal_list"
+        },
+        "detail": {
+          "$ref": "#/$defs/detail_value"
+        },
+        "loss": {
+          "$ref": "#/$defs/loss"
+        }
+      },
+      "required": [
+        "kind",
+        "provenance",
+        "source_ids",
+        "detail",
+        "loss"
       ],
       "additionalProperties": false
     }

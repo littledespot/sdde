@@ -15,11 +15,14 @@ classifications do not prove absence.
 Use supported for preserved meaning; candidate_omission for meaning lost downstream,
 including compatible requirements misclassified as conflicting. Check conflict
 labels against source meaning; unresolved status is not proof of contradiction.
-Use unsupported, ambiguous or conflicting for genuine source gaps: explain the
-known facts/preconditions in detail; supply question asking the user for the missing
-choice and specifying the answer format. The user supplies the answer. Omit question
-for supported, not_applicable and candidate_omission. Do not ask to restate supported
-behavior or change a verdict to pass.
+Use unsupported, ambiguous or conflicting only for a necessary missing user choice:
+put known facts/preconditions and its effect on required behavior in detail. Ask
+that choice in question with an answer format that resolves it, including needed
+details beyond yes/no. The user answers. Omit question
+for supported, not_applicable, candidate_omission and inconclusive. Use inconclusive
+with diagnostic detail when interpretation is unresolved without an identifiable
+missing user decision. Do not ask to restate supported behavior or change a verdict
+to pass.
 
 Follow evidence_rules and each task's evidence. Non-null supported_provenance
 must match for supported or not_applicable. Choose not_applicable only when its

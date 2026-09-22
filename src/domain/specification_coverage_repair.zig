@@ -127,14 +127,23 @@ pub fn authorizeOmission(a: std.mem.Allocator, validator: @import("typed_text.zi
     for (support.result.entries) |entry| {
         const evidence = (try authority.supportedOmission(a, support.inputs, support.observations, support.result, entry.requirement)) orelse continue;
         try @import("specification_support_evidence.zig").validate(a, support.inputs, context.inputs, evidence);
-        if (evidence.review.?.provenance.claim_ids.len == 0) return error.UnsafeSpecificationOmissionRepair;
-        const target = try omissionTarget(candidate, entry.requirement, current);
+        if (evidence.review.?.provenance.claim_ids.len == 0) continue;
+        const target = omissionTarget(candidate, entry.requirement, current) catch |err| switch (err) {
+            error.UnsafeSpecificationOmissionRepair => continue,
+            else => return err,
+        };
         if (target.part == .record) return bindRetry(a, try atomic.authorizeInsert(a, try sessions.ownerFor(a, current, target.unit), current.revision, target, .record, facts, .{ .omission = evidence }));
         const selected = target.part.value;
         const value = try candidates.attributedValue(.canonical, current.units[target.unit].?.response, selected.subject, selected.field);
         const provenance = evidence.review.?.provenance;
-        try r.sameSet(r.ClaimId, provenance.claim_ids, value.provenance.claim_ids);
-        try r.sameSet(r.CitationId, provenance.citation_ids, value.provenance.citation_ids);
+        r.sameSet(r.ClaimId, provenance.claim_ids, value.provenance.claim_ids) catch |err| switch (err) {
+            error.InvalidReferenceReconciliation => continue,
+            else => return err,
+        };
+        r.sameSet(r.CitationId, provenance.citation_ids, value.provenance.citation_ids) catch |err| switch (err) {
+            error.InvalidReferenceReconciliation => continue,
+            else => return err,
+        };
         return bindRetry(a, try atomic.authorize(a, try sessions.ownerFor(a, current, target.unit), current.revision, target, .{ .value = value.value }, facts, .{ .omission = evidence }));
     }
     return error.UnsafeSpecificationOmissionRepair;

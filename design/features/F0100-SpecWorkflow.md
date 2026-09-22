@@ -11,8 +11,10 @@ clarification routes are unfinished. Phase 3 repair is verified offline. See
 consistency review and shared actionable-question preparation to this design.
 Native assessment and question-preparation owners exist; complete semantic readiness
 is outstanding. The corrective [§12.8.1 clarification gate](../contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
-is documented but not implemented. [FIX_002](../../fixes/FIX_002.md) owns its rollout;
-historical delivery notes below do not establish that new gate's conformance.
+has offline-verified admission and repair-precedence coverage.
+[FIX_002](../../fixes/FIX_002.md) tracks the remaining semantic acceptance work and
+the approved D1 source-response schema change under §12.7. Historical delivery
+notes below do not establish live question necessity or completed readiness.
 
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) defines the
 implemented generic response-composition integration: extraction content/citations,
@@ -740,17 +742,20 @@ closed requiredness/ownership policies, current support checks and outcomes.
   common evidence owner and do not grant model output authority.
 - `candidate_omission` describes established meaning lost in extraction or generated
   content. Native missing-family obligations remain invalid even after a positive
-  review. Genuine source gaps route to clarification or the earliest upstream owner.
+  review. Genuine source gaps route under §12.8.1 only after candidate/interpretation
+  defects are resolved. `inconclusive` findings grant no question or repair authority.
 - Malformed review repair changes one authorized detail or evidence selection,
   inserts a missing finding or deletes an identical duplicate. It cannot change an
   existing substantive verdict or repair a forbidden applicability decision.
   Current inputs, old value and revision are checked before dispatch and merge.
-- Source-backed content repair reuses the existing coverage repair owner; unsafe targets
-  block. Assembly, coverage and semantic review run again after a content edit.
-- The approved upstream-repair draft attributes loss to an extraction chunk,
-  token classification, reconciliation signal or disposition. Native owners check
-  the target and source association; attribution remains model-assisted. Its
-  execution-private `loss` field is not persisted review authority. The runner
+- Source-backed content repair reuses the existing coverage repair owner, selecting
+  the first safe target while retaining other defects. No eligible target means invalid;
+  assembly, coverage and semantic review run again after a content edit.
+- Upstream repair attributes loss to an extraction chunk, token classification,
+  reconciliation signal, disposition or conflict. Native owners check the exact
+  producer/claim/source joins; attribution remains model-assisted. Source review
+  retains `loss` for the same admission checks on readback; it does not grant
+  positive-content provenance. The runner
   renews explicitly replaced dependencies under §12.8 and requires complete
   rebuilding. Semantic progress still needs a stable subject join; regenerated
   ordinals alone cannot resolve the original omission.
@@ -897,7 +902,7 @@ validators:
   remain mandatory Plan-owned obligations, rendered in `reference-context.md`; Specify
   creates no Plan form and cannot use policy findings as business provenance. Plan must
   reassess current principles and resolve those obligations under its own input authority.
-- The native closed `specification-state/v3` contract distinguishes `specified` and
+- The native closed `specification-state/v4` contract distinguishes `specified` and
   `spec_clarification_pending`. The pending variant holds the current reference snapshot,
   clarification binding/open IDs and prior ID ledger; it cannot supply completed content.
   The specified variant contains the feature key,

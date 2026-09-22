@@ -14,8 +14,9 @@ claims that the engine already satisfies them.
 **22 September corrective design:** [§12.8.1](contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
 owns clarification admission and candidate-failure precedence;
 [FIX_002](../fixes/FIX_002.md) tracks implementation and semantic validation still
-required. This documentation amendment neither implements the gate nor authorizes
-the separately proposed verdict reassessment. The overall design remains Proposed.
+required. Shared admission and repair precedence have offline verification; the
+approved D1 response shapes follow §12.7. Verdict reassessment remains unapproved.
+The overall design remains Proposed.
 
 **Reading this design:** Sections 1, 3, 4, 30–32 retain the overview, invariants,
 responsibility boundary, delivery sequence and acceptance criteria. Other sections

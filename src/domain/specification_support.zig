@@ -24,6 +24,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             conflicting,
             unsupported,
             candidate_omission,
+            inconclusive,
             not_applicable,
 
             pub fn finding(self: Decision) a.Finding {
@@ -40,12 +41,18 @@ pub fn Contract(comptime purpose: Purpose) type {
         };
         pub const Value = if (purpose == .principles) principles.Value else struct {
             loss: @import("source_omission.zig").Location = .{ .unlocalized = .{} },
-            decision: Decision,
+            kind: Decision,
             provenance: spec.Selection,
             source_ids: []const @import("reference_identity.zig").SourceId,
             detail: []const u8,
             question: ?[]const u8 = null,
         };
+        /// Source responses use the schema discriminator; policy reviews retain
+        /// their independent closed decision vocabulary.
+        pub fn decisionOf(value: Value) Decision {
+            return if (purpose == .source) value.kind else value.decision;
+        }
+
         pub const Candidate = struct {
             omission_conflict_claims: []const r.ClaimId = &.{},
             review: Review,
@@ -201,8 +208,8 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (finding.requirement_ordinal != ordinal) continue;
                     found = true;
                     const before = diagnostics.items.len;
-                    if (purpose == .source) if (finding.value.decision == .not_applicable and required != .review) try diagnostics.append(allocator, diagnostic(proposed, .invalid_decision, requirement.seed.id, ordinal, position));
-                    const semantic = finding.value.decision.finding();
+                    if (purpose == .source) if (decisionOf(finding.value) == .not_applicable and required != .review) try diagnostics.append(allocator, diagnostic(proposed, .invalid_decision, requirement.seed.id, ordinal, position));
+                    const semantic = decisionOf(finding.value).finding();
                     if (!admission.validDetail(semantic, finding.value.detail)) try diagnostics.append(allocator, diagnostic(proposed, .invalid_detail, requirement.seed.id, ordinal, position));
                     if (purpose == .source) if (admission.questionIssue(semantic, finding.value.question)) |issue| {
                         const text_issue: Issue = switch (issue) {
@@ -210,13 +217,9 @@ pub fn Contract(comptime purpose: Purpose) type {
                         };
                         try diagnostics.append(allocator, diagnostic(proposed, text_issue, requirement.seed.id, ordinal, position));
                     };
-                    var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail);
+                    var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail, finding.value.loss);
                     if (purpose == .source and reviewed == .accepted) {
                         reviewed.accepted.question = finding.value.question;
-                        @import("source_omission.zig").validate(inputs, sources, semantic, reviewed.accepted, finding.value.loss) catch |err| {
-                            if (err == error.OutOfMemory) return error.OutOfMemory;
-                            reviewed = .{ .rejected = .{ .issue = .invalid_loss, .rule = (try admission.requirements(allocator, inputs, sources, requirement.seed.id)).rule(semantic) } };
-                        };
                     }
                     if (reviewed == .rejected) {
                         var invalid = diagnostic(proposed, .invalid_evidence, requirement.seed.id, ordinal, position);
@@ -224,7 +227,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                         try diagnostics.append(allocator, invalid);
                     }
                     if (diagnostics.items.len != before) continue;
-                    const not_applicable: ?a.Rule = if (purpose == .principles) null else if (required == .not_applicable) required.not_applicable else if (finding.value.decision == .not_applicable) required.review else null;
+                    const not_applicable: ?a.Rule = if (purpose == .principles) null else if (required == .not_applicable) required.not_applicable else if (decisionOf(finding.value) == .not_applicable) required.review else null;
                     if (inputs.specification != null) {
                         candidates[index] = .{ .id = .{ .ordinal = ordinal, .revision = inputs.revision }, .requirement = requirement.seed.id };
                     }
@@ -269,7 +272,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (evidence.finding != .supported) return error.InvalidRequiredAuthority;
                     break :blk Decision.not_applicable;
                 } else try Decision.fromFinding(evidence.finding);
-                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .decision = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .question = review.question } };
+                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .kind = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .question = review.question, .loss = review.loss orelse return error.InvalidRequiredAuthority } };
             }
             var empty = inputs;
             empty.evidence = &.{};

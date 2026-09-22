@@ -364,13 +364,13 @@ test "source-backed omissions stay invalid across registered owners and source g
         for ([_]a.Finding{ .unsupported, .ambiguous, .conflicting }) |finding| {
             proofs[0].finding = finding;
             const gap = try run(allocator, inputs);
-            try std.testing.expectEqual(.needs_user, gap.continuation);
+            try std.testing.expectEqual(.invalid, gap.continuation);
             try std.testing.expect((try a.supportedOmission(allocator, inputs, observations, gap, id(kind))) == null);
         }
         proofs[0].finding = .candidate_omission;
         inputs.authorities = &.{};
         const stale = try run(allocator, inputs);
-        try std.testing.expectEqual(.needs_user, stale.continuation);
+        try std.testing.expectEqual(.invalid, stale.continuation);
         try std.testing.expect((try a.supportedOmission(allocator, inputs, observations, stale, id(kind))) == null);
     }
 }
@@ -417,4 +417,39 @@ test "authority clarification subjects preserve earliest owner and remain stable
         try std.testing.expectEqualStrings(before.id, after.id);
     }
     try std.testing.expectError(error.ProtectedClarification, refresh.refresh(allocator, .{ .state = .{ .value = first.value }, .submissions = &.{}, .protected_forms = &.{.{ .id = c.Id.parse(first.value.?.records[0].id).?, .bytes = "protected" }} }, again));
+}
+
+test "current contradictory assessments fail while genuine missing decisions retain their questions" {
+    const needs = @import("domain/required_authority_clarifications.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    for ([_]a.Kind{ .feature_intent, .design_decision, .executable_decomposition }) |kind| {
+        var inputs = try fixture(allocator, kind);
+        var negative = inputs.evidence[0];
+        negative.finding = .unsupported;
+        negative.resolution = .{ .existing_authority = source };
+        negative.method = .model_assisted;
+        negative.review = .{ .detail = "The action is supported but its deadline is absent.", .question = "When is the deadline? Supply a date and timezone.", .provenance = .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{} };
+        inputs.evidence = &.{negative};
+        const gap = try run(allocator, inputs);
+        try std.testing.expectEqual(.needs_user, gap.continuation);
+        _ = try needs.build(allocator, inputs, try observe(allocator, inputs), gap);
+        var positive = negative;
+        positive.id.ordinal = 2;
+        positive.finding = .supported;
+        positive.review.?.question = null;
+        positive.review.?.detail = "The same current source already supplies the deadline.";
+        for ([_]bool{ false, true }) |reverse| {
+            inputs.evidence = if (reverse) &.{ positive, negative } else &.{ negative, positive };
+            const inconclusive = try run(allocator, inputs);
+            try std.testing.expectEqual(.invalid, inconclusive.continuation);
+            try std.testing.expectEqual(.inconclusive_review, inconclusive.entries[0].candidate_defect.?.reason);
+            try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, inputs, try observe(allocator, inputs), inconclusive));
+        }
+        // A vague negative with no question cannot gain one from a descriptor.
+        negative.review = null;
+        inputs.evidence = &.{negative};
+        try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, inputs, try observe(allocator, inputs), try run(allocator, inputs)));
+    }
 }

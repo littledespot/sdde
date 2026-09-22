@@ -10,10 +10,11 @@ pub const Part = union(enum) { provenance, value: ValueField };
 pub const Target = union(enum) { provenance: Subject, value: struct { subject: Subject, field: ValueField }, record: usize };
 pub const StableTarget = struct { value: Target };
 pub const Replacement = union(enum) { provenance: g.spec.Selection, value: g.spec.BusinessValue, record: g.spec.Model.RecordProposal };
-pub const Rule = enum { provenance, typed_text, exact_copy, record_kind, duplicate_record, unit_kind };
-pub const Blocked = enum { competing_records, unit_kind, clarification_question };
-pub const Field = union(enum) { target: Target, unit, clarification_question };
+pub const Rule = enum { provenance, typed_text, exact_copy, record_kind, duplicate_record, unit_kind, interpretation };
+pub const Blocked = enum { competing_records, unit_kind, clarification_question, inconclusive_review };
+pub const Field = union(enum) { target: Target, unit, clarification_question, interpretation };
 pub const Issue = struct {
+    detail: ?[]const u8 = null,
     unit: g.Unit,
     field: Field,
     rule: Rule,

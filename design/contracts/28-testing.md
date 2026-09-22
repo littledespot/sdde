@@ -497,7 +497,8 @@ that inject a correct diagnosis do not establish complete recovery.
 | Genuine source contradiction | Exact current subject/claim/source association and explicit incompatible meanings admit a concrete choice; do not treat every conflict as repairable |
 | Supported versus missing requirement | Both source review and generation needs; complete source requires no restatement, genuine missing choice yields preconditions/question/expected answer with a blank answer region |
 | Inconclusive or malformed need | Existing bounded correction only where authorized; exhaustion or no safe correction fails with no new spec/forms, including when other valid questions exist |
-| D1 if selected | Full initial-response correction versus selected native repair; changing error locations, dropped/changed siblings, no semantic reassessment through JSON correction, exact independent allowances and actual tokens |
+| Optional applicability | No-conflict preserved source → unjustified negative → D1 question correction → pause, recorded as a semantic limitation; separately cover evidence-backed non-applicability, actual entities, a concrete data decision and inconclusive review in unrelated domains. Successful support reaches AC/FR, cited principle assessment and validated readback; policy conflicts retain business intent and Plan ownership. |
+| Approved D1 | Full initial-response correction versus selected native repair; changing error locations, dropped/changed siblings, no semantic reassessment through JSON correction, exact independent allowances and actual tokens |
 | Freshness and publication | Source/policy/answer changes rebuild affected evidence; pending readback does not trust question prose; protected forms survive; logs/report distinguish error, incomplete publication and completed scoring |
 
 Include unrelated business domains and cases with no surviving positive business

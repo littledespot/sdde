@@ -420,7 +420,7 @@ control. OpenAI rubric evaluation remains outside this amendment.
 
 - The feature-brief result schema selected by the workflow yields a `FeatureBriefProposal`
   grounded only in the completed reference claim/citation registries, or a typed specification
-  clarification need.
+  clarification need, or the approved `inconclusive` diagnostic result.
 - The model supplies a business title, description, and primary goal plus existing
   claim/citation or resolved clarification-response IDs; it cannot supply the `featureId`, any
   workflow or project path, or a reference selector.
@@ -431,7 +431,9 @@ control. OpenAI rubric evaluation remains outside this amendment.
   §12.8.1; candidate defects follow their existing validation/repair boundary.
 
 - Specification-section, plan-unit, and task-cluster workflows declare discriminated result
-  schemas that return either stage content or one `ClarificationNeedProposal`.
+  schemas for stage content or a `ClarificationNeedProposal`. Specification generation
+  also permits `inconclusive` with diagnostic `detail`; it terminates through the
+  existing invalid-result path and cannot authorize a user question.
 - A clarification carries a bounded user-answer schema and engine-known subject authorities
   explaining the gap.
 - An admitted need is a normal semantic pause, consumes no operation-local retry,
@@ -488,9 +490,22 @@ correction and persisted validation share this contract; detail correction retai
 the verdict/provenance. Its selected schema requires both `detail` and `question`
 for a retained negative finding, and permits only `detail` otherwise. Diagnostics
 identify missing, invalid or forbidden questions separately from invalid detail;
-they retain one repair unit and retry family. Initial/insertion findings still use
-native decision-dependent validation within their existing wire shape. Generation
-uses its existing question shape. Presence and association checks are structural,
+they retain one repair unit and retry family. The user-approved D1 amendment uses
+closed `kind`-discriminated source findings for initial reviews and insertion:
+`ambiguous`, `conflicting` and `unsupported` require `detail` and `question`;
+`supported`, `not_applicable`, `candidate_omission` and `inconclusive` forbid
+`question`. Shared fields remain schema references; `kind` is the sole source
+decision field. Principle findings retain their separate `decision` contract.
+The existing codec decodes source candidates with `kind`; native candidates retain
+optional question data for diagnostics and the same decision-dependent checks.
+Persisted evidence retains its existing finding/resolution representation.
+Missing/forbidden questions now reject at schema admission, before native collection.
+Existing protocol correction resubmits the whole assigned review under its original
+assignment allowance, including otherwise correct siblings; insertion still corrects
+only its selected finding. No partial-response merge, new counter or verdict
+reassessment is introduced. Selected native text repairs retain their narrow scope.
+Remove the superseded source `decision` wire format without a compatibility reader.
+Generation uses its existing question shape. Presence and association checks are structural,
 not deterministic proof of actionability.
 
 **User-facing output:** reuse the current controlled form and fields:
@@ -523,6 +538,12 @@ The same evidence owner supplies concise guidance to initial review, insertion
 and repair: `not_applicable` still needs supporting claims. Native validation and
 persisted readback retain eligibility, exact-set and current-provenance checks;
 schema cardinality never establishes semantic support or selects citations.
+For entity applicability, the shared requirement description asks whether required
+business behavior needs entities. An entity heading or explicit declaration of
+absence is unnecessary; displayed values alone do not establish business entities.
+A genuine missing data decision must state its behavioral effect and request the
+details needed to resolve it, rather than a bare yes/no about entities. This guidance
+does not authorize native inference from question prose or verdict reassessment.
 
 Consolidate only the same engine-built subject under existing identity rules.
 Equal wording or shared citations across subjects do not establish equivalent
@@ -662,7 +683,7 @@ This contract is deliberately domain-neutral. Adding a new requirement kind requ
 
 #### 12.8.1 Clarification admission and candidate-failure precedence
 
-**Corrective design requirement — 22 September 2026; implementation outstanding.**
+**Corrective contract — 22 September 2026.**
 This section replaces blanket unsupported/uncertain → clarification interpretations
 in §§12, 17 and 21. The overall design remains Proposed. It does not authorize
 verdict reassessment prohibited by §22.1; [FIX_002](../../fixes/FIX_002.md) tracks
@@ -683,14 +704,24 @@ record it as model-assisted. Do not add keyword heuristics, a second reviewer by
 default, or a parallel gap certificate/store. A known inconclusive review cannot
 enter clarification just because the wire shape has no uncertainty alternative:
 its owner must expose a closed rejection through the existing invalid-result path.
-Any needed native/wire variant is settled with the canonical contract before coding.
+The user-approved focused amendment adds `inconclusive` to source-review decisions
+and native findings: nonempty `detail`, no `question`, no localized loss or repair
+authority. Specification generation has a corresponding `inconclusive` result with
+`detail`. Existing invalid-result handling retains diagnostics and terminates if no
+eligible producer repair can cause a dependent reassessment. The approved D1 source
+schema variants follow §12.7; D2 verdict reassessment remains separate and unapproved.
 
 **Diagnostic evidence:** the existing evidence owner must admit source-backed loss
 against the selected producer even when its claims are ineligible for positive
 content. The loss owner validates the exact producer/claim/source combination;
 packet guidance, selected schemas, collection and readback project those same rules.
-Source-only evidence is valid only for loss locations that permit it. Diagnostic
-eligibility never grants positive support or automatically selects citations.
+Source-only evidence is valid only for loss locations that permit it. A selected
+signal/conflict requires its exact producer claims; disposition loss may use its
+claim or source-only evidence. An unlocalized finding retains ordinary eligibility.
+Native source-review evidence retains `loss`, so readback repeats those same joins;
+principle evidence has no loss location. `specification-state/v4` rejects previous
+snapshot contracts rather than silently supplying the missing diagnostic binding.
+Diagnostic eligibility never grants positive support or automatically selects citations.
 
 A reconciliation conflict starts as an unresolved candidate assertion. Only current
 review evidence for that exact subject establishing incompatible original meanings

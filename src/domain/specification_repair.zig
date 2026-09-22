@@ -55,7 +55,7 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
         .exact_copy => "Use an allowed value representation supported by the unchanged provenance; exact copies must select a supplied token/citation pair.",
         .record_kind => "Supply one record of the requested kind with valid content and evidence selections.",
         .duplicate_record => "Remove only the evidence-equivalent redundant occurrence; preserve coverage and sibling order.",
-        .unit_kind => return error.UnsafeSpecificationRepair,
+        .unit_kind, .interpretation => return error.UnsafeSpecificationRepair,
     } };
     var authorization = if (rejection.issue.rule == .duplicate_record)
         try atomic.authorizeDelete(allocator, owner, candidate.revision, target, expected, facts, rule)

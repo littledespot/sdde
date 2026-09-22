@@ -190,6 +190,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -220,6 +223,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -253,6 +259,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -317,6 +326,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -373,6 +385,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -433,6 +448,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -489,6 +507,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -545,6 +566,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -601,6 +625,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -657,6 +684,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -713,6 +743,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -781,8 +814,29 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
+    },
+    "inconclusive": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "inconclusive"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "kind",
+        "detail"
+      ],
+      "additionalProperties": false
     }
   },
   "$ref": "#/$defs/brief"

@@ -3926,9 +3926,9 @@ fn protocolReview(a: std.mem.Allocator, count: usize, misplaced: bool) ![]const 
         const detail = try std.fmt.allocPrint(a, "Evidence for requirement {d}.", .{ordinal});
         const loss = .{ .kind = "unlocalized" };
         row.* = if (misplaced)
-            try std.json.Stringify.valueAlloc(a, .{ .requirement_ordinal = ordinal, .value = .{ .decision = "supported", .provenance = provenance }, .source_ids = sources, .detail = detail, .loss = loss }, .{})
+            try std.json.Stringify.valueAlloc(a, .{ .requirement_ordinal = ordinal, .value = .{ .kind = "supported", .provenance = provenance }, .source_ids = sources, .detail = detail, .loss = loss }, .{})
         else
-            try std.json.Stringify.valueAlloc(a, .{ .requirement_ordinal = ordinal, .value = .{ .decision = "supported", .provenance = provenance, .source_ids = sources, .detail = detail, .loss = loss } }, .{});
+            try std.json.Stringify.valueAlloc(a, .{ .requirement_ordinal = ordinal, .value = .{ .kind = "supported", .provenance = provenance, .source_ids = sources, .detail = detail, .loss = loss } }, .{});
     }
     return std.mem.concat(a, u8, &.{ "{\"entries\":[", try std.mem.join(a, ",", rows), "]}" });
 }
