@@ -1573,6 +1573,7 @@ test "configured specification generation YAML executes native references models
         if (scenario == omission_scenario + 2) driver.fault = .{ .stage = .candidate_review, .shape = .empty };
         driver.extraction_omission = extraction_omission;
         driver.source_gaps = source_gaps or (fault != null and fault.?.reviewShape());
+        if (source_gaps) driver.measurement_prefix = if (scenario == source_gap_start) ".zig-cache/review-decision-greeting" else ".zig-cache/review-decision-loan";
         if (evidence_scenario) driver.evidence_fault = if (scenario == evidence_start + 2) .unchanged else .recover;
         if (extraction_omission) driver.malformed_once = true;
         driver.text_fault = text_scenario;
@@ -1836,6 +1837,9 @@ test "configured specification generation YAML executes native references models
             try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/clarifications.json", .{}));
         }
         if (source_gaps) {
+            // Reproduce the semantic failure, not a genuine source gap: the fake
+            // reviewer requests seven missing fields despite supplied intent.
+            // This protects observed routing/accounting, not prompt effectiveness.
             const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&view)).?.support_findings;
             var negative: usize = 0;

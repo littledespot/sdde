@@ -696,6 +696,11 @@ the expected answer. Conflicts require the incompatible source meanings and thei
 exact subject/claim/source joins. A negative enum, conflict label, copied diagnostic,
 nonempty question or absence of prewritten specification headings is insufficient.
 
+Engine execution failures are never clarification evidence or question text in
+generated Markdown. Preserve their typed rejection in operational reports/logs;
+do not convert them into `needs_user`, missing business information or a fallback
+question. Existing open clarifications do not permit continuation after failure.
+
 The existing admission owner checks requiredness, permitted applicability, complete
 assignment coverage, evidence identity/freshness, decision-dependent shape and
 candidate-defect disposition. Existing semantic review assesses whether the decision

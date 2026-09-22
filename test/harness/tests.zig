@@ -729,6 +729,57 @@ test "bad judgments stay evaluator errors while provider usage is retained" {
     try std.testing.expect(std.mem.indexOf(u8, try reports.markdown(a, report), "No quality score") != null);
 }
 
+test "each rubric result needs source evidence even when sibling judgments are complete" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const config = try configuration.parse(a, config_bytes, test_selection);
+    for ([_][3][]const u8{
+        .{ "clarity-testability", "organization", "proportionate-business-scope" },
+        .{ "renewal-duration", "receipt-content", "fee-exclusion" },
+    }) |ids| {
+        var inputs = try capture(a);
+        const seed = (try c.decode(judgment.Proposal, a, good)).results[0];
+        var criteria = [_]c.Criterion{inputs.rubric.criteria[0]} ** 4;
+        var results = [_]judgment.CriterionResult{seed} ** 4;
+        for (ids, 1..) |id, index| {
+            criteria[index].id = id;
+            results[index].criterion_id = id;
+        }
+        inputs.rubric.criteria = &criteria;
+        inputs.rubric_bytes = try std.json.Stringify.valueAlloc(a, inputs.rubric, .{});
+        const request = try packet.input(a, inputs);
+        const carried = (try std.json.parseFromSlice(std.json.Value, a, request, .{})).value.object;
+        try std.testing.expectEqualStrings(inputs.sources[0].text, carried.get("sources").?.array.items[0].object.get("text").?.string);
+        try std.testing.expectEqualStrings(inputs.specification, carried.get("specification").?.object.get("text").?.string);
+        // Independent returned judgments progressively restore the omitted evidence;
+        // the evaluator itself must not retry an invalid judgment or fabricate it.
+        for (0..4) |restored| {
+            for (results[1..], 0..) |*result, index| result.evidence = if (index < restored) seed.evidence else seed.evidence[1..];
+            const payload = try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &results }, .{});
+            var observation = observed_good;
+            observation.payload = payload;
+            var fake: Fake = .{ .observations = &.{observation} };
+            const report = try evaluator.run(std.testing.io, a, fake.port(), config, inputs);
+            try std.testing.expectEqual(@as(usize, 1), fake.count);
+            try std.testing.expectEqual(@as(usize, 1), report.attempts.len);
+            try std.testing.expectEqualDeep(observation.usage, report.attempts[0].usage);
+            try std.testing.expectEqualDeep(seed, results[0]);
+            if (restored < 3) {
+                try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
+                try std.testing.expect(std.mem.indexOf(u8, try reports.markdown(a, report), "No quality score") != null);
+                // Claiming absence does not waive source evidence either.
+                results[3].missing_from_specification = true;
+                try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, inputs, try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = &results }, .{})));
+                results[3].missing_from_specification = false;
+            } else {
+                try std.testing.expectEqual(.scored, report.outcome.evaluated.assessment);
+                try std.testing.expectEqualDeep(results[0..], report.outcome.evaluated.results);
+            }
+        }
+    }
+}
+
 test "input capture is stable and uses shared no-follow file and directory policy" {
     const io = std.testing.io;
     var tmp = std.testing.tmpDir(.{});
