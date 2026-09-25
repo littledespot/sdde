@@ -113,15 +113,17 @@ pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence
         .eligible => |ids| ids,
         .exact => |ids| ids,
     }, claim)) return reject(.ineligible_claim, rule);
-    const resolved = refs.select(allocator, records.items, sources, proposed) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else reject(.invalid_selection, rule);
+    if (proposed.clarification_response_ids.len != 0) return reject(.invalid_selection, rule);
+    const resolved = refs.select(allocator, records.items, sources, proposed.claim_ids) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else reject(.invalid_selection, rule);
+    const provenance: spec.Provenance = .{ .claim_ids = resolved.claim_ids, .citation_ids = resolved.citation_ids, .clarification_response_ids = proposed.clarification_response_ids };
     switch (rule.minimum) {
         .claim_required => if (proposed.claim_ids.len == 0) return reject(.missing_claims, rule),
         .claim_or_source_required => if (proposed.claim_ids.len == 0 and source_ids.len == 0) return reject(.missing_evidence, rule),
         .optional => {},
     }
     if (rule.claims == .exact) r.sameSet(r.ClaimId, rule.claims.exact, proposed.claim_ids) catch return reject(.wrong_claim_set, rule);
-    if (rule.provenance) |expected| sameProvenance(expected, resolved.provenance) catch return reject(.wrong_candidate_provenance, rule);
-    const review: a.ReviewEvidence = .{ .loss = loss, .detail = detail, .provenance = resolved.provenance, .source_ids = source_ids };
+    if (rule.provenance) |expected| sameProvenance(expected, provenance) catch return reject(.wrong_candidate_provenance, rule);
+    const review: a.ReviewEvidence = .{ .loss = loss, .detail = detail, .provenance = provenance, .source_ids = source_ids };
     @import("source_omission.zig").validate(inputs, sources, finding, review, loss) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else reject(.invalid_loss, rule);
     return .{ .accepted = review };
 }

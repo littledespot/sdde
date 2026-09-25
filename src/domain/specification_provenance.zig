@@ -59,7 +59,7 @@ pub fn bind(allocator: std.mem.Allocator, validator: text.Validator, context: Co
 
 /// Initial reference-grounded generation. Applicable user-response support is
 /// supplied by the clarification lifecycle, not inferred from loaded form IDs.
-const Resolved = @import("reference_support.zig").Resolved;
+const Resolved = struct { provenance: spec.Provenance, scopes: []const evidence.Scope };
 
 fn resolve(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, context: Context, provenance: spec.Values(boundary).Evidence) Error!Resolved {
     return resolveRecords(boundary, allocator, context.inputs, @import("reference_support.zig").records(context.references), provenance);
@@ -68,9 +68,11 @@ fn resolve(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, conte
 pub fn resolveRecords(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, inputs: evidence.Inputs, references: @import("reference_support.zig").Records, provenance: spec.Values(boundary).Evidence) Error!Resolved {
     const claims = references.items;
     if (provenance.claim_ids.len == 0 or provenance.clarification_response_ids.len != 0) return error.InvalidSpecification;
-    try r.unique(r.ClaimId, provenance.claim_ids);
     if (boundary == .canonical) try r.unique(r.CitationId, provenance.citation_ids);
-    const resolved = try @import("reference_support.zig").select(allocator, claims, inputs, .{ .claim_ids = provenance.claim_ids, .clarification_response_ids = provenance.clarification_response_ids });
+    const selected = @import("reference_support.zig").select(allocator, claims, inputs, provenance.claim_ids) catch |err| switch (err) {
+        error.InvalidReferenceState => return error.InvalidSpecification,
+        else => |other| return other,
+    };
     const dispositions = references.dispositions;
     for (provenance.claim_ids) |id| {
         const disposition: ?r.Disposition = found: {
@@ -80,12 +82,12 @@ pub fn resolveRecords(comptime boundary: spec.Boundary, allocator: std.mem.Alloc
         if (!eligibleClaim(disposition)) return error.InvalidSpecification;
     }
     // Stable unique union in selected-claim order, not an arbitrary superset.
-    const citations = resolved.provenance.citation_ids;
+    const citations = selected.citation_ids;
     if (boundary == .canonical) {
         if (citations.len != provenance.citation_ids.len) return error.InvalidSpecification;
         for (citations, provenance.citation_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecification;
     }
-    return resolved;
+    return .{ .provenance = .{ .claim_ids = selected.claim_ids, .citation_ids = citations, .clarification_response_ids = provenance.clarification_response_ids }, .scopes = selected.scopes };
 }
 
 pub fn scopes(allocator: std.mem.Allocator, context: Context, provenance: spec.Provenance) Error![]const evidence.Scope {

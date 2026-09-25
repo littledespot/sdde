@@ -480,6 +480,53 @@ test "canonical citation union preserves selected claim order and overlapping ev
     for ([_]u32{ 0, 999 }) |id| try std.testing.expectError(error.InvalidReferenceReconciliation, r.citationUnion(std.testing.allocator, items, &.{.{ .ordinal = id }}));
 }
 
+test "shared reference support resolves ordered claims without Spec policy" {
+    const support = @import("domain/reference_support.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "First claim.\n", "Second claim.\n" });
+    defer fixture.deinit();
+    const items = (try f.initialize(a, fixture.inputs, fixture.extracted, 2)).plan.layout.items;
+    const claims = [_]r.ClaimId{ .{ .ordinal = 2 }, .{ .ordinal = 1 } };
+    const selected = try support.select(std.testing.allocator, items, fixture.inputs, &claims);
+    defer std.testing.allocator.free(selected.scopes);
+    defer std.testing.allocator.free(selected.citation_ids);
+    try std.testing.expectEqualDeep(&claims, selected.claim_ids);
+    try std.testing.expectEqualDeep(&[_]r.CitationId{ .{ .ordinal = 2 }, .{ .ordinal = 1 } }, selected.citation_ids);
+    try std.testing.expectEqualDeep(items.entries[1].claim.chunk_id, selected.scopes[0].chunk_id);
+    try std.testing.expectEqualDeep(items.entries[0].claim.chunk_id, selected.scopes[1].chunk_id);
+
+    try std.testing.expectError(error.InvalidReferenceReconciliation, support.select(std.testing.allocator, items, fixture.inputs, &.{ claims[0], claims[0] }));
+    try std.testing.expectError(error.InvalidReferenceReconciliation, support.select(std.testing.allocator, items, fixture.inputs, &.{.{ .ordinal = 999 }}));
+    var stale = items;
+    stale.state_id.bytes = "stale";
+    try std.testing.expectError(error.InvalidReferenceState, support.select(std.testing.allocator, stale, fixture.inputs, &claims));
+    const bad_entries = try a.dupe(r.Item, items.entries);
+    bad_entries[1].claim.chunk_id.bytes = "missing";
+    var invalid_scope = items;
+    invalid_scope.entries = bad_entries;
+    try std.testing.expectError(error.InvalidSourceCitation, support.select(std.testing.allocator, invalid_scope, fixture.inputs, &claims));
+}
+
+test "shared reference support releases allocations on every failure" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, supportAllocationCase, .{});
+}
+
+fn supportAllocationCase(backing: std.mem.Allocator) !void {
+    const support = @import("domain/reference_support.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{"An application starts.\n"});
+    defer fixture.deinit();
+    const items = (try f.initialize(a, fixture.inputs, fixture.extracted, 2)).plan.layout.items;
+    const resolved = try support.select(backing, items, fixture.inputs, &.{.{ .ordinal = 1 }});
+    defer backing.free(resolved.scopes);
+    defer backing.free(resolved.citation_ids);
+    try std.testing.expectEqual(@as(usize, 1), resolved.scopes.len);
+}
+
 test "hierarchical reconciliation preserves original meaning citations exact tokens and total membership" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

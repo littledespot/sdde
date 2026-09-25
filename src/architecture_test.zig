@@ -219,6 +219,12 @@ test "domain and port dependency direction is enforced repository wide" {
     }
 }
 
+test "shared reference support does not import Spec policy" {
+    const source = @embedFile("domain/reference_support.zig");
+    try expectAbsent(source, "specification.zig");
+    try expectAbsent(source, "specification_provenance.zig");
+}
+
 test "bootstrap orchestrator imports only binding and result contracts" {
     const source = @embedFile("application/bootstrap_orchestrator.zig");
     try expectAbsent(source, "/actions/");

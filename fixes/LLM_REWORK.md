@@ -1,8 +1,9 @@
 # LLM_REWORK — Derive mechanical facts; ask models for semantic choices
 
-**Reviewed:** 26 September 2026. **Status:** Phase 0 done; runtime cutover pending.
-**Scope:** Phase 0 baseline tests and approved [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md).
-No production schema or workflow changed; no live calls were made.
+**Reviewed:** 26 September 2026. **Status:** Phases 0–1 done; runtime cutover pending.
+**Scope:** Phase 0 baseline tests, approved [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md)
+and Phase 1's reference-owner refactor. No new live calls were made. The production
+schema and workflow have not undergone the planned cutover.
 
 ## 1. Finding and recommendation
 
@@ -44,7 +45,7 @@ code audit found substantive gaps in the earlier proposal:
 | Rebuilding repair choices from each rejected replacement can enlarge its allowance. | Retain the original validated repair bound through the existing repair context, separately from the changing candidate/revision (§5.5). |
 | New response IDs would still require model-side joins in today's request. | Expose directly claim-addressable choices through the existing evidence projection (§5.1). |
 | Review evidence and completed readback consume the existing provenance contract. | Update these consumers together; pending clarification state has a different storage contract (§6). |
-| The current shared reference helper imports Spec types; Spec eligibility is not universal. | Refactor the existing mechanical owner and retain purpose policy with consuming domains (§6.1). |
+| The shared reference helper previously imported Spec types; Spec eligibility is not universal. | Phase 1 removed that dependency; purpose policy stays with consuming domains (§6.1). |
 | A claim ordinal is meaningful only in its captured reference namespace. | Bind the namespace natively; preserve other evidence and operational IDs (§6.2–§6.3). |
 
 These are reasons to settle the focused contract before coding, not to add a fixer
@@ -86,6 +87,87 @@ The preceding §36 implementation passed 1,246 offline tests. Those tests establ
 contract behavior and containment, not live semantic quality. No test or measurement
 in this document establishes the proposed contract's effectiveness yet.
 
+### Phase 0 run — the same reference join fails during brief generation
+
+Execution
+[`2026-09-25T21-53-09Z-74d618e36d74294723f5ca72d7a90347`](../zig-out/e2e-spec/2026-09-25T21-53-09Z-74d618e36d74294723f5ca72d7a90347/report.md)
+used clean revision `58b0917` (`Phase 0`). Its captured requests still use the
+current token/citation tuple, not ADR 0020's claim-handle contract.
+
+| Boundary | Observed evidence |
+| --- | --- |
+| Extraction/reconciliation, calls 1–7 | All three source obligations reached generation. Business claim 1 and preserved-token claim 2 remained separate; both were retained and no conflict was reported. |
+| Brief, call 8 | The title selected existing token 1/citation 2 but declared only claim 1. Native validation rejected `title.value` with `unknown_exact`: supporting claim 2 was missing from its provenance. The reference itself exists. |
+| Coupled repair, call 9 | The authorized replacement could change title content and its claim selection. The model returned the same invalid value and provenance. |
+| Coupled repair, call 10 | The model added `Display ` and ` on startup` around the exact reference but still selected only claim 1. `changed:true` recorded a merge, not validation success. Moving the reference from segment 0 to 1 did not resolve the defect. |
+| Terminal result | The same native assignment exhausted its two allowed repair executions (one initial attempt plus one retry): `RetryLimitExhausted`. All 10 calls returned final text; all 14,133 tokens were accounted against 100,000. |
+| Later gates | Story, records, semantic/principle assessment, publication/readback and rubric grading were not reached. No specification or clarification was published; publication and grading are `not_run`. |
+
+The [first repair request](../zig-out/e2e-spec/2026-09-25T21-53-09Z-74d618e36d74294723f5ca72d7a90347/evidence/generation/call-000009/request.json)
+included source text, both claims, the rejected tuple and an instruction to correct
+content and claim selection together. It still required the model to join the token
+to its supporting claim. Calls 9 and 10 sent byte-identical 5,107-byte requests;
+call 8 was 10,242 bytes. Prompt schema text was 837 and 3,927 bytes respectively
+(the compact native `response_format` schema objects were 616 and 3,012 bytes).
+These are another failed baseline, not evidence of improvement. Malformed prefixes
+were recovered by the existing decoder; no JSON/schema correction exhausted.
+Authentication succeeded; missing answers and the global token limit were not the stop.
+
+**Rollout impact:** Phase 1.1 subsequently removed the reference owner's Spec-type
+coupling; the coordinated Phase 2 cutover is next. This run confirms the existing
+rationale; it does not justify a new repair owner, more retries or a separate
+prompt-only detour. Under
+ADR 0020, selecting eligible exact claim 2 with explicit support `S=[1]` derives
+`L=[1,2]`, removing this redundant join. It does not prove the title is useful or
+the eventual specification preserves meaning; those remain semantic checks.
+
+Extend the existing generation regression during Phase 2.3 with this variation:
+unchanged replacement → prose changed and reference moved, same unresolved defect
+→ exhaustion, plus bounded successful recovery and an unrelated requirement.
+Preserve the existing retry identity and accounting: the owning target's validation,
+not changed bytes, decides whether repair succeeded. Phase 3.1 must carry that
+distinction through the runner and no-publication boundary.
+
+### Latest run — earlier repairs recover, record repair exhausts
+
+Execution
+[`2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377`](../zig-out/e2e-spec/2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377/report.md)
+recorded modified revision `58b0917`, source fingerprint
+`129b92c3c395bf79df8a485de4594e6d7e53409d3304e3d551a4dfff830408bb`.
+Its requests still use the pre-cutover token/citation tuple.
+
+| Boundary | Observed evidence |
+| --- | --- |
+| Extraction through brief, calls 1–9 | All source obligations reached generation. The title again failed `unknown_exact`; repair replaced the reference with prose and passed native field validation. |
+| Story, calls 10–12 | The same join failed. Call 11 returned reasoning-tagged content without a final answer; existing protocol correction recovered on call 12, preserving request 11's identity and accounting both attempts. The replacement was prose. |
+| Entity decision, calls 13–14 | `not_applicable` had the same invalid join in its basis. Repair added claim 2 and passed native validation, but the basis remained only the greeting literal. Correct citations do not explain applicability. |
+| Records, calls 15–17 | Record 0's functional requirement again selected token 1/citation 2 with only claim 1. Both authorized record replacements returned it unchanged. The same assignment exhausted two repair executions: `RetryLimitExhausted`. |
+| Terminal boundary | 17 provider calls, 25,996/100,000 tokens, complete usage accounting. No specification or clarification was published; semantic/principle assessment, persisted publication/readback and rubric grading were not reached. |
+
+The [records response](../zig-out/e2e-spec/2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377/evidence/generation/call-000015/model_output.txt)
+also repeats the greeting as Given/When/Then and includes an entity despite the
+fixed `not_applicable` decision. These are additional candidate problems; native
+validation stopped at record 0's join before entity membership or semantic review
+could assess the rest. The supplied prompt already described required behavior,
+precondition, trigger and outcome, and instructed the model to follow the entity
+decision. This is not evidence that purpose guidance or source requirements were absent.
+
+The [record repair request](../zig-out/e2e-spec/2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377/evidence/generation/call-000016/request.json)
+included the rejected value, source evidence and permission to correct content and
+claims together. Calls 16–17 sent identical 6,786-byte requests and received the
+same invalid record. Earlier successful work continued; missing-answer recovery
+and global token enforcement were not the final failure.
+
+**Required rollout update:** retain Phases 0–1 as complete and implement Phase 2
+next. Extend its existing checks across brief, story, entity basis and records,
+including a shared-provenance acceptance criterion. Phase 3.1 must combine earlier
+successful repairs, a recovered missing answer and later native exhaustion with
+separate retry identities and exact accounting. Phase 2.4 and live Phase 4 must
+distinguish correct lineage from meaningful content: deriving claim 2 removes the
+redundant join, but cannot turn a greeting alone into a requirement, an applicability
+explanation or a test scenario. Reaching a later failure does not establish improved
+specification quality. No new retry or repair authority is justified by this run.
+
 ## 3. Ownership inventory
 
 | Information/work | Current owner/status | Assessment |
@@ -94,7 +176,7 @@ in this document establishes the proposed contract's effectiveness yet.
 | Exact-token candidate identity and raw bytes | [structured_tokens](../src/domain/structured_tokens.zig), extraction identity actions | Already deterministic. Relevance and classification remain semantic where not fixed by policy. |
 | Canonical claim/citation/token identities | [reference_extraction](../src/domain/reference_extraction.zig), [reference_claim_items](../src/domain/reference_claim_items.zig) | Already native, assigned after validation. Do not add another identity system. |
 | Exact-copy choice | [typed_text.ExactCopy](../src/domain/typed_text.zig), [generation schema](../design/workflows/spec/generation.schema.json) | Model repeats token/citation and supporting-claim selection. Highest-priority simplification. |
-| Citation union | [reference_support.select](../src/domain/reference_support.zig), [specification_provenance](../src/domain/specification_provenance.zig) | Already derived. `reference_support` currently imports Spec selection/provenance types; remove that coupling while reusing its mechanical owner (§6.1). |
+| Citation union | [reference_support.select](../src/domain/reference_support.zig), [specification_provenance](../src/domain/specification_provenance.zig) | Already derived. Phase 1 removed the shared owner's Spec-type dependency; Spec eligibility remains in its own consumer (§6.1). |
 | Summary statement `local_key` | [reconciliation validation](../src/domain/reference_reconciliation_validation.zig), schema and key repair | Model-generated uniqueness/order bookkeeping remains. Separate candidate for removal after defining ordering semantics. |
 | Preserved-token reconciliation content | [reconciliation validation](../src/domain/reference_reconciliation_validation.zig), [repair](../src/domain/reference_reconciliation_repair.zig) | The sole selected preserved-token claim determines its token. Audit/removal of the repeated token field is feasible separately. |
 | Review assignment ordinals | [specification_support](../src/domain/specification_support.zig) | Single-target repair already binds its assignment natively. Batch findings still need unambiguous association; do not bind unchecked array positions. |
@@ -386,17 +468,17 @@ any shared version tag; no migration, dual reader or new pending evidence store.
 
 ### 6.1 Shared mechanics and consuming-domain policy
 
-Cross-workflow reuse requires a focused refactor, not simply calling
-`specification_provenance` from Plan or Tasks. Today
-[reference_support](../src/domain/reference_support.zig) accepts `spec.Selection`
-and returns `spec.Provenance`; Spec additionally requires completed reconciliation,
-retained claims and business-appropriate token kinds, and currently rejects
-clarification-response support. Those are not universal reference rules.
+Cross-workflow reuse cannot simply call `specification_provenance` from Plan or
+Tasks. Phase 1 moved selection mechanics to reference-owned inputs and results in
+[reference_support](../src/domain/reference_support.zig). Spec still requires
+completed reconciliation, retained claims and business-appropriate token kinds,
+and rejects clarification-response support. Those are not universal reference
+rules. Phase 2 extends the same owner to exact-handle lineage.
 
-| Responsibility | Owner after the proposed refactor |
+| Responsibility | Owner for the planned Phase 2 cutover |
 | --- | --- |
 | Handle identity and text syntax | Existing `reference_identity.ClaimId` and `typed_text`; syntax/membership validation receives native permitted choices. |
-| Occurrence lookup and reference lineage | Existing reference owner resolves one bound ledger, checks identity/kind and derives stable claim/citation unions. Move its shared fact types below Spec; replace old declarations/callers rather than add a parallel resolver. |
+| Occurrence lookup and reference lineage | Existing reference owner resolves one bound ledger and derives stable claim/citation unions. Phase 1 moved its result types below Spec; Phase 2 adds exact-handle lookup there, rather than a parallel resolver. |
 | Applicable claims, token kinds and other support | Consuming domain's existing validator/policy. For example, Spec's exclusion of `code_sample` is not a global exact-reference prohibition. Model output or unregistered YAML rules cannot grant eligibility. |
 | Attributed-unit boundaries and traversal | Registered typed content contract identifies the owning value/record and collects handles in declared order. Each domain preserves its other evidence types and full validation. |
 | Repair scope, approval and semantic review | Existing consuming-domain authority, coordinated through shared repair/runner mechanisms. Reference expansion grants no new target or verdict authority. |
@@ -609,7 +691,7 @@ cannot acquire a fresh claim from the whole assignment catalogue on retry.
 
 ## 10. Phased rollout with testable checkpoints
 
-**Phase 0 is done; the remaining chunks are planned.** The approved contract
+**Phases 0–1 are done; the remaining chunks are planned.** The approved contract
 activates only at the coordinated Phase 2 cutover. There are five phases and eleven
 chunks. Each chunk produces a reviewable diff, named regression evidence and a
 recorded proceed/revise decision. §11 supplies the common acceptance matrix;
@@ -660,7 +742,7 @@ accepted/rejected repair examples. The retained
 has 13 accounted calls, 18,512 actual tokens, two story-repair executions and no
 publication or rubric grade. Its requests measure:
 
-| Assignment | Serialized Bedrock request bytes | Selected schema bytes | Actual input / total tokens |
+| Assignment | Serialized Bedrock request bytes | Prompt schema bytes | Actual input / total tokens |
 | --- | ---: | ---: | ---: |
 | Brief initial, call 9 | 10,242 | 3,927 | 1,583 / 1,763 |
 | Brief repair, call 10 | 5,107 | 837 | 976 / 1,270 |
@@ -687,7 +769,7 @@ checks do not establish live model quality or implementation of the approved con
 
 ### Phase 1 — Remove coupling without changing behavior
 
-**1.1 — Refactor the existing reference owner.** Depends on Phase 0.
+**1.1 — Refactor the existing reference owner — done.** Depends on Phase 0.
 
 - **Outcome/owners:** move common selection/lineage mechanics below Spec types in
   `reference_support`; adapt its consumers. Keep Spec eligibility and non-reference
@@ -699,6 +781,17 @@ checks do not establish live model quality or implementation of the approved con
 - **Exit/revise:** this chunk may land independently once applicable tests and full
   verification pass. If it requires a second resolver, policy registry or a shared
   module importing Spec, revise the boundary before the contract change.
+
+**Phase 1 complete (26 September 2026):** `reference_support.select` now accepts
+claim IDs and returns reference-owned claim, citation and scope facts. Spec
+generation and review evidence adapt these facts under their existing eligibility
+rules; neither schema nor request text changed. The old Spec-type import is gone.
+Reference tests cover ordering, duplicate/foreign claims, stale state, invalid
+scopes and allocation cleanup. The architecture test forbids Spec imports in the
+shared owner, and review tests reject clarification-response support. The targeted
+reference, Spec, typed-text and architecture suite passed (545/545 tests). The
+complete verification, including packaged smoke checks, passed. This is an
+ownership refactor; ADR 0020's exact-handle runtime behavior begins in Phase 2.
 
 ### Phase 2 — Implement one coordinated format change
 
@@ -737,8 +830,11 @@ checks do not establish live model quality or implementation of the approved con
   keep coupled, membership and reviewed-insertion policies distinct. Update native
   exact reconstruction and remove the obsolete tuple-specific trigger/guidance.
 - **Checks:** unknown handle → bounded valid replacement; unchanged/alternating errors
-  → exhaustion; invalid `S` → its authorized recovery or block. A later rejected
-  handle cannot enlarge the original bound. Reordering preserves evidence sets;
+  → exhaustion, including §2's changed-prose/moved-reference recurrence under one
+  target identity. Adapt the retained failure to the new handle contract rather
+  than preserving the old tuple as an accepted format. Invalid `S` → its authorized
+  recovery or block. A later rejected handle cannot enlarge the original bound.
+  Reordering preserves evidence sets;
   adding/removing dependencies outside authority rejects. Verify siblings, origins,
   full-unit validation, dependent rebuilding and exact usage/retry accounting.
 - **Exit/revise:** include a repair that passes its field but fails later coverage,
@@ -757,6 +853,9 @@ checks do not establish live model quality or implementation of the approved con
   reject. Test old versions, both current state variants, exact Markdown expansion,
   clarification failure precedence and downstream gates. A trusted-join pass cannot
   turn an inconclusive finding into a user question or completion.
+  Include §2's correctly linked but literal-only entity basis and repeated
+  Given/When/Then; test semantic rejection routing separately from native entity
+  membership, alongside meaningful successful output.
 - **Exit/revise:** every producer/consumer in §6 agrees; superseded formats, readers,
   tuple-only repair branches and fixtures are removed. Keep negative tests that reject
   old shapes. Any readback discrepancy blocks the whole Phase 2 change. No activation
@@ -773,6 +872,10 @@ checks do not establish live model quality or implementation of the approved con
   domain evidence retain their boundaries. Sliced results, renewed dependencies,
   stale reads and operational IDs behave correctly. Combine successful assignments
   with repeated/alternating protocol and native errors under the global budget.
+  A changed replacement with an unresolved target must retain its retry count;
+  exhaustion must prevent both specification and clarification publication.
+  Include §2's combined sequence: earlier native repairs succeed, a missing answer
+  recovers within its request, then a different native assignment exhausts.
 - **Exit/revise:** independent integration and negative tests pass without Spec/session
   imports or workflow-name branches. This proves a reusable contract, not completed
   Plan/Tasks/Implement workflows. A helper test or renamed Spec workflow is insufficient.
