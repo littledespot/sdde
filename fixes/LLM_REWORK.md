@@ -38,7 +38,7 @@ in [FIX_002](FIX_002.md#36-preserve-field-purpose-through-repair-and-recover-mis
 
 | Boundary | Observed evidence |
 | --- | --- |
-| Source/extraction | Start successfully, display the exact greeting, and optionally output UTC date/time all reached generation. Claim 1 carries business prose; claim 2 is the preserved greeting occurrence. |
+| Source/extraction | Start successfully, display the exact greeting, and SHOULD output UTC date/time all reached generation. Claim 1 carries business prose; claim 2 is the preserved greeting occurrence. |
 | Reconciliation | One mixed signal incorrectly included the preserved-token claim in model prose. Existing evidence repair corrected its selection; execution continued. |
 | Brief | Initial title used token 1/citation 2 but selected only claim 1. Repair converted the reference object into a JSON-looking prose string. It passed field validation; that is not semantic recovery. |
 | Story | Initial output was only token 1/citation 2, again selecting claim 1. Both authorized coupled replacements returned the same invalid combination. |
@@ -75,6 +75,7 @@ in this document establishes the proposed contract's effectiveness yet.
 | Review assignment ordinals | [specification_support](../src/domain/specification_support.zig) | Single-target repair already binds its assignment natively. Batch findings still need unambiguous association; do not bind unchecked array positions. |
 | FR/AC IDs and numbering | [specification_identity](../src/domain/specification_identity.zig) | Already deterministic. The number of meaningful requirements is a semantic question, not an array-count calculation. |
 | Coverage membership/counts | [specification_coverage](../src/domain/specification_coverage.zig) | Already computed. Counting a cited claim is not proving its meaning survived. |
+| Exact-copy reconstruction after coverage failure | [specification_coverage_repair](../src/domain/specification_coverage_repair.zig) | Already native when the entire field equals a known literal and already cites its claim. Preserve this bounded behavior; do not replace it with a model call or expand it to guessed embedded matches. |
 | JSON part assembly | [json_composition_runtime](../src/domain/json_composition_runtime.zig) | Already native and prompt-free. Preserve full assembled validation and exact producer dependencies. |
 | Markdown, headings, escaping and literal expansion | [specification_projection](../src/domain/specification_projection.zig), [renderer](../src/domain/specification_markdown.zig) | Already deterministic. Do not ask a model to fix the rendered document. |
 | Retry limits, usage, freshness and publication status | Existing runner, lifecycle, accounting and publication owners | Already engine authority. No change justified by this proposal. |
@@ -141,6 +142,11 @@ registries. Native expansion must be deterministic and idempotent; repeated use 
 one reference does not multiply citation entries. Do not deduplicate text segments:
 repeating a value in two parts of a sentence can be intentional.
 
+Define stable dependency ordering once at this owner, including traversal of
+shared-provenance records. Continue rejecting duplicate explicit selections where
+the existing contract requires uniqueness; deduplicating derived dependencies is
+not permission to silently fix invalid model evidence.
+
 The proposal must explicitly settle how those roles survive canonicalization:
 
 1. Deriving an exact-value dependency must not declare the surrounding prose
@@ -157,7 +163,10 @@ The proposal must explicitly settle how those roles survive canonicalization:
 
 Selection must resolve uniquely in the current immutable reference state, be of
 the required preserved-token kind, and be permitted for the request and authorized
-repair unit. Unknown, foreign, stale, ineligible or conflicting evidence rejects.
+repair unit. Unknown or ineligible selections and foreign, stale or conflicting
+request/reference-state bindings reject. A reused numeric ordinal alone cannot
+reveal that the model intended an older occurrence; freshness comes from the
+existing bound reference state and producer dependencies.
 Use the owning purpose's eligibility policy; positive content and diagnostic
 loss findings do not have identical evidence permissions.
 
@@ -300,7 +309,7 @@ Governing amendment surfaces: [§7.1](../design/contracts/07-domain-representati
 [§16.3](../design/contracts/16-reference-ingestion.md),
 [§17.3](../design/contracts/17-specify.md),
 [§22](../design/contracts/22-repair.md), and affected persistence/rendering contracts
-in [§§23–24](../design/design.md#23-rendering-and-editability).
+in [§§23–24](../design/design.md#23-rendering-and-editability-strategy).
 In particular §17 currently requires the supporting claim in model-selected
 provenance, and §22's approved §36 amendment says the engine adds no citations.
 This document does not silently override those rules or accept the overall
@@ -344,9 +353,9 @@ transport, raising retry allowances or removing validation.
 | --- | --- |
 | Reported greeting and unrelated business requirements | One selected exact claim resolves the correct literal/citation without model-supplied duplicate IDs; meaningful successful candidates proceed through the existing gates. |
 | Old tuple shape | Closed new model schema rejects superseded token/citation fields. No compatibility path. |
-| Unknown, wrong-kind, ineligible or stale claim | Typed rejection; no default, citation insertion, publication or clarification conversion. |
+| Unknown/wrong-kind/ineligible claim or stale/foreign state binding | Typed rejection; no default, citation insertion, publication or clarification conversion. Reused ordinals do not bypass state/dependency checks. |
 | Same literal in different sources | Exact selected occurrence retained; no first-match selection. |
-| Repeated exact segment | Deterministic citation set, preserved text order/repetition and idempotent expansion. |
+| Repeated exact segment | Stable ordered citation union, preserved text order/repetition and idempotent expansion. Duplicate derived dependencies collapse; duplicate explicit evidence selections still reject. |
 | Reference added, replaced or removed | Correct dependency recomputation for the whole authorized unit; unrelated sibling data and producer origins unchanged. |
 | Shared-provenance acceptance record | All fields contribute exact dependencies; Given/When/Then retain separate meaning and unaffected content. |
 | Fixed-evidence repair | No newly derived claim or source scope outside authorization; coupled changes require their approved target. |
