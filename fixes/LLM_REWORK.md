@@ -1,6 +1,6 @@
 # LLM_REWORK — Derive mechanical facts; ask models for semantic choices
 
-**Date:** 25 September 2026. **Status:** Feasibility assessment and proposed rollout.
+**Date:** 25 September 2026. **Status:** Cross-workflow feasibility reviewed; contract decisions remain open.
 **Scope:** Documentation only. No code, schema, workflow, configuration or governing
 design changes are implemented or approved by this document. No live calls were made.
 
@@ -18,18 +18,39 @@ The model should select the intended source occurrence once; existing native
 owners should derive its fixed dependencies. Business meaning and selection of
 semantic supporting evidence remain model-assisted and subject to review.
 
-**Recommendation:** first design one shared post-extraction reference-selection
-contract using existing preserved-token claim IDs. Remove redundant model-authored
-relationships through canonical construction, rather than another prompt asking
-the model to reconstruct them. Keep counts, assembly and rendering with their
-existing deterministic owners. Do not create a reference registry, fixer agent,
-second evidence store, retry policy or generic execution layer.
+**Revised recommendation:** for typed content backed by a validated reference
+ledger, use its preserved-token claim ID in both model and canonical exact
+segments. Preserve explicit content-support selection once and derive reference
+lineage from that selection plus the exact segments. Refactor existing reference
+mechanics below Spec's types and policy so other workflow operations can reuse them.
+This avoids a second reference syntax and independently stored dependency lists.
+Counts, assembly, rendering, retries and publication retain their current owners.
 
-Core lookup feasibility is high. The complete change is cross-cutting: provenance
-roles, repair scope and canonical readback must be settled before implementation.
-It cannot honestly be described as a one-field rename or a guarantee of good prose.
+**Across workflows:** any validated workflow may use this contract through registered
+operations with declared typed content and reference inputs. It is not a universal
+schema or replacement for all evidence IDs. Workflows without such content need no
+reference ledger; arbitrary JSON does not acquire reference semantics automatically.
+The concrete reuse boundary and proof required are in §6.1–§6.4.
 
-## 2. Evidence: the latest failure
+Lookup feasibility is high; implementation readiness is not established. The
+code audit found substantive gaps in the earlier proposal:
+
+| Finding | Required correction |
+| --- | --- |
+| Flattened provenance cannot recover which claims were explicit versus derived. | Preserve explicit selection; define one derived effective-provenance view (§5.2). |
+| Canonical pairs would require conversions that the atomic repair API does not currently support. | Prefer the same claim handle across text boundaries; do not add conversion infrastructure merely to preserve old pairs (§5.4). |
+| Fixed-evidence repair can change authority when a reference is removed. | Pin effective evidence; a change outside that scope requires an authorized coupled target (§5.5). |
+| An invalid handle prevents complete effective provenance from being calculated. | Bind candidate repair to independently validated facts; do not require unavailable old provenance or infer authority from the invalid handle (§5.5). |
+| New response IDs would still require model-side joins in today's request. | Expose directly claim-addressable choices through the existing evidence projection (§5.1). |
+| Review evidence and completed readback consume the existing provenance contract. | Update these consumers together; pending clarification state has a different storage contract (§6). |
+| The current shared reference helper imports Spec types; Spec eligibility is not universal. | Refactor the existing mechanical owner and retain purpose policy with consuming domains (§6.1). |
+| A claim ordinal is meaningful only in its captured reference namespace. | Bind the namespace natively; preserve other evidence and operational IDs (§6.2–§6.3). |
+
+These are reasons to settle the focused contract before coding, not to add a fixer
+agent, reference registry, evidence store or execution framework. The proposal
+removes one avoidable failure class; it cannot guarantee meaningful prose.
+
+## 2. Evidence: the retained failure
 
 Reviewed execution:
 [`2026-09-25T08-21-44Z-b16638b5493910a4b1d29436213dcde9`](../zig-out/e2e-spec/2026-09-25T08-21-44Z-b16638b5493910a4b1d29436213dcde9/report.md).
@@ -69,7 +90,7 @@ in this document establishes the proposed contract's effectiveness yet.
 | Exact-token candidate identity and raw bytes | [structured_tokens](../src/domain/structured_tokens.zig), extraction identity actions | Already deterministic. Relevance and classification remain semantic where not fixed by policy. |
 | Canonical claim/citation/token identities | [reference_extraction](../src/domain/reference_extraction.zig), [reference_claim_items](../src/domain/reference_claim_items.zig) | Already native, assigned after validation. Do not add another identity system. |
 | Exact-copy choice | [typed_text.ExactCopy](../src/domain/typed_text.zig), [generation schema](../design/workflows/spec/generation.schema.json) | Model repeats token/citation and supporting-claim selection. Highest-priority simplification. |
-| Citation union | [reference_support.select](../src/domain/reference_support.zig), [specification_provenance](../src/domain/specification_provenance.zig) | Already derived as a stable unique union of selected claims. Extend this boundary; do not duplicate it. |
+| Citation union | [reference_support.select](../src/domain/reference_support.zig), [specification_provenance](../src/domain/specification_provenance.zig) | Already derived. `reference_support` currently imports Spec selection/provenance types; remove that coupling while reusing its mechanical owner (§6.1). |
 | Summary statement `local_key` | [reconciliation validation](../src/domain/reference_reconciliation_validation.zig), schema and key repair | Model-generated uniqueness/order bookkeeping remains. Separate candidate for removal after defining ordering semantics. |
 | Preserved-token reconciliation content | [reconciliation validation](../src/domain/reference_reconciliation_validation.zig), [repair](../src/domain/reference_reconciliation_repair.zig) | The sole selected preserved-token claim determines its token. Audit/removal of the repeated token field is feasible separately. |
 | Review assignment ordinals | [specification_support](../src/domain/specification_support.zig) | Single-target repair already binds its assignment natively. Batch findings still need unambiguous association; do not bind unchecked array positions. |
@@ -101,7 +122,7 @@ It must not manufacture FRs/ACs from a counter, choose every available citation,
 merge semantically similar prose using string heuristics, or default an uncertain
 finding to success. Existing semantic review remains explicitly model-assisted.
 
-## 5. Proposed exact-reference contract
+## 5. Proposed exact-reference contract — source-backed content
 
 ### 5.1 Use an existing identity once
 
@@ -120,44 +141,73 @@ captured source occurrence → token 1 → citation 2 → exact bytes
 [reference_claim_items.build](../src/domain/reference_claim_items.zig) already
 checks a preserved-token claim's one citation, source occurrence and raw bytes.
 [eligibleExactClaim](../src/domain/specification_provenance.zig) currently performs
-the reverse lookup while authorizing §36 repair. The new contract should resolve
-the selected claim directly through existing reference/provenance ownership; do
-not retain a redundant reverse-lookup path solely for the removed model format.
+the reverse lookup while authorizing §36 repair. Resolve the selected claim directly
+through existing reference/provenance ownership. Remove reverse lookup only where
+its callers disappear; native token/citation identities remain valid elsewhere.
+
+**The request must also remove the join.** Today's
+[model_evidence.Token/project](../src/domain/model_evidence.zig) offers a token ID,
+value and citation separately from the owning claim. Changing only the response
+schema would still ask the model to join these lists. Refactor this existing
+projection to offer a claim-addressable exact choice with its trusted value and
+source context. Do not add a second lookup table or strip evidence needed to choose
+meaningfully. Request choices, schema exclusions and native eligibility must use
+the same owning facts; an arbitrary integer still does not become a valid handle.
+
+This projection also supplies reconciliation and source review. Reconciliation
+still requires token IDs; its simplification is deferred in §7A. Preserve that
+metadata for those consumers rather than globally replacing the shared token
+record. Use contract-appropriate views from the same projection owner: directly
+selectable claim occurrences for typed content, existing token facts where required.
+Do not send duplicate exact-choice catalogues in one request or add workflow-name
+branches to choose semantics.
 
 The model still writes prose and selects evidence for its semantic assertions.
 Exact-value dependency membership comes from the explicit exact-value selection,
 not from guessing what a prose string might mean. Equal strings in two files remain
 different occurrences. Never resolve by literal text or by the first matching value.
 
-### 5.2 Derive lineage without manufacturing support
+### 5.2 Preserve explicit selection; derive effective provenance
 
-Conceptually, a field/record has:
+The current canonical representation **cannot reconstruct the required roles**.
+[specification.Provenance](../src/domain/specification.zig) has one claim list and
+its citation union. Under the proposed automatic derivation, these cases collapse:
 
-- model-selected evidence for its content;
-- exact source dependencies implied by its typed exact-value selections;
-- a native, stable union used for canonical lineage and citation accounting.
+| Explicit support `S` | Exact dependencies `E` | Effective claims `L` | After removing the exact reference |
+| --- | --- | --- | --- |
+| `[1]` | `[2]` | `[1,2]` | Claim 2 should disappear from derived lineage. |
+| `[1,2]` | `[2]` | `[1,2]` | Claim 2 remains explicitly selected support. |
 
-These are roles in one existing evidence path, not three independently mutable
-registries. Native expansion must be deterministic and idempotent; repeated use of
-one reference does not multiply citation entries. Do not deduplicate text segments:
-repeating a value in two parts of a sentence can be intentional.
+Subtracting exact dependencies loses intentional support in the second case;
+keeping the old union leaves obsolete derived support in the first. This is a
+demonstrated information loss, not an implementation detail to defer.
 
-Define stable dependency ordering once at this owner, including traversal of
-shared-provenance records. Continue rejecting duplicate explicit selections where
-the existing contract requires uniqueness; deduplicating derived dependencies is
-not permission to silently fix invalid model evidence.
+**Preferred contract:** retain explicit reference-claim selection `S` once with
+canonical content. Derive `E` from that content's exact handles, then
+`L = stableUnique(S + E)` through the refactored reference owner. Do not persist
+independently writable `S`, `E` and `L` lists. Distinguish stored selection from
+the effective reference view with types, not caller-specific meanings of `claim_ids`.
+Spec composes this view into its evidence contract; other domains preserve their
+own accepted support types. `L` describes reference claims, not all workflow evidence.
 
-The proposal must explicitly settle how those roles survive canonicalization:
+This requires a focused canonical-contract amendment. Retaining the old canonical
+format is not compatible with all the proposed add/remove guarantees. Any retained
+materialized citations or coverage remain checked projections, not selection authority.
 
-1. Deriving an exact-value dependency must not declare the surrounding prose
-   semantically supported. Existing review still assesses source entailment.
-2. Removing/replacing a reference must recompute its derived dependencies. Blindly
-   unioning new claims into the old provenance leaves obsolete support behind.
-3. Some content legitimately describes only an exact value. Do not impose a new
-   blanket “every field must cite a prose claim” rule merely to fix this fixture.
-4. If current canonical data can reconstruct the required distinctions uniquely,
-   reuse it. If it cannot, make the smallest explicit canonical-contract amendment;
-   do not add a hidden side table or infer which old claims were model-selected.
+Deriving a literal dependency never selects a business assertion on the model's
+behalf. Explicit support may itself include a preserved-token claim; forbidding
+that to avoid the ambiguity would be a new semantic restriction. For the current
+source-backed Spec path, require eligible, nonempty effective support, permitting
+`S=[]` when eligible exact references make `L` nonempty. Do not require a prose claim
+merely because this fixture contains one. Other domains may legitimately have an
+empty reference component and support from their own accepted authority; the shared
+resolver must not impose Spec's nonempty-claim or no-user-response restrictions.
+
+Use explicit-selection order followed by first exact-reference occurrence in
+declared field/segment order for the stable union. Define this once in the existing
+owner, including all fields in a shared-provenance record. Duplicate explicit
+selections still reject. Repeated exact segments deduplicate dependencies, not text.
+Recompute after authorized replacement or removal; do not append to the prior union.
 
 ### 5.3 Eligibility and scope are required decisions
 
@@ -170,14 +220,18 @@ existing bound reference state and producer dependencies.
 Use the owning purpose's eligibility policy; positive content and diagnostic
 loss findings do not have identical evidence permissions.
 
-There is a material interaction with passive references: current
-`reference_support.select` derives source scopes from selected claims, and
-`specification_provenance.resolvedChoices` uses those scopes to offer passive IDs.
-Adding an exact dependency can therefore change other available references.
-**Do not silently broaden unrelated passive-reference choices.** The amendment
-must define whether those choices use explicit content-support scopes or the
-complete derived lineage. Prefer preserving the existing authorized choice scope;
-if that requires retaining an evidence-role distinction, resolve it before coding.
+Current `reference_support.select` derives source scopes from all selected claims;
+`specification_provenance.resolvedChoices` uses them to offer passive IDs. A valid
+old exact copy already includes its token claim in that selection. Compare new
+behavior with that **equivalent valid candidate**, not the failed tuple missing
+its required claim.
+
+**Preferred Spec scope rule:** derive passive choices from effective lineage `L`, as
+the equivalent valid old candidate does. Explicit-only scopes would narrow existing
+valid behavior and are not a neutral safety measure. Newly selected occurrences
+must still be eligible for the current assignment, and fixed repairs must not gain
+new scope. Removal must revalidate passive siblings that depended on the removed
+claim; operational capabilities remain entirely separate.
 
 ### 5.4 This is construction under a new contract, not silent repair
 
@@ -186,39 +240,252 @@ model contract removes redundant fields, validates one selection, then construct
 canonical data according to an explicit rule. Reject superseded model formats;
 do not add compatibility readers, guessing, or an optional fallback to old tuples.
 
-Canonical token/citation pairs may remain useful internally. The current
-[Values(boundary)](../src/domain/specification.zig) distinguishes model and canonical
-evidence but shares the same business-text type. A wire-only rename is insufficient:
-the model-selection type and canonical exact-reference type need an explicit,
-typed conversion at the existing evidence boundary. Keep generic JSON decoding
-free of hidden reference lookup or workflow-dependent transformations.
+The current [Values(boundary)](../src/domain/specification.zig) distinguishes model
+and canonical evidence but shares business-text structure. Prefer a claim handle
+in both model and canonical exact segments, with validity established at the native
+boundary. The ledger owns the token/citation/bytes; duplicating the pair in every
+canonical segment is not required to preserve exactness. Renderers and coverage
+resolve it through the shared owner. Model data remains untrusted until admission.
+
+This also avoids a real API obstacle: [atomic_repair.Contract](../src/domain/atomic_repair.zig)
+uses one replacement type for expected values, `current_value`, response parsing,
+comparison and merge. Keeping model handles but canonical pairs would require a
+separate presentation/conversion contract. That alternative is feasible in principle,
+but has more surface and no demonstrated benefit here. Never use a lossy model
+projection as the native expected value or move lookup into generic JSON decoding.
+
+The shared-handle option still needs schema/type, canonical-version, evidence and
+consumer changes. It avoids text conversion machinery, not all contract work.
+
+### 5.5 Specify fixed repair and review semantics before coding
+
+The existing [native repair](../src/domain/specification_repair.zig) pins selection;
+[omission repair](../src/domain/specification_coverage_repair.zig) compares canonical
+claim/citation sets, and insertion matches reviewed evidence. Fixed explicit `S`
+is not equivalent to fixed effective `L`: removing a sole exact segment can remove
+a claim from `L` without changing `S`.
+
+Where effective evidence is valid and available, preserve the existing fixed-evidence
+boundary: a value-only repair cannot change its explicit support or effective
+evidence. Recompute using the complete attributed singleton/record, then compare
+with authorized evidence.
+Retain exact expected-value/revision checks and the governing claim/citation
+equality rules; equal source scopes alone do not establish equal evidence.
+Reference addition, replacement or removal that changes that evidence requires an
+explicitly authorized coupled target, or remains a typed block. The amendment must
+name any newly supported coupled case; existing §36 authority does not automatically
+authorize every such change. Do not silently add an explicit citation to compensate
+for a removed derived dependency. Fixed membership and reviewed-omission repairs
+must apply the same decision through their existing owners.
+
+**Rejected candidates need a distinct precondition.** An unknown/wrong-kind handle
+prevents `L` from being constructed. Requiring equality with a nonexistent old `L`
+would disable repair; treating the bad handle as evidence would invent authority.
+Today explicit provenance can resolve independently before the value fails.
+
+The focused amendment should preserve bounded candidate recovery: the existing
+authorization owner binds the exact rejected value, fixed explicit selection and
+independently validated eligible reference facts for the owning unit. Use those
+facts as the permitted replacement scope, not as complete accepted provenance.
+A replacement cannot introduce evidence outside that bound; unchanged siblings
+remain fixed and complete validation computes the resulting `L`. Unknown handles
+contribute no scope. If these facts cannot support a valid replacement, a separately
+authorized coupled repair is required or the candidate blocks. The exact permitted
+set and comparison rule belong in the amendment and owning regression before
+implementation; this proposal does not grant arbitrary citation selection.
+
+Invalid explicit support cannot be treated as fixed, trusted scope. If both `S`
+and an exact handle fail, use the existing evidence-repair path first, or an
+explicitly authorized group; reassess the handle after full validation. Retain
+existing retry families and accounting. A replacement must not enlarge its own
+allowance by introducing a new handle and then treating that rejected response as
+fresh eligibility on the next attempt. Bind permitted choices through the existing
+authorization facts; changed upstream authority invalidates that authorization.
+
+Distinguish bad candidate data from a broken evidence context. An unavailable
+model-selected handle under a valid binding is a native candidate defect. Missing,
+corrupt or stale engine-owned ledger/choice bindings follow their existing terminal
+authority or runner rejection; they are not requests for the model to invent a
+replacement reference and never become user clarifications.
+
+[Spec source-review evidence](../src/domain/specification_support_evidence.zig) currently
+requires supported findings to match the candidate's effective provenance and
+replays that rule on readback. Preserve that comparison against derived `L`, while
+presenting explicit support and exact-reference content accurately to review.
+Literal lineage is not proof of semantic entailment. Negative/loss diagnostics retain
+their distinct eligibility rules; do not globally tighten them to positive-content
+provenance or change review verdict authority. This comparison is Spec's review
+contract, not a universal rule for every workflow's findings.
+
+There is a residual bookkeeping cost: supported review responses still repeat
+evidence that admission requires to equal the candidate's effective provenance.
+Project that native expected view through the existing review-guidance owner;
+do not make the reviewer calculate `S + E`. Removing the repeated response fields
+and attaching fixed positive evidence natively would require a separate review
+contract amendment. It is not part of this first patch, and success here must not
+be described as eliminating all model-side evidence bookkeeping.
 
 ## 6. End-to-end integration and feasibility
+
+The following is the first production integration: Spec. Shared reuse requirements
+follow in §6.1; the table does not make Spec policy mandatory for other workflows.
 
 | Stage | Required treatment | Feasibility / failure to avoid |
 | --- | --- | --- |
 | Capture and extraction | Keep native spans, token candidates, classification and subsequent identity assignment. | Claim IDs do not exist yet. Do not force the proposed post-ledger ID into extraction or introduce a phase-dependent fallback. |
 | Reconciliation | Preserve semantic dispositions/grouping and native identity/coverage checks. Consider redundant preserved-token fields as a separate follow-up. | Extraction/reconciliation business prose currently excludes exact-copy segments. Do not accidentally enable them by changing a shared type. |
-| Request preparation | Project allowed occurrences and source meaning from current reference authority. Select the workflow's canonical schema through existing owners. | Avoid a new schema registry, copied per-caller lookup maps or loss of source context when shrinking response metadata. |
-| Model decode and native admission | Parse closed proposed shape; resolve exact selections; construct derived evidence; validate text, membership and full unit. | Arbitrary IDs still reject. Native failures remain typed failures; no malformed-data-to-clarification conversion. |
+| Request preparation | Offer directly claim-addressable exact choices and source meaning. Keep one configured response schema; initial and fixed-repair choices use the same eligibility facts. | Later initial requests also embed canonical brief/entities in `specification_session.packetFor`; omission packets embed the canonical candidate. Audit all model-visible context, not only `current_value`. |
+| Model decode and native admission | Parse the closed shape; resolve exact selections; derive effective evidence; validate text, membership and full unit. | Preserve the rejected handle and location. Distinguish a bad selection under valid authority from a broken trusted binding; only the former is candidate repair. |
 | Brief/story/entities/records | Apply the same contract to every attributed value, all record fields and admitted clarification questions using that representation. | Do not fix only primary-story generation. Shared-provenance records need a complete group dependency union. |
-| Native repair | Existing atomic owner binds old value, revision, scope and dependencies. A fixed-evidence text repair may select only references allowed by its fixed authority. | Deterministic derivation must not expand a value-only repair into new evidence authority. Adding external evidence still requires an authorized coupled target. |
+| Native repair | Existing atomic owner binds full native expected value, revision, scope and dependencies. Apply §5.5 to addition and removal, using full-record dependency recomputation. | Preserve precise repair target and existing retry identity when invalid handles alternate. Do not compare only explicit support when authorization pins effective evidence. |
 | Protocol correction | Same selected response schema and existing lifecycle/accounting; retain the original assignment. | No additional retry engine or generic fixer. Native reference defects and JSON/schema defects remain distinct. |
-| Coverage/omission repair | Reuse canonical coverage calculation and existing authorized repair/renewal paths. Project selected canonical current values into the correct new model shape where a model response is requested. | These packets currently read canonical completed data. Showing old pair-shaped values with a new claim-shaped schema would recreate conflicting guidance. Do not add a whole-specification native-to-JSON reassembly API. |
+| Coverage/omission repair | Retain native exact reconstruction; derive effective lineage for coverage and exact-set omission checks. Native and model replacements use coherent text syntax. | Same claim handles avoid pair/handle conversion. Evidence types still differ; verify selected expected values, displayed context, parsing and merge without adding a whole-specification native-to-JSON reassembly API. |
 | Assembly and downstream invalidation | Retain deterministic assembly and runner-owned invalidation; recompute affected dependency closure and run full validation. | Completed parts cannot be reused after their reference/policy dependencies become stale. |
-| Semantic/principle review | Inspect resulting content against original evidence; distinguish literal lineage from semantic support. | A greeting-only story can become mechanically consistent and still be a bad story. More passing joins is not a quality result. |
+| Semantic/principle review | Inspect resulting content against original evidence. Supported-source evidence compares with effective provenance; diagnostic evidence retains its own eligibility (§5.5). | A greeting-only story can become mechanically consistent and still be a bad story. Do not overload the shared `Provenance` type with two meanings. |
 | Rendering/publication | Expand exact bytes and render through existing owners only after required gates. | Reference objects inside strings remain prose, not hidden selections. Do not parse JSON-looking prose into evidence or ban it by a fixture-specific pattern. |
-| Persisted readback | Recompute expected relationships from the captured snapshot and compare with stored canonical data. Validate reviews and coverage again. | Reject tampered or stale evidence. Never repair stored canonical data during readback and thereby erase evidence of corruption. |
+| Completed readback | Resolve stored explicit support and exact handles against the captured snapshot; recompute effective relationships and validate stored reviews/coverage. | Reject invalid handles, stale bindings and inconsistent retained projections. Constructing a derived view from canonical inputs is permitted; repairing corrupt stored authority is not. |
+| Clarification/pending readback | Validate attributed generation questions before projection. Preserve pending reference-snapshot, clarification-ID and ledger validation. | Pending state does not store attributed generated content. Do not claim it replays complete specification provenance, or add that storage merely for this change. |
 | Plan/tasks gates | Continue reading only validated predecessor authority; preserve open-clarification gates. | Shared policy should be reusable, but complete production Plan/Tasks model integration is not established by this audit. Do not claim unimplemented consumers are verified. |
 
-Relevant existing readback owners are
-[specification_state](../src/domain/specification_state.zig),
-[incomplete_specification](../src/domain/incomplete_specification.zig),
-[reference_snapshot](../src/domain/reference_snapshot.zig) and
-[specification_support_evidence](../src/domain/specification_support_evidence.zig).
-Persisted canonical format need not change merely because model syntax changes.
-If evidence-role semantics require a format change, update its explicit contract
-and reject old versions; no dual readers or migration subsystem.
+The concrete localization owner is `specification_provenance.Inspection`:
+`inspectAttributed`/`inspectRecord` currently resolve provenance before marking a
+value target, and `specification_generation.rejectedPart` uses that target for
+repair. Extend existing diagnostic facts for a rejected claim handle; do not route
+a failed new lookup through a generic provenance error. Syntax/schema failures
+retain protocol correction; well-shaped unavailable handles use native validation.
+
+[Completed state](../src/domain/specification_state.zig) validates content,
+coverage and review associations. [Pending state](../src/domain/incomplete_specification.zig)
+stores references and clarification identities; generation questions are flattened
+to text by [the existing question builder](../src/actions/clarification/build_specification_clarification_need.zig).
+These are different contracts. The recommended canonical content change requires
+an explicit version amendment and old-version rejection, including conformance of
+any shared version tag; no migration, dual reader or new pending evidence store.
+
+### 6.1 Shared mechanics and consuming-domain policy
+
+Cross-workflow reuse requires a focused refactor, not simply calling
+`specification_provenance` from Plan or Tasks. Today
+[reference_support](../src/domain/reference_support.zig) accepts `spec.Selection`
+and returns `spec.Provenance`; Spec additionally requires completed reconciliation,
+retained claims and business-appropriate token kinds, and currently rejects
+clarification-response support. Those are not universal reference rules.
+
+| Responsibility | Owner after the proposed refactor |
+| --- | --- |
+| Handle identity and text syntax | Existing `reference_identity.ClaimId` and `typed_text`; syntax/membership validation receives native permitted choices. |
+| Occurrence lookup and reference lineage | Existing reference owner resolves one bound ledger, checks identity/kind and derives stable claim/citation unions. Move its shared fact types below Spec; replace old declarations/callers rather than add a parallel resolver. |
+| Applicable claims, token kinds and other support | Consuming domain's existing validator/policy. For example, Spec's exclusion of `code_sample` is not a global exact-reference prohibition. Model output or unregistered YAML rules cannot grant eligibility. |
+| Attributed-unit boundaries and traversal | Registered typed content contract identifies the owning value/record and collects handles in declared order. Each domain preserves its other evidence types and full validation. |
+| Repair scope, approval and semantic review | Existing consuming-domain authority, coordinated through shared repair/runner mechanisms. Reference expansion grants no new target or verdict authority. |
+| Allocation and lifetime | Existing action/value owner retains immutable inputs and allocator-owned results; no process-wide cache or cross-execution reference table. |
+
+The mechanical input is a bound reference ledger, explicit claim selection,
+ordered typed exact handles and native eligibility facts. Its output is resolved
+occurrences and a derived reference view, or a precise typed rejection. It does not
+receive workflow names, model callbacks, publication authority or operational ports.
+
+An empty reference component is not a universal text-validation bypass. Today's
+`typed_text.Validator` validates a reference grammar binding and requires nonempty
+source scopes. Each consumer must supply its accepted text/source context; accepting
+user-answer-only typed prose without that context is not already implemented by
+allowing `L=[]`. If a consumer needs that extension, define it explicitly at the
+existing text boundary, reusing normalization and rejecting unavailable references.
+Do not fabricate source scopes or weaken Spec validation to enable it.
+
+Keep the dependency direction acyclic: `typed_text` should name the low-level
+[reference_identity](../src/domain/reference_identity.zig) type, not import the
+extraction/resolution layer that already consumes typed text. Shared reference
+mechanics must not import Spec generation/session/policy types. Existing actions
+call the pure owner; orchestrators only coordinate declared runner bindings. If a
+separately callable operation is required, register it through the existing registry;
+do not hide it in the runner or create a new dispatcher.
+
+Keep this refactor bounded. `Items`, claim lookup and citation union currently live
+under reference reconciliation. Reusing those mechanical fact types does not
+require dismantling extraction/reconciliation or introducing a new generic evidence
+framework. Move only declarations whose dependencies prevent reuse, and remove the
+superseded declarations; preserve one implementation of each join and policy.
+
+### 6.2 Configured shapes and identity bindings
+
+[ADR 0003](../design/decisions/0003-generic-workflow-engine.md) allows any workflow
+identity composed from registered contracts. A response schema supplies shape;
+the registered native operation supplies semantic interpretation. Plan's existing
+[typed-leaf design](../design/contracts/07-domain-representations.md) already
+distinguishes business text, semantic text and operational references.
+
+- Apply this contract to declared typed fields, including nested records, arrays
+  and optional containers supported by that native contract. Do not recursively
+  interpret arbitrary objects named `claim_id`, `kind` or `provenance`.
+- Keep JSON decoding and [composition](../src/domain/json_composition_runtime.zig)
+  structural and prompt-free. Assembly does not resolve references or certify
+  semantic support; typed admission and full validation follow it.
+- Keep one configured complete schema per response binding; derive selected/part
+  schemas from it and verify conformance with the registered shared text contract.
+  The [schema compiler](../src/domain/model_result_schema.zig) supports local
+  `#/$defs/` references, not external schema imports. Do not invent a second schema
+  registry or assume cross-file imports. Existing schema/partition limits still apply.
+- No-reference workflows remain unchanged. A new JSON shape is usable only when its
+  semantic fields have a supported registered native contract. New authority kinds
+  require an explicit native-contract extension, not configurable executable rules.
+
+`ClaimId` is snapshot-local. The request and native content owner must bind one
+validated reference namespace; the model need not echo that engine identity. One
+snapshot can contain many source documents. Two independent snapshots can both
+contain claim 2; never flatten them into one ordinal space or choose the first match.
+Multi-snapshot attribution within one unit is not established by current code and
+needs a separate qualified-binding contract. Missing/ambiguous bindings must reject
+before a request can treat those ordinals as available choices.
+
+The corpus `StateId` alone is not a freshness proof. A rebuilt extraction can retain
+that source namespace while changing claim order or meaning. Bind the actual
+captured ledger and current producer/dependency generations, as existing
+[native dependency capture](../src/domain/specification_candidate_context.zig) and
+[reference lineage](../src/domain/reference_reconciliation_context.zig) already do.
+Persisted readback resolves against its exact captured ledger/contract. Do not
+substitute `(StateId, ClaimId)` equality for these checks or create a new hash/ID
+registry to duplicate them.
+
+A later workflow reuses the validated predecessor's reference identity where its
+contract permits. It does not remint source occurrences merely because the workflow
+name changed. Fresh execution envelopes remain execution-local; they do not replace
+persisted reference namespaces, predecessor freshness or contract validation.
+
+### 6.3 Workflow applicability and preserved authority
+
+| Workflow/use | Reusable part | Authority that remains separate |
+| --- | --- | --- |
+| Specify | Source-backed business fields, exact literal dependencies and reference-derived citations. | Retained-claim policy, business token restrictions, coverage, questions and semantic/principle review. |
+| Plan | Exact references in declared narrative fields using validated upstream evidence. | Editable-spec authority, accepted user answers, repository facts, principles, file/path candidates and plan approvals. |
+| Tasks | References within supported description fields; existing native IDs/counts remain computed. | Task obligation IDs, approved `fileId`s, command IDs, dependencies and task-definition approval. |
+| Implement | Reference display in declared explanatory content where its contract permits. | Authorized edits, raw code/patch payloads, approved files and task-scoped copy sources. No implicit expansion inside code strings. |
+| Another registered workflow | The same typed reference mechanism, without a workflow-name branch, when its operations supply the required evidence. | Its own registered evidence, review and publication contract; no automatic SDD predecessor sequence. |
+| Workflow without reference-backed content | Existing JSON/schema, runner and other deterministic operations. | No fabricated claims, source capture, additional prompts or mandatory reference stage. |
+
+`L` is only the reference-claim component. [Plan](../design/contracts/18-plan.md)
+also admits authenticated edits and other evidence; [Tasks](../design/contracts/19-tasks.md)
+selects obligation/file/command IDs; [Implement](../design/contracts/20-implement.md)
+uses authorized operation and copy-source contracts. Keep those namespaces and
+accepted support. An exact display reference never grants read, write, copy, command
+or approval authority and must not replace an operational ID.
+
+Preserve the SDD gates: open Spec clarifications block Plan; open Spec/Plan
+clarifications block Tasks; Implement requires current upstream approvals and no
+unresolved upstream clarifications. Reference resolution satisfies none of these
+gates by itself. Unrelated workflows retain their own declared gates.
+
+### 6.4 Evidence needed to claim reuse
+
+The inspected production workflow resources currently implement Spec; full
+Plan/Tasks/Implement generation is not demonstrated. Their rows above are integration
+requirements, not completed features. Verify a second non-Spec registered test
+consumer with a different response shape and native eligibility before calling the
+mechanism reusable. Merely renaming the Spec workflow or testing its helper directly
+does not establish independent reuse. Test generic composition separately from
+domain admission, and disclose offline tests versus live workflow evidence. Use
+test-owned bindings for this proof; do not ship a production node, policy registry
+or workflow solely to satisfy the test.
 
 ## 7. Other deterministic opportunities, ranked separately
 
@@ -266,22 +533,39 @@ part of this work. No evidence supports replacing semantic review with arithmeti
 
 **Expected benefits:** fewer invalid combinations; smaller model outputs; less
 bookkeeping guidance; fewer avoidable repair calls; reproducible lineage and
-diagnostics; clearer unit/property tests; identical rules across affected consumers.
+diagnostics; clearer unit/property tests; shared mechanics with explicit domain policy.
 Request/token/latency improvements are hypotheses until measured on comparable runs.
 
-**Costs:** a coordinated model-boundary change, typed conversion, repair/readback
-work and replacement regressions. Removing redundant metadata can reduce useful
-context if requests are also over-trimmed. Keep original source meaning available.
+**Costs:** coordinated model/canonical contract changes, effective-provenance
+derivation, repair/readback conformance and replacement regressions. The preferred
+shared handle avoids bidirectional text conversion, but not those costs. Removing
+redundant metadata can reduce useful context if requests are over-trimmed.
+
+| Alternative | Assessment |
+| --- | --- |
+| Better diagnostics only | Smallest operational change; can name the missing claim precisely. Retains the model bookkeeping failure class. |
+| One claim handle, still repeat it in provenance | Removes token/citation disagreement but preserves the reported missing-supporting-claim failure. Insufficient for this objective. |
+| One handle, permanently flatten explicit and derived claims | Avoids the initial mismatch but cannot meet the stated removal/readback guarantees. Reject this shortcut. |
+| One handle in model/canonical text; retain explicit selection and derive effective provenance | Preferred: meets the stated guarantees with one selection authority and no pair conversion. Requires the focused cross-cutting amendment. |
+
+The model can still select the wrong or nonexistent occurrence, omit an exact
+value, misunderstand a requirement, or return malformed JSON/no answer. This
+proposal eliminates redundant joins, not all reference selection or provider
+failures. Native membership checks and bounded recovery remain necessary.
 
 | Risk | Required control |
 | --- | --- |
 | Citation laundering | Derive only dependencies of explicit allowed references; keep source entailment in semantic review. Never cite all claims by default. |
 | Coverage appears complete while meaning is lost | Retain meaningful-story/FR/AC and obligation checks in semantic assessment and live rubric evaluation. Include deliberately poor but well-linked candidates in tests. |
 | Identical literal selects wrong source | Use existing occurrence identity and captured source scope, not value equality. |
-| New reference changes unrelated permissions | Decide evidence roles and passive-choice scope explicitly; inert text never grants operational capability. |
+| Scope changes unexpectedly | Compare passive choices against an equivalent valid old candidate using complete lineage; preserve fixed repair scope. |
 | Replacing/removing content leaves stale derived claims | Recompute from the complete authorized unit; do not append to old derived unions. |
-| Retry scope silently widens | Fixed-evidence repairs remain fixed; altered evidence requires its existing authorized group. Preserve stable identity and bounds. |
+| Retry scope silently widens | Preserve fixed effective evidence; a change needs a specifically authorized group or blocks. Preserve stable identity and bounds. |
 | Two authorities disagree | One reference ledger and resolver; schemas/packets are projections. No parallel mapping cache or side store. |
+| A shared projection breaks an unchanged consumer | Preserve reconciliation/review token metadata while deriving contract-appropriate choices from the same owner. |
+| Spec policy leaks into other workflows | Keep common mechanics below domain types; each consumer supplies its native eligibility and other accepted evidence. |
+| Same ordinal resolves against the wrong snapshot | Bind the exact namespace in the native request/value owner; reject ambiguous or swapped bindings. |
+| Display values gain operational authority | Preserve file, command, obligation, approval and copy-source contracts; never interpret raw code/patch strings as display segments. |
 | Readback conceals corruption | Recompute for comparison and reject mismatch, rather than normalize corrupt persisted data into validity. |
 | Pre-/post-extraction identities are confused | Keep token-candidate classification separate from later claim selection. No runtime guessing between formats. |
 | Simpler schema is mistaken for a solved workflow | Require downstream semantic assessment, publication/readback and rubric evidence. Safe failure is containment, not completion. |
@@ -292,17 +576,26 @@ The user's request authorizes this assessment only. Prior §36 approval authoriz
 bounded coupled repair, not native construction of new provenance under a changed
 model contract. The following focused decisions are still proposed:
 
-1. **Model reference shape:** accept one existing preserved-token claim occurrence
-   selection and remove redundant token/citation fields from affected model responses.
-   Preserve pre-ledger extraction identities and canonical literal precision.
-2. **Evidence derivation and scope:** define derived exact dependencies versus
-   semantic content-support selections, replacement/removal behavior, passive-choice
-   scope and canonical reconstruction/readback. No semantic inference or automatic
-   arbitrary citation insertion is authorized.
-3. **Repair conformance:** define how the new model/canonical shapes project through
-   fixed and coupled repairs, and retire §36 mechanics whose sole trigger becomes
-   unrepresentable. Preserve genuine unknown/ineligible-reference failures and
-   unrelated membership, omission and conflict authority.
+1. **Shared exact-reference shape:** use one preserved-token claim handle in model
+   and canonical segments; update the closed content/version contracts and reject
+   old formats. Apply through registered typed fields in any workflow, with the
+   shared/domain split in §6.1. Preserve pre-ledger identities and other namespaces.
+2. **Content selection and effective provenance:** persist explicit selection once;
+   derive reference dependencies and their stable union. Keep this reference view
+   consistent across its consumers without replacing other workflow support types.
+   Spec positive review/readback and passive choices follow §5; other purpose and
+   diagnostic policies retain their existing owners.
+3. **Fixed/coupled repair:** pin available valid effective evidence for value-only
+   repair; specify the independently validated scope used when a rejected handle
+   prevents that evidence from existing. Define any additional authorized coupled
+   add/remove cases; otherwise block them. Update membership/omission equality and
+   precise targeting, retiring only mechanics made obsolete by the removed tuple.
+
+The invalid-handle permitted set and comparison rule in §5.5 remain a readiness
+blocker until this amendment specifies them. An implementation request must not
+silently choose broader authority. Review evidence attachment, reconciliation token
+metadata removal, multiple-ledger attribution and zero-scope typed text remain
+separate follow-ups, not prerequisites to be folded into this patch.
 
 Governing amendment surfaces: [§7.1](../design/contracts/07-domain-representations.md),
 [§12](../design/contracts/12-model-boundary.md),
@@ -322,24 +615,33 @@ they are not prerequisites for the first exact-reference change.
 
 1. **Settle the three decisions above and capture conformance cases.** Map every
    existing model/canonical consumer before changing its shape. Establish a concrete
-   source-scope and add/remove dependency policy, not a prompt-only interpretation.
-2. **Implement one native reference-expansion boundary.** Reuse current ledger,
-   evidence and typed-text owners. Prove the mechanical transformation with unit
-   and property tests before connecting it to workflow execution.
+   source-scope and add/remove dependency policy, plus the reusable contract and
+   domain-policy split. Do not interpret this as approval to implement new workflows.
+2. **Prove the bounded native contract first.** Using existing ledger, evidence and
+   typed-text owners, remove Spec type dependencies from shared mechanics and test
+   handle resolution, the two ambiguous-union examples, effective scope and bounded
+   repair. Prove reuse through a non-Spec test consumer with a different shape and
+   native policy. This is offline construction/rejection evidence, not live quality.
+   Do not leave a parallel production path or reusable helper that still imports Spec.
 3. **Change all affected producers/consumers together.** Initial content, selected
-   repairs, protocol schemas, current-value projections, canonical validation,
-   coverage and readback must agree. Keep workflow orchestration through the
-   existing runner. Replace prompt wording; do not add a new prompt or agent.
-4. **Remove superseded machinery.** Old model tuple schemas, the redundant supporting
+   repairs, protocol schemas, all model-visible context, canonical validation,
+   coverage, supported/diagnostic review and readback must agree. Domain owners
+   perform the pure work through existing actions; orchestrators only coordinate
+   typed outcomes through the runner. Replace prompt wording; add no prompt or agent.
+4. **Remove superseded machinery.** Old exact-copy tuple schemas, the redundant supporting
    claim requirement and repair cases specific to reconstructing that tuple must
    not survive as alternate supported formats. Preserve validation for unknown
-   selections and all still-applicable bounded repair behavior.
+   selections, unchanged reconciliation token contracts and all still-applicable
+   bounded repair behavior. Do not delete a shared projection merely because one
+   consumer's representation changed.
 5. **Verify and measure offline.** Run relevant registered target tests, full
    `zig build verify`, clean-environment native packaging checks and `git diff --check`.
-   Measure actual serialized initial/repair/correction requests and compiled graph;
-   do not predict savings from smaller example JSON alone.
+   Measure serialized initial/repair/correction requests, compiled graph and native
+   allocation/runtime cost on varied reference sets. Use existing request/accounting
+   owners; do not predict token savings from example JSON length alone.
 6. **Obtain separate approval for controlled model and full E2E tests.** Use captured
-   assignments, unchanged sources/schema policy and one variable at a time. Then
+   assignments and unchanged sources/model settings, varying only the approved
+contract/projection as a unit. Then
    inspect actual requirements, acceptance criteria, principles, publication/readback
    and rubric output. Retain failures and report incomplete evidence; no automatic rerun.
 
@@ -352,30 +654,64 @@ transport, raising retry allowances or removing validation.
 | Case | Required evidence |
 | --- | --- |
 | Reported greeting and unrelated business requirements | One selected exact claim resolves the correct literal/citation without model-supplied duplicate IDs; meaningful successful candidates proceed through the existing gates. |
-| Old tuple shape | Closed new model schema rejects superseded token/citation fields. No compatibility path. |
+| Old tuple shape/version | New response and canonical contracts reject superseded segment fields and old state versions. No compatibility path. |
+| Request choices | Offered exact choices identify their claim directly. Initial requests, fixed repairs, canonical brief/entity context and omission context use coherent handle syntax and eligibility. |
+| Shared projection consumers | Spec exact-choice projection changes without dropping token IDs required by reconciliation or source review. Each request has the facts its declared contract requires, without duplicate choice lists. |
 | Unknown/wrong-kind/ineligible claim or stale/foreign state binding | Typed rejection; no default, citation insertion, publication or clarification conversion. Reused ordinals do not bypass state/dependency checks. |
 | Same literal in different sources | Exact selected occurrence retained; no first-match selection. |
 | Repeated exact segment | Stable ordered citation union, preserved text order/repetition and idempotent expansion. Duplicate derived dependencies collapse; duplicate explicit evidence selections still reject. |
+| Explicit/derived overlap | The two §5.2 examples remain distinguishable after round-trip. Removing a reference under an authorized group drops only derived support; intentional explicit token evidence survives. |
+| Empty explicit selection | In source-backed Spec, `S=[]` is permitted when eligible exact segments supply nonempty effective evidence; empty effective evidence rejects. Other domains retain their accepted non-reference support. No semantic-quality pass is implied. |
 | Reference added, replaced or removed | Correct dependency recomputation for the whole authorized unit; unrelated sibling data and producer origins unchanged. |
 | Shared-provenance acceptance record | All fields contribute exact dependencies; Given/When/Then retain separate meaning and unaffected content. |
-| Fixed-evidence repair | No newly derived claim or source scope outside authorization; coupled changes require their approved target. |
-| Passive references and source scope | Derived exact lineage does not silently widen unrelated choices under the approved policy. Operational path capabilities remain unchanged. |
-| Model/canonical projection | Initial and repair requests use one selected schema and show current values in its model shape; canonical persistence uses its declared shape. |
+| Fixed-evidence repair | Reference removal cannot silently shrink fixed effective evidence; addition cannot expand it. Unchanged siblings contribute to the full-record check. Changes need their approved coupled target. |
+| Invalid candidate without complete provenance | Valid explicit support/siblings plus one unknown handle can recover within the bound validated choices. Unknown handles grant no scope; unavailable valid evidence cannot be fabricated. Do not demand equality with an old `L` that never existed. |
+| Invalid explicit support and invalid handle | Existing evidence repair or an authorized group handles invalid `S`; it is never pinned as trusted scope. Cover staged recovery and exhaustion with unchanged retry families, sibling data and accounting. |
+| Repair cannot expand its own scope | Alternating rejected handles cannot enlarge the next request's permitted set. Upstream changes invalidate existing authorization through its normal dependency checks. |
+| Bad selection versus broken binding | Unknown model choices under valid authority may repair. Invalid/missing trusted ledger or choice binding follows existing terminal rejection, with no extra model call, clarification or publication. |
+| Passive references and source scope | Equivalent valid candidates retain their available choices; removed dependencies force sibling revalidation. Operational path capabilities remain unchanged. |
+| Native expected value / model presentation | Existing atomic checks still bind exact native expected values and dependencies. Shared handle syntax must not conceal differences in evidence shape or authorize lossy comparisons. |
+| Diagnostic localization | A rejected handle names its field/segment and permitted choices; it targets value repair, not unrelated provenance. Changed invalid IDs do not restart the same assignment's allowance. |
+| Supported and negative review evidence | Supported findings compare with effective provenance. Loss/negative findings retain their existing distinct eligibility; validate both live in-memory and on completed-state readback. |
 | Sliced response/dependency renewal | Stale completed parts reject; renewed dependencies rebuild all affected validators/reviews before publication. |
 | Missing answers, invalid JSON/schema and repeated invalid handles | Existing retry identities, exhaustion, failure precedence and exact usage accounting remain unchanged. Successful unrelated work continues within budget. |
-| Canonical state tampering | Foreign/deleted claims, altered token/citation joins and mismatched coverage/review evidence reject on readback; no silent reconstruction into success. |
+| Completed versus pending state | Completed readback revalidates stored content selection, reference handles and coverage/review projections. Pending readback retains its reference/clarification identity contract without new content storage. |
+| Canonical state tampering | Foreign/deleted claims, invalid exact handles and mismatched retained coverage/review projections reject on readback. Derived views are computed; corrupt authoritative values are never silently repaired. |
 | Empty/meaningless but correctly linked story or AC | Never counted as semantic recovery merely because joins pass. Scripted review tests routing; approved live rubric tests actual quality. |
 | Pre-ledger extraction and reconciliation | Their existing allowed shapes and source selections remain intact; exact-copy business segments are not newly admitted there. |
+| Independent workflow reuse | Two differently named configured workflows with distinct response shapes use the same shared resolver through registered typed consumers. The second consumer has no Spec/session dependency or workflow-name branch. |
+| Shape and policy variation | Nested records, arrays and optional typed fields contribute only to their owning evidence unit. Different native eligibility sets remain enforced; Spec-only restrictions do not become global. |
+| Structural JSON versus typed meaning | Reference-looking objects in ordinary JSON remain ordinary data. Existing schema/composition limits reject unsupported shapes; resolution does not enter the generic assembler or decoder. |
+| No-reference and mixed-support workflows | No unnecessary ledger/model calls for an unrelated workflow. Domain-accepted user answers, repository facts and other support are not dropped or converted to fabricated claims. |
+| Namespace isolation and reuse | Swapped bindings reject across different states and after changed ledger production under the same corpus ID/ordinal. A bare ordinal cannot reveal unstated model intent. Valid predecessor identity survives a fresh execution; stale producer/contract changes invalidate dependents. |
+| Operational and stage boundaries | Display references grant no file/copy/command capability; source-like strings inside code remain raw payload. Existing clarification and approval gates remain independent. |
+| Shared dependency direction | Architecture checks reject shared reference/syntax modules importing Spec generation, sessions or policy; no second resolver/schema/policy registry. |
 
 ## 12. Feasibility conclusion
 
-**Proceed with a focused contract proposal, not another local prompt patch.** The
-engine has the source occurrence identities and lookup facts needed to eliminate
-the repeated-reference mismatch. The hard part is preserving evidence meaning and
-repair/readback boundaries, not performing the lookup.
+**Viable for reuse across workflows through a shared typed contract, with Spec as
+the first integration.** The engine already has occurrence identities, structural
+composition and registered-operation boundaries. The remaining work is the shared
+reference refactor, canonical selection representation and repair/readback conformance.
+It needs the decisions in §9 and the cross-workflow proof in §11 before implementation
+readiness or production reuse can be claimed.
+
+This does not promise automatic support for every JSON Schema, authority namespace
+or future workflow. New domains reuse the mechanism by supplying their declared
+typed fields, validated reference binding and native policy; they do not duplicate
+the resolver or inherit Spec's semantic rules. Workflows without reference content
+continue using their existing deterministic owners.
 
 The first implementation should remove one avoidable failure class end to end.
 It must not claim deterministic proof of specification quality, silently infer
 business evidence, or hide unresolved model errors behind mechanically complete
 coverage. Broader bookkeeping simplifications should follow measured evidence,
 independently of this first contract.
+
+**Evidence limit:** this review inspected current code and governing contracts;
+it made documentation changes only. The proposed types/schemas have not been
+compiled or exercised, and no live effectiveness claim follows from this review.
+Existing regression owners include [specification generation tests](../src/specification_generation_test.zig),
+[typed-text tests](../src/typed_text_test.zig), [request workflow tests](../src/model_request_workflow_test.zig)
+and [native packaging smoke](../test/packaging/smoke.zig); implementation must extend
+them with the matrix above rather than count existing containment tests as recovery evidence.
