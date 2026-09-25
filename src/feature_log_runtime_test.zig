@@ -89,6 +89,8 @@ test "runner barrier persists recovers and sequences feature events" {
     const bytes = try directory.dir.readFileAlloc(io, "0001.log", std.testing.allocator, .limited(log_limits.max_segment_bytes));
     defer std.testing.allocator.free(bytes);
     try std.testing.expect(std.mem.startsWith(u8, bytes, @import("domain/feature_log_format.zig").event_heading));
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "|EVENT-1|1|2026-08-30T10:15:30Z|") != null);
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "|EVENT-2|2|2026-08-30T10:15:30Z|") != null);
     try std.testing.expectEqual(@as(usize, 2), std.mem.count(u8, bytes, "|task.started|"));
     try std.testing.expectEqual(@as(usize, 0), outputs.emergency_count);
 }
@@ -258,6 +260,7 @@ test "debug captures response code content without explicit prompt selectors" {
     const bytes = try directory.dir.readFileAlloc(io, "0001.log", std.testing.allocator, .limited(log_limits.max_segment_bytes));
     defer std.testing.allocator.free(bytes);
     try std.testing.expect(std.mem.startsWith(u8, bytes, @import("domain/feature_log_format.zig").prompt_heading));
+    try std.testing.expect(std.mem.indexOf(u8, bytes, "|2026-08-30T10:15:30Z|") != null);
     try std.testing.expect(std.mem.indexOf(u8, bytes, "|PLAN|") != null);
     try std.testing.expect(std.mem.indexOf(u8, bytes, "|70000|") != null);
     try std.testing.expect(std.mem.indexOf(u8, bytes, "|sanitized|9|false|true|") != null);

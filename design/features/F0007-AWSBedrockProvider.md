@@ -55,17 +55,23 @@ entries, never an absent entry. No model or region is a runtime default.
 }
 ```
 
-`json: true` uses the existing `outputConfig.textFormat` schema projection for
-Converse ([AWS structured-output contract](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)).
+`json: true` uses InvokeModel with `response_format.type: "json_schema"` and
+`response_format.json_schema.schema` as an object ([AWS structured-output contract](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)).
 `false` sends complete schema guidance without that native output constraint.
 Neither changes engine validation or permits fallback after provider rejection.
 
 The initial registered contracts are:
 
-| Exact model | Explicit region | Converse | CountTokens | Response modes |
+| Exact model | Explicit region | InvokeModel | CountTokens | Response modes |
 | --- | --- | --- | --- | --- |
 | `openai.gpt-oss-20b-1:0` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; native schema projection |
-| `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` | Yes | Yes | Prompt-only |
+| `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` | Unresolved; see below | Yes | Prompt-only |
+
+**Outstanding catalogue decision:** the unused Haiku registration predates this
+amendment. Its native request requires a different codec and an explicit output
+limit, incompatible with simply reusing the open-weight body. Removal has been
+proposed for approval; the API transition is not complete while that incompatible
+registration remains. No current project catalogue selects it.
 
 - Both support the registered temperature control.
 - GPT-OSS registers the explicit reasoning-effort values `low`, `medium` and `high`;
@@ -126,26 +132,22 @@ The initial registered contracts are:
 
 ## Request and schema projection
 
-- Converse uses `/model/<encoded-model>/converse`; CountTokens uses
-  `/model/<encoded-model>/count-tokens`.
-- Both share one text-input projection: ordered system/guidance blocks and ordered
-  user/evidence blocks.
-- A Bedrock request needs explicit user/evidence input; the adapter invents no input
-  text.
-- CountTokens wraps this projection in `input.converse` and sends no inference controls.
-- Converse always sends temperature `0` when supported by the bound model and
-  omits it only when unsupported (§12.5). Reasoning effort is sent only when selected.
-- Reasoning effort uses the closed `additionalModelRequestFields.reasoning_effort`
-  projection described by the [AWS OpenAI model
-  parameters](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-openai.html);
-  the adapter accepts no arbitrary additional parameters.
-- Neither sends `maxTokens`, a workflow-budget-derived ceiling, tools, stop sequences,
-  arbitrary wire parameters or model-visible engine identities.
-
-- Both modes add the complete compiled result schema once to guidance.
-- Native mode also sends its registered structural projection in
-  `outputConfig.textFormat.structure.jsonSchema`, with type `json_schema` and fixed name
-  `sdde_model_envelope_v1`.
+- Under the user-approved 25 September 2026 amendment, inference uses only
+  `/model/<encoded-model>/invoke`; CountTokens uses `/model/<encoded-model>/count-tokens`.
+- The shared open-weight codec emits ordered system/guidance text blocks in one
+  `developer` message and user/evidence blocks in one `user` message. Explicit
+  user/evidence input is required; no input text is invented.
+- CountTokens wraps the exact serialized inference body as base64 in
+  `input.invokeModel.body`. A model without exact-count support rejects before dispatch.
+- Supported temperature remains `0` (§12.5); selected `reasoning_effort` is a
+  top-level field. Both follow the existing binding, not adapter defaults.
+- Model and streaming fields are omitted because the endpoint fixes them
+  ([AWS model parameters](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-openai.html)).
+  No output ceiling, tools, stop sequences or arbitrary parameters are added.
+- Both response modes add the complete compiled result schema once to guidance.
+  Native mode also sends its registered structural projection as a JSON object in
+  `response_format.json_schema.schema`, with `type: "json_schema"` and name
+  `sdde_model_envelope_v1`. Prompt-only mode omits `response_format`.
 - This is derived data, never a second schema source.
 - Under [ADR 0006](../decisions/0006-minimal-model-response.md), closed objects,
   required fields, types, enums and constants are retained; disjoint tagged `oneOf`
@@ -165,32 +167,28 @@ The initial registered contracts are:
   original operation, binding and input.
 - No tokenizer approximation is used.
 
-- Inference requires nonnegative integer input/output/total usage with checked `input +
-  output == total`.
-- `end_turn` requires one assistant message and one complete text block; the returned
-  owned content remains an untrusted candidate.
-- Validated reasoning-text metadata may accompany that single text block and is
-  discarded.
-- Empty server-tool usage is accepted; nonempty tool use, malformed reasoning metadata
-  and missing or multiple final text blocks reject.
-- When the closed wire/usage portion is valid, content rejection retains actual
-  usage and latency in F0006's `.rejected` observation. Reasoning-only `end_turn`
-  identifies `missing_final_text`; other invalid content identifies `invalid_content`.
-  Both remain `response_invalid`, with no adapter retry. After shared association
-  and usage validation, only `missing_final_text` is eligible for explicit bounded
-  protocol correction under §22.6. `invalid_content` remains terminal. Invalid
-  wire/usage cannot supply trusted usage, and reasoning never becomes candidate text.
+- Inference validates `prompt_tokens`, `completion_tokens` and `total_tokens`
+  with checked `input + output == total`. Optional closed token-detail objects
+  are metadata, never additional charges. No response-body latency is invented.
+- One choice at index zero with `finish_reason: "stop"` must contain an assistant
+  message. Its string `content` remains an untrusted candidate.
+- Only the documented leading `<reasoning>...</reasoning>` framing is separated
+  from final text. Reasoning-only, empty or absent final text yields
+  `missing_final_text`; reasoning never becomes candidate content.
+- Valid wire/usage retains actual usage on content rejection. Only missing final
+  text is eligible for the existing bounded correction under §22.6; other invalid
+  content remains terminal. The adapter never repairs JSON or retries.
+- Refusal and tool-call metadata cannot become an answer. Unknown fields, wrong
+  types, multiple choices and unknown finish reasons reject.
 
-Recognized non-candidate stops discard content and retain usage:
+Recognized non-candidate finishes discard content and retain usage:
 
-| AWS stop | F0006 outcome |
+| AWS finish reason | F0006 outcome |
 | --- | --- |
-| `max_tokens` | `output_limit` |
-| `tool_use` | `unsupported_tool_request` |
-| `guardrail_intervened`, `content_filtered` | `content_filtered` |
-| `malformed_model_output`, `malformed_tool_use` | `malformed_output` |
-| `model_context_window_exceeded` | `context_limit` |
-| `stop_sequence`, unknown | `response_invalid` failure |
+| `length` | `output_limit` |
+| `tool_calls`, `function_call` | `unsupported_tool_request` |
+| `content_filter` | `content_filtered` |
+| Unknown | `invalid_content` rejection |
 
 - AWS exception discrimination follows the [restJson1 error
   encoding](https://smithy.io/2.0/aws/protocols/aws-restjson1-protocol.html#operation-error-serialization):

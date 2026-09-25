@@ -66,7 +66,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             invalid_json,
             unknown_requirement,
             duplicate_requirement,
-            missing_requirement,
+            missing_finding,
             invalid_detail,
             missing_question,
             invalid_question,
@@ -149,8 +149,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             }
             if (target != null and slots.items.len != 1) return error.InvalidRequiredAuthority;
             const projected = try @import("model_evidence.zig").project(scratch, all.entries);
-            const sources = try scratch.alloc(struct { id: @import("reference_identity.zig").SourceId, text: []const u8 }, context.inputs.corpus.sources.len);
-            for (context.inputs.corpus.sources, sources) |source, *copy| copy.* = .{ .id = source.id, .text = source.bytes };
+            const sources = try @import("model_evidence.zig").sources(scratch, context.inputs);
             const subject: Subject = if (inputs.specification != null or inputs.brief != null) .{ .candidate_support = .{ .candidate = inputs.specification, .brief = inputs.brief } } else .{ .source_preservation = .{} };
             const payload = .{ .subject = subject, .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = try admission.sourceChoices(scratch, context.inputs), .supported = admission.minimum(.supported), .not_applicable = admission.minimum(Decision.not_applicable.finding()), .candidate_omission = admission.minimum(.candidate_omission), .negative = admission.minimum(.unsupported) }, .requirements = slots.items, .sources = sources, .extraction = try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction), .dispositions = records.dispositions, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = try @import("model_evidence.zig").signals(scratch, records.signals), .conflicts = try @import("model_evidence.zig").conflicts(scratch, records.conflicts) };
             const encoded = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
@@ -242,7 +241,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     };
                     entry_origin.* = proposed.origins[position];
                 }
-                if (!found) try diagnostics.append(allocator, diagnostic(proposed, .missing_requirement, requirement.seed.id, ordinal, null));
+                if (!found) try diagnostics.append(allocator, diagnostic(proposed, .missing_finding, requirement.seed.id, ordinal, null));
             }
             if (diagnostics.items.len != 0) return .{ .rejected = .{ .candidate = proposed, .rejection = .{ .diagnostics = try diagnostics.toOwnedSlice(allocator) } } };
             var result = inputs;

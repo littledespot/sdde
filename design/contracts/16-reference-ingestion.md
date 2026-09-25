@@ -190,11 +190,18 @@ Where a parser can decide mechanically, the engine extracts facts before involvi
   and renderers emit the exact scalar sequence through deterministic Markdown escaping without
   Unicode normalization.
 
-- The approved Markdown eligibility rule is `markdown_inline_code_v1`: parsed inline-code spans
-  are preservation-eligible candidates; ordinary prose, quoted text and fenced code blocks are
-  not candidates through this extractor.
-- The candidate retains the exact source bytes between matching backtick delimiters, including
-  whitespace and line endings, rather than Markdown-rendered or Unicode-normalized text.
+- The approved [§7.1 typed-content amendment](07-domain-representations.md#71-shared-types)
+  registers `markdown_inline_code_v1`, `markdown_fenced_code_v1` and
+  `markdown_link_destination_v1`: raw inline interiors, fenced bodies and explicit
+  inline-link destinations. Ordinary prose or quotation marks do not create candidates.
+- The bounded source-range parser does not claim a complete Markdown AST. Opaque
+  code/HTML interiors do not create nested link candidates; ambiguous overlapping
+  markup cannot mint overlapping identities. Other source syntax remains captured evidence.
+- Candidates retain source coordinates, whitespace and line endings rather than
+  Markdown-rendered or Unicode-normalized values. Syntax identifies form, not meaning:
+  a fenced block may be required exact output or illustrative `code_sample`.
+- Existing claim/citation joins revalidate extractor identity and exact source spans
+  for live assembly and persisted readback, without a separate token registry.
 - Eligibility is not relevance, semantic approval or an operational capability.
 - The model still classifies every supplied candidate.
 - Source partitioning must keep each exact span citable within its chunk or fail explicitly; it

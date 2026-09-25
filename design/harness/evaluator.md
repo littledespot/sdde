@@ -97,7 +97,7 @@ The internal test environment supplies the evaluation selection:
 - The same day's Bedrock extension adds the explicit region and selected-provider
   credential.
 - Reports retain the complete resolved configuration, including `api:
-  "openai_responses"` or `"bedrock_converse"`, `region` and the selected `model`;
+  "openai_responses"` or `"bedrock_invoke"`, `region` and the selected `model`;
   credentials remain separate and never enter a request body or report.
 
 ### Provider behavior
@@ -113,27 +113,35 @@ The internal test environment supplies the evaluation selection:
 - No SDK or production dependency was added.
 
 - The internal Bedrock adapter uses
-  [Converse](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)
+  [InvokeModel](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html)
   with its [API
   key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-use.html), reusing
   the production HTTPS transport, endpoint encoding, text request codec, response
   decoding and AWS exception classification.
-- The existing registry supports `openai.gpt-oss-20b-1:0` in `ap-southeast-2`, and
-  `anthropic.claude-3-5-haiku-20241022-v1:0` in `us-west-2`.
-- Unknown or mismatched pairs reject; no new model, region, credential chain or endpoint
-  is inferred.
-- Both accept `reasoning_effort: null`; GPT-OSS also supports `low`, `medium` and
-  `high`.
-- Both registered Bedrock models require temperature `0`. Unsupported models omit
-  the control according to their registered capability, not an operator override.
+- Bedrock grading requires native JSON Schema capability from the existing model
+  registry. Currently `openai.gpt-oss-20b-1:0` in `ap-southeast-2` qualifies;
+  the registered prompt-only Haiku model cannot be selected for grading. There is
+  no separate evaluator model allowlist or prompt-only fallback.
+- Unknown, mismatched or schema-incapable selections reject before a provider call;
+  no model, region, credential chain or endpoint is inferred.
+- Reasoning effort and temperature follow the same registry. GPT-OSS accepts null,
+  `low`, `medium` and `high` reasoning effort; supported Bedrock temperature resolves
+  to `0`, otherwise omission, without an operator override.
 - These are the repository's registered contracts, not a catalogue of all models
   available from the provider.
 
-- Bedrock evaluation uses an explicit prompt-only JSON profile: the same complete
-  rubric, inputs and native-derived result schema go into the request, followed by the
-  same local judgment validation.
-- This is not native schema enforcement or a fallback from failed native mode.
-- No tools, `maxTokens`, truncation or provider-specific retry policy is added.
+- Under the user-approved 23 and 25 September 2026 amendments, Bedrock grading requests
+  native structured output through `response_format` with type
+  `json_schema`, using the existing shared request encoder. This supersedes the
+  prompt-only evaluator profile.
+- `packet.resultSchema` derives one schema from the native judgment type; that
+  same schema supplies prompt guidance and the serialized native schema object.
+  It uses the supported object/array/scalar/enum/nullable subset. No second schema
+  definition or evaluator-specific provider transformation is introduced.
+- Complete local judgment validation still owns criterion coverage, score bounds,
+  dispositions and exact source/specification evidence. Native schema requests do
+  not authorize accepting malformed or unsupported judgments.
+- No tools, `max_completion_tokens`, truncation or provider-specific retry policy is added.
 - Stopped and malformed output never becomes a grade; validated usage is retained even
   when content is rejected.
 
@@ -147,7 +155,8 @@ The internal test environment supplies the evaluation selection:
   union.
 - OpenAI retains the response's ID and actual model; Bedrock retains only the exact
   requested model/region plus the HTTP request ID when present.
-- Converse does not echo an actual model or response ID, so neither is invented.
+- Optional provider model/ID metadata remains in raw response evidence; it does
+  not replace the authorized target identity.
 - A foreign provider identity or mismatched Bedrock target rejects before scoring.
 - The report renderer labels these different kinds of evidence explicitly.
 
@@ -162,7 +171,8 @@ The internal test environment supplies the evaluation selection:
   [configuration.zig](../../test/harness/configuration.zig),
   [openai.zig](../../test/harness/openai.zig) and
   [judgment.zig](../../test/harness/judgment.zig) own the closed native contracts.
-- Case, rubric, configuration and report use distinct `/v1` schema identifiers.
+- Case, rubric and configuration use distinct `/v1` schema identifiers; reports
+  use `evaluation-report/v2` with typed judgment diagnostics.
 - Unknown keys, duplicate keys/IDs, unsupported versions and invalid values reject;
   there are no compatibility readers.
 - A case declares its ID, source IDs/paths and rubric path.
@@ -346,5 +356,3 @@ zig build verify
 - Human H-016 calibration remains outstanding.
 - The handoff is implemented, but the latest live generation failed before a
   specification was available to grade.
-
-Recorded command results: [evaluator verification, 2026-09-06](implementation-verification-history.md#evaluator--offline-verification-2026-09-06).

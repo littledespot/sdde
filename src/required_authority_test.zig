@@ -210,7 +210,7 @@ test "Specify projects registered native fields and complete reference obligatio
     try std.testing.expectEqual(.needs_user, (try run(allocator, before)).continuation);
     try std.testing.expectEqualStrings("Hello, World!", before.references.?.items.entries[1].claim.content.preserved_token.value.raw_value.bytes);
     const spec = @import("domain/specification.zig");
-    const value: spec.BusinessValue = .{ .normalized = .{ .segments = &.{.{ .literal = .{ .value = "Supported business value" } }} } };
+    const value: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "Supported business value" } }} };
     const provenance: spec.Provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} };
     const attributed: spec.AttributedValue = .{ .value = value, .provenance = provenance };
     var content: spec.IdentifiedContent = .{ .display_name = attributed, .primary_user_story = attributed, .entities = .{ .disposition = .not_applicable, .basis = attributed }, .records = &.{} };

@@ -118,7 +118,7 @@ test "unknown contradictory unbounded and unsupported schema fields reject at an
         "{\"const\":true,\"enum\":[\"yes\"]}",                                                                     "{\"enum\":[\"x\"],\"type\":\"string\"}",                                                            "{\"type\":\"object\"}",                                                                                                         "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":true}",
         "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":{\"type\":\"boolean\"}}", "{\"type\":\"object\",\"properties\":{},\"required\":[\"missing\"],\"additionalProperties\":false}", "{\"type\":\"object\",\"properties\":{\"x\":{\"type\":\"boolean\"}},\"required\":[\"x\",\"x\"],\"additionalProperties\":false}", "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
         "{\"type\":\"object\",\"properties\":[],\"required\":[],\"additionalProperties\":false}",                  "{\"type\":\"object\",\"properties\":{},\"required\":true,\"additionalProperties\":false}",          "{\"anyOf\":[{},{}]}",                                                                                                           "{\"oneOf\":[]}",
-        "{\"oneOf\":[{}]}",                                                                                        "{\"oneOf\":[{\"type\":\"boolean\"},{\"type\":\"null\"}]}",
+        "{\"oneOf\":[{}]}",                                                                                        "{\"oneOf\":[{\"type\":\"boolean\"},{\"type\":\"boolean\"}]}",
     };
     for (rejected) |field| {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -346,4 +346,53 @@ test "reference expansion enforces node and depth bounds after substitution" {
     }
     try defs.appendSlice(try std.fmt.allocPrint(a, ",\"d{d}\":{s}", .{ schema.max_depth + 1, replacement }));
     try std.testing.expectError(error.InvalidModelResultSchema, compile(a, try std.mem.concat(a, u8, &.{ "{\"$defs\":{", defs.items, "},\"$ref\":\"#/$defs/d0\"}" })));
+}
+
+test "nested type-disjoint alternatives accept but overlapping and nonobject response roots reject" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const disjoint = "{\"oneOf\":[{\"type\":\"boolean\"},{\"type\":\"null\"}]}";
+    _ = try compile(a, try fieldSchema(a, disjoint));
+    try std.testing.expectError(error.InvalidModelResultSchema, compile(a, disjoint));
+    for ([_][]const u8{
+        "{\"oneOf\":[{\"type\":\"string\",\"maxLength\":8},{\"const\":\"overlap\"}]}",
+        "{\"oneOf\":[{\"type\":\"integer\",\"minimum\":0,\"maximum\":9},{\"const\":10}]}",
+        "{\"oneOf\":[{\"type\":\"boolean\"},{\"oneOf\":[{\"type\":\"string\",\"maxLength\":8},{\"type\":\"null\"}]}]}",
+    }) |bad| try std.testing.expectError(error.InvalidModelResultSchema, compile(a, try fieldSchema(a, bad)));
+}
+
+test "native availability narrows nested alternatives without altering canonical schemas" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, restrictChoices, .{});
+}
+
+fn restrictChoices(allocator: std.mem.Allocator) !void {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const original = try compile(a, try fieldSchema(a, variants));
+    const narrowed = try schema.restrict(allocator, original, &.{.{ .kind = "clarification_needed" }});
+    defer narrowed.release();
+    try std.testing.expect(narrowed.selected().isRestrictionOf(original));
+    try std.testing.expect(!original.isRestrictionOf(narrowed.selected()));
+    try std.testing.expectEqualStrings(original.bytes(), narrowed.selected().bytes());
+    try std.testing.expect(std.mem.indexOf(u8, original.modelBytes(), "clarification_needed") != null);
+    try std.testing.expect(std.mem.indexOf(u8, narrowed.selected().modelBytes(), "clarification_needed") == null);
+    const check = @import("domain/model_payload_schema.zig");
+    for ([_][]const u8{ "{\"value\":{\"kind\":\"content\",\"answer\":\"Supported\"}}", "{\"value\":{\"kind\":\"clarification_needed\",\"question\":\"Choose\"}}" }, 0..) |bytes, index| {
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
+        try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), original.root()) == null);
+        try std.testing.expectEqual(index == 0, check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), narrowed.selected().root()) == null);
+    }
+    if (schema.restrict(allocator, original, &.{ .{ .kind = "content" }, .{ .kind = "clarification_needed" } })) |unexpected| {
+        unexpected.release();
+        return error.TestUnexpectedResult;
+    } else |err| switch (err) {
+        error.OutOfMemory => return err,
+        error.InvalidModelResultSchema => {},
+    }
+    const different = try compile(a, try fieldSchema(a, variants));
+    try std.testing.expect(!narrowed.selected().isRestrictionOf(different));
+    const copy = try narrowed.selected().clone(a);
+    try std.testing.expectEqualStrings(narrowed.selected().modelBytes(), copy.modelBytes());
 }

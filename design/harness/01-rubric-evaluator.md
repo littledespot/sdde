@@ -58,7 +58,7 @@ human approval is claimed by the offline fixtures.
 
 - The shared grading call accepts explicit artifact provenance; full-workflow handoff is
   still H-015.
-- Responses/Converse APIs with native HTTPS are implemented without a new dependency.
+- Responses/InvokeModel APIs with native HTTPS are implemented without a new dependency.
 - Exact evaluation provider/model come only from the `TEST_` environment variables in
   [the evaluator contract](evaluator.md#run); the credential is `TEST_OPENAI_API_KEY` or
   `TEST_AWS_BEARER_TOKEN_BEDROCK` for the selected provider.

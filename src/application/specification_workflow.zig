@@ -18,6 +18,16 @@ pub const ids_schema = values.schema(.specification_id_ledger, @import("../domai
 pub const coverage_schema = values.schema(.specification_coverage, owned.Value, 1, null).captured();
 pub const schemas = [_]data.Schema{ session_schema, raw_schema, parsed_schema, checked_schema, ids_schema, coverage_schema };
 
+pub const SourceReadiness = struct {
+    pub const Action = @import("../actions/specification/check_specification_source_readiness.zig").Action;
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const references = try @import("reference_extraction_workflow.zig").read(&input.step.data, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted);
+        return .{ .outcome = context.?.action.execute(references.payload().reconciliation_accounted), .delta = .{} };
+    }
+};
+
 pub const Initialize = struct {
     pub const Action = @import("../actions/specification/initialize_specification_generation.zig").Action;
     allocator: std.mem.Allocator,
@@ -42,7 +52,6 @@ pub const Check = struct {
 };
 pub const BuildInput = struct {
     pub const Action = @import("../actions/specification/build_specification_model_input.zig").Action;
-    pub const gates = [_][]const u8{"required-authority@1"};
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {

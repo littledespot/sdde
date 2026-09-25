@@ -48,8 +48,13 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment
         if (claim.content != .preserved_token) continue;
         const token = claim.content.preserved_token;
         w.print("- **TOK-{d}** ({s}): ", .{ token.value.id.ordinal, @tagName(token.value.kind) }) catch return error.OutOfMemory;
-        try markdown.code(w, token.value.raw_value.bytes);
-        try citations(w, &.{token.citation_id});
+        if (token.value.kind == .code_sample) {
+            try citations(w, &.{token.citation_id});
+            try markdown.codeBlock(w, token.value.raw_value.bytes);
+        } else {
+            try markdown.code(w, token.value.raw_value.bytes);
+            try citations(w, &.{token.citation_id});
+        }
     }
     try write(w, "\n## Conflicts\n\n");
     for (value.conflicts) |conflict| {

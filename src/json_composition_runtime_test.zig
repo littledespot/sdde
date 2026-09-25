@@ -24,7 +24,9 @@ test "composition retains only accepted schema-associated requests and placement
     const canonical = try adapter.compiler().compile(a, contract);
     const plan = try adapter.compiler().compileComposition(a, config, canonical);
     var fixture: Fixture = undefined;
-    try fixture.initWithCompiledSchema(try plan.selectSchema(0, &.{}));
+    const restricted = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, try plan.selectSchema(0, &.{}), &.{.{ .kind = "unavailable" }});
+    defer restricted.release();
+    try fixture.initWithCompiledSchema(restricted.selected());
     defer fixture.deinit();
     const id = fixture.base.model_request_id;
     const packet = try packets.create(std.testing.allocator, "{}", id.immutable_unit_owner_id, id.purpose, null);

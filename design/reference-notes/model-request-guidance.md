@@ -200,7 +200,7 @@ approved controlled calls are still needed to measure model outcomes under §28.
 
 - The model catalogue’s required `json` boolean selects response mode (ADR 0012).
   With `true`, the shared Bedrock serializer sends Structured Outputs through
-  `outputConfig.textFormat.type: "json_schema"`, derived from the compiled schema.
+  `response_format.type: "json_schema"`, derived from the compiled schema.
 - The complete schema remains in system guidance and engine validation.
 - Tagged `oneOf` becomes disjoint `anyOf`; unsupported bounds stay engine-enforced.
 - Explicit token counting uses the same text input as inference.
@@ -210,8 +210,8 @@ approved controlled calls are still needed to measure model outcomes under §28.
   evidence that those failures have been resolved.
 
 AWS documents [structured-output support for gpt-oss-20b](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-oss-20b.html)
-and [schema-constrained Converse output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
-(checked 20 September 2026). Availability does not overturn the
+and [schema-constrained InvokeModel output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
+(checked 25 September 2026). Availability does not overturn the
 [retained native-mode failures](../../fixes/FIX_001.md#47-native-mode-and-retry-counts-are-not-demonstrated-solutions)
 or prove improvement for the configured provider/model/schema combination. A
 comparison must record the actual mode and full engine-validation results.

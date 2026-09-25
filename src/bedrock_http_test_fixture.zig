@@ -214,7 +214,7 @@ pub const Fixture = struct {
     }
 };
 
-fn openRequest(client: *std.http.Client, method: std.http.Method, uri: std.Uri, options: std.http.Client.RequestOptions) std.http.Client.RequestError!std.http.Client.Request {
+fn openRequest(client: *std.http.Client, method: std.http.Method, uri: std.Uri, options: std.http.Client.RequestOptions) @import("adapters/provider/native_model_http.zig").RequestError!std.http.Client.Request {
     const fixture = Fixture.cast(client.io.userdata);
     fixture.connects += 1;
     _ = fixture.active_socket_calls.fetchAdd(1, .acq_rel);
@@ -223,7 +223,7 @@ fn openRequest(client: *std.http.Client, method: std.http.Method, uri: std.Uri, 
     std.debug.assert(method == .POST and std.mem.eql(u8, uri.scheme, "https"));
     std.debug.assert(options.redirect_behavior == .unhandled and !options.keep_alive);
     // A synthetic already-connected stream requires no certificate-store read.
-    // Production uses std.http.Client.request directly, retaining system TLS trust.
+    // Production uses the guarded native opener, retaining system TLS trust.
     client.now = .fromNanoseconds(0);
     var connected = options;
     var host_buffer: [std.Io.net.HostName.max_len]u8 = undefined;

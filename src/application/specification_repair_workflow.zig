@@ -32,7 +32,6 @@ pub const Authorize = struct {
 };
 pub const BuildInput = struct {
     pub const Action = @import("../actions/specification/build_specification_repair_input.zig").Action;
-    pub const gates = spec.BuildInput.gates;
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {

@@ -71,6 +71,7 @@ pub fn build(b: *std.Build) void {
         .root_module = sdde_module,
     });
     const run_module_tests = b.addRunArtifact(module_tests);
+    b.step("test-engine", "Test the engine without harness-specific cases").dependOn(&run_module_tests.step);
 
     const executable_tests = b.addTest(.{
         .root_module = executable.root_module,
@@ -82,15 +83,6 @@ pub fn build(b: *std.Build) void {
     });
     const run_yaml_safety_tests = b.addRunArtifact(yaml_safety_tests);
 
-    const version_policy_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("build/zig_version.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    const run_version_policy_tests = b.addRunArtifact(version_policy_tests);
-
     const architecture_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/architecture_test.zig"),
@@ -100,6 +92,7 @@ pub fn build(b: *std.Build) void {
     });
     const run_architecture_tests = b.addRunArtifact(architecture_tests);
     run_architecture_tests.setCwd(b.path("."));
+    b.step("test-architecture", "Test repository dependency and authority boundaries").dependOn(&run_architecture_tests.step);
 
     const test_step = b.step("test", "Run all unit tests");
     const evaluator_tests = b.addTest(.{ .root_module = b.createModule(.{
@@ -120,7 +113,6 @@ pub fn build(b: *std.Build) void {
     b.step("evaluate-spec", "Grade a supplied specification through OpenAI or Bedrock (explicit --live required)").dependOn(&run_evaluator.step);
     b.step("build-rubric-evaluator", "Build the development-only evaluator without an API call").dependOn(&evaluator_exe.step);
     b.step("test-rubric-evaluator", "Test development-only rubric evaluation").dependOn(&run_evaluator_tests.step);
-    test_step.dependOn(&run_evaluator_tests.step);
     const e2e_module = b.createModule(.{
         .root_source_file = b.path("e2e.zig"),
         .target = target,
@@ -135,13 +127,24 @@ pub fn build(b: *std.Build) void {
     const provenance = b.addRunArtifact(provenance_tool);
     provenance.setCwd(b.path("."));
     provenance.has_side_effects = true;
-    e2e_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance.addOutputFileArg("build-provenance.json") });
-    const provenance_tests = b.addRunArtifact(b.addTest(.{ .root_module = provenance_module }));
-    test_step.dependOn(&provenance_tests.step);
+    const provenance_file = provenance.addOutputFileArg("build-provenance.json");
+    e2e_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
+    const all_tests_module = b.createModule(.{
+        .root_source_file = b.path("tests.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
+            .{ .name = "unicode_normalization", .module = unicode_module },
+        },
+    });
+    all_tests_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
+    const all_tests = b.addRunArtifact(b.addTest(.{ .name = "repository-tests", .root_module = all_tests_module }));
+    all_tests.setCwd(b.path("."));
+    test_step.dependOn(&all_tests.step);
     const e2e_tests = b.addTest(.{ .root_module = e2e_module });
     const run_e2e_tests = b.addRunArtifact(e2e_tests);
     b.step("test-e2e-harness", "Test single-case E2E fixture and publication checks").dependOn(&run_e2e_tests.step);
-    test_step.dependOn(&run_e2e_tests.step);
     const launcher_tests = b.addSystemCommand(&.{"sh"});
     launcher_tests.addFileArg(b.path("test/harness/e2e/launcher_test.sh"));
     launcher_tests.addFileArg(b.path("scripts/e2e-spec.sh"));
@@ -151,10 +154,11 @@ pub fn build(b: *std.Build) void {
     const run_e2e = b.addRunArtifact(e2e_executable);
     run_e2e.has_side_effects = true;
     if (b.args) |args| run_e2e.addArgs(args);
-    b.step("e2e-spec", "Generate with the selected project's configured LLM and grade its published specification").dependOn(&run_e2e.step);
+    b.step("e2e-spec", "Manually generate and grade one selected case").dependOn(&run_e2e.step);
     b.step("build-e2e-harness", "Build the live E2E harness without an API call").dependOn(&e2e_executable.step);
     const e2e_directory = b.addTempFiles();
-    const e2e_binary = e2e_directory.addCopyFile(e2e_executable.getEmittedBin(), e2e_executable.out_filename);
+    const e2e_offline = offlineExecutable(b, e2e_executable);
+    const e2e_binary = e2e_directory.addCopyFile(e2e_offline.getEmittedBin(), e2e_offline.out_filename);
     const e2e_help = std.Build.Step.Run.create(b, "run standalone E2E help without development assets or credentials");
     e2e_help.addFileArg(e2e_binary);
     e2e_help.addArg("--help");
@@ -170,11 +174,22 @@ pub fn build(b: *std.Build) void {
     e2e_denied.expectStdOutEqual("");
     e2e_denied.expectStdErrEqual("Select exactly one E2E case with --case; use --help.\n");
     const e2e_smoke = b.step("smoke-e2e-harness", "Test standalone E2E startup without API calls");
+    e2e_smoke.dependOn(&e2e_executable.step);
     e2e_smoke.dependOn(&e2e_help.step);
     e2e_smoke.dependOn(&e2e_denied.step);
+    const e2e_extra_case = std.Build.Step.Run.create(b, "reject standalone E2E invocation with multiple cases");
+    e2e_extra_case.addFileArg(e2e_binary);
+    e2e_extra_case.addArgs(&.{ "--case", "one.json", "--case", "two.json" });
+    e2e_extra_case.setCwd(e2e_directory.getDirectory());
+    e2e_extra_case.clearEnvironment();
+    e2e_extra_case.expectExitCode(1);
+    e2e_extra_case.expectStdOutEqual("");
+    e2e_extra_case.expectStdErrEqual("Select exactly one E2E case with --case; use --help.\n");
+    e2e_smoke.dependOn(&e2e_extra_case.step);
     test_step.dependOn(e2e_smoke);
     const evaluator_directory = b.addTempFiles();
-    const evaluator_binary = evaluator_directory.addCopyFile(evaluator_exe.getEmittedBin(), evaluator_exe.out_filename);
+    const evaluator_offline = offlineExecutable(b, evaluator_exe);
+    const evaluator_binary = evaluator_directory.addCopyFile(evaluator_offline.getEmittedBin(), evaluator_offline.out_filename);
     const evaluator_help = std.Build.Step.Run.create(b, "run standalone evaluator help without development assets or credentials");
     evaluator_help.addFileArg(evaluator_binary);
     evaluator_help.addArg("--help");
@@ -190,6 +205,7 @@ pub fn build(b: *std.Build) void {
     evaluator_denied.expectStdOutEqual("");
     evaluator_denied.expectStdErrEqual("Invalid arguments; use --help. No API call made.\n");
     const evaluator_smoke = b.step("smoke-rubric-evaluator", "Test standalone evaluator startup without API calls");
+    evaluator_smoke.dependOn(&evaluator_exe.step);
     evaluator_smoke.dependOn(&evaluator_help.step);
     evaluator_smoke.dependOn(&evaluator_denied.step);
     _ = evaluator_directory.add("judge.json", "{\"schema\":\"evaluation-config/v1\",\"reasoning_effort\":null,\"temperature\":null,\"timeout_ms\":1000,\"retry_limit\":0,\"retry_delay_ms\":0,\"total_token_budget\":100}");
@@ -219,11 +235,8 @@ pub fn build(b: *std.Build) void {
         evaluator_smoke.dependOn(&check.step);
     }
     test_step.dependOn(evaluator_smoke);
-    test_step.dependOn(&run_module_tests.step);
     test_step.dependOn(&run_executable_tests.step);
     test_step.dependOn(&run_yaml_safety_tests.step);
-    test_step.dependOn(&run_version_policy_tests.step);
-    test_step.dependOn(&run_architecture_tests.step);
     const unicode_tests = b.addTest(.{ .root_module = unicode_module });
     const run_unicode_tests = b.addRunArtifact(unicode_tests);
     test_step.dependOn(&run_unicode_tests.step);
@@ -282,7 +295,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }) }));
     b.step("test-workflow-repair-retry", "Test validated repair progress and bounded recurrence").dependOn(&repair_retry_tests.step);
-    test_step.dependOn(&repair_retry_tests.step);
 
     const invocation_validation_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/provider_invocation_validation_test.zig"),
@@ -330,6 +342,39 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }) });
     b.step("test-provider-conformance", "Test shared fake and production Bedrock contracts without AWS calls").dependOn(&b.addRunArtifact(provider_conformance_tests).step);
+
+    const native_http_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/adapters/provider/native_model_http.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) }));
+    b.step("test-no-live-model-calls", "Prove native model connections are disabled in test executables").dependOn(&native_http_tests.step);
+    const isolation_fixture = b.addTempFiles();
+    const isolation_build = isolation_fixture.addCopyFile(b.path("test/build/live_step_isolation.zig"), "build.zig");
+    _ = isolation_fixture.addCopyFile(b.path("build/live_step_isolation.zig"), "live_step_isolation.zig");
+    const isolation_tests = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "--build-file" });
+    isolation_tests.addFileArg(isolation_build);
+    isolation_tests.addArgs(&.{ "test", "--cache-dir" });
+    isolation_tests.addArg(b.cache_root.path orelse ".zig-cache");
+    b.step("test-build-isolation", "Reject direct and transitive live harness dependencies from automated steps").dependOn(&isolation_tests.step);
+    test_step.dependOn(&isolation_tests.step);
+
+    const registration_fixture = b.addTempFiles();
+    const registration_build = registration_fixture.addCopyFile(b.path("test/build/test_registration.zig"), "build.zig");
+    _ = registration_fixture.addCopyFile(b.path("build/test_registration.zig"), "test_registration.zig");
+    const registration_tests = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "--build-file" });
+    registration_tests.addFileArg(registration_build);
+    registration_tests.addArgs(&.{ "test", "--cache-dir" });
+    registration_tests.addArg(b.cache_root.path orelse ".zig-cache");
+    b.step("test-build-registration", "Reject extra or missing full-suite test executions").dependOn(&registration_tests.step);
+    test_step.dependOn(&registration_tests.step);
+
+    const timing_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/test_fixtures/scenario_timing.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) }));
+    b.step("test-scenario-timing", "Test scenario cost reporting and incomplete-run accounting").dependOn(&timing_tests.step);
 
     const count_validation_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("src/model_token_count_validation_test.zig"),
@@ -478,6 +523,12 @@ pub fn build(b: *std.Build) void {
     clarification_step.dependOn(&b.addRunArtifact(clarification_tests).step);
 
     const graph_step = b.step("test-workflow-graph", "Test workflow compilation, graph bounds and runner execution");
+    const operation_registry_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/workflow_operation_registry_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    b.step("test-workflow-operation-registry", "Test current operation registry schemas, bindings and authority").dependOn(&b.addRunArtifact(operation_registry_tests).step);
     for ([_][]const u8{ "src/workflow_definition_test.zig", "src/workflow_registry_test.zig", "src/workflow_json_composition_test.zig" }) |source| {
         const graph_tests = b.addTest(.{ .root_module = b.createModule(.{
             .root_source_file = b.path(source),
@@ -489,6 +540,12 @@ pub fn build(b: *std.Build) void {
     }
 
     const atomic_execution_step = b.step("test-atomic-execution", "Test execution isolation, provider lifecycle, authorization and logging cleanup");
+    const envelope_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("src/pipeline_data_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    }) });
+    b.step("test-pipeline-envelope", "Test pipeline value ownership and origin metadata").dependOn(&b.addRunArtifact(envelope_tests).step);
     for ([_][]const u8{
         "src/provider_operation_lifecycle_test.zig",
         "src/provider_authorization_test.zig",
@@ -503,12 +560,30 @@ pub fn build(b: *std.Build) void {
         }) });
         const run_tests = b.addRunArtifact(tests);
         atomic_execution_step.dependOn(&run_tests.step);
+        if (std.mem.eql(u8, source, "src/feature_log_runtime_test.zig"))
+            b.step("test-feature-log-runtime", "Test feature log serialization, rotation and failures").dependOn(&run_tests.step);
         if (std.mem.eql(u8, source, "src/workflow_execution_test.zig")) graph_step.dependOn(&run_tests.step);
     }
 
-    const smoke_command = packaging_smoke.add(b, executable);
+    const smoke_command = packaging_smoke.add(b, offlineExecutable(b, executable));
     const smoke_step = b.step("smoke", "Test the packaged executable in a clean directory");
     smoke_step.dependOn(&smoke_command.step);
+    smoke_step.dependOn(&executable.step);
+    const network_probe = b.addExecutable(.{ .name = "model-network-probe", .root_module = b.createModule(.{
+        .root_source_file = b.path("test/packaging/model_network_probe.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "native_model_http", .module = b.createModule(.{
+            .root_source_file = b.path("src/adapters/provider/native_model_http.zig"),
+            .target = target,
+            .optimize = optimize,
+        }) }},
+    }) });
+    const run_network_probe = b.addRunArtifact(offlineExecutable(b, network_probe));
+    run_network_probe.clearEnvironment();
+    run_network_probe.expectExitCode(0);
+    b.step("smoke-no-live-model-calls", "Prove ordinary automated subprocesses cannot open model connections").dependOn(&run_network_probe.step);
+    smoke_step.dependOn(&run_network_probe.step);
 
     const lint_command = b.addSystemCommand(&.{
         b.graph.zig_exe,
@@ -521,6 +596,7 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("build.zig.zon"));
     lint_command.addFileArg(b.path("harness.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));
+    lint_command.addFileArg(b.path("tests.zig"));
     lint_command.addDirectoryArg(b.path("build"));
     lint_command.addDirectoryArg(b.path("src"));
     lint_command.addDirectoryArg(b.path("test"));
@@ -532,4 +608,28 @@ pub fn build(b: *std.Build) void {
     verify_step.dependOn(lint_step);
     verify_step.dependOn(test_step);
     verify_step.dependOn(smoke_step);
+    @import("build/test_registration.zig").check(b.allocator, verify_step, &.{
+        all_tests, run_executable_tests, run_yaml_safety_tests, run_unicode_tests,
+    }) catch |err| std.debug.panic("full-suite test registration failed: {s}", .{@errorName(err)});
+    // Live execution is reachable only from the explicitly selected manual
+    // commands. Check transitive dependencies, including every targeted suite.
+    for (b.top_level_steps.values()) |entry| {
+        const name = entry.step.name;
+        if (std.mem.eql(u8, name, "test") or std.mem.eql(u8, name, "verify") or
+            std.mem.eql(u8, name, "smoke") or std.mem.startsWith(u8, name, "test-") or
+            std.mem.startsWith(u8, name, "smoke-"))
+        {
+            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step }) catch |err|
+                std.debug.panic("automated step {s} violates manual-only model execution: {s}", .{ name, @errorName(err) });
+        }
+    }
+}
+
+fn offlineExecutable(b: *std.Build, application: *std.Build.Step.Compile) *std.Build.Step.Compile {
+    return b.addExecutable(.{ .name = application.name, .root_module = b.createModule(.{
+        .root_source_file = b.path("test/packaging/offline.zig"),
+        .target = application.root_module.resolved_target,
+        .optimize = application.root_module.optimize,
+        .imports = &.{.{ .name = "application", .module = application.root_module }},
+    }) });
 }

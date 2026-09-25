@@ -13,14 +13,14 @@ test "reconciliation rejects the observed native union response and accepts the 
     const a = arena.allocator();
     const schema = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .limited(@import("domain/model_result_schema.zig").max_bytes));
     const check = @import("model_payload_schema_test.zig").checkDocument;
-    const prefix = "{\"statements\":[{\"local_key\":1,\"claim_ids\":[{\"ordinal\":1}],\"content\":";
+    const prefix = "{\"statements\":[{\"local_key\":1,\"claim_ids\":[1],\"content\":";
     for ([_][]const u8{
-        "{\"model\":{\"kind\":\"business\",\"segments\":[{\"kind\":\"literal\",\"value\":\"Display the greeting.\"}]}}",
-        "{\"preserved_token\":{\"id\":{\"ordinal\":1},\"kind\":\"business_exact_string\",\"value\":\"Hello, World!\"}}",
+        "{\"model\":{\"kind\":\"business\",\"segments\":[\"Display the greeting.\"]}}",
+        "{\"preserved_token\":{\"id\":1,\"kind\":\"business_exact_string\",\"value\":\"Hello, World!\"}}",
     }) |content| try check(schema, .{ .bytes = try std.mem.concat(a, u8, &.{ prefix, content, "}]}" }), .rejection = .missing_required_property, .path = "/statements/0/content/kind" });
     for ([_][]const u8{
-        "{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[{\"kind\":\"literal\",\"value\":\"Display the greeting.\"}]}}",
-        "{\"kind\":\"preserved_token\",\"token_id\":{\"ordinal\":1}}",
+        "{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"Display the greeting.\"]}}",
+        "{\"kind\":\"preserved_token\",\"token_id\":1}",
     }) |content| try check(schema, .{ .bytes = try std.mem.concat(a, u8, &.{ prefix, content, "}]}" }) });
 }
 
@@ -69,14 +69,14 @@ test "compact candidate encoding and decoding release every failed allocation" {
 // Independent wire fixtures: these values are authored from the contracts, never
 // synthesized from schema nodes or encoded by the codec being tested.
 const response_wire = struct {
-    const id = "{\"ordinal\":7}";
+    const id = "7";
     const provenance = "{\"claim_ids\":[" ++ id ++ "],\"clarification_response_ids\":[]}";
-    const segments = "[{\"kind\":\"literal\",\"value\":\"Display the status\"},{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "}]";
-    const nodes = "[{\"kind\":\"literal\",\"value\":\"Source meaning\"},{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "},{\"kind\":\"source\",\"source_id\":" ++ id ++ "}]";
-    const normalized = "{\"kind\":\"normalized\",\"segments\":" ++ segments ++ "}";
-    const exact = "{\"kind\":\"exact_copy\",\"token_id\":" ++ id ++ ",\"citation_id\":" ++ id ++ "}";
+    const segments = "[\"Display the status\",{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "}]";
+    const nodes = "[\"Source meaning\",{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "},{\"kind\":\"source\",\"source_id\":" ++ id ++ "}]";
+    const normalized = segments;
+    const exact = "[{\"kind\":\"exact_copy\",\"token_id\":" ++ id ++ ",\"citation_id\":" ++ id ++ "}]";
     const attributed = "{\"value\":" ++ normalized ++ ",\"provenance\":" ++ provenance ++ "}";
-    const selection = "{\"first\":{\"ordinal\":7},\"last\":{\"ordinal\":9}}";
+    const selection = "{\"first\":7,\"last\":9}";
     const classifications = "[{\"kind\":\"preserve\",\"preserve\":{\"token_candidate_id\":{\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":7},\"kind\":\"business_exact_string\"}},{\"kind\":\"irrelevant\",\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}]";
     const clarification = "{\"kind\":\"clarification\",\"reason\":\"ambiguous\",\"question\":" ++ attributed ++ "}";
     const records = .{
@@ -104,21 +104,27 @@ test "independent wire cases cover every selected specification result and neste
     try checkCandidate("extraction", "citation_replacement", "{\"citations\":[" ++ response_wire.selection ++ "]}");
     try checkCandidate("extraction", "source_selection_replacement", response_wire.selection);
     try checkCandidate("reconciliation", "summary", "{\"statements\":[{\"local_key\":7,\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"preserved_token\",\"token_id\":" ++ response_wire.id ++ "}}]}");
-    try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"preserved_token\",\"token_id\":" ++ response_wire.id ++ "}}],\"conflicts\":[{\"claim_ids\":[" ++ response_wire.id ++ ",{\"ordinal\":9}],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "},\"resolution\":\"unresolved\"}]}");
+    try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"preserved_token\",\"token_id\":" ++ response_wire.id ++ "}}],\"conflicts\":[{\"claim_ids\":[" ++ response_wire.id ++ ",9],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "},\"resolution\":\"unresolved\"}]}");
     // Structural conformance is not a claim that these independently shaped
     // records satisfy the graph, source-join or semantic validators.
     try checkCandidate("generation", "brief", "{\"kind\":\"brief\",\"title\":" ++ response_wire.attributed ++ ",\"description\":" ++ response_wire.attributed ++ ",\"primary_goal\":" ++ response_wire.attributed ++ "}");
     try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.exact ++ ",\"provenance\":" ++ response_wire.provenance ++ "}");
     try checkCandidate("generation", "entities", "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"basis\":" ++ response_wire.attributed ++ "}");
     inline for (.{ "brief", "primary_user_story", "entities" }) |selection| try checkCandidate("generation", selection, response_wire.clarification);
+    // Assignment-specific rules require the unit context: schema checks here,
+    // with native validation covered by specification_generation_test.
+    try candidateSchemaCase("generation", "records", response_wire.clarification, .missing_required_property, "/record_kind");
     inline for (response_wire.records) |record| {
         const bytes = "{\"content\":" ++ record[1] ++ ",\"provenance\":" ++ response_wire.provenance ++ "}";
-        try checkCandidate("generation", record[0], "{\"kind\":\"records\",\"records\":[" ++ bytes ++ "]}");
-        try checkCandidate("generation", record[0], response_wire.clarification);
-        try checkCandidate("repair", "record_" ++ record[0], bytes);
+        try checkCandidate("generation", "records", "{\"kind\":\"records\",\"records\":[" ++ bytes ++ "]}");
+        const need = response_wire.clarification[0 .. response_wire.clarification.len - 1] ++ ",\"record_kind\":\"" ++ record[0] ++ "\"}";
+        try checkCandidate("generation", "records", need);
+        try candidateSchemaCase("generation", "primary_user_story", need, .unknown_property, "/record_kind");
+        if (comptime std.mem.eql(u8, record[0], "acceptance_criterion") or std.mem.eql(u8, record[0], "functional_requirement") or std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_" ++ record[0], bytes);
+        if (comptime !std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_non_entity", bytes);
     }
-    try checkCandidate("repair", "provenance", response_wire.provenance);
-    try checkCandidate("repair", "value", response_wire.exact);
+    try checkCandidate("generation", "provenance", response_wire.provenance);
+    try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.exact ++ "}");
     try checkCandidate("support", "detail", "{\"detail\":\"Which deadline applies?\"}");
     try candidateCase("support", "detail", "{\"detail\":\"Which deadline applies?\",\"finding\":\"supported\"}", .unknown_property, "/finding");
     try checkCandidate("support", "selection", "{\"provenance\":" ++ response_wire.provenance ++ ",\"source_ids\":[]}");
@@ -205,11 +211,61 @@ test "selected source and reconciliation repairs conform to their native respons
     try candidateCase("reconciliation", "business_text", "{\"segments\":" ++ response_wire.segments ++ ",\"claim_ids\":[]}", .unknown_property, "/claim_ids");
 }
 
+test "business values use one segment shape for prose and exact references" {
+    const value = "[\"Display \",{\"kind\":\"exact_copy\",\"token_id\":7,\"citation_id\":9},\" with UTC date/time.\"]";
+    try checkCandidate("generation", "value", "{\"value\":" ++ value ++ "}");
+    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ value ++ ",\"provenance\":" ++ response_wire.provenance ++ "}");
+    try candidateCase("generation", "value", "{\"value\":{\"kind\":\"exact_copy\",\"token_id\":7,\"citation_id\":9}}", .type_mismatch, "/value");
+}
+
+test "review and insertion evidence shapes follow native minima without excluding source-only diagnoses" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const review = @import("domain/specification_support.zig").Source;
+    const admission = @import("domain/specification_support_evidence.zig");
+    const check = @import("model_payload_schema_test.zig").checkDocument;
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schema = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
+    for (std.meta.tags(review.Decision)) |decision| {
+        var value: review.Value = .{
+            .kind = decision,
+            .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} },
+            .source_ids = &.{.{ .ordinal = 7 }},
+            .detail = "The source establishes an action; its duration is unspecified.",
+            .question = if (admission.questionRequired(decision.finding())) "Which duration applies? Supply the duration and starting event." else null,
+        };
+        for ([_][]const u8{ "finding", "applicability_finding", "review", "review_applicability" }) |definition| {
+            if (decision == .not_applicable and std.mem.indexOf(u8, definition, "applicability") == null) continue;
+            const selected = schema.select(.{ .bytes = definition }).?;
+            const whole = std.mem.startsWith(u8, definition, "review");
+            for (0..2) |claims| {
+                value.provenance.claim_ids = if (claims == 0) &.{} else &.{.{ .ordinal = 7 }};
+                const encoded = if (whole) try codec.encode(review.Review, a, .{ .entries = &.{.{ .requirement_ordinal = 7, .value = value }} }) else try codec.encode(review.Value, a, value);
+                const rejects = claims == 0 and admission.minimum(decision.finding()) == .claim_required;
+                try check(selected.modelBytes(), .{ .bytes = encoded, .rejection = if (rejects) .array_length else null, .path = if (!rejects) null else if (whole) "/entries/0/value/provenance/claim_ids" else "/provenance/claim_ids" });
+            }
+        }
+    }
+    // The provider projection must also retain the nonempty condition. The full
+    // schema and native validator continue to own admission and evidence meaning.
+    const projection = @import("domain/model_schema_projection.zig");
+    const native = try projection.value(a, schema.select(.{ .bytes = "applicability_finding" }).?.root(), .bedrock);
+    for (native.object.get("anyOf").?.array.items) |variant| {
+        const properties = variant.object.get("properties").?.object;
+        const decision = std.meta.stringToEnum(review.Decision, properties.get("kind").?.object.get("const").?.string).?;
+        const claims = properties.get("provenance").?.object.get("properties").?.object.get("claim_ids").?.object;
+        const required = admission.minimum(decision.finding()) == .claim_required;
+        try std.testing.expectEqual(required, claims.contains("minItems"));
+        if (required) try std.testing.expectEqual(@as(i64, 1), claims.get("minItems").?.integer);
+    }
+}
+
 test "loss attribution wire variants stay closed across initial review insertion and replacement" {
     const locations = .{
         "{\"kind\":\"unlocalized\"}",
         "{\"kind\":\"extraction_claim\",\"bytes\":\"chunk-7\"}",
-        "{\"kind\":\"token_classification\",\"source_id\":{\"ordinal\":7},\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}",
+        "{\"kind\":\"token_classification\",\"source_id\":7,\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}",
         "{\"kind\":\"reconciliation_signal\",\"ordinal\":7}",
         "{\"kind\":\"reconciliation_disposition\",\"ordinal\":9}",
         "{\"kind\":\"reconciliation_conflict\",\"ordinal\":9}",
@@ -229,7 +285,7 @@ fn checkCandidate(comptime name: []const u8, comptime selection: ?[]const u8, by
     return candidateCase(name, selection, bytes, null, null);
 }
 
-fn candidateCase(comptime name: []const u8, comptime selection: ?[]const u8, bytes: []const u8, rejection: ?@import("domain/model_payload_schema.zig").Rejection, path: ?[]const u8) !void {
+fn candidateSchemaCase(comptime name: []const u8, comptime selection: ?[]const u8, bytes: []const u8, rejection: ?@import("domain/model_payload_schema.zig").Rejection, path: ?[]const u8) !void {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -238,13 +294,20 @@ fn candidateCase(comptime name: []const u8, comptime selection: ?[]const u8, byt
     const schema = try adapter.compiler().compile(a, source);
     const selected = if (selection) |definition| schema.select(.{ .bytes = definition }) orelse return error.MissingSchemaSelection else schema;
     try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = bytes, .rejection = rejection, .path = path });
+}
+
+fn candidateCase(comptime name: []const u8, comptime selection: ?[]const u8, bytes: []const u8, rejection: ?@import("domain/model_payload_schema.zig").Rejection, path: ?[]const u8) !void {
+    try candidateSchemaCase(name, selection, bytes, rejection, path);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
     if (rejection != null) {
         try std.testing.expectError(error.InvalidJsonDocument, decodeCandidate(name, selection, a, bytes));
     } else {
         const encoded = try decodeCandidate(name, selection, a, bytes);
         // Both owners must accept the response in both directions. In particular,
         // native union encoding must not introduce a wrapper absent from the schema.
-        try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = encoded });
+        try candidateSchemaCase(name, selection, encoded, null, null);
         try std.testing.expectEqualStrings(encoded, try decodeCandidate(name, selection, a, encoded));
     }
 }
@@ -276,9 +339,11 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         if (comptime std.mem.eql(u8, definition, "token_reference")) return nativeWire(@FieldType(r.ContentProposal, "preserved_token"), a, bytes);
         const T = @import("domain/reference_reconciliation_repair.zig").Replacement;
         return selectedWire(T, a, @field(std.meta.Tag(T), definition["repair_".len..]), bytes);
-    } else if (comptime std.mem.eql(u8, name, "repair")) {
-        return selectedWire(@import("domain/specification_repair.zig").Replacement, a, if (std.mem.eql(u8, selection.?, "provenance")) .provenance else if (std.mem.eql(u8, selection.?, "value")) .value else .record, bytes);
     } else if (comptime std.mem.eql(u8, name, "generation")) {
+        const definition = selection.?;
+        if (comptime std.mem.eql(u8, definition, "provenance") or std.mem.eql(u8, definition, "value") or std.mem.startsWith(u8, definition, "repair_record_")) {
+            return selectedWire(@import("domain/specification_repair.zig").Replacement, a, if (std.mem.eql(u8, definition, "provenance")) .provenance else if (std.mem.eql(u8, definition, "value")) .value else .record, bytes);
+        }
         return nativeWire(@import("domain/specification_generation.zig").ModelResponse, a, bytes);
     } else if (comptime selection != null and !std.mem.startsWith(u8, selection.?, "review")) {
         const selected = selection.?;
@@ -289,30 +354,30 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
 }
 
 test "final proposal schemas and native readers reject deterministic echoes and mixed shapes" {
-    const echoed = "{\"claim_ids\":[{\"ordinal\":7}],\"citation_ids\":[{\"ordinal\":7}],\"clarification_response_ids\":[]}";
+    const echoed = "{\"claim_ids\":[7],\"citation_ids\":[7],\"clarification_response_ids\":[]}";
     inline for (.{ "member_claim_ids", "member_summary_ids" }) |field| {
         try candidateCase("reconciliation", "summary", "{\"statements\":[],\"" ++ field ++ "\":[]}", .unknown_property, "/" ++ field);
     }
     try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.normalized ++ ",\"provenance\":" ++ echoed ++ "}", .unknown_property, "/provenance/citation_ids");
-    try candidateCase("repair", "provenance", echoed, .unknown_property, "/citation_ids");
+    try candidateCase("generation", "provenance", echoed, .unknown_property, "/citation_ids");
     try candidateCase("support", null, "{\"entries\":[{\"requirement_ordinal\":7,\"value\":{\"kind\":\"supported\",\"loss\":{\"kind\":\"unlocalized\"},\"provenance\":" ++ echoed ++ ",\"source_ids\":[],\"detail\":\"\"}}]}", .unknown_property, "/entries/0/value/provenance/citation_ids");
-    try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[{\"ordinal\":7}],\"citation_ids\":[],\"content\":{\"kind\":\"preserved_token\",\"token_id\":{\"ordinal\":7}}}],\"conflicts\":[]}", .unknown_property, "/signals/0/citation_ids");
-    try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[],\"conflicts\":[{\"claim_ids\":[{\"ordinal\":7},{\"ordinal\":9}],\"citation_ids\":[],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "},\"resolution\":\"unresolved\"}]}", .unknown_property, "/conflicts/0/citation_ids");
+    try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[7],\"citation_ids\":[],\"content\":{\"kind\":\"preserved_token\",\"token_id\":7}}],\"conflicts\":[]}", .unknown_property, "/signals/0/citation_ids");
+    try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[],\"conflicts\":[{\"claim_ids\":[7,9],\"citation_ids\":[],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "},\"resolution\":\"unresolved\"}]}", .unknown_property, "/conflicts/0/citation_ids");
 }
 
 test "independent multi-record proposals retain siblings and all disposition variants" {
     const dispositions =
-        \\{"claim_dispositions":[{"claim_id":{"ordinal":7},"disposition":{"kind":"retained"}},{"claim_id":{"ordinal":9},"disposition":{"kind":"duplicate","target_claim_id":{"ordinal":7}}},{"claim_id":{"ordinal":11},"disposition":{"kind":"superseded","related_claim_ids":[{"ordinal":7},{"ordinal":9}]}},{"claim_id":{"ordinal":13},"disposition":{"kind":"conflicting","related_claim_ids":[{"ordinal":15}]}},{"claim_id":{"ordinal":15},"disposition":{"kind":"conflicting","related_claim_ids":[{"ordinal":13}]}}],"signals":[],"conflicts":[]}
+        \\{"claim_dispositions":[{"claim_id":7,"disposition":{"kind":"retained"}},{"claim_id":9,"disposition":{"kind":"duplicate","target_claim_id":7}},{"claim_id":11,"disposition":{"kind":"superseded","related_claim_ids":[7,9]}},{"claim_id":13,"disposition":{"kind":"conflicting","related_claim_ids":[15]}},{"claim_id":15,"disposition":{"kind":"conflicting","related_claim_ids":[13]}}],"signals":[],"conflicts":[]}
     ;
     try checkCandidate("reconciliation", "global", dispositions);
     const statements =
-        \\{"statements":[{"local_key":7,"claim_ids":[{"ordinal":7}],"content":{"kind":"model","model":{"kind":"business","segments":[{"kind":"literal","value":"Confirm a booking."}]}}},{"local_key":9,"claim_ids":[{"ordinal":9}],"content":{"kind":"model","model":{"kind":"business","segments":[{"kind":"literal","value":"Issue a renewal receipt."}]}}}]}
+        \\{"statements":[{"local_key":7,"claim_ids":[7],"content":{"kind":"model","model":{"kind":"business","segments":["Confirm a booking."]}}},{"local_key":9,"claim_ids":[9],"content":{"kind":"model","model":{"kind":"business","segments":["Issue a renewal receipt."]}}}]}
     ;
     try checkCandidate("reconciliation", "summary", statements);
     const records =
-        \\{"kind":"records","records":[{"content":{"kind":"functional_requirement","text":{"kind":"normalized","segments":[{"kind":"literal","value":"Confirm a booking."}]}},"provenance":{"claim_ids":[{"ordinal":7}],"clarification_response_ids":[]}},{"content":{"kind":"functional_requirement","text":{"kind":"normalized","segments":[{"kind":"literal","value":"Issue a receipt."}]}},"provenance":{"claim_ids":[{"ordinal":9}],"clarification_response_ids":[]}}]}
+        \\{"kind":"records","records":[{"content":{"kind":"functional_requirement","text":["Confirm a booking."]},"provenance":{"claim_ids":[7],"clarification_response_ids":[]}},{"content":{"kind":"functional_requirement","text":["Issue a receipt."]},"provenance":{"claim_ids":[9],"clarification_response_ids":[]}}]}
     ;
-    try checkCandidate("generation", "functional_requirement", records);
+    try checkCandidate("generation", "records", records);
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -328,13 +393,13 @@ test "independent multi-record proposals retain siblings and all disposition var
 }
 
 test "disposition schemas reject legacy fields incompatible variants and missing targets" {
-    const prefix = "{\"claim_dispositions\":[{\"claim_id\":{\"ordinal\":7},\"disposition\":";
+    const prefix = "{\"claim_dispositions\":[{\"claim_id\":7,\"disposition\":";
     const suffix = "}],\"signals\":[],\"conflicts\":[]}";
     try candidateCase("reconciliation", "global", prefix ++ "\"retained\",\"related_claim_ids\":[]" ++ suffix, .unknown_property, "/claim_dispositions/0/related_claim_ids");
     try candidateCase("reconciliation", "global", prefix ++ "{\"kind\":\"retained\"},\"related_claim_ids\":[]" ++ suffix, .unknown_property, "/claim_dispositions/0/related_claim_ids");
     try candidateCase("reconciliation", "global", prefix ++ "{\"kind\":\"retained\",\"related_claim_ids\":[]}" ++ suffix, .unknown_property, "/claim_dispositions/0/disposition/related_claim_ids");
     try candidateCase("reconciliation", "global", prefix ++ "{\"kind\":\"duplicate\"}" ++ suffix, .missing_required_property, "/claim_dispositions/0/disposition/target_claim_id");
-    try candidateCase("reconciliation", "global", prefix ++ "{\"kind\":\"duplicate\",\"target_claim_id\":{\"ordinal\":9},\"related_claim_ids\":[]}" ++ suffix, .unknown_property, "/claim_dispositions/0/disposition/related_claim_ids");
+    try candidateCase("reconciliation", "global", prefix ++ "{\"kind\":\"duplicate\",\"target_claim_id\":9,\"related_claim_ids\":[]}" ++ suffix, .unknown_property, "/claim_dispositions/0/disposition/related_claim_ids");
     try candidateCase("reconciliation", "global", prefix ++ "{\"kind\":\"conflicting\"}" ++ suffix, .missing_required_property, "/claim_dispositions/0/disposition/related_claim_ids");
 }
 
@@ -347,7 +412,7 @@ test "superseded and conflicting response schemas require nonempty relationship 
     const schema = (try adapter.compiler().compile(a, source)).select(.{ .bytes = "global" }).?;
     inline for (.{ "superseded", "conflicting" }) |kind| {
         try @import("model_payload_schema_test.zig").checkDocument(schema.modelBytes(), .{
-            .bytes = "{\"claim_dispositions\":[{\"claim_id\":{\"ordinal\":7},\"disposition\":{\"kind\":\"" ++ kind ++ "\",\"related_claim_ids\":[]}}],\"signals\":[],\"conflicts\":[]}",
+            .bytes = "{\"claim_dispositions\":[{\"claim_id\":7,\"disposition\":{\"kind\":\"" ++ kind ++ "\",\"related_claim_ids\":[]}}],\"signals\":[],\"conflicts\":[]}",
             .rejection = .array_length,
             .path = "/claim_dispositions/0/disposition/related_claim_ids",
         });
@@ -392,4 +457,43 @@ test "model JSON optional fields round trip without relaxing required nullable f
     const present: Value = .{ .name = "delivery", .answer = "next day", .status = 3 };
     try std.testing.expectEqualDeep(present, try codec.decode(Value, a, try codec.encode(Value, a, present)));
     for ([_][]const u8{ "{\"name\":\"delivery\"}", "{\"status\":null}", "{\"name\":\"delivery\",\"status\":null,\"foreign\":0}" }) |bad| try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Value, a, bad));
+}
+
+test "declared compact values preserve typed identities and reject legacy or ambiguous wire shapes" {
+    try compactRoundTrip(std.testing.allocator);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, compactRoundTrip, .{});
+}
+fn compactRoundTrip(allocator: std.mem.Allocator) !void {
+    const Id = struct {
+        pub const model_scalar = "number";
+        number: u16,
+    };
+    const Segment = union(enum) {
+        pub const model_inline = .{ .words = "text" };
+        words: struct { text: []const u8 },
+        reference: struct { id: Id },
+    };
+    const Value = union(enum) {
+        pub const model_inline = .{ .sequence = "items" };
+        sequence: struct { items: []const Segment },
+        choice: struct { id: Id },
+    };
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const sample_value: Value = .{ .sequence = .{ .items = &.{ .{ .words = .{ .text = "Renew a loan " } }, .{ .reference = .{ .id = .{ .number = 9 } } } } } };
+    const expected = "{\"value\":[\"Renew a loan \",{\"kind\":\"reference\",\"id\":9}]}";
+    const decoded = try codec.decode(Value, a, expected);
+    try std.testing.expectEqualDeep(sample_value, decoded);
+    const stored_before = try std.json.Stringify.valueAlloc(a, sample_value, .{});
+    const stored_after = try std.json.Stringify.valueAlloc(a, decoded, .{});
+    try std.testing.expectEqualStrings(stored_before, stored_after);
+    try std.testing.expectEqualDeep(decoded, try codec.decode(Value, a, try codec.encode(Value, a, decoded)));
+    _ = try codec.decode(Value, a, "{\"value\":{\"kind\":\"choice\",\"id\":90e-1}}");
+    for ([_][]const u8{
+        "[]",                                               "{\"value\":[{\"kind\":\"words\",\"text\":\"old\"}]}",
+        "{\"value\":{\"kind\":\"sequence\",\"items\":[]}}", "{\"value\":{\"kind\":\"choice\",\"id\":{\"number\":9}}}",
+        "{\"value\":{\"kind\":\"choice\",\"id\":9.5}}",     "{\"value\":{\"kind\":\"choice\",\"id\":65536}}",
+        "{\"value\":false}",                                "{\"value\":[],\"extra\":0}",
+    }) |bad| try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Value, a, bad));
 }

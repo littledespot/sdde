@@ -98,7 +98,7 @@ pub const Adapter = struct {
             return result;
         };
         defer raw.deinit();
-        const decoded = @import("bedrock_response.zig").decodeConverse(raw.value) catch {
+        const decoded = @import("bedrock_response.zig").decodeInvoke(raw.value) catch {
             result.extraction = .invalid;
             return result;
         };

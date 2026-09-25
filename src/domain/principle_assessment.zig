@@ -57,7 +57,8 @@ pub const Rule = struct {
         return self;
     }
 };
-pub const Rejection = struct { issue: Issue, rule: Rule };
+pub const CitationRejection = struct { index: usize, diagnostic: registry.CitationDiagnostic };
+pub const Rejection = struct { issue: Issue, rule: Rule, citation: ?CitationRejection = null };
 pub const Admission = union(enum) { accepted: a.ReviewEvidence, rejected: Rejection };
 
 pub fn subjects(allocator: std.mem.Allocator, business: Business) Error![]const a.Id {
@@ -83,7 +84,7 @@ pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.
     defer arena.deinit();
     const scratch = arena.allocator();
     const context = inputs.principle_context orelse return error.InvalidRequiredAuthority;
-    try p.validateStored(scratch, source_context.inputs, context.business.references, context.business.brief, context.business.content);
+    try p.validateStored(scratch, source_context.inputs, .{ .records = source_context.registry.records, .occurrences = source_context.registry.occurrences }, context.business.references, context.business.brief, context.business.content);
     const assigned = try subjects(scratch, context.business);
     const ledger = try a.build(scratch, inputs);
     const Requirement = struct { ordinal: u32, subject: a.Id };
@@ -118,7 +119,7 @@ pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, id: a.Id, value: Va
     const rules = try rule(inputs, value.decision.finding());
     if (id.kind != .policy_predicate or id.unit != .decision or id.slot != .compliance or id.unit.decision.ordinal == 0 or id.unit.decision.ordinal > inputs.seeds.len) return error.InvalidRequiredAuthority;
     for (value.citations, 0..) |citation, index| {
-        registry.validateCitation(context.registry, context.selection, citation) catch return .{ .rejected = .{ .issue = .invalid_principle_citation, .rule = rules } };
+        if (try registry.validateCitation(context.registry, context.selection, citation)) |diagnostic| return .{ .rejected = .{ .issue = .invalid_principle_citation, .rule = rules, .citation = .{ .index = index, .diagnostic = diagnostic } } };
         for (value.citations[0..index]) |previous| if (std.meta.eql(previous, citation)) return .{ .rejected = .{ .issue = .invalid_selection, .rule = rules } };
     }
     if (rules.citations_required and value.citations.len == 0) return .{ .rejected = .{ .issue = .missing_evidence, .rule = rules } };

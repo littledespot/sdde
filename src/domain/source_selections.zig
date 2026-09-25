@@ -3,7 +3,10 @@
 const std = @import("std");
 const evidence = @import("reference_evidence.zig");
 const source = @import("reference_ingestion.zig");
-pub const Id = struct { ordinal: u32 };
+pub const Id = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
 pub const Selection = struct { first: Id, last: Id };
 pub const Choice = struct { id: Id, text: []const u8 };
 pub const Issue = struct {

@@ -24,7 +24,7 @@ pub const Action = struct {
         needs[0] = .{
             .stage = .spec,
             .subject = .{ .requirement = "specification", .unit = switch (checked.unit) {
-                .records => |kind| @tagName(kind),
+                .records => @tagName(checked.response.clarification.record_kind orelse return error.InvalidSpecification),
                 else => @tagName(checked.unit),
             }, .slot = "content" },
             .authority = authority,

@@ -56,7 +56,7 @@ test "summary repair changes only a rejected field then inserts missing membersh
         try std.testing.expect(good.statements.len >= 2);
         const statements = try a.dupe(r.StatementProposal, good.statements);
         statements[0].claim_ids = &.{.{ .ordinal = 999 }};
-        statements[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "source-0.md" } }} } } };
+        statements[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } };
         const parsed: r.Parsed = .{ .source = .{ .origin = initial }, .input = input, .proposal = .{ .summary = .{ .statements = statements } } };
         const rejected = (try f.validate_summary.execute(a, parsed, fixture.context())).invalid;
         const authorization = (try repair.authorize(a, parsed, fixture.context(), rejected)).model;
@@ -126,7 +126,7 @@ test "disposition insertion ignores response metadata and preserves dependent va
         const target = task.get("target").?.object;
         try std.testing.expectEqual(@as(usize, 2), target.count());
         try std.testing.expectEqualStrings("insert_disposition", target.get("unit").?.string);
-        try std.testing.expectEqual(@as(i64, 2), target.get("claim").?.object.get("ordinal").?.integer);
+        try std.testing.expectEqual(@as(i64, 2), target.get("claim").?.integer);
         try std.testing.expectEqualStrings("repair_disposition", packet.resultDefinition().?.bytes);
         try std.testing.expect(task.get("rule").?.object.get("disposition_choices").?.object.get("retained").?.bool);
         try std.testing.expectEqual(@as(usize, 2), task.get("rule").?.object.count());
@@ -143,8 +143,8 @@ test "disposition insertion ignores response metadata and preserves dependent va
         var rejected_candidate = missing;
         var selected = authorization;
         for ([_][]const u8{
-            "{\"kind\":\"duplicate\",\"target_claim_id\":{\"ordinal\":1}}",
-            "{\"kind\":\"superseded\",\"related_claim_ids\":[{\"ordinal\":1}]}",
+            "{\"kind\":\"duplicate\",\"target_claim_id\":1}",
+            "{\"kind\":\"superseded\",\"related_claim_ids\":[1]}",
         }, 0..) |bytes, i| {
             const origin: Origin = .{ .request = .{ .value = @intCast(5 + i) }, .attempt = .{ .value = 1 } };
             const request = try repair.packet(a, rejected_candidate, fixture.context(), selected);
@@ -341,9 +341,9 @@ test "summary signal and conflict repair packets retain precise shared text issu
                 const bad_text: r.text.BusinessText = .{ .segments = if (fault == 2)
                     &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = 999 } } }}
                 else
-                    &.{.{ .literal = .{ .value = if (fault == 0) "Display \\\"a result\\\"." else " \t" } }} };
+                    &.{.{ .literal = .{ .value = if (fault == 0) "Invalid\x01text" else " \t" } }} };
                 const bad: r.ContentProposal = .{ .model = .{ .business = bad_text } };
-                const good: r.ContentProposal = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display \"a result\"." } }} } } };
+                const good: r.ContentProposal = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display a result." } }} } } };
                 var parsed: r.Parsed = .{ .input = input, .source = .{ .origin = original }, .proposal = undefined };
                 var replacement: repair.Replacement = .{ .content = good };
                 if (stage == 0) {
@@ -377,8 +377,7 @@ test "summary signal and conflict repair packets retain precise shared text issu
                 const rejected = (try textRejection(a, parsed, fixture.context())).?;
                 try std.testing.expectEqual(.typed_text, rejected.issue.rule);
                 const issue = rejected.issue.expected.text_issue;
-                try std.testing.expectEqual(([_]@FieldType(r.text.Issue, "reason"){ .unbound_path, .blank, .unknown_passive, .unknown_source })[fault], issue.reason);
-                if (fault == 0) try std.testing.expectEqualStrings("\\", issue.path_match.?.lexeme);
+                try std.testing.expectEqual(([_]@FieldType(r.text.Issue, "reason"){ .invalid_scalar, .blank, .unknown_passive, .unknown_source })[fault], issue.reason);
                 const authorization = (try repair.authorize(a, parsed, fixture.context(), rejected)).model;
                 const packet = try repair.packet(std.testing.allocator, parsed, fixture.context(), authorization);
                 defer packets.release(packet);
@@ -388,7 +387,8 @@ test "summary signal and conflict repair packets retain precise shared text issu
                 const projected = try json.decode(r.diagnostic.Fact, a, try std.json.Stringify.valueAlloc(a, rule.get("expected").?, .{}));
                 try std.testing.expectEqualDeep(issue, projected.text_issue);
                 try std.testing.expect(!rule.contains("dependencies") and !rule.contains("origin"));
-                try std.testing.expect(body.value.object.get("input").?.object.get("passive_literals").?.array.items.len > 0);
+                try std.testing.expectEqual(@as(usize, 0), body.value.object.get("input").?.object.get("passive_literals").?.array.items.len);
+                try std.testing.expectEqualStrings("passive", packet.excludedVariants()[0].kind);
                 try std.testing.expectEqualStrings(if (stage == 2) "repair_summary" else "business_text", packet.resultDefinition().?.bytes);
                 const unchanged = try repair.merge(a, parsed, fixture.context(), authorization, authorization.operation.replace, correction);
                 try std.testing.expect(!unchanged.source.last_repair.?.changed);
@@ -577,8 +577,8 @@ test "closed reconciliation JSON rejects model identities unknown fields union v
     defer fixture.deinit();
     const input = try f.build_input.execute(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2));
     for ([_][]const u8{
-        "{}",                                                                            "null",                                                                                  "[]",                                                                                                                                "{\"global\":{}}",                                                                                                                                                           "{\"global\":{},\"summary\":{}}",
-        "{\"claim_dispositions\":[],\"signals\":[],\"conflicts\":[],\"conflict_id\":1}", "{\"claim_dispositions\":[],\"claim_dispositions\":[],\"signals\":[],\"conflicts\":[]}", "{\"claim_dispositions\":[{\"claim_id\":{\"ordinal\":1},\"disposition\":{\"kind\":\"resolved\"}}],\"signals\":[],\"conflicts\":[]}", "{\"claim_dispositions\":[],\"signals\":[],\"conflicts\":[{\"claim_ids\":[],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":[]},\"resolution\":\"source_precedence\"}]}",
+        "{}",                                                                            "null",                                                                                  "[]",                                                                                                                  "{\"global\":{}}",                                                                                                                                                           "{\"global\":{},\"summary\":{}}",
+        "{\"claim_dispositions\":[],\"signals\":[],\"conflicts\":[],\"conflict_id\":1}", "{\"claim_dispositions\":[],\"claim_dispositions\":[],\"signals\":[],\"conflicts\":[]}", "{\"claim_dispositions\":[{\"claim_id\":1,\"disposition\":{\"kind\":\"resolved\"}}],\"signals\":[],\"conflicts\":[]}", "{\"claim_dispositions\":[],\"signals\":[],\"conflicts\":[{\"claim_ids\":[],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":[]},\"resolution\":\"source_precedence\"}]}",
     }) |bytes| try std.testing.expectError(error.InvalidReferenceReconciliation, f.parse.execute(a, .{ .input = input, .bytes = bytes }));
 }
 
@@ -712,7 +712,7 @@ test "signal projection requires exact citation token kind and retained-claim co
     }
 }
 
-test "scoped reconciliation prose reuses the shared path gate across multiple sources" {
+test "scoped reconciliation text validates explicit references across multiple sources" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -723,7 +723,7 @@ test "scoped reconciliation prose reuses the shared path gate across multiple so
     const allowed: r.text.ReferenceSemanticText = .{ .nodes = &.{ .{ .source = .{ .source_id = .{ .ordinal = 1 } } }, .{ .source = .{ .source_id = .{ .ordinal = 2 } } } } };
     _ = try text.validator.referenceIn(a, context, allowed);
     try std.testing.expectError(error.InvalidTypedText, text.validator.referenceIn(a, context, .{ .nodes = &.{.{ .source = .{ .source_id = .{ .ordinal = 3 } } }} }));
-    try std.testing.expectError(error.UnboundPathReference, text.validator.referenceIn(a, context, .{ .nodes = &.{.{ .literal = .{ .value = "Read src/main.zig." } }} }));
+    _ = try text.validator.referenceIn(a, context, .{ .nodes = &.{.{ .literal = .{ .value = "Read src/main.zig." } }} });
     try std.testing.expectError(error.InvalidTypedText, text.validator.reference(a, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scope = context.scopes[0] }, allowed));
 }
 
@@ -815,7 +815,7 @@ test "authorized content payloads cover every kind across statement and signal i
             try std.testing.expectEqual(!insert, repair_input.contains("current_value"));
             if (!insert) try std.testing.expectEqualStrings("preserved_token", repair_input.get("current_value").?.object.get("kind").?.string);
             try std.testing.expect(std.mem.indexOf(u8, packet.body(), "exact_selected_token") == null);
-            for ([_][]const u8{ "{\"kind\":\"preserved_token\",\"token_id\":{\"ordinal\":1}}", "{\"token_id\":{\"ordinal\":1}}", "{}", "{\"current_value\":{}}" }) |wire|
+            for ([_][]const u8{ "{\"kind\":\"preserved_token\",\"token_id\":1}", "{\"token_id\":1}", "{}", "{\"current_value\":{}}" }) |wire|
                 try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, auth, packet, wire));
             const replacement = try repair.parse(a, auth, packet, try f.repairResponse(a, good));
             try std.testing.expectEqualDeep(good, replacement);
@@ -957,14 +957,14 @@ test "shared multi-source scope rejects unrelated passive literals and stale emp
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const fixture = try prepare(a, &.{ "First\n", "Second\n", "Third\n" });
+    const fixture = try prepare(a, &.{ "First report.zig\n", "Second report.zig\n", "Third other.zig\n" });
     defer fixture.deinit();
     const items = try f.build_items.execute(a, fixture.inputs, fixture.extracted);
     const context = try @import("domain/reference_reconciliation_validation.zig").scopes(a, items, &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } }, fixture.context());
+    try std.testing.expectEqual(@as(usize, 3), fixture.text.registry.occurrences.len);
     for (fixture.text.registry.occurrences) |occurrence| {
-        if (occurrence.origin != .reference_name) continue;
         const candidate: r.text.BusinessText = .{ .segments = &.{.{ .passive = .{ .passive_literal_id = occurrence.id } }} };
-        if (occurrence.origin.reference_name.ordinal <= 2) {
+        if (occurrence.origin.source_id.ordinal <= 2) {
             _ = try text.validator.businessIn(a, context, candidate);
         } else try std.testing.expectError(error.InvalidPassiveLiteral, text.validator.businessIn(a, context, candidate));
     }
@@ -1168,7 +1168,7 @@ test "mixed claim kinds choose independent selection repair across summaries and
             defer packets.release(packet);
             const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
             const choices = body.value.object.get("repair").?.object.get("rule").?.object;
-            try std.testing.expectEqual(@as(i64, business.ordinal), choices.get("selection").?.array.items[0].object.get("ordinal").?.integer);
+            try std.testing.expectEqual(@as(i64, business.ordinal), choices.get("selection").?.array.items[0].integer);
             const constraints = body.value.object.get("input").?.object.get("constraints").?.array.items;
             var content_rule = false;
             var token_rule = false;
@@ -1177,7 +1177,7 @@ test "mixed claim kinds choose independent selection repair across summaries and
                 token_rule = token_rule or std.mem.eql(u8, constraint.object.get("constraint").?.string, "exact_selected_token");
             }
             try std.testing.expect(content_rule and token_rule);
-            const wire = try std.fmt.allocPrint(a, "{{\"claim_ids\":[{{\"ordinal\":{d}}}]}}", .{business.ordinal});
+            const wire = try std.fmt.allocPrint(a, "{{\"claim_ids\":[{d}]}}", .{business.ordinal});
             var merged = try repair.merge(a, parsed, fixture.context(), authorization, try repair.parse(a, authorization, packet, wire), null);
             if (global) {
                 try std.testing.expectEqualDeep(parsed.proposal.global.signals[0].content, merged.proposal.global.signals[0].content);
@@ -1338,6 +1338,239 @@ test "canonical summary and signal redundancy preserves evidence and rejects com
     }
 }
 
+test "misbound extra projections recover by proven deletion with intact siblings and exact dependencies" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const origin: Origin = .{ .request = .{ .value = 6 }, .attempt = .{ .value = 1 } };
+    for ([_][]const u8{ "Display `Hello, World!`.\n", "Confirm `Loan renewed!`.\n" }) |source| for ([_]bool{ false, true }) |global| for ([_]bool{ false, true }) |first| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try prepare(a, &.{source});
+        defer fixture.deinit();
+        const progress = try f.initialize(a, fixture.inputs, fixture.extracted, 2);
+        const input = if (global) try f.summaries(a, progress, fixture.context()) else try f.build_input.execute(a, progress);
+        const good: r.Parsed = .{ .source = .{ .origin = origin }, .input = input, .proposal = if (global) .{ .global = try f.global(a, input) } else .{ .summary = try f.summary(a, input) } };
+        try std.testing.expect((try textRejection(a, good, fixture.context())) == null);
+        // Both independent obligations already have valid projections. Add the
+        // business projection again, incorrectly bound to the token claim.
+        const business = good.input.items[0].claim;
+        const token = good.input.items[1].claim;
+        try std.testing.expect(business.content == .model and token.content == .preserved_token);
+        var parsed = good;
+        const count = if (global) good.proposal.global.signals.len else good.proposal.summary.statements.len;
+        const index: usize = if (first) 0 else count;
+        if (global) {
+            const values = try a.alloc(r.SignalProposal, count + 1);
+            @memcpy(values[0..index], good.proposal.global.signals[0..index]);
+            values[index] = .{ .claim_ids = &.{token.id}, .content = f.content(business) };
+            @memcpy(values[index + 1 ..], good.proposal.global.signals[index..]);
+            parsed.proposal.global.signals = values;
+        } else {
+            const values = try a.alloc(r.StatementProposal, count + 1);
+            @memcpy(values[0..index], good.proposal.summary.statements[0..index]);
+            values[index] = .{ .local_key = @intCast(count + 1), .claim_ids = &.{token.id}, .content = f.content(business) };
+            @memcpy(values[index + 1 ..], good.proposal.summary.statements[index..]);
+            parsed.proposal.summary.statements = values;
+        }
+        const rejected = (try textRejection(a, parsed, fixture.context())).?;
+        try std.testing.expectEqual(.content, rejected.issue.rule);
+        try std.testing.expectEqual(.matching_claim_content, rejected.issue.expected.constraint);
+        try std.testing.expectEqualDeep(origin, rejected.origin.?);
+        try std.testing.expectEqual(index, if (global) rejected.unit.signal else rejected.unit.statement);
+        try std.testing.expect(rejected.relations.content == null);
+        try std.testing.expectEqual(@as(usize, 0), rejected.relations.selection.len);
+        try std.testing.expectEqual(index, rejected.relations.redundant.?);
+        if (global and first) try std.testing.checkAllAllocationFailures(std.testing.allocator, redundantDeletionAllocation, .{ parsed, fixture.context() });
+        const automatic = (try repair.authorize(a, parsed, fixture.context(), rejected)).automatic;
+        try std.testing.expect(automatic.authorization.operation == .delete);
+        const merged = try repair.merge(a, parsed, fixture.context(), automatic.authorization, null, null);
+        try std.testing.expectEqualDeep(good.proposal, merged.proposal);
+        try std.testing.expectEqual(@as(u64, 2), merged.source.revision);
+        for (0..count) |sibling| {
+            const unit: r.diagnostic.Unit = if (global) .{ .signal = sibling } else .{ .statement = sibling };
+            try std.testing.expectEqualDeep(origin, merged.source.at(unit, .record).?);
+        }
+        try std.testing.expect((try textRejection(a, merged, fixture.context())) == null);
+        if (global) try std.testing.expectEqual(.complete, (try f.finish(a, input, merged.proposal.global, fixture.context())).valid.outcome);
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, merged, fixture.context(), automatic.authorization, null, null));
+        // Even a valid sibling change invalidates the entire original proof.
+        const changed_content: r.ContentProposal = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "A different supported requirement." } }} } } };
+        var changed = parsed;
+        const business_index: usize = if (first) 1 else 0;
+        if (global) {
+            const values = try a.dupe(r.SignalProposal, parsed.proposal.global.signals);
+            values[business_index].content = changed_content;
+            changed.proposal.global.signals = values;
+        } else {
+            const values = try a.dupe(r.StatementProposal, parsed.proposal.summary.statements);
+            values[business_index].content = changed_content;
+            changed.proposal.summary.statements = values;
+        }
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, changed, fixture.context(), rejected));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, changed, fixture.context(), automatic.authorization, null, null));
+        var stale = fixture.context();
+        stale.inputs.corpus.state_id.bytes = "different-source";
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, parsed, stale, rejected));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, parsed, stale, automatic.authorization, null, null));
+    };
+}
+
+fn redundantDeletionAllocation(allocator: std.mem.Allocator, parsed: r.Parsed, ctx: f.Context) !void {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const rejected = (try textRejection(a, parsed, ctx)).?;
+    const automatic = (try repair.authorize(a, parsed, ctx, rejected)).automatic;
+    const merged = try repair.merge(a, parsed, ctx, automatic.authorization, null, null);
+    try std.testing.expect((try textRejection(a, merged, ctx)) == null);
+}
+
+test "misbound projection deletion rejects missing coverage invalid survivors and novel content" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    const Failure = enum { novel, missing_token, missing_business, invalid_survivor, foreign_claim, empty_claims, repeated_claim, invalid_text };
+    for ([_][]const u8{ "Display `Hello, World!`.\n", "Confirm `Loan renewed!`.\n" }) |source| for ([_]bool{ false, true }) |global| for (std.meta.tags(Failure)) |failure| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try prepare(a, &.{source});
+        defer fixture.deinit();
+        const progress = try f.initialize(a, fixture.inputs, fixture.extracted, 2);
+        const input = if (global) try f.summaries(a, progress, fixture.context()) else try f.build_input.execute(a, progress);
+        const business = input.items[0].claim;
+        const token = input.items[1].claim;
+        var extra: r.SignalProposal = .{ .claim_ids = &.{token.id}, .content = f.content(business) };
+        switch (failure) {
+            .novel => extra.content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "A different proposed meaning." } }} } } },
+            .invalid_text => extra.content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } },
+            .foreign_claim => extra.claim_ids = &.{.{ .ordinal = 999 }},
+            .empty_claims => extra.claim_ids = &.{},
+            .repeated_claim => extra.claim_ids = &.{ token.id, token.id },
+            else => {},
+        }
+        var parsed: r.Parsed = .{ .input = input, .proposal = undefined };
+        if (global) {
+            var proposal = try f.global(a, input);
+            var values: std.ArrayList(r.SignalProposal) = .empty;
+            try values.append(a, extra);
+            for (proposal.signals) |value| {
+                if (failure == .missing_token and value.content == .preserved_token) continue;
+                if (failure == .missing_business and value.content == .model) continue;
+                var sibling = value;
+                if (failure == .invalid_survivor and value.content == .preserved_token) sibling.claim_ids = &.{};
+                try values.append(a, sibling);
+            }
+            proposal.signals = try values.toOwnedSlice(a);
+            parsed.proposal = .{ .global = proposal };
+        } else {
+            const proposal = try f.summary(a, input);
+            var values: std.ArrayList(r.StatementProposal) = .empty;
+            try values.append(a, .{ .local_key = 3, .claim_ids = extra.claim_ids, .content = extra.content });
+            for (proposal.statements) |value| {
+                if (failure == .missing_token and value.content == .preserved_token) continue;
+                if (failure == .missing_business and value.content == .model) continue;
+                var sibling = value;
+                if (failure == .invalid_survivor and value.content == .preserved_token) sibling.local_key = 0;
+                try values.append(a, sibling);
+            }
+            parsed.proposal = .{ .summary = .{ .statements = try values.toOwnedSlice(a) } };
+        }
+        const rejected = (try textRejection(a, parsed, fixture.context())).?;
+        try std.testing.expect(rejected.relations.redundant == null);
+        try std.testing.expect((try repair.authorize(a, parsed, fixture.context(), rejected)) != .automatic);
+    };
+}
+
+test "misbound redundancy handles aggregate summary diagnostics and distinct exact tokens" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "Display `Accepted` and `Rejected`.\n", "Record the decision.\n" });
+    defer fixture.deinit();
+    const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 8), fixture.context());
+    const good = try f.global(a, input);
+    var tokens_selected: std.ArrayList(r.SignalProposal) = .empty;
+    for (good.signals) |signal| if (signal.content == .preserved_token) try tokens_selected.append(a, signal);
+    try std.testing.expectEqual(@as(usize, 2), tokens_selected.items.len);
+    for ([_]bool{ false, true }) |missing| {
+        var values: std.ArrayList(r.SignalProposal) = .empty;
+        try values.append(a, .{ .claim_ids = tokens_selected.items[1].claim_ids, .content = tokens_selected.items[0].content });
+        for (good.signals) |signal| {
+            if (missing and std.meta.eql(signal.content, tokens_selected.items[0].content)) continue;
+            try values.append(a, signal);
+        }
+        var parsed: r.Parsed = .{ .input = input, .proposal = .{ .global = good } };
+        parsed.proposal.global.signals = try values.toOwnedSlice(a);
+        const rejected = (try textRejection(a, parsed, fixture.context())).?;
+        try std.testing.expectEqual(.exact_selected_token, rejected.issue.expected.constraint);
+        const decision = try repair.authorize(a, parsed, fixture.context(), rejected);
+        if (missing) {
+            try std.testing.expect(rejected.relations.redundant == null and decision != .automatic);
+        } else {
+            const merged = try repair.merge(a, parsed, fixture.context(), decision.automatic.authorization, null, null);
+            try std.testing.expectEqualDeep(good, merged.proposal.global);
+            try std.testing.expectEqual(.complete, (try f.finish(a, input, merged.proposal.global, fixture.context())).valid.outcome);
+        }
+    }
+    // With the same content kind the defect is reported at aggregate membership,
+    // not at one statement. The same proof must still identify a safe deletion.
+    const summary_fixture = try prepare(a, &.{ "Confirm the request.\n", "Record the decision.\n" });
+    defer summary_fixture.deinit();
+    var progress = try f.initialize(a, summary_fixture.inputs, summary_fixture.extracted, 8);
+    var summary_input = try f.build_input.execute(a, progress);
+    while (summary_input.partition.group.level == .within_source) {
+        const candidate: r.Parsed = .{ .input = summary_input, .proposal = .{ .summary = try f.summary(a, summary_input) } };
+        progress = try f.build_summary.execute(a, try f.assign_summary.execute(a, (try f.validate_summary.execute(a, candidate, summary_fixture.context())).valid));
+        summary_input = try f.build_input.execute(a, progress);
+    }
+    var original = try f.summary(a, summary_input);
+    const distinct = try a.dupe(r.StatementProposal, original.statements);
+    distinct[1].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Record the decision." } }} } } };
+    original.statements = distinct;
+    const statements = try a.alloc(r.StatementProposal, original.statements.len + 1);
+    @memcpy(statements[0..original.statements.len], original.statements);
+    statements[original.statements.len] = original.statements[0];
+    statements[original.statements.len].local_key = @intCast(statements.len);
+    statements[original.statements.len].claim_ids = original.statements[1].claim_ids;
+    // An extra individually valid statement still needs the entire membership
+    // check, and no new per-statement acceptance path is introduced.
+    const parsed: r.Parsed = .{ .input = summary_input, .proposal = .{ .summary = .{ .statements = statements } } };
+    const rejected = (try textRejection(a, parsed, summary_fixture.context())).?;
+    try std.testing.expect(rejected.unit == .summary);
+    const decision = (try repair.authorize(a, parsed, summary_fixture.context(), rejected)).automatic;
+    const merged = try repair.merge(a, parsed, summary_fixture.context(), decision.authorization, null, null);
+    try std.testing.expectEqualDeep(original, merged.proposal.summary);
+    try std.testing.expect((try textRejection(a, merged, summary_fixture.context())) == null);
+}
+
+test "redundant signal deletion cannot discard a selected superseded claim" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "Display `Accepted`.\n", "Record the decision.\n" });
+    defer fixture.deinit();
+    const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 8), fixture.context());
+    var proposal = try f.global(a, input);
+    const dispositions = try a.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
+    try std.testing.expectEqual(@as(usize, 3), dispositions.len);
+    dispositions[0].disposition = .{ .superseded = .{ .related_claim_ids = &.{dispositions[2].claim_id} } };
+    proposal.claim_dispositions = dispositions;
+    const original = proposal.signals;
+    proposal.signals = original[1..];
+    // Coverage alone permits omitting this superseded non-token claim.
+    _ = (try f.finish(a, input, proposal, fixture.context())).valid;
+    const signals = try a.dupe(r.SignalProposal, original);
+    signals[0].content = signals[1].content;
+    proposal.signals = signals;
+    const parsed: r.Parsed = .{ .input = input, .proposal = .{ .global = proposal } };
+    const rejected = (try textRejection(a, parsed, fixture.context())).?;
+    try std.testing.expect(rejected.relations.redundant == null);
+    try std.testing.expect((try repair.authorize(a, parsed, fixture.context(), rejected)) != .automatic);
+}
+
 test "occupied sibling membership blocks impossible summary and signal selections" {
     const repair = @import("domain/reference_reconciliation_repair.zig");
     for ([_][]const u8{ "Display `Hello, World!`.\n", "Confirm `Loan renewed!`.\n" }) |source| for ([_]bool{ false, true }) |global| {
@@ -1477,7 +1710,7 @@ test "signal selection admits available and overlapping sets but blocks exhauste
         const choices = body.value.object.get("repair").?.object.get("rule").?.object.get("selection").?.array.items;
         try std.testing.expectEqual(@as(usize, 2), choices.len);
         const ids = try a.alloc(r.ClaimId, if (scenario == 0) 1 else 2);
-        for (ids, 0..) |*id, index| id.* = .{ .ordinal = @intCast(choices[index].object.get("ordinal").?.integer) };
+        for (ids, 0..) |*id, index| id.* = .{ .ordinal = @intCast(choices[index].integer) };
         const wire = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, .{ .selection = .{ .claim_ids = ids } });
         const merged = try repair.merge(a, parsed, fixture.context(), authorization, try repair.parse(a, authorization, packet, wire), null);
         for (signals, 0..) |sibling, index| if (index != selected) try std.testing.expectEqualDeep(sibling, merged.proposal.global.signals[index]);
@@ -1652,7 +1885,7 @@ test "repair progress separates restored membership from invalid inserted conten
         const original = if (global) good.proposal.global.signals[0].content else good.proposal.summary.statements[0].content;
         const insert = (try repair.authorize(a, missing, fixture.context(), (try textRejection(a, missing, fixture.context())).?)).model;
         try std.testing.expect(insert.operation == .insert);
-        const bad: r.ContentProposal = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "source-0.md" } }} } } };
+        const bad: r.ContentProposal = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } };
         const inserted = try repair.merge(a, missing, fixture.context(), insert, .{ .content = bad }, null);
         const rejection = (try textRejection(a, inserted, fixture.context())).?;
         try std.testing.expectEqual(.typed_text, rejection.issue.rule);

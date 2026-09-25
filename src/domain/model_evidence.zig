@@ -8,8 +8,15 @@ pub const Claim = struct {
     content: r.ContentProposal,
     citation_ids: []const r.CitationId,
 };
-pub const Token = struct { id: tokens.Id, kind: tokens.Kind, value: []const u8, citation_id: r.CitationId };
+pub const Token = struct { source_form: tokens.ExtractorId, id: tokens.Id, kind: tokens.Kind, value: []const u8, citation_id: r.CitationId };
 pub const Projection = struct { claims: []const Claim, citations: []const r.extraction.Citation, preserved_tokens: []const Token };
+pub const Source = struct { id: r.extraction.identity.SourceId, text: []const u8 };
+
+pub fn sources(a: std.mem.Allocator, inputs: r.evidence.Inputs) std.mem.Allocator.Error![]const Source {
+    const result = try a.alloc(Source, inputs.corpus.sources.len);
+    for (inputs.corpus.sources, result) |source, *copy| copy.* = .{ .id = source.id, .text = source.bytes };
+    return result;
+}
 pub const Statement = struct { id: r.StatementId, claim_ids: []const r.ClaimId, content: r.ContentProposal };
 pub const Summary = struct { id: r.SummaryId, partition_id: r.PartitionId, member_claim_ids: []const r.ClaimId, member_summary_ids: []const r.SummaryId, statements: []const Statement };
 pub const Signal = struct { id: r.SignalId, value: struct { claim_ids: []const r.ClaimId, citation_ids: []const r.CitationId, content: r.ContentProposal } };
@@ -84,7 +91,7 @@ pub fn project(allocator: std.mem.Allocator, items: []const r.Item) std.mem.Allo
             const token = item.claim.content.preserved_token;
             for (preserved.items) |prior| {
                 if (prior.id.ordinal == token.value.id.ordinal) break;
-            } else try preserved.append(allocator, .{ .id = token.value.id, .kind = token.value.kind, .value = token.value.raw_value.bytes, .citation_id = token.citation_id });
+            } else try preserved.append(allocator, .{ .source_form = token.value.candidate_id.extractor_id, .id = token.value.id, .kind = token.value.kind, .value = token.value.raw_value.bytes, .citation_id = token.citation_id });
         }
         for (item.citations) |citation| {
             for (citations.items) |prior| {

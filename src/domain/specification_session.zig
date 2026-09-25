@@ -4,7 +4,8 @@ const g = @import("specification_generation.zig");
 const p = @import("specification_provenance.zig");
 const packets = @import("model_input_packet.zig");
 const identity = @import("model_request_identity.zig");
-pub const unit_count = 3 + std.meta.tags(g.spec.Kind).len;
+pub const unit_count = std.meta.fields(g.Unit).len;
+pub const records_index = @intFromEnum(std.meta.Tag(g.Unit).records);
 pub const Session = struct {
     feature: @import("feature_identity.zig").FeatureId,
     reference_state: @import("reference_identity.zig").StateId,
@@ -22,13 +23,13 @@ pub fn unit(index: usize) error{InvalidSpecificationUnit}!g.Unit {
         0 => .brief,
         1 => .primary_user_story,
         2 => .entities,
-        3...unit_count - 1 => .{ .records = @enumFromInt(index - 3) },
+        records_index => .records,
         else => error.InvalidSpecificationUnit,
     };
 }
 
 pub fn initialize(feature: @import("feature_identity.zig").FeatureId, context: p.Context) Error!Session {
-    if (@import("feature_identity.zig").FeatureId.parse(feature.bytes) == null or context.references.outcome != .complete) return error.InvalidSpecificationUnit;
+    if (@import("feature_identity.zig").FeatureId.parse(feature.bytes) == null or !p.generationReady(context.references)) return error.InvalidSpecificationUnit;
     _ = try p.items(context);
     return .{ .feature = feature, .reference_state = context.inputs.corpus.state_id };
 }
@@ -69,20 +70,36 @@ pub fn packetFor(allocator: std.mem.Allocator, current: Session, context: p.Cont
     const payload = .{
         .unit = try unit(index),
         .brief = if (current.units[0]) |checked| checked.response.content.brief else null,
+        .entities = if (current.units[2]) |checked| checked.response.content.entities else null,
         .claims = projected.claims,
         .citations = projected.citations,
         .preserved_tokens = projected.preserved_tokens,
-        .signals = try @import("model_evidence.zig").signals(a, context.references.records.signals),
+        .sources = try @import("model_evidence.zig").sources(a, context.inputs),
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, scopes.items),
     };
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), a, payload);
     const selected = try unit(index);
-    return packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, .{ .bytes = switch (selected) {
+    const result = try packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, .{ .bytes = switch (selected) {
         .brief => "brief",
         .primary_user_story => "primary_user_story",
         .entities => "entities",
-        .records => |kind| @tagName(kind),
+        .records => "records",
     } });
+    defer packets.release(result);
+    var exact_available = false;
+    for (projected.preserved_tokens) |token| if (p.permitsExactKind(token.kind)) {
+        exact_available = true;
+        break;
+    };
+    return @import("reference_model_input.zig").withTextChoices(allocator, result, payload.passive_literals.len != 0, exact_available);
+}
+
+/// A value-only repair cannot borrow choices from unchanged sibling evidence.
+pub fn withSelectionChoices(a: std.mem.Allocator, base: *const packets.Packet, context: p.Context, selection: g.spec.Selection) Error!*packets.Packet {
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const choices = try p.choicesFor(arena.allocator(), context, selection);
+    return @import("reference_model_input.zig").withTextChoices(a, base, choices.passive.len != 0, choices.exact_copy.len != 0);
 }
 
 pub fn append(current: Session, checked: g.Checked) Error!Session {
@@ -92,13 +109,32 @@ pub fn append(current: Session, checked: g.Checked) Error!Session {
     next.units[current.completed] = checked;
     next.completed += 1;
     next.revision = std.math.add(u64, current.revision, 1) catch return error.InvalidSpecificationUnit;
-    // An evidence-backed non-applicable entity decision creates no entity call
-    // or invented entity. The empty family is an engine-owned structural fact.
-    if (next.completed == unit_count - 1 and next.units[2].?.response.content.entities.disposition == .not_applicable) {
-        next.units[next.completed] = .{ .unit = .{ .records = .entity }, .response = .{ .content = .{ .records = &.{} } } };
-        next.completed += 1;
-    }
     return next;
+}
+
+/// Cross-unit consistency belongs to the session, not individual content fields.
+/// The same check governs admission, completed replacements and assembly.
+pub fn checkMembership(current: Session, checked: g.Checked) Error!?@import("specification_candidate.zig").Issue {
+    if (checked.response != .content) return null;
+    const proposed = checked.response.content;
+    if (proposed != .records and proposed != .entities) return null;
+    const entities = if (proposed == .entities) proposed.entities else (current.units[2] orelse return error.InvalidSpecificationUnit).response.content.entities;
+    const records = if (proposed == .records) proposed.records else if (current.units[records_index]) |entry| entry.response.content.records else return null;
+    var count: usize = 0;
+    var first: ?usize = null;
+    for (records, 0..) |record, index| if (record.content == .entity) {
+        count += 1;
+        if (first == null) first = index;
+    };
+    if (g.spec.entityMembershipSatisfied(entities.disposition, count)) return null;
+    return .{
+        .unit = checked.unit,
+        .field = if (proposed == .records and first != null) .{ .target = .{ .record = first.? } } else .unit,
+        .rule = .entity_membership,
+        .observed = null,
+        .membership = .{ .disposition = entities.disposition, .entity_count = count },
+        .detail = if (count == 0) "The fixed entity decision requires at least one entity record; none was supplied." else "Entity records contradict the fixed not_applicable decision.",
+    };
 }
 
 pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: Session) Error!@import("specification_identity.zig").Assigned {
@@ -112,17 +148,37 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
             .invalid => return error.InvalidSpecificationUnit,
         };
         if (result.response != .content) return error.InvalidSpecificationUnit;
-        if (result.response.content == .records) try records.appendSlice(allocator, result.response.content.records);
+        if (try checkMembership(current, result) != null) return error.InvalidSpecificationUnit;
+        if (result.response.content == .records) {
+            // Canonical section order is a projection; candidate indices and
+            // repair origins retain the model's order throughout the session.
+            for (std.enums.values(g.spec.Kind)) |kind| for (result.response.content.records) |record| {
+                if (record.content == kind) try records.append(allocator, record);
+            };
+        }
     }
     const entities = current.units[2].?.response.content.entities;
-    const entity_records = current.units[unit_count - 1].?.response.content.records;
-    if ((entities.disposition == .required and entity_records.len == 0) or (entities.disposition == .not_applicable and entity_records.len != 0)) return error.InvalidSpecificationUnit;
     return @import("specification_identity.zig").assign(allocator, .{
         .display_name = current.units[0].?.response.content.brief.title,
         .primary_user_story = current.units[1].?.response.content.primary_user_story,
         .entities = entities,
         .records = records.items,
     }, current.starting_ledger);
+}
+
+/// Locate a canonical ID in the retained request order, without reordering
+/// candidate values or their per-field repair origins.
+pub fn recordIndex(current: Session, id: g.spec.Id) Error!usize {
+    if (current.completed != unit_count) return error.InvalidSpecificationUnit;
+    const checked = current.units[records_index] orelse return error.InvalidSpecificationUnit;
+    if (checked.unit != .records or checked.response != .content or checked.response.content != .records) return error.InvalidSpecificationUnit;
+    var ordinal = current.starting_ledger.next[@intFromEnum(id.kind)];
+    for (checked.response.content.records, 0..) |record, index| {
+        if (record.content != id.kind) continue;
+        if (ordinal == id.ordinal) return index;
+        ordinal = std.math.add(u32, ordinal, 1) catch return error.InvalidSpecificationUnit;
+    }
+    return error.InvalidSpecificationUnit;
 }
 
 /// A completed unit may change only through an exact authorized merge. This
@@ -138,5 +194,6 @@ pub fn replaceCompleted(allocator: std.mem.Allocator, validator: @import("typed_
     var next = current;
     next.revision = merged.revision_after;
     next.units[index] = checked;
+    if (try checkMembership(next, checked) != null) return error.InvalidSpecificationUnit;
     return next;
 }

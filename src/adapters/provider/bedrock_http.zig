@@ -3,12 +3,13 @@ const transport = @import("bedrock_transport.zig");
 const lease = @import("../../ports/provider_authorization_lease.zig");
 const pipeline = @import("../../domain/pipeline.zig");
 
-pub const Adapter = HttpAdapter(std.http.Client.request);
+const native = @import("native_model_http.zig");
+pub const Adapter = HttpAdapter(native.request);
 
 // Connection establishment is selected at compile time. Production always uses
 // the standard HTTPS opener; tests can supply an in-memory connected stream
 // without replacing HTTP serialization, response reads, or task ownership.
-pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method, std.Uri, std.http.Client.RequestOptions) std.http.Client.RequestError!std.http.Client.Request) type {
+pub fn HttpAdapter(comptime open_request: fn (*std.http.Client, std.http.Method, std.Uri, std.http.Client.RequestOptions) native.RequestError!std.http.Client.Request) type {
     return struct {
         const Self = @This();
         io: std.Io,
@@ -200,7 +201,7 @@ pub fn endpoint(allocator: std.mem.Allocator, request: transport.Request) std.me
     }
     // Region is a closed enum, not a user-supplied host or URL string.
     return std.fmt.allocPrint(allocator, "https://bedrock-runtime.{s}.amazonaws.com/model/{s}/{s}", .{
-        @tagName(request.region), encoded.written(), if (request.kind == .inference) "converse" else "count-tokens",
+        @tagName(request.region), encoded.written(), if (request.kind == .inference) "invoke" else "count-tokens",
     });
 }
 

@@ -30,6 +30,13 @@ pub const Record = struct {
 };
 pub const Placement = union(enum) { inserted: *const Record, already_present: *const Record };
 
+/// One immutable origin is shared by every current output of an application.
+/// Slot replacement and invalidation release their own references.
+const OriginOwner = struct {
+    origin: data.Origin,
+    references: usize,
+};
+
 /// Sole owner of accumulated workflow values. A node receives only a filtered
 /// immutable view; replacements become visible together after complete validation.
 pub const PipelineEnvelope = struct {
@@ -54,7 +61,7 @@ pub const PipelineEnvelope = struct {
             slot.* = null;
         }
         for (&self.origins) |*origin| {
-            if (origin.*) |value| self.allocator.destroy(value);
+            if (origin.*) |value| self.releaseOrigin(value);
             origin.* = null;
         }
         if (self.scope) |scope| scope.release();
@@ -167,13 +174,13 @@ pub const PipelineEnvelope = struct {
         }
         // Prepare lineage before committing any output. Keep the quadratic
         // authority table off the runner's stack, with explicit envelope ownership.
-        var prepared_origins: [data.key_count]?*data.Origin = @splat(null);
-        errdefer for (prepared_origins) |prepared| if (prepared) |value| self.allocator.destroy(value);
-        for (&prepared_origins, 0..) |*prepared, index| {
-            if (delta.data_writes[index] == null and delta.data_replacements[index] == null) continue;
-            prepared.* = try self.allocator.create(data.Origin);
-            prepared.*.?.* = origin;
+        var output_count: usize = 0;
+        for (delta.data_writes, delta.data_replacements) |write, replacement| {
+            if (write != null or replacement != null) output_count += 1;
         }
+        const prepared_origin: ?*OriginOwner = if (output_count == 0) null else try self.allocator.create(OriginOwner);
+        errdefer if (prepared_origin) |owner| self.allocator.destroy(owner);
+        if (prepared_origin) |owner| owner.* = .{ .origin = origin, .references = output_count };
         var prepared_records: std.ArrayList(*const Record) = .empty;
         defer prepared_records.deinit(self.allocator);
         errdefer for (prepared_records.items) |record| self.releaseRecord(record);
@@ -196,22 +203,22 @@ pub const PipelineEnvelope = struct {
             const slot = &self.slots[@intFromEnum(key)];
             values.destroy(slot.*.?);
             slot.* = null;
-            self.allocator.destroy(self.origins[@intFromEnum(key)].?);
+            self.releaseOrigin(self.origins[@intFromEnum(key)].?);
             self.origins[@intFromEnum(key)] = null;
         }
         for (&delta.data_replacements, 0..) |*slot, index| {
             if (slot.*) |value| {
                 values.destroy(self.slots[index].?);
                 self.slots[index] = value;
-                self.allocator.destroy(self.origins[index].?);
-                self.origins[index] = prepared_origins[index];
+                self.releaseOrigin(self.origins[index].?);
+                self.origins[index] = &prepared_origin.?.origin;
                 slot.* = null;
             }
         }
         for (&delta.data_writes, 0..) |*slot, index| {
             if (slot.*) |value| {
                 self.slots[index] = value;
-                self.origins[index] = prepared_origins[index];
+                self.origins[index] = &prepared_origin.?.origin;
                 slot.* = null;
             }
         }
@@ -345,6 +352,12 @@ pub const PipelineEnvelope = struct {
         values.destroy(record.value);
         self.allocator.free(record.occurrence.producer);
         self.allocator.destroy(record);
+    }
+
+    fn releaseOrigin(self: *PipelineEnvelope, origin: *data.Origin) void {
+        const owner: *OriginOwner = @fieldParentPtr("origin", origin);
+        owner.references -= 1;
+        if (owner.references == 0) self.allocator.destroy(owner);
     }
 };
 

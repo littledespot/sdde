@@ -95,6 +95,28 @@ Configuration and environment errors never consume LLM repair attempts.
   origin, original value or absence anchor, and complete dependency snapshot.
   Reconciliation loss cannot authorize inserting an already extracted claim.
 
+**Approved redundant-projection amendment (25 September 2026):** native
+reconciliation may delete one misbound extra summary statement or signal when
+its current, unique, nonempty claim selection is valid (and non-conflicting for a
+signal), every selected claim remains represented, the complete surviving
+collection passes its existing validation, and the removed content is canonically
+identical to a valid survivor under that survivor's actual claim scope. This
+extends identical-evidence redundancy; it grants no evidence reassignment or
+semantic inference. Bind the original diagnostic, old value, revision and complete
+dependencies; retain surviving values/origins and rerun normal full validation.
+No proof means no deletion. Existing retry and token accounting remain unchanged.
+
+**Approved conditional-membership amendment (25 September 2026, FIX_002 §31):**
+The specification session's existing entity decision may authorize replacement of
+one contradictory entity with a source-grounded non-entity record, retaining its
+exact evidence selection, or insertion of one missing required entity. It may not
+change that decision, delete unique content, reclassify siblings or infer semantics.
+Bind the current session, old value/absence, source/policy dependencies and stable
+record occurrence. Subsequent invalid fields of that record retain the same
+whole-record assignment and retry bound. Reuse the native repair owner, selected
+schema definitions, runner and accounting. Full unit validation, source/claim and
+exact-token coverage, semantic assessment and publication validation remain required.
+
 The repair algebra is closed:
 
 - `replace(pointer, expectedValue, replacement)`;
@@ -119,6 +141,53 @@ The repair guidance contains:
 - the fixed target pointer;
 - the exact replacement schema;
 - the instruction that unrelated fields must not be returned or changed.
+
+Unavailable passive/exact-copy diagnostics identify the rejected ID or token/citation pair and location. Existing
+native evidence choices drive both schema narrowing (§12.2) and concise corrective guidance:
+state validation failed, name unavailable alternatives, and identify source-backed text or
+permitted references as appropriate. A value-only repair preserves its exact provenance;
+it cannot borrow an exact-copy choice from another claim. A pair may exist in the supplied
+evidence yet be unavailable for the selected claims. The same choice-guidance owner handles
+both reference kinds; when neither is permitted, explicitly request source-backed text strings.
+Keep the rejected value once when
+its containing field adds no other content; retain record siblings when needed for meaning.
+This does not grant new repair targets, semantic reassessment or additional retries.
+
+Specification generation and native unit repair reuse the unit's configured purpose
+prompt (§17.3); repair must not substitute a generic instruction that drops the
+field's semantic purpose. The selected replacement schema and authorization still
+limit writable content. Recover original source meaning within that scope while
+preserving correct surrounding content. Mechanical repair acceptance does not prove
+semantic recovery; full coverage and the existing semantic review remain mandatory.
+
+**Approved coupled-evidence amendment (25 September 2026, FIX_002 §36):** when
+native `unknown_exact` validation establishes an existing, currently eligible
+token/citation pair whose supporting claim is absent from otherwise valid selected
+provenance, repair may replace one attributed singleton or one shared-provenance
+record. Preserve the record kind and all outside siblings. Invented/ineligible
+pairs, stale evidence and unlocalized omissions do not grant this authority.
+The model chooses the corrected content and evidence; the engine adds no citations
+and infers no meaning. Subsequent defects within the selected group retain that
+group's identity and bound through existing authorization, merge and retry owners.
+Once its content/evidence joins pass, independently established membership or
+redundancy defects use their existing repair authority; a resolved evidence group
+must not force a forbidden kind or prevent authorized duplicate deletion.
+Revalidate the full unit before dependent generation, then assemble and run complete
+coverage, semantic/principle review and publication/readback validation. A group
+replacement grants no completed-unit rewrite, verdict reassessment or coverage
+bypass. Existing reviewed omission and dependency-renewal rules remain unchanged.
+
+Evidence repair obtains the diagnostic and permitted references from their existing
+validator/registry, including any applicable source-line bounds. The request builder
+projects those facts; it does not revalidate citations or select supporting evidence.
+Registry/selection integrity failures remain engine failures, distinct from an
+invalid model-proposed citation. Principle citation diagnostics identify the citation
+index, rejected chunk/line field and value, using the existing selection for allowed
+IDs and the captured span for inclusive line bounds. These same facts reach repair
+and reports; they are not a second persisted authority. JSON/schema correction (§22.6) does not replace
+native evidence repair. The diagnostic and optional repeat-feedback work in
+[FIX_002 §25](../../fixes/FIX_002.md#25-principle-citation-conformance--architecture-review)
+is not authority to change retry limits, reconsider verdicts or persist new policy.
 
 Example:
 
@@ -427,3 +496,14 @@ If `task-a -> task-b -> task-a`, the diagnostic includes the cycle and selects o
 #### Scope expansion
 
 A code repair requires an undeclared second file. This is not treated as a larger code repair. It is a task/plan scope defect and blocks implementation until the upstream artifact is corrected.
+
+### Typed-content repair conformance
+
+The approved [§7.1 amendment](07-domain-representations.md#71-shared-types) uses the
+same ordered segment shape for initial business values and selected value repairs.
+An invalid reference diagnostic retains its segment location and rejected IDs;
+permitted choices derive from the fixed provenance. Literal punctuation is not a
+repair trigger. Repair keeps siblings, exact-byte obligations, dependency freshness,
+full validation, retry identities and token accounting with their existing owners.
+Native coverage repair remains limited to its existing whole-display equality proof;
+this amendment does not authorize substring guessing or rewriting meaning.

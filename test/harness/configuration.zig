@@ -3,7 +3,7 @@ const std = @import("std");
 const c = @import("contracts.zig");
 const contracts = @import("../../src/domain/llm_provider_contracts.zig");
 const registry = @import("../../src/composition/provider_model_contracts.zig").registry;
-pub const Api = enum { openai_responses, bedrock_converse };
+pub const Api = enum { openai_responses, bedrock_invoke };
 const ReasoningEffort = enum { none, minimal, low, medium, high, xhigh };
 pub const Selection = struct { api: Api, model: c.ModelId, region: ?contracts.BedrockRegion = null };
 
@@ -47,7 +47,7 @@ pub fn parse(a: std.mem.Allocator, bytes: []const u8, selection: Selection) c.Er
         .retry_delay_ms = settings.retry_delay_ms,
         .total_token_budget = settings.total_token_budget,
     };
-    if (selection.api == .bedrock_converse) {
+    if (selection.api == .bedrock_invoke) {
         const required = try bedrockTemperature(selection.model);
         if (settings.temperature != null and !std.meta.eql(settings.temperature, required)) return error.InvalidEvaluationContract;
         value.temperature = required;
@@ -62,10 +62,11 @@ pub fn validate(value: Config) c.Error!void {
     if (value.temperature) |temperature| if (!std.math.isFinite(temperature) or temperature < 0 or temperature > 2) return error.InvalidEvaluationContract;
     switch (value.api) {
         .openai_responses => if (value.region != null) return error.InvalidEvaluationContract,
-        .bedrock_converse => {
+        .bedrock_invoke => {
             const region = value.region orelse return error.InvalidEvaluationContract;
             const model = registry.resolve(.{ .bytes = "aws-bedrock" }, c.ModelId.parse(value.model).?) orelse return error.InvalidEvaluationContract;
-            if (!model.acceptsConfig(.{ .aws_bedrock = .{ .region = region } }) or !model.capabilities.inference or
+            if (!model.acceptsConfig(.{ .aws_bedrock = .{ .region = region } }) or
+                !model.capabilities.supports(.native_schema, model.capabilities.inferenceControls()) or
                 !contracts.supportsReasoningEffort(model.supported_reasoning_efforts, if (value.reasoning_effort) |effort| @tagName(effort) else null)) return error.InvalidEvaluationContract;
             if (!std.meta.eql(value.temperature, try bedrockTemperature(c.ModelId.parse(value.model).?))) return error.InvalidEvaluationContract;
         },

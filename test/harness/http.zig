@@ -68,7 +68,7 @@ pub const Adapter = struct {
         }
         var client: std.http.Client = .{ .allocator = a, .io = self.io };
         defer client.deinit();
-        var request = try client.request(.POST, comptime std.Uri.parse("https://api.openai.com/v1/responses") catch unreachable, .{
+        var request = try @import("../../src/adapters/provider/native_model_http.zig").request(&client, .POST, comptime std.Uri.parse("https://api.openai.com/v1/responses") catch unreachable, .{
             .redirect_behavior = .unhandled,
             .keep_alive = false,
             .headers = .{

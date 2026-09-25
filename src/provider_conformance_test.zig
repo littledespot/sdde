@@ -176,8 +176,8 @@ test "Bedrock captures exact serialized requests and raw responses before respon
     const cases = [_]struct { body: []const u8, status: u16 = 200, exception: ?[]const u8 = null, expected: Expected }{
         .{ .body = @import("bedrock_transport_test_fixture.zig").complete, .expected = .complete },
         .{ .body = "\xffnot-json", .expected = .malformed },
-        .{ .body = "{\"stopReason\":\"max_tokens\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}", .expected = .stopped },
-        .{ .body = "{\"stopReason\":\"unknown\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}", .expected = .rejected },
+        .{ .body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}", .expected = .stopped },
+        .{ .body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"unknown\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}", .expected = .rejected },
         .{ .body = "{\"message\":\"unparsed provider error detail\"}", .status = 429, .exception = "ThrottlingException", .expected = .http_error },
     };
     for (cases) |case| {
@@ -264,8 +264,8 @@ test "Bedrock request capture failure prevents transport for inference and token
 test "Bedrock response capture failure preserves completed stopped and rejected usage" {
     const bodies = [_][]const u8{
         @import("bedrock_transport_test_fixture.zig").complete,
-        "{\"stopReason\":\"max_tokens\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}",
-        "{\"stopReason\":\"unknown\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}",
+        "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}",
+        "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"unknown\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}",
     };
     for (bodies) |body| {
         var fixture: Fixture = undefined;
@@ -483,7 +483,7 @@ test "shared fake and Bedrock preserve provider failure cancellation and stopped
                 },
                 2 => {
                     fixture.fake_provider.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 10, .output_tokens = 2 } };
-                    fixture.wire.result = .{ .received = .{ .status = 200, .body = "{\"stopReason\":\"max_tokens\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}" } };
+                    fixture.wire.result = .{ .received = .{ .status = 200, .body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}" } };
                     var observed = try fixture.call(authorized);
                     defer observed.deinit();
                     try std.testing.expectEqual(.output_limit, observed.completed.raw_result.stopped.reason);
@@ -517,7 +517,7 @@ test "Bedrock endpoint encoding is HTTPS fixed-region with no target reinterpret
     const http = @import("adapters/provider/bedrock_http.zig");
     const value = try http.endpoint(std.testing.allocator, .{ .region = .@"ap-southeast-2", .model = contracts.registry.entries[0].model, .kind = .inference, .body = "", .api_key = "", .deadline_monotonic_ms = 1 });
     defer std.testing.allocator.free(value);
-    try std.testing.expectEqualStrings("https://bedrock-runtime.ap-southeast-2.amazonaws.com/model/openai.gpt-oss-20b-1%3A0/converse", value);
+    try std.testing.expectEqualStrings("https://bedrock-runtime.ap-southeast-2.amazonaws.com/model/openai.gpt-oss-20b-1%3A0/invoke", value);
     // Force native HTTP implementation compilation without a network request.
     _ = &http.Adapter.port;
 }
@@ -559,27 +559,20 @@ test "Bedrock projects the exact input once for both APIs without size controls 
     defer std.testing.allocator.free(count_body);
     var first = try strict.parse(std.testing.allocator, infer, .{ .maximum_depth = 32 }, false, null);
     defer first.deinit();
-    var second = try strict.parse(std.testing.allocator, count_body, .{ .maximum_depth = 32 }, false, null);
-    defer second.deinit();
-    const counted = second.value.object.get("input").?.object.get("converse").?;
-    for ([_][]const u8{ "system", "messages" }) |name| {
-        const a = try std.json.Stringify.valueAlloc(std.testing.allocator, first.value.object.get(name).?, .{});
-        defer std.testing.allocator.free(a);
-        const b = try std.json.Stringify.valueAlloc(std.testing.allocator, counted.object.get(name).?, .{});
-        defer std.testing.allocator.free(b);
-        try std.testing.expectEqualStrings(a, b);
-    }
-    try std.testing.expectEqual(@as(usize, 3), first.value.object.get("system").?.array.items.len);
+    const decoded_count = try @import("bedrock_transport_test_fixture.zig").requestBody(std.testing.allocator, count_body, .input_token_count);
+    defer std.testing.allocator.free(decoded_count);
+    try std.testing.expectEqualStrings(infer, decoded_count);
+    try std.testing.expectEqual(@as(usize, 3), first.value.object.get("messages").?.array.items[0].object.get("content").?.array.items.len);
     const framing = @import("domain/model_controls.zig").response_format_guidance;
-    try std.testing.expectEqualStrings(framing, first.value.object.get("system").?.array.items[1].object.get("text").?.string);
+    try std.testing.expectEqualStrings(framing, first.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[1].object.get("text").?.string);
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, infer, framing));
-    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, count_body, framing));
-    try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), first.value.object.get("system").?.array.items[2].object.get("text").?.string);
+    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, decoded_count, framing));
+    try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), first.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[2].object.get("text").?.string);
     try std.testing.expect(std.mem.indexOf(u8, infer, "$ref") == null);
     try std.testing.expect(std.mem.indexOf(u8, infer, "$defs") == null);
-    for ([_][]const u8{ "maxTokens", "model_request_id", "binding_id", "deadline", "Authorization", "outputConfig" }) |name| {
+    for ([_][]const u8{ "max_completion_tokens", "model_request_id", "binding_id", "deadline", "Authorization", "outputConfig" }) |name| {
         try std.testing.expect(std.mem.indexOf(u8, infer, name) == null);
-        try std.testing.expect(std.mem.indexOf(u8, count_body, name) == null);
+        try std.testing.expect(std.mem.indexOf(u8, decoded_count, name) == null);
     }
 }
 
@@ -603,14 +596,15 @@ test "Bedrock native projection retains complete guidance and registered mode wi
         defer std.testing.allocator.free(body);
         var parsed = try strict.parse(std.testing.allocator, body, .{ .maximum_depth = 32 }, false, null);
         defer parsed.deinit();
-        const format = parsed.value.object.get("outputConfig").?.object.get("textFormat").?;
+        const format = parsed.value.object.get("response_format").?;
         try std.testing.expectEqualStrings("json_schema", format.object.get("type").?.string);
-        const schema = format.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
+        const schema = try std.json.Stringify.valueAlloc(std.testing.allocator, format.object.get("json_schema").?.object.get("schema").?, .{});
+        defer std.testing.allocator.free(schema);
         try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), schema);
         try std.testing.expectEqualDeep(fixture.base.request.response_schema.root().*, (try parser.compiler().compile(fixture.base.schema_arena.allocator(), schema)).root().*);
-        try std.testing.expectEqual(@as(usize, 3), parsed.value.object.get("system").?.array.items.len);
+        try std.testing.expectEqual(@as(usize, 3), parsed.value.object.get("messages").?.array.items[0].object.get("content").?.array.items.len);
         const framing = @import("domain/model_controls.zig").response_format_guidance;
-        try std.testing.expectEqualStrings(framing, parsed.value.object.get("system").?.array.items[1].object.get("text").?.string);
+        try std.testing.expectEqualStrings(framing, parsed.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[1].object.get("text").?.string);
         try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, body, framing));
     }
     for ([_][]const u8{ "{\"type\":\"string\",\"maxLength\":100}", "{\"type\":\"integer\",\"minimum\":0,\"maximum\":4}", "{\"type\":\"array\",\"maxItems\":2,\"items\":{\"type\":\"boolean\"}}" }) |property| {
@@ -621,8 +615,9 @@ test "Bedrock native projection retains complete guidance and registered mode wi
         defer std.testing.allocator.free(native);
         var wire = try strict.parse(std.testing.allocator, native, .{ .maximum_depth = 32 }, false, null);
         defer wire.deinit();
-        try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), wire.value.object.get("system").?.array.items[2].object.get("text").?.string);
-        const projection = wire.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
+        try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), wire.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[2].object.get("text").?.string);
+        const projection = try std.json.Stringify.valueAlloc(std.testing.allocator, wire.value.object.get("response_format").?.object.get("json_schema").?.object.get("schema").?, .{});
+        defer std.testing.allocator.free(projection);
         for ([_][]const u8{ "maxLength", "minimum", "maximum", "maxItems" }) |unsupported| try std.testing.expect(std.mem.indexOf(u8, projection, unsupported) == null);
         fixture.base.request.response_guidance_mode = .prompt_only;
         fixture.base.registry_entry.json = false;
@@ -632,7 +627,7 @@ test "Bedrock native projection retains complete guidance and registered mode wi
     }
 }
 
-test "Bedrock reasoning effort is explicit registered and serialized only for inference" {
+test "Bedrock reasoning effort is explicit registered and retained in the counted body" {
     const encoding = @import("adapters/provider/bedrock_request.zig");
     for ([_]?[]const u8{ null, "low", "medium", "high" }) |effort| {
         for (contracts.registry.entries, 0..) |contract, index| {
@@ -661,16 +656,16 @@ test "Bedrock reasoning effort is explicit registered and serialized only for in
             defer std.testing.allocator.free(bytes);
             var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 32 }, false, null);
             defer parsed.deinit();
-            const additional = parsed.value.object.get("additionalModelRequestFields");
+            const additional = parsed.value.object.get("reasoning_effort");
             if (effort) |value| {
-                try std.testing.expectEqual(@as(usize, 1), additional.?.object.count());
-                try std.testing.expectEqualStrings(value, additional.?.object.get("reasoning_effort").?.string);
+                try std.testing.expectEqualStrings(value, additional.?.string);
             } else try std.testing.expect(additional == null);
             const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count);
             defer std.testing.allocator.free(counted);
-            for ([_][]const u8{ "additionalModelRequestFields", "reasoning_effort", "inferenceConfig", "maxTokens" }) |field|
-                try std.testing.expect(std.mem.indexOf(u8, counted, field) == null);
-            try std.testing.expect(std.mem.indexOf(u8, bytes, "maxTokens") == null);
+            const counted_body = try @import("bedrock_transport_test_fixture.zig").requestBody(std.testing.allocator, counted, .input_token_count);
+            defer std.testing.allocator.free(counted_body);
+            try std.testing.expectEqualStrings(bytes, counted_body);
+            try std.testing.expect(!parsed.value.object.contains("max_completion_tokens"));
         }
     }
     for ([_][]const u8{ "", "LOW", "none", "minimal", "xhigh", "low\n", "unknown" }) |invalid|
@@ -683,15 +678,15 @@ test "Bedrock response rejects malformed UTF8 identity-shaped unknown data and i
     defer fixture.deinit();
     const original = @import("bedrock_transport_test_fixture.zig").complete;
     const changes = [_][2][]const u8{
-        .{ "\"text\":\"{}\"", "\"text\":\"\xff\"" },
-        .{ "\"text\":\"{}\"", "\"text\":\"{}\",\"text\":\"{}\"" },
-        .{ "\"totalTokens\":12", "\"totalTokens\":11" },
-        .{ "\"inputTokens\":10", "\"inputTokens\":\"10\"" },
-        .{ "\"inputTokens\":10", "\"inputTokens\":18446744073709551615" },
-        .{ "\"latencyMs\":1", "\"latencyMs\":1,\"secret\":true" },
+        .{ "\"content\":\"{}\"", "\"content\":\"\xff\"" },
+        .{ "\"content\":\"{}\"", "\"content\":\"{}\",\"content\":\"{}\"" },
+        .{ "\"total_tokens\":12", "\"total_tokens\":11" },
+        .{ "\"prompt_tokens\":10", "\"prompt_tokens\":\"10\"" },
+        .{ "\"prompt_tokens\":10", "\"prompt_tokens\":18446744073709551615" },
+        .{ "\"total_tokens\":12", "\"total_tokens\":12,\"secret\":true" },
         .{ "\"role\":\"assistant\"", "\"role\":\"user\"" },
-        .{ "\"end_turn\"", "\"stop_sequence\"" },
-        .{ "\"end_turn\"", "\"unknown\"" },
+        .{ "\"stop\"", "\"stop_sequence\"" },
+        .{ "\"stop\"", "\"unknown\"" },
     };
     for (changes, 0..) |change, index| {
         const bytes = try std.mem.replaceOwned(u8, std.testing.allocator, original, change[0], change[1]);
@@ -708,45 +703,76 @@ test "Bedrock response rejects malformed UTF8 identity-shaped unknown data and i
     }
 }
 
-test "Bedrock text normalization validates reasoning metadata without making it candidate authority" {
+test "Bedrock InvokeModel separates reasoning and retains usage on invalid final content" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator, .bedrock);
+    defer fixture.deinit();
+    const cases = [_]struct { content: []const u8, missing: bool = false, expected: []const u8 = "{}" }{
+        .{ .content = "{}" },
+        .{ .content = "<reasoning>metadata</reasoning>{}" },
+        .{ .content = " \n<reasoning>metadata</reasoning> \n{}" },
+        .{ .content = "<reasoning>{}</reasoning>", .missing = true },
+        .{ .content = "<reasoning>unfinished", .missing = true },
+        .{ .content = "", .missing = true },
+        .{ .content = " \t\n", .missing = true },
+        .{ .content = "<reasoning>notes</reasoning>{broken", .expected = "{broken" },
+        .{ .content = "prefix {}", .expected = "prefix {}" },
+        .{ .content = "{\"text\":\"<reasoning>literal</reasoning>\"}", .expected = "{\"text\":\"<reasoning>literal</reasoning>\"}" },
+    };
+    for (cases) |case| {
+        const bytes = try std.json.Stringify.valueAlloc(std.testing.allocator, .{
+            .choices = .{.{ .index = @as(u32, 0), .message = .{ .role = "assistant", .content = case.content }, .finish_reason = "stop" }},
+            .usage = .{ .prompt_tokens = 10, .completion_tokens = 2, .total_tokens = 12 },
+        }, .{});
+        defer std.testing.allocator.free(bytes);
+        var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = bytes } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
+        defer observed.deinit();
+        if (case.missing) {
+            const rejected = observed.completed.raw_result.rejected;
+            try std.testing.expectEqual(.missing_final_text, rejected.reason);
+            try std.testing.expectEqual(@as(u64, 12), rejected.usage.total_tokens);
+            try std.testing.expect(rejected.request_id == fixture.base.model_request_id);
+            try std.testing.expect(rejected.binding_id.eql(fixture.base.provider_binding.bindingId()));
+        } else {
+            try std.testing.expectEqualStrings(case.expected, observed.completed.raw_result.complete.content.bytes);
+            try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.complete.usage.total_tokens);
+        }
+    }
+}
+
+test "InvokeModel content failures preserve usage and reject ambiguous answers" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator, .bedrock);
     defer fixture.deinit();
     const original = @import("bedrock_transport_test_fixture.zig").complete;
-    const cases = [_]struct { content: []const u8, usage: []const u8 = "{}", accepted: bool }{
-        .{ .content = "[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}},{\"text\":\"{}\"}]", .accepted = true },
-        .{ .content = "[{\"text\":\"{}\"},{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\",\"signature\":\"sig\"}}}]", .accepted = true },
-        .{ .content = "[{\"text\":\"{}\"}]", .accepted = true },
-        .{ .content = "[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"{}\"}}}]", .accepted = false },
-        .{ .content = "[{\"text\":\"{}\"},{\"text\":\"{}\"}]", .accepted = false },
-        .{ .content = "[{\"text\":\"{}\",\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]", .accepted = false },
-        .{ .content = "[{\"text\":\"{}\"},{\"reasoningContent\":{\"reasoningText\":{\"text\":true}}}]", .accepted = false },
-        .{ .content = "[{\"text\":\"{}\"},{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\",\"signature\":false}}}]", .accepted = false },
-        .{ .content = "[{\"text\":\"{}\"},{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\",\"authority\":true}}}]", .accepted = false },
-        .{ .content = "[{\"text\":\"{}\"},{\"toolUse\":{}}]", .accepted = false },
-        .{ .content = "[{\"text\":\"{}\"}]", .usage = "null", .accepted = false },
-        .{ .content = "[{\"text\":\"{}\"}]", .usage = "{\"webSearchRequests\":1}", .accepted = false },
-    };
-    for (cases) |case| {
-        const changed = try std.mem.replaceOwned(u8, std.testing.allocator, original, "[{\"text\":\"{}\"}]", case.content);
-        defer std.testing.allocator.free(changed);
-        const usage = try std.fmt.allocPrint(std.testing.allocator, "\"serverToolUsage\":{s},\"inputTokens\":10", .{case.usage});
-        defer std.testing.allocator.free(usage);
-        const bytes = try std.mem.replaceOwned(u8, std.testing.allocator, changed, "\"inputTokens\":10", usage);
+    for ([_]struct { old: []const u8, new: []const u8, reason: operation.ProviderContentDiagnostic = .invalid_content }{
+        .{ .old = "\"index\":0", .new = "\"index\":1" },
+        .{ .old = "\"content\":\"{}\"", .new = "\"content\":{}" },
+        .{ .old = "\"content\":\"{}\"", .new = "\"content\":null", .reason = .missing_final_text },
+        .{ .old = ",\"content\":\"{}\"", .new = "", .reason = .missing_final_text },
+        .{ .old = "\"message\":", .new = "\"logprobs\":{},\"message\":" },
+        .{ .old = "\"role\":\"assistant\"", .new = "\"role\":\"assistant\",\"unexpected\":true" },
+    }) |case| {
+        const bytes = try std.mem.replaceOwned(u8, std.testing.allocator, original, case.old, case.new);
+        defer std.testing.allocator.free(bytes);
+        try std.testing.expect(!std.mem.eql(u8, bytes, original));
+        var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = bytes } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
+        defer observed.deinit();
+        try std.testing.expectEqual(case.reason, observed.completed.raw_result.rejected.reason);
+        try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.rejected.usage.total_tokens);
+    }
+    for ([_]usize{ 0, 2 }) |count| {
+        const choice = .{ .index = @as(u32, 0), .message = .{ .role = "assistant", .content = "{}" }, .finish_reason = "stop" };
+        const choices = [_]@TypeOf(choice){ choice, choice };
+        const bytes = try std.json.Stringify.valueAlloc(std.testing.allocator, .{
+            .choices = choices[0..count],
+            .usage = .{ .prompt_tokens = 10, .completion_tokens = 2, .total_tokens = 12 },
+        }, .{});
         defer std.testing.allocator.free(bytes);
         var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = bytes } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
         defer observed.deinit();
-        if (case.accepted) {
-            try std.testing.expectEqualStrings("{}", observed.completed.raw_result.complete.content.bytes);
-            try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.complete.usage.total_tokens);
-        } else {
-            if (std.mem.eql(u8, case.usage, "{}")) {
-                const rejected = observed.completed.raw_result.rejected;
-                try std.testing.expectEqual(@as(u64, 12), rejected.usage.total_tokens);
-                try std.testing.expect(rejected.request_id == fixture.base.model_request_id);
-                try std.testing.expect(rejected.binding_id.eql(fixture.base.provider_binding.bindingId()));
-            } else try std.testing.expectEqual(.response_invalid, observed.failed.cause);
-        }
+        try std.testing.expectEqual(.invalid_content, observed.completed.raw_result.rejected.reason);
+        try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.rejected.usage.total_tokens);
     }
 }
 
@@ -788,6 +814,27 @@ test "Bedrock HTTP headers grow beyond the standard client buffer without consum
     const parsed = try std.http.Client.Response.Head.parse(head);
     try std.testing.expectEqual(.ok, parsed.status);
     try std.testing.expectEqualStrings("{}", reader.buffered());
+}
+
+test "native Bedrock inference and token counting cannot connect from tests with credentials" {
+    const http_fixture = @import("bedrock_http_test_fixture.zig");
+    var connection: http_fixture.Fixture = undefined;
+    connection.init("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}");
+    defer connection.deinit();
+    var adapter: @import("adapters/provider/bedrock_http.zig").Adapter = .{
+        .io = connection.io(),
+        .clock = connection.adapter().clock,
+        .runtime = .{},
+    };
+    for ([_]operation.ProviderOperationKind{ .inference, .input_token_count }) |kind| {
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+        const observed = try adapter.port().exchange(arena.allocator(), connection.request(kind));
+        try std.testing.expectEqual(.transport_failed, observed.failed.cause);
+        try std.testing.expectEqual(.not_sent, observed.failed.delivery);
+        try std.testing.expectEqual(@as(usize, 0), connection.connects);
+        try std.testing.expectEqual(@as(usize, 0), connection.wire.items.len);
+    }
 }
 
 test "Bedrock HTTP rejects expired deadlines and cancellation before network setup" {
@@ -943,10 +990,8 @@ test "Bedrock inference serializes zero for every registered model and omits uns
             var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 32 }, false, null);
             defer parsed.deinit();
             if (temperature_supported) {
-                const inference = parsed.value.object.get("inferenceConfig").?;
-                try std.testing.expectEqual(@as(usize, 1), inference.object.count());
-                try std.testing.expectEqualStrings("0", inference.object.get("temperature").?.number_string);
-            } else try std.testing.expect(parsed.value.object.get("inferenceConfig") == null);
+                try std.testing.expectEqualStrings("0", parsed.value.object.get("temperature").?.number_string);
+            } else try std.testing.expect(parsed.value.object.get("temperature") == null);
             const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count);
             defer std.testing.allocator.free(counted);
             try std.testing.expect(std.mem.indexOf(u8, counted, "\"temperature\"") == null);

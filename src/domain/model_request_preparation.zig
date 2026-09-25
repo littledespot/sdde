@@ -57,8 +57,18 @@ pub const Source = struct {
     model_visible_input_id: provider.ModelVisibleInputId,
     result_resource: *const compilation.CompiledResource,
     composition: ?@import("json_composition_runtime.zig").Binding = null,
+    restriction: ?*const @import("model_result_schema.zig").Restricted = null,
 
     pub fn resultSchema(self: Source) ValidationError!*const @import("model_result_schema.zig").Schema {
+        const canonical = try self.canonicalSchema();
+        if (self.restriction) |restriction| {
+            if (restriction.canonical() != canonical) return error.InvalidModelRequestSource;
+            return restriction.selected();
+        }
+        return canonical;
+    }
+
+    fn canonicalSchema(self: Source) ValidationError!*const @import("model_result_schema.zig").Schema {
         if (workflow.WorkflowResourceId.parse(self.result_resource.id.bytes) == null or
             self.result_resource.content != .result_schema) return error.InvalidModelRequestSource;
         if (self.composition) |part| {

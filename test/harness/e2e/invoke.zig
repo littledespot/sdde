@@ -47,7 +47,8 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     }
     if (trace.calls != 0) {
         report.last_model_call = trace.calls;
-        if (trace.output_written) report.last_model_output = try @import("../evidence.zig").Store.path(allocator, .generation, trace.calls, .model_output);
+        if (trace.call_records.items.len == trace.calls and trace.call_records.items[trace.calls - 1].output == .available)
+            report.last_model_output = try @import("../evidence.zig").Store.path(allocator, .generation, trace.calls, .model_output);
     }
     if (trace.failure) |failure| {
         report.status = .harness_error;

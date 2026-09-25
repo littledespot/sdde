@@ -60,33 +60,14 @@ For every model-returned path-like field, the engine executes these checks in or
   engine-rendered.
 - Renderers resolve valid nodes and tokens to engine-controlled display labels/bytes.
 
-- As defense in depth, every model-authored `LiteralText.value` and `BusinessLiteralText.value`
-  is rejected when a token bounded by whitespace/punctuation matches `(segment/)+basename`,
-  `(segment\\)+basename`, a drive/UNC/URI form, a basename ending in any compiled compound
-  extension, or any root-level basename accepted by a compiled exact/name rule or known-manifest
-  rule.
-- The last set includes extensionless or dotfile names such as `Dockerfile`, `Makefile`, and
-  `.env` when a selected preset admits them.
-- Segments use the same NFC and allowed-character policy as path normalization.
-- `BuildSupersetPathTokenGrammarAction` compiles this detector from every resolved environment
-  extension/exact/name rule, manifest/reserved name, path/URI grammar, and current identified
-  reference-manifest basename—not merely the current unit's allowed kinds—and binds the exact
-  policy/repository/reference identities and scanner version.
-- Workflow-operation/unit allowlists are applied only after detection and can never shrink the
-  lexeme detector.
-
-- The lexer never turns a token into a path.
-- An inline match produces `UNBOUND_PATH_REFERENCE`; an atomic repair may choose only an exact
-  unit-allowlisted passive literal ID, locally allowed file/source ID, or non-path replacement
-  text.
-- Unknown/stale/cross-unit passive IDs produce closed diagnostics and the model cannot register
-  one.
-- A valid passive reference or `ExactBusinessCopy` bypasses inline-literal rejection only as
-  inert display content.
-- In technical prose, a passive literal whose exact bytes resolve to a locally allowed project
-  file produces `FILE_REFERENCE_REQUIRED`; business prose may retain the display literal because
-  lexical shape cannot decide business relevance.
-- Operational use of the same bytes must independently pass normal path/file-ID authorization.
+- The shared source scanner discovers candidate filenames, paths and URIs from
+  captured source evidence; it never establishes semantic intent or operational
+  authority. Ordinary model prose is not rejected solely for matching that lexer.
+- Explicit passive/source/exact selections still require current, correctly scoped
+  evidence. Unknown, stale and cross-scope selections reject through their native
+  owners and existing repair lifecycle.
+- No prose or display node is promoted to an actionable path. Operational uses
+  must independently pass the path/file-ID and capability rules above.
 
 - Plans and tasks refer to stable `fileId` values once a path is accepted.
 - Filename repair occurs in planning, before the file record is approved.
@@ -109,7 +90,7 @@ No model-authored filename or path is written to `spec.md`, `plan.md`, `tasks.md
 
 | Stage | Model representation | Deterministic authority before rendering/writing |
 | --- | --- | --- |
-| Specify | Ordinary prose plus unit-allowlisted `PassiveLiteralReference` IDs; no inline filename/path/URI and no operational project path | Passive registry scalar/origin validation, unbound-path lexer, business-boundary rules, and optional exact existing source IDs |
+| Specify | Inert prose plus scoped passive and exact-value selections; no operational project path | Registry/token evidence validation and semantic business-boundary review |
 | Plan | Existing `fileId`; an allowed `pathIntentOptionId` plus semantic `nameSourceId`, followed by an engine-generated `pathCandidateId` for a new file; raw create-path only under explicit disabled-by-default fallback | Exact option membership/capability subset, versioned name transform, full preset kind/root/name/extension/placement rules, active-host-plus-target portability, collision/containment, path-candidate registry, and plan-file grant |
 | Tasks | Approved read/write `fileId`s and capabilities only | Exact `PlanState.fileGrants`, sole file registry, task-unit scope, and graph/coverage validation |
 | Implement | Approved `fileId`/copy `sourceId`/operation-intent ID only | Plan grant ∩ task scope ∩ current preset/global capability, descriptor/no-follow target state, and content reference validation |
@@ -124,7 +105,7 @@ Every generation unit follows the same pre-write loop:
 
 1. Build initial guidance from the exact compiled preset/policy. Normal path-intent and candidate-selection operations receive only complete bounded option/candidate ID choices plus engine-rendered labels and minimal valid examples; full mechanical path rules are included only for an explicitly authorized raw-path fallback field.
 2. Decode the response into a candidate held only in memory; no artifact or workspace write is authorized.
-3. Run schema, typed-reference, unbound-path-token, preset path, portability, authorization, and stage-specific validators.
+3. Run schema, typed-reference, preset path, portability, authorization, and stage-specific validators.
 4. If a path-related rule fails, order diagnostics and select one; build a single-pointer repair authorization containing the exact rejected value, compiled policy state, stable rule ID and typed rule value, permitted candidate IDs/format, and immutable siblings.
 5. Invoke the bounded repair operation selected explicitly by the workflow, validate authorization/revision/scope, merge only that atomic replacement, and rerun the impacted validators followed by the complete unit validator set.
 6. Repeat only through the workflow-selected repair operation and within that

@@ -39,6 +39,12 @@ emit metadata only and the removed `promptCapture` field rejects. Prompt records
 keep their registered `debug` severity and the configured event threshold.
 
 - Candidate diagnostics retain typed rule, target, rejected value and admissible scope.
+- The shared diagnostic projection distinguishes a response origin, an assembled-candidate
+  diagnostic, and missing required response provenance. Coverage validation initially
+  describes the assembled candidate; repair authorization supplies a producer only after
+  selecting a supported replacement. Observers retain the native revision, dependencies
+  and targets without inventing a call association. Missing required or ambiguous response
+  associations still reject; diagnostic attribution grants no repair authority.
 - The producing request's assignment position in the existing identity ledger, attempt ordinal
   and operation kind survive request-body release and join only to the current execution's
   operation ledger.
@@ -46,6 +52,8 @@ keep their registered `debug` severity and the configured event threshold.
   original call attribution.
 - Console, event and report projections consume this evidence without parsing model text again
   or creating repair authority.
+- Model-text capture status belongs to the captured call. A later correlation or reporting
+  error cannot relabel successfully saved text as a capture failure.
 
 ### Complete execution evidence
 

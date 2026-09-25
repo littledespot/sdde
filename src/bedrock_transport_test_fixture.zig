@@ -1,7 +1,7 @@
 const std = @import("std");
 const transport = @import("adapters/provider/bedrock_transport.zig");
 
-pub const complete = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12},\"metrics\":{\"latencyMs\":1}}";
+pub const complete = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}";
 
 pub const Wire = struct {
     calls: usize = 0,
@@ -22,7 +22,7 @@ pub const Wire = struct {
                 else => @panic("provider emitted malformed JSON"),
             };
             defer parsed.deinit();
-            std.debug.assert(parsed.value.object.contains("outputConfig") == enabled);
+            std.debug.assert(parsed.value.object.contains("response_format") == enabled);
         }
         std.debug.assert(request.api_key.len != 0);
         std.debug.assert(std.mem.indexOf(u8, request.body, request.api_key) == null);
@@ -30,3 +30,16 @@ pub const Wire = struct {
         return self.result orelse .{ .received = .{ .status = 200, .body = if (request.kind == .input_token_count) "{\"inputTokens\":10}" else self.inference_body } };
     }
 };
+
+// Inspect the actual InvokeModel body, including its CountTokens binary wrapper.
+pub fn requestBody(a: std.mem.Allocator, bytes: []const u8, kind: @import("domain/llm_provider_operation.zig").ProviderOperationKind) ![]u8 {
+    if (kind == .inference) return a.dupe(u8, bytes);
+    var parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
+    defer parsed.deinit();
+    const encoded = parsed.value.object.get("input").?.object.get("invokeModel").?.object.get("body").?.string;
+    const decoder = std.base64.standard.Decoder;
+    const body = try a.alloc(u8, try decoder.calcSizeForSlice(encoded));
+    errdefer a.free(body);
+    try decoder.decode(body, encoded);
+    return body;
+}

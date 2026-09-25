@@ -378,14 +378,6 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 - **Output:** reference evidence
 - **Responsibility:** Resolve one known and locally authorized `sourceId`.
 
-## `RejectUnboundPathTokenAction`
-
-- **Input:** one model-authored `LiteralText` or `BusinessLiteralText` segment and version-bound
-  superset path-token grammar
-- **Output:** prose-path evidence
-- **Responsibility:** Reject one inline path/URI/filename lexeme without resolving or
-  authorizing it.
-
 ## `ParseSourceAction`
 
 - **Input:** source bytes and parser ID

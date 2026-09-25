@@ -51,7 +51,7 @@ Renderers own:
 - Tagged `RawSourceScalar`/verbatim values are the underlying text exception: their validated
   UTF-8 scalar sequence bypasses NFC and is emitted through the versioned deterministic
   Markdown/JSON escape function without altering the represented value.
-- `ExactBusinessCopy` can emit such a scalar only after its token ID and citation resolve to the
+- An `exact_copy` segment can emit such a scalar only after its token ID and citation resolve to the
   same current snapshot scalar; it never carries inline model bytes.
 - Opaque copied file bytes are not rendered or Unicode-normalized; their immutable blob contract
   remains byte-exact.
@@ -81,12 +81,14 @@ Renderers own:
 - `spec.md` is reparsed and normalized at the plan boundary; its IR must pass the full
   specification gate.
 - The parser first captures each semantic field's exact UTF-8 bytes and record key.
-- When current provenance marks a leaf as `ExactBusinessCopy`, `RebindExactBusinessCopyAction`
-  compares the captured unescaped scalar byte-for-byte with the referenced preserved token and
-  reconstructs the typed variant; any difference loses the binding and produces an exact-copy
-  diagnostic.
-- Every other leaf is deterministically segmented into NFC-normalized `BusinessLiteralText` and
-  inert inline-code passive-literal spans.
+- Exact-copy segments retain token/citation identity within the ordered business value.
+  Editable-view comparison uses the current canonical segment projection and compares exact
+  source bytes; formatting or a matching substring cannot create a new binding. A changed exact
+  segment requires the existing acknowledgement/provenance path or an exact-copy diagnostic.
+- Ordinary segments are NFC-normalized prose; explicit passive and exact segments are inert
+  inline code. Adjacent display spans may share a fence while their canonical identities remain
+  separate. Code samples render as deterministic fenced blocks in reference context and are
+  excluded from business-specification exact-copy choices.
 - A known span resolves by exact `(kind, NFC bytes)` against the registry bound by the
   specification.
 - A new user-written filename/path/URI cannot become a model repair or operational path: it

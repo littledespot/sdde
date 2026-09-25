@@ -87,7 +87,8 @@ pub fn exactTargets(a: std.mem.Allocator, brief: g.Brief, candidate: spec.Identi
     return exact.toOwnedSlice(a);
 }
 fn copies(value: spec.BusinessValue, token: r.extraction.tokens.Token) bool {
-    return value == .exact_copy and value.exact_copy.token_id.ordinal == token.value.id.ordinal and value.exact_copy.citation_id.ordinal == token.citation_id.ordinal;
+    for (value.segments) |segment| if (segment == .exact_copy and segment.exact_copy.token_id.ordinal == token.value.id.ordinal and segment.exact_copy.citation_id.ordinal == token.citation_id.ordinal) return true;
+    return false;
 }
 fn recordCopies(content: spec.Content(spec.BusinessValue), token: r.extraction.tokens.Token) bool {
     switch (content) {

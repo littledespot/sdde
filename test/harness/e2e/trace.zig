@@ -18,6 +18,147 @@ const TransportOutcome = union(enum) {
     failed: transport.Failure,
 };
 
+test "production tracing retains aggregate coverage diagnostics and permits existing bounded repair" {
+    // Offline integration: only the transport returns scripted data. The real
+    // workflow, provider admission, trace, runner and publication path execute.
+    const io = std.testing.io;
+    const samples = @import("../../../src/test_fixtures/spec_generation_responses.zig");
+    const Wire = struct {
+        invocation: *@import("../../../src/composition/engine_invocation.zig").Assembly,
+        omitted: bool,
+        calls: usize = 0,
+
+        fn exchange(context: *transport.Context, a: std.mem.Allocator, _: transport.Request) transport.Error!transport.Response {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            self.calls += 1;
+            const runner = &self.invocation.pipeline_runner.?;
+            const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const body = samples.build(a, view, .{ .normalize_exact = true, .omit_exact = self.omitted }) catch |err| std.debug.panic("scripted response: {s}", .{@errorName(err)});
+            return .{ .received = .{ .status = 200, .body = try std.fmt.allocPrint(
+                a,
+                "{{\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":{s}}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}}}",
+                .{try std.json.Stringify.valueAlloc(a, body, .{})},
+            ) } };
+        }
+        fn selected(_: *anyopaque) bindings.SelectionStepOutcome {
+            return .ok;
+        }
+        fn ready(_: *anyopaque) bindings.PreparationOutcome {
+            return .ok;
+        }
+    };
+    const Mode = enum { repair, blocked, capture_failure };
+    for ([_][]const u8{ "Display `Hello, World!`.", "Display `Loan renewed!`." }) |source| for (std.meta.tags(Mode)) |mode| {
+        const omitted = mode == .blocked;
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+        const fixture = @import("fixture.zig");
+        const captured = try fixture.capture(io, a, .cwd(), choice);
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        var run = std.testing.tmpDir(.{});
+        defer run.cleanup();
+        try fixture.materialize(io, project.dir, captured);
+        try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/stories.md", .data = source });
+        var runtime: @import("../../../src/composition/root.zig").Runtime = undefined;
+        runtime.init(io, std.testing.allocator, project.dir, .{});
+        defer runtime.deinit();
+        try std.testing.expect(runtime.boot == .ready);
+        var invocation = runtime.invocation(&.{ choice.workflow_id, "--feature", choice.feature, "--reference", choice.reference }, .{
+            .snapshot = try @import("../../../src/adapters/provider/bedrock_api_key.zig").Snapshot.capture(std.testing.allocator, "isolated-credential"),
+        });
+        defer invocation.deinit();
+        const initial = invocation.bindings();
+        try std.testing.expectEqual(.ok, initial.invokeValidateOperationRegistry());
+        try std.testing.expectEqual(.ok, initial.invokeParseInvocation());
+        try std.testing.expectEqual(.ok, initial.invokeSelectWorkflow());
+        try std.testing.expectEqual(.ok, initial.invokePrepareWorkflow());
+        var trace = try Trace.init(.{ .io = io, .allocator = std.testing.allocator, .run = run.dir, .secrets = &.{"isolated-credential"} }, &invocation);
+        defer trace.close();
+        if (mode == .capture_failure) try run.dir.createDirPath(io, "evidence/generation/call-000001/model_output.txt");
+        var wire: Wire = .{ .invocation = &invocation, .omitted = omitted };
+        trace.inner_transport = .{ .context = @ptrCast(&wire), .exchange_fn = Wire.exchange };
+        runtime.provider_runtime.provider.?.aws_bedrock.transport = .{ .context = @ptrCast(&trace), .exchange_fn = Trace.exchange };
+        var prepared = trace.port().vtable.*;
+        prepared.validate_operation_registry = Wire.selected;
+        prepared.parse_invocation = Wire.selected;
+        prepared.select_workflow = Wire.selected;
+        prepared.prepare_workflow = Wire.ready;
+        const outcome = @import("../../../src/application/workflow_engine_orchestrator.zig").run(.{ .context = &trace, .vtable = &prepared });
+        try std.testing.expectEqual(mode == .capture_failure, trace.failure != null);
+        try std.testing.expectEqual(switch (mode) {
+            .repair => workflow.OutcomeTag.ok,
+            .blocked => .blocked,
+            .capture_failure => .failed,
+        }, outcome.executionStatus().?);
+        const runner = &invocation.pipeline_runner.?;
+        var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = outcome.executionStatus() };
+        try @import("observation.zig").capture(a, runner, &report);
+        try trace.correlate(a, &report);
+        try std.testing.expectEqual(wire.calls, trace.calls);
+        try std.testing.expectEqual(wire.calls, report.model_calls);
+        try std.testing.expectEqual(@as(u128, wire.calls) * 12, report.total_tokens);
+        try std.testing.expect(report.usage_complete);
+        if (mode == .capture_failure) {
+            try std.testing.expectEqual(@as(usize, 1), trace.calls);
+            try std.testing.expectEqual(.capture_failed, report.exchange_evidence.?.text);
+            try std.testing.expect(report.last_model_output == null);
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "specs/hello-world/spec.md", .{}));
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "specs/hello-world/clarify/S01.md", .{}));
+            continue;
+        }
+        const events = try run.dir.readFileAlloc(io, "events.jsonl", a, .limited(16 * 1024 * 1024));
+        var rows = std.mem.splitScalar(u8, events, '\n');
+        var aggregate: usize = 0;
+        var selected: usize = 0;
+        var merged: usize = 0;
+        var coverage_call: ?i64 = null;
+        while (rows.next()) |row| {
+            if (row.len == 0) continue;
+            const event = (try std.json.parseFromSlice(std.json.Value, a, row, .{})).value.object;
+            const step = event.get("step").?.string;
+            const operation_id = for (runner.selected.graph.authority.steps) |entry| {
+                if (std.mem.eql(u8, step, entry.id.bytes)) break entry.operation_id.bytes;
+            } else return error.UnknownTracedOperation;
+            if (std.mem.eql(u8, operation_id, "validate-specification-coverage") and std.mem.eql(u8, event.get("outcome").?.string, "invalid")) {
+                aggregate += 1;
+                coverage_call = event.get("exchange").?.object.get("call").?.integer;
+                try std.testing.expect(event.get("candidate_source").? == .null);
+                try std.testing.expect(event.get("candidate_error").?.object.contains("coverage"));
+            }
+            if (std.mem.eql(u8, operation_id, "authorize-specification-coverage-repair") and !omitted) {
+                selected += 1;
+                try std.testing.expect(event.get("candidate_source").? == .object);
+                try std.testing.expectEqual(coverage_call.?, event.get("exchange").?.object.get("call").?.integer);
+            }
+            if (std.mem.eql(u8, operation_id, "merge-specification-coverage-repair")) {
+                merged += 1;
+                try std.testing.expectEqual(coverage_call.?, event.get("exchange").?.object.get("call").?.integer);
+            }
+        }
+        try std.testing.expectEqual(@as(usize, 1), aggregate);
+        try std.testing.expectEqual(@as(usize, if (omitted) 0 else 1), selected);
+        try std.testing.expectEqual(selected, merged);
+        const spec_path = "specs/hello-world/spec.md";
+        const state_path = ".sddtoolkit/workflows/features/hello-world/state/workflow.json";
+        if (omitted) {
+            try std.testing.expectEqual(.candidate, report.candidate_error.?.attribution());
+            try std.testing.expect(report.candidate_model_call == null);
+            try std.testing.expect(std.mem.indexOf(u8, try @import("report.zig").renderMarkdown(a, report), "assembled candidate") != null);
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, spec_path, .{}));
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, state_path, .{}));
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "specs/hello-world/clarify/S01.md", .{}));
+        } else {
+            try project.dir.access(io, spec_path, .{});
+            const state = try project.dir.readFileAlloc(io, state_path, a, .limited(64 * 1024 * 1024));
+            _ = (try @import("../../../src/domain/specification_state.zig").parse(a, state, .{ .bytes = choice.feature }, runtime.boot.ready.workflows.registry().contractSource())).specified().?;
+            try std.testing.expect(report.candidate_error == null);
+        }
+    };
+}
+
 pub const Trace = struct {
     store: evidence.Store,
     invocation: *@import("../../../src/composition/engine_invocation.zig").Assembly,
@@ -29,7 +170,6 @@ pub const Trace = struct {
     last_rejection: @import("observation.zig").LastModelRejection = .{},
     sequence: usize = 0,
     current: ?operation.ProviderOperationId = null,
-    output_written: bool = false,
     last_step: ?workflow.WorkflowStepId = null,
 
     const Call = @import("observation.zig").Call;
@@ -110,7 +250,6 @@ pub const Trace = struct {
         const self: *Trace = @ptrCast(@alignCast(context));
         if (self.failure != null) return error.Cancelled;
         self.calls += 1;
-        self.output_written = false;
         self.captureRequest(request) catch |err| {
             self.fail(err);
             return error.Cancelled;
@@ -206,11 +345,13 @@ pub const Trace = struct {
         if (view.slots[@intFromEnum(invocation.schema.key)] != null) {
             const raw = try values.read(&view, invocation.schema, @import("../../../src/domain/model_invocation_result.zig").For(.inference).Result);
             if (self.current) |current| if (current.eql(raw.operationId())) {
-                if (!self.output_written) if (raw.outcome()) |outcome| {
+                if (self.call_records.items[self.calls - 1].output != .available) if (raw.outcome()) |outcome| {
                     if (outcome.* == .observation and outcome.observation == .completed and outcome.observation.completed.raw_result == .complete) {
-                        try self.store.write(.generation, self.calls, .model_output, outcome.observation.completed.raw_result.complete.content.bytes);
-                        self.output_written = true;
-                        self.call_records.items[self.calls - 1].output_available = true;
+                        self.store.write(.generation, self.calls, .model_output, outcome.observation.completed.raw_result.complete.content.bytes) catch |err| {
+                            self.call_records.items[self.calls - 1].output = .capture_failed;
+                            return err;
+                        };
+                        self.call_records.items[self.calls - 1].output = .available;
                     }
                 };
             };

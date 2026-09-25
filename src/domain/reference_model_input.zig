@@ -28,7 +28,9 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
         .exact_candidates = selected.items,
     };
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
-    return packets.create(allocator, body, .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = scope.state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } } }, .initial_generation, null);
+    const packet = try packets.create(allocator, body, .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = scope.state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } } }, .initial_generation, null);
+    defer packets.release(packet);
+    return withTextChoices(allocator, packet, payload.passive_literals.len != 0, false);
 }
 
 pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, guidance_scope: Constraint.Scope) Error!*packets.Packet {
@@ -53,12 +55,30 @@ pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.
     };
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
     const slot = try std.fmt.allocPrint(scratch, "reconciliation-{d}", .{input.partition.id.ordinal});
-    return packets.create(allocator, body, .{ .reference_global = .{ .reference_state_id = .{ .bytes = inputs.corpus.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, .{ .bytes = @tagName(input.purpose) });
+    const packet = try packets.create(allocator, body, .{ .reference_global = .{ .reference_state_id = .{ .bytes = inputs.corpus.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, .{ .bytes = @tagName(input.purpose) });
+    defer packets.release(packet);
+    return withTextChoices(allocator, packet, payload.passive_literals.len != 0, false);
+}
+
+/// Availability projects existing evidence, not semantics or a second registry.
+/// Reference text has no exact-copy variant; its owner leaves that choice alone.
+pub fn withTextChoices(a: std.mem.Allocator, packet: *const packets.Packet, passive_available: bool, exact_copy_available: bool) packets.Error!*packets.Packet {
+    var excluded: [2]@import("model_result_schema.zig").ExcludedVariant = undefined;
+    var count: usize = 0;
+    if (!passive_available) {
+        excluded[count] = .{ .kind = "passive" };
+        count += 1;
+    }
+    if (!exact_copy_available) {
+        excluded[count] = .{ .kind = "exact_copy" };
+        count += 1;
+    }
+    return packets.withExcludedVariants(a, packet, excluded[0..count]);
 }
 
 /// Use the same exact-scope resolver as typed-text validation. Display choices
 /// never grant a read, fetch, command or other operational capability.
-pub fn passiveChoices(allocator: std.mem.Allocator, registry: literals.Registry, inputs: evidence.Inputs, scopes: []const evidence.Scope) Error![]const literals.Record {
+pub fn passiveChoices(allocator: std.mem.Allocator, registry: literals.Registry, inputs: evidence.Inputs, scopes: []const evidence.Scope) literals.Error![]const literals.Record {
     var result: std.ArrayList(literals.Record) = .empty;
     for (registry.records) |record| {
         const allowed = literals.resolveIn(registry, inputs, scopes, record.id) catch |err| switch (err) {

@@ -11,7 +11,7 @@ const account = @import("actions/reference/validate_reference_extraction_account
 const text_fixture = @import("test_fixtures/reference_text.zig");
 const token_fixture = @import("test_fixtures/reference_tokens.zig");
 
-pub const no_claim = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"kind\":\"literal\",\"value\":\"This chunk contains no feature claims.\"}]},\"token_classifications\":[]}";
+pub const no_claim = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[\"This chunk contains no feature claims.\"]},\"token_classifications\":[]}";
 
 pub fn reply(allocator: std.mem.Allocator, chunk: evidence.Chunk, text: []const u8) ![]const u8 {
     const claim = .{
@@ -114,7 +114,7 @@ test "positive no claim evidence and valid citations are mandatory" {
     var ids: fixture.IdSource = .{};
     const inputs = try fixture.prepare(allocator, &ids, try ingest(allocator, "unicode.md", "Café\r\n"));
     try std.testing.expectError(error.InvalidReferenceExtraction, finish(allocator, inputs, &.{raw(inputs, 0, "{\"kind\":\"claims\",\"claims\":[],\"token_classifications\":[]}")}));
-    const empty_reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"kind\":\"literal\",\"value\":\"  \"}]},\"token_classifications\":[]}";
+    const empty_reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[\"  \"]},\"token_classifications\":[]}";
     try std.testing.expectError(error.InvalidTypedText, finish(allocator, inputs, &.{raw(inputs, 0, empty_reason)}));
     const parsed = try parse.execute(allocator, .{ .entries = &.{raw(inputs, 0, try reply(allocator, inputs.chunks.entries[0], "claim"))} });
     var entry = parsed.entries[0];
@@ -363,7 +363,7 @@ test "citation repair changes only the selected reference and retains exact diag
         var foreign = authorization;
         foreign.owner.reference_chunk.reference_state_id.bytes = "different-source-state";
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, foreign, replacement, repair_origin));
-        try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, "{\"first\":{\"ordinal\":1},\"last\":{\"ordinal\":1},\"verbatim\":\"invented\"}"));
+        try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, "{\"first\":1,\"last\":1,\"verbatim\":\"invented\"}"));
         const invalid_repair = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .citation = bad }, repair_origin);
         const rejected = (try validate.execute(a, inputs, try token_fixture.prepare(a, inputs, invalid_repair))).invalid;
         try std.testing.expectEqualDeep(repair_origin, rejected.origin.?);
@@ -423,14 +423,14 @@ test "text repair preserves siblings and exposes remaining classification defect
         defer arena.deinit();
         const a = arena.allocator();
         var ids: fixture.IdSource = .{};
-        const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", "Display `Loan renewed!`.\n"));
+        const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", "Display `Loan renewed!`. Consult requirements.md.\n"));
         const context = try text_fixture.prepare(a, inputs);
         defer context.deinit();
         const available = try token_fixture.candidates(a, inputs);
         const bad: extraction.ProposalContent = @unionInit(extraction.ProposalContent, @tagName(kind), if (kind == .business or kind == .scope_guard)
-            extraction.text.BusinessText{ .segments = &.{.{ .literal = .{ .value = "requirements.md" } }} }
+            extraction.text.BusinessText{ .segments = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} }
         else
-            extraction.text.ReferenceSemanticText{ .nodes = &.{.{ .literal = .{ .value = "requirements.md" } }} });
+            extraction.text.ReferenceSemanticText{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} });
         const good: extraction.ProposalContent = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Retain this independent claim." } }} } };
         const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id };
         var unknown = available.entries[0].id;
@@ -440,7 +440,7 @@ test "text repair preserves siblings and exposes remaining classification defect
             .{ .content = bad, .citations = &.{wholeChunk(inputs.chunks.entries[0])} },
         } } }} };
         const rejection = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
-        try std.testing.expectEqual(.unbound_path, rejection.issue.reason);
+        try std.testing.expectEqual(.invalid_scalar, rejection.issue.reason);
         try std.testing.expectEqual(@as(usize, 1), rejection.target.claim);
         try std.testing.expectEqualDeep(first, rejection.origin.?);
         const facts = try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), candidate);
@@ -457,7 +457,6 @@ test "text repair preserves siblings and exposes remaining classification defect
         try std.testing.expectEqualStrings(rejection.issue.description(), rule.get("requirement").?.string);
         const projected = try @import("domain/model_candidate_json.zig").decode(extraction.text.Issue, a, try std.json.Stringify.valueAlloc(a, rule.get("issue").?, .{}));
         try std.testing.expectEqualDeep(rejection.issue, projected);
-        try std.testing.expectEqualStrings("requirements.md", projected.path_match.?.lexeme);
         const wire = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, replacement);
         const merged = try repair.merge(a, facts, authorization, try repair.parse(a, authorization, packet, wire), correction);
         try std.testing.expectEqualDeep(candidate.entries[0].outcome.claims[0], merged.entries[0].outcome.claims[0]);
@@ -492,7 +491,7 @@ test "text repair preserves siblings and exposes remaining classification defect
         try std.testing.expect(!again.last_repair.?.changed);
         try std.testing.expectEqual(.recurring, (try repair.progress(a, text_fixture.validator, context.registry, text_fixture.safety.value(context.owner), inputs, again)).?.validated.result);
         const repeated = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, again)).invalid;
-        try std.testing.expectEqual(.unbound_path, repeated.issue.reason);
+        try std.testing.expectEqual(.invalid_scalar, repeated.issue.reason);
         try std.testing.expectEqualDeep(correction, repeated.origin.?);
         var registry = context.registry;
         registry.grammar.reference_state_id.bytes = "stale-state";
@@ -512,12 +511,12 @@ test "no-feature-claim text repair retains native failures and immutable classif
     defer context.deinit();
     const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id };
     for ([_]extraction.text.ReferenceSemanticText{
-        .{ .nodes = &.{.{ .literal = .{ .value = "https://example.invalid/context" } }} },
+        .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} },
         .{ .nodes = &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = 999 } } }} },
     }, 0..) |reason, scenario| {
         const candidate: extraction.Parsed = .{ .entries = &.{.{ .scope = scope, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = reason } }} };
         const rejection = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
-        try std.testing.expectEqual(@as(@TypeOf(rejection.issue.reason), if (scenario == 0) .unbound_path else .unknown_passive), rejection.issue.reason);
+        try std.testing.expectEqual(@as(@TypeOf(rejection.issue.reason), if (scenario == 0) .invalid_scalar else .unknown_passive), rejection.issue.reason);
         try std.testing.expect(rejection.target == .reason);
         const facts = try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), candidate);
         const authorization = try repair.authorize(a, facts, rejection);
@@ -618,7 +617,7 @@ test "composed extraction preserves producer attribution and stable native repai
         const available = try token_fixture.candidates(a, inputs);
         var unknown = available.entries[0].id;
         unknown.ordinal = 999;
-        var response = raw(inputs, 0, try token_fixture.wire(a, try reply(a, inputs.chunks.entries[0], "requirements.md"), &.{.{ .irrelevant = unknown }}));
+        var response = raw(inputs, 0, try token_fixture.wire(a, try reply(a, inputs.chunks.entries[0], "Invalid\x01text"), &.{.{ .irrelevant = unknown }}));
         response.origin = anchor;
         response.producers = .{ .content = content, .classifications = classified };
         const parsed = try parse.execute(a, .{ .entries = &.{response} });

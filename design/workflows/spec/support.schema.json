@@ -110,18 +110,9 @@
       ]
     },
     "ordinal": {
-      "type": "object",
-      "properties": {
-        "ordinal": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 4294967295
-        }
-      },
-      "required": [
-        "ordinal"
-      ],
-      "additionalProperties": false
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
     },
     "detail": {
       "type": "object",
@@ -433,25 +424,7 @@
       "type": "object",
       "properties": {
         "provenance": {
-          "type": "object",
-          "properties": {
-            "claim_ids": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/ordinal"
-              },
-              "maxItems": 4294967295,
-              "minItems": 1
-            },
-            "clarification_response_ids": {
-              "$ref": "#/$defs/ordinal_list"
-            }
-          },
-          "required": [
-            "claim_ids",
-            "clarification_response_ids"
-          ],
-          "additionalProperties": false
+          "$ref": "#/$defs/claim_provenance"
         },
         "source_ids": {
           "$ref": "#/$defs/ordinal_list"
@@ -470,7 +443,7 @@
           "const": "supported"
         },
         "provenance": {
-          "$ref": "#/$defs/provenance"
+          "$ref": "#/$defs/claim_provenance"
         },
         "source_ids": {
           "$ref": "#/$defs/ordinal_list"
@@ -650,7 +623,7 @@
           "const": "not_applicable"
         },
         "provenance": {
-          "$ref": "#/$defs/provenance"
+          "$ref": "#/$defs/claim_provenance"
         },
         "source_ids": {
           "$ref": "#/$defs/ordinal_list"
@@ -668,6 +641,27 @@
         "source_ids",
         "detail",
         "loss"
+      ],
+      "additionalProperties": false
+    },
+    "claim_provenance": {
+      "type": "object",
+      "properties": {
+        "claim_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ordinal"
+          },
+          "maxItems": 4294967295,
+          "minItems": 1
+        },
+        "clarification_response_ids": {
+          "$ref": "#/$defs/ordinal_list"
+        }
+      },
+      "required": [
+        "claim_ids",
+        "clarification_response_ids"
       ],
       "additionalProperties": false
     }

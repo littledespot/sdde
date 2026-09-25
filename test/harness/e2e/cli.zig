@@ -66,7 +66,7 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
     const config = @import("../configuration.zig").parse(allocator, captured.evaluation.config_bytes, selection) catch return error.InvalidEvaluationConfiguration;
     report.evaluation_configuration = config;
     const judge_key = try @import("../environment.zig").credential(environment, selection.api);
-    const generation_key = try @import("../environment.zig").credential(environment, .bedrock_converse);
+    const generation_key = try @import("../environment.zig").credential(environment, .bedrock_invoke);
     try std.Io.File.stdout().writeStreamingAll(io, "Generating with the selected project's configured LLM...\n");
     const secrets = [_][]const u8{ generation_key, judge_key };
     const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = allocator, .run = run, .secrets = &secrets };

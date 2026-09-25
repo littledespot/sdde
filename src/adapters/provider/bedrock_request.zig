@@ -52,75 +52,60 @@ pub const TextRequest = struct {
 pub fn encodeText(allocator: std.mem.Allocator, request: TextRequest, kind: operation.ProviderOperationKind) Error![]const u8 {
     var output: std.Io.Writer.Allocating = .init(allocator);
     defer output.deinit();
-    write(&output.writer, request, kind) catch |err| return if (err == error.InvalidRequest) error.InvalidRequest else error.OutOfMemory;
-    return output.toOwnedSlice();
+    var schema: ?std.json.Parsed(std.json.Value) = null;
+    if (request.schema == .native) schema = std.json.parseFromSlice(std.json.Value, allocator, request.schema.native.structure, .{}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequest;
+    defer if (schema) |*parsed| parsed.deinit();
+    writeInvoke(&output.writer, request, if (schema) |parsed| parsed.value else null) catch |err| return if (err == error.InvalidRequest) error.InvalidRequest else error.OutOfMemory;
+    if (kind == .inference) return output.toOwnedSlice();
+    const encoder = std.base64.standard.Encoder;
+    const encoded = try allocator.alloc(u8, encoder.calcSize(output.written().len));
+    defer allocator.free(encoded);
+    return std.json.Stringify.valueAlloc(allocator, .{ .input = .{ .invokeModel = .{ .body = encoder.encode(encoded, output.written()) } } }, .{});
 }
 
-fn write(writer: *std.Io.Writer, request: TextRequest, kind: operation.ProviderOperationKind) !void {
+// GPT-OSS InvokeModel uses the OpenAI chat-completion body. Model and stream
+// are omitted: the endpoint fixes both. Schema remains a JSON object on this wire.
+fn writeInvoke(writer: *std.Io.Writer, request: TextRequest, schema: ?std.json.Value) !void {
     var json: std.json.Stringify = .{ .writer = writer, .options = .{} };
     try json.beginObject();
-    if (kind == .input_token_count) {
-        try json.objectField("input");
-        try json.beginObject();
-        try json.objectField("converse");
-        try json.beginObject();
-    }
-    try textInput(&json, request);
-    if (kind == .input_token_count) {
-        try json.endObject();
-        try json.endObject();
-    } else {
-        if (request.reasoning_effort) |effort| {
-            try json.objectField("additionalModelRequestFields");
-            try json.write(.{ .reasoning_effort = effort });
-        }
-        if (request.temperature) |temperature| {
-            try json.objectField("inferenceConfig");
-            try json.beginObject();
-            try json.objectField("temperature");
-            try json.write(temperature.wireValue());
-            try json.endObject();
-        }
-        if (request.schema == .native) {
-            try json.objectField("outputConfig");
-            try json.write(.{ .textFormat = .{ .type = "json_schema", .structure = .{ .jsonSchema = .{
-                .schema = request.schema.native.structure,
-                .name = request.schema_name,
-            } } } });
-        }
-    }
-    try json.endObject();
-}
-
-// Both APIs receive complete acceptance guidance. Native inference also carries
-// the derived provider grammar; it adds no acceptance authority or prose.
-fn textInput(json: *std.json.Stringify, request: TextRequest) !void {
-    try json.objectField("system");
-    try json.beginArray();
-    for (request.content) |part| switch (part) {
-        .system, .guidance => |text| try json.write(.{ .text = text }),
-        .user, .evidence => {},
-    };
-    try json.write(.{ .text = @import("../../domain/model_controls.zig").response_format_guidance });
-    try json.write(.{ .text = request.schema.guidance() });
-    try json.endArray();
     try json.objectField("messages");
     try json.beginArray();
-    try json.beginObject();
-    try json.objectField("role");
-    try json.write("user");
-    try json.objectField("content");
-    try json.beginArray();
-    var has_input = false;
-    for (request.content) |part| switch (part) {
-        .user, .evidence => |text| {
-            has_input = true;
-            try json.write(.{ .text = text });
-        },
-        .system, .guidance => {},
-    };
-    if (!has_input) return error.InvalidRequest;
+    for ([_]bool{ true, false }) |system| {
+        try json.beginObject();
+        try json.objectField("role");
+        try json.write(if (system) "developer" else "user");
+        try json.objectField("content");
+        try json.beginArray();
+        var count: usize = 0;
+        for (request.content) |part| {
+            const selected = switch (part) {
+                .system, .guidance => |text| if (system) text else null,
+                .user, .evidence => |text| if (!system) text else null,
+            };
+            if (selected) |text| {
+                try json.write(.{ .type = "text", .text = text });
+                count += 1;
+            }
+        }
+        if (system) {
+            try json.write(.{ .type = "text", .text = @import("../../domain/model_controls.zig").response_format_guidance });
+            try json.write(.{ .type = "text", .text = request.schema.guidance() });
+        } else if (count == 0) return error.InvalidRequest;
+        try json.endArray();
+        try json.endObject();
+    }
     try json.endArray();
+    if (request.reasoning_effort) |effort| {
+        try json.objectField("reasoning_effort");
+        try json.write(effort);
+    }
+    if (request.temperature) |temperature| {
+        try json.objectField("temperature");
+        try json.write(temperature.wireValue());
+    }
+    if (schema) |shape| {
+        try json.objectField("response_format");
+        try json.write(.{ .type = "json_schema", .json_schema = .{ .name = request.schema_name, .schema = shape } });
+    }
     try json.endObject();
-    try json.endArray();
 }

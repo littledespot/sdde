@@ -8,10 +8,22 @@ pub const StateId = struct {
         return std.mem.eql(u8, self.bytes, other.bytes);
     }
 };
-pub const SourceId = struct { ordinal: u32 };
-pub const BlockId = struct { ordinal: u32 };
-pub const ClaimId = struct { ordinal: u32 };
-pub const CitationId = struct { ordinal: u32 };
+pub const SourceId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
+pub const BlockId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
+pub const ClaimId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
+pub const CitationId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
 pub const ChunkId = struct {
     bytes: []const u8,
 

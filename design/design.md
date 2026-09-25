@@ -178,7 +178,7 @@ references, and normative resolutions are retained in the linked sections.
 15. The same normalized engine input and the same accepted structured model payload produce byte-stable rendered artifacts.
 16. Only `spec.md` accepts free user edits as a stage artifact. A registered clarification form accepts edits only in its declared status/answer regions; generated plan/task/reference views are never parsed as authoritative state.
 17. Implementation cannot begin until the user has approved the current plan and current task graph.
-18. Every actionable project-file reference in model output is a typed `fileId` or a planning-stage `ProjectPathCandidate`; path-shaped tokens in free-text fields are invalid.
+18. Every actionable project-file reference in model output is a typed `fileId` or a planning-stage `ProjectPathCandidate`. Prose and display content are inert: punctuation or a rendered link never authorizes a file, command or network operation. The approved typed-content amendment in §7.1 supersedes blanket path-shaped prose rejection.
 19. Every datum or decision marked required by a closed schema, obligation, policy, or accepted authority has exactly one current supported resolution before its owning stage can commit.
 20. Zero resolutions, multiple non-equivalent resolutions, semantic ambiguity, conflict, staleness, or unsupported authority produces a typed clarification, explicit upstream rework, or administrative block; it never selects a default, approximation, nearest match, warning-only continuation, or caller-local exception.
 21. Clarification ownership is derived from a compiler-locked requirement-kind/decision-slot registry. A model, prompt, caller, principle, preset, or configuration value cannot choose a more convenient stage.
@@ -838,7 +838,7 @@ The new engine is ready for production evaluation when all of the following are 
       their producing calls. Explicit exact/modified replay sends one selected request
       at most once, retains an immutable linked result and grants no workflow authority.
 
-9. Fixed workflow artifact paths are engine-assigned, and every path-like model field is
+9. Fixed workflow artifact paths are engine-assigned, and every operational path field is
     structured, normalized, contained, classified, preset-validated, and authorized before it
     can enter specification, plan, tasks, or a published output.
 
@@ -848,7 +848,7 @@ The new engine is ready for production evaluation when all of the following are 
       `pathCandidateId` choices before minting a `fileId`; the option indivisibly binds project,
       environment, kind, role, templates, and capability ceiling.
     - Every actionable project-file reference in tasks/implementation is only a `fileId`,
-      renderers alone display validated paths, and unbound path-shaped prose is rejected.
+      renderers alone display validated paths. Inert prose never supplies operational authority.
 
 11. React, Node, Maven/Gradle Java, and multi-project .NET fixtures have accepted and rejected
     option-binding, registered name-transform, zero/over-limit candidate, filename, placement,
@@ -1021,7 +1021,9 @@ The new engine is ready for production evaluation when all of the following are 
 36. One shared, domain-neutral authority-reconciliation contract enumerates every
     schema/obligation/policy/accepted-authority-required datum or decision, assigns structural
     identity and a compiler-locked earliest owner, and produces exactly one validated closed
-    outcome per entry before generation and commit.
+    outcome per entry before commit. Required upstream authority gates generation;
+    execution-local drafts follow §17.3 without requiring a prior semantic verdict
+    on output fields that have not yet been generated.
 
 37. Zero support, multiple non-equivalent support, ambiguity, conflict, staleness, unsupported
     authority, and unregistered ownership can never satisfy a stage gate or enter ordinary

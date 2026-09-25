@@ -231,23 +231,37 @@ pub fn literal(w: *std.Io.Writer, bytes: []const u8) Error!void {
         },
     };
 }
-pub fn code(w: *std.Io.Writer, bytes: []const u8) Error!void {
+fn codeFenceLength(bytes: []const u8) usize {
     var longest: usize = 0;
     var run: usize = 0;
     for (bytes) |byte| {
         run = if (byte == '`') run + 1 else 0;
         longest = @max(longest, run);
     }
+    return longest + 1;
+}
+pub fn codeBlock(w: *std.Io.Writer, bytes: []const u8) Error!void {
+    const length = @max(@as(usize, 3), codeFenceLength(bytes));
+    try write(w, "\n");
+    for (0..length) |_| try write(w, "`");
+    try write(w, "\n");
+    try write(w, bytes);
+    if (bytes.len == 0 or bytes[bytes.len - 1] != '\n') try write(w, "\n");
+    for (0..length) |_| try write(w, "`");
+    try write(w, "\n\n");
+}
+pub fn code(w: *std.Io.Writer, bytes: []const u8) Error!void {
+    const length = codeFenceLength(bytes);
     const padded = bytes[0] == '`' or bytes[bytes.len - 1] == '`' or
         (bytes[0] == ' ' and bytes[bytes.len - 1] == ' ' and std.mem.trim(u8, bytes, " ").len != 0);
-    for (0..longest + 1) |_| try write(w, "`");
+    for (0..length) |_| try write(w, "`");
     if (padded) try write(w, " ");
     for (bytes) |byte| {
         w.writeByte(byte) catch return error.OutOfMemory;
         if (byte == '\n') try write(w, "  ");
     }
     if (padded) try write(w, " ");
-    for (0..longest + 1) |_| try write(w, "`");
+    for (0..length) |_| try write(w, "`");
 }
 
 const Cursor = struct {

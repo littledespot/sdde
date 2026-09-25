@@ -89,17 +89,21 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
     report.attempts = try attempts.toOwnedSlice(allocator);
     report.candidate_error = if (try @import("../../../src/application/candidate_validation_diagnostics.zig").read(&view)) |diagnostic| try diagnostic.copy(allocator) else null;
     report.repairs = try @import("../../../src/application/candidate_repair_observations.zig").read(allocator, &view);
-    if (report.candidate_error) |diagnostic| if (diagnostic.origin()) |origin| {
-        const accounting = runner.model_accounting orelse return error.MissingProviderEvidence;
-        const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
-        var found = false;
-        for (ledger.accounted_operations.items) |accounted| if (origin.matches(identities, accounted.id)) {
-            const id = accounted.id;
-            if (found) return error.MissingProviderEvidence;
-            _ = accounting.current_operations.record(id) orelse return error.MissingProviderEvidence;
-            found = true;
-        };
-        if (!found) return error.MissingProviderEvidence;
+    if (report.candidate_error) |diagnostic| switch (diagnostic.attribution()) {
+        .candidate => {},
+        .missing_response => return error.MissingProviderEvidence,
+        .response => |origin| {
+            const accounting = runner.model_accounting orelse return error.MissingProviderEvidence;
+            const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
+            var found = false;
+            for (ledger.accounted_operations.items) |accounted| if (origin.matches(identities, accounted.id)) {
+                const id = accounted.id;
+                if (found) return error.MissingProviderEvidence;
+                _ = accounting.current_operations.record(id) orelse return error.MissingProviderEvidence;
+                found = true;
+            };
+            if (!found) return error.MissingProviderEvidence;
+        },
     };
     const observation = @import("../../../src/application/provider_observation_workflow.zig");
     const information = runner.envelope.latestInformation(observation.schema.key);
@@ -177,7 +181,7 @@ pub const Call = struct {
     origin: @import("../../../src/domain/model_candidate_origin.zig").Origin,
     step: []const u8,
     usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage = null,
-    output_available: bool = false,
+    output: enum { not_projected, available, capture_failed } = .not_projected,
     raw_response_available: bool = false,
     status: ?u16 = null,
     exception: ?[]const u8 = null,
@@ -211,10 +215,14 @@ pub fn correlate(a: std.mem.Allocator, calls: []Call, report: *c.Report) !void {
             report.provider_diagnostic = last.provider_diagnostic;
             report.provider_content_diagnostic = last.provider_content_diagnostic;
         }
-        report.last_model_output = if (last.output_available) try @import("../evidence.zig").Store.path(a, .generation, calls.len, .model_output) else null;
+        report.last_model_output = if (last.output == .available) try @import("../evidence.zig").Store.path(a, .generation, calls.len, .model_output) else null;
         report.exchange_evidence = .{
             .raw_response = if (last.raw_response_available) try @import("../evidence.zig").Store.path(a, .generation, calls.len, .response) else null,
-            .text = if (report.evidence_error != null) .capture_failed else if (last.output_available) .available else if (!last.raw_response_available) .response_absent else if (report.terminal_rejection != null and report.terminal_rejection.?.kind == .token_budget) .budget_stop else .not_projected,
+            .text = switch (last.output) {
+                .available => .available,
+                .capture_failed => .capture_failed,
+                .not_projected => if (!last.raw_response_available) .response_absent else if (report.terminal_rejection != null and report.terminal_rejection.?.kind == .token_budget) .budget_stop else .not_projected,
+            },
             .status = last.status,
             .exception = if (last.exception) |bytes| try a.dupe(u8, bytes) else null,
             .request_id = if (last.request_id) |bytes| try a.dupe(u8, bytes) else null,
@@ -232,10 +240,14 @@ pub fn correlate(a: std.mem.Allocator, calls: []Call, report: *c.Report) !void {
     report.candidate_model_step = null;
     report.candidate_model_output = null;
     const diagnostic = report.candidate_error orelse return;
-    const origin = diagnostic.origin() orelse return error.MissingRequestEvidence;
+    const origin = switch (diagnostic.attribution()) {
+        .candidate => return,
+        .missing_response => return error.MissingRequestEvidence,
+        .response => |value| value,
+    };
     const index = try findCall(calls, origin);
     const source = calls[index];
-    if (!source.output_available) return error.MissingRequestEvidence;
+    if (source.output != .available) return error.MissingRequestEvidence;
     report.candidate_model_call = index + 1;
     report.candidate_model_step = try a.dupe(u8, source.step);
     report.candidate_model_output = try @import("../evidence.zig").Store.path(a, .generation, index + 1, .model_output);

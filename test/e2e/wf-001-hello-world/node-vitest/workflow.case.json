@@ -75,8 +75,20 @@
       "destination": ".sddtoolkit/workflows/spec/generation.prompt.md"
     },
     {
+      "source": "design/workflows/spec/entities.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/entities.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/records.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/records.prompt.md"
+    },
+    {
       "source": "design/workflows/spec/generation.schema.json",
       "destination": ".sddtoolkit/workflows/spec/generation.schema.json"
+    },
+    {
+      "source": "design/workflows/spec/principle.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/principle.prompt.md"
     },
     {
       "source": "design/workflows/spec/support.prompt.md",
@@ -89,10 +101,6 @@
     {
       "source": "design/workflows/spec/repair.prompt.md",
       "destination": ".sddtoolkit/workflows/spec/repair.prompt.md"
-    },
-    {
-      "source": "design/workflows/spec/repair.schema.json",
-      "destination": ".sddtoolkit/workflows/spec/repair.schema.json"
     },
     {
       "source": "test/e2e/wf-001-hello-world/node-vitest/principles/architecture.md",

@@ -7,11 +7,26 @@ pub const text = extraction.text;
 pub const Error = extraction.Error || error{InvalidReferenceReconciliation};
 pub const ClaimId = extraction.ClaimId;
 pub const CitationId = extraction.CitationId;
-pub const PartitionId = struct { ordinal: u32 };
-pub const SummaryId = struct { ordinal: u32 };
-pub const StatementId = struct { ordinal: u32 };
-pub const SignalId = struct { ordinal: u32 };
-pub const ConflictId = struct { ordinal: u32 };
+pub const PartitionId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
+pub const SummaryId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
+pub const StatementId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
+pub const SignalId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
+pub const ConflictId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
 pub const Item = struct {
     claim: extraction.Claim,
     source_id: evidence.identity.SourceId,

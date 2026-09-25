@@ -3,6 +3,15 @@
 Part of the [proposed design](../design.md#28-testing-strategy). This section retains the
 baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
 
+Automated unit, integration, fault-injection, harness and packaging checks must
+make no live LLM calls. Native model connections are disabled in test binaries;
+provider transport tests use in-memory I/O. Automated smoke subprocesses compile
+the same application entry points with native model connections disabled, and the
+production executables must also compile. Automated build steps must not depend
+on live harness execution. Live test generation and evaluation run only through
+manually selected harness commands with the approval required by §28.7;
+credentials alone never authorize a test call.
+
 ### 28.1 Action unit tests
 
 Each action is tested with immutable fixtures and fake narrow ports. Required cases include:

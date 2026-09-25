@@ -77,7 +77,7 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
   claim/citation/passive/clarification registries
 - **Output:** feature-brief evidence
 - **Responsibility:** Prove all reference or resolved-response grounding joins, business-only
-  fields, completeness, and absence of unbound path tokens.
+  fields, completeness, and current bindings for every explicit passive/exact reference.
 
 ## `AssignFeatureRequestIdAction`
 

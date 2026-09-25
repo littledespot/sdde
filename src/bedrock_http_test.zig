@@ -39,7 +39,7 @@ test "concrete HTTP sends each API once and owns a complete fragmented response"
         try fixture.expectJoined();
         try std.testing.expectEqual(@as(usize, 1), fixture.opens);
         try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, "POST "));
-        const path = if (kind == .inference) "/converse HTTP/1.1\r\n" else "/count-tokens HTTP/1.1\r\n";
+        const path = if (kind == .inference) "/invoke HTTP/1.1\r\n" else "/count-tokens HTTP/1.1\r\n";
         try std.testing.expect(std.mem.indexOf(u8, fixture.wire.items, path) != null);
         try std.testing.expect(std.mem.indexOf(u8, fixture.wire.items, "host: bedrock-runtime.ap-southeast-2.amazonaws.com\r\n") != null);
         try std.testing.expect(std.mem.endsWith(u8, fixture.wire.items, fixture.request(kind).body));

@@ -85,10 +85,25 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
             }
         },
         .one_of => |variants| {
-            if (value != .object) return reject(.type_mismatch, node);
+            const shape: schema.JsonType = switch (value) {
+                .object => .object,
+                .array => .array,
+                .string => .string,
+                .number => .number,
+                .boolean => .boolean,
+                .null_value => .null_value,
+            };
+            var has_object = false;
+            for (variants) |variant| {
+                const expected = schema.jsonType(variant).?;
+                has_object = has_object or expected == .object;
+                if (shape != .object and shape == expected) return validateValue(value, variant);
+            }
+            if (shape != .object or !has_object) return reject(.type_mismatch, node);
             const kind = value.object.get("kind") orelse return (reject(.missing_required_property, node)).property("kind");
             if (kind != .string) return (reject(.type_mismatch, node)).property("kind");
             for (variants) |variant| {
+                if (variant.* != .object) continue;
                 const declared = schema.findProperty(variant.object, "kind").?.schema.constant.string;
                 if (std.mem.eql(u8, kind.string, declared)) return validateValue(value, variant);
             }

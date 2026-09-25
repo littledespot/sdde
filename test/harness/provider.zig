@@ -12,7 +12,7 @@ pub const Identity = union(enum) {
         return switch (self) {
             .unavailable => false,
             .openai_response => |value| config.api == .openai_responses and c.id(value.response_id) and c.ModelId.parse(value.actual_model) != null,
-            .bedrock_target => |value| config.api == .bedrock_converse and config.region == value.region and std.mem.eql(u8, config.model, value.model),
+            .bedrock_target => |value| config.api == .bedrock_invoke and config.region == value.region and std.mem.eql(u8, config.model, value.model),
         };
     }
 };

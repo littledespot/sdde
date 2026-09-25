@@ -38,8 +38,6 @@ canonical specification types. **Dependencies:** none; independent of H-001.
 - The evaluator and specification reuse the same closed JSON decoder; the
   evaluator-local wire-kind validator is removed.
 
-Recorded command results: [H-007 verification](implementation-verification-history.md#h-007--specification-contract-verification).
-
 ### Required work
 
 - Align the governing design and illustrative IR with F0100's already-approved section
@@ -101,8 +99,6 @@ mechanics. Governing source: Design §12.8 and acceptance criteria 36–40.
   typed gaps, and H-012/H-013 integrate publication and the complete workflow.
 - This ticket does not claim those workflows execute yet.
 
-Recorded command results: [H-008 verification](implementation-verification-history.md#h-008--required-authority-verification).
-
 ### Required work
 
 - Build the execution-local required-slot projection only from registered schemas,
@@ -131,7 +127,7 @@ Recorded command results: [H-008 verification](implementation-verification-histo
 
 ## H-009 — Connect reference operations to model execution
 
-**Status:** Implemented; final offline verification is in the [history](implementation-verification-history.md#h-009h-010--offline-verification-2026-09-07). **Owner:** registered reference/model
+**Status:** Implemented. **Owner:** registered reference/model
 operations. **Dependencies:** reuse current generic request lifecycle work;
 H-008 is required at applicable production authority gates.
 
@@ -194,7 +190,6 @@ H-008 is required at applicable production authority gates.
 ## H-010 — Generate and validate specification content
 
 **Status:** Original content scope implemented; ADR 0015 principle assessment pending.
-Original offline verification is in the [history](implementation-verification-history.md#h-009h-010--offline-verification-2026-09-07).
 **Owner:** registered specification actions and typed IR.
 **Dependencies:** H-007–H-009.
 
@@ -260,8 +255,6 @@ Original offline verification is in the [history](implementation-verification-hi
   through canonical selection/shared review; persist exact evidence and mandatory
   Plan obligations. Cover changed principles, unrelated cases and fresh readback.
   Existing source-only generation safety remains required.
-
-Recorded command results: [H-009/H-010 verification](implementation-verification-history.md#h-009h-010--offline-verification-2026-09-07).
 
 ## H-011 — Complete specification clarification handling
 
@@ -338,7 +331,7 @@ H-010 supplies unit needs. Coordinate output handling with H-012.
 - A shared registered writer publishes prepared clarification output with exact
   captured-input rechecks and complete replacement.
 - The successful YAML branch now renders the reference sidecar, builds closed
-  `specification-state/v4`, and prepares the specification, sidecar, clarification
+  `specification-state/v5`, and prepares the specification, sidecar, clarification
   registry and canonical state together.
 - Preparation rechecks normalized Markdown and state/view joins; the writer rechecks
   captured clarification and workflow state before each replacement and writes
@@ -402,9 +395,6 @@ The shared output rules are defined once in ADR 0009:
 
 ### H-011/H-012 implementation checks
 
-- [Recorded commands and
-  results](implementation-verification-history.md#h-011h-012-implementation-checks)
-  verify the implemented increment only.
 - H-011/H-012 remain partial; unchecked acceptance criteria and live/human evaluation
   remain open.
 

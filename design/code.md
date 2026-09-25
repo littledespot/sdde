@@ -731,7 +731,7 @@ Native [content contract](../src/domain/specification.zig) interpretation:
 
 - Tagged unions encode as single-key objects, e.g.
   `{"functional_requirement":{"text":...}}`; title/story keep fixed provenance keys.
-- `BusinessValue` holds normalized typed text or `exact_copy` token/citation IDs.
+- `BusinessValue` holds ordered prose, passive-ID and `exact_copy` token/citation segments.
   Requirement wording carries modality; there is no separate modality field.
 - Parsing yields a candidate. H-008/H-010/H-012 must assemble and validate current
   reference, passive, clarification, identity and provenance state before it
@@ -1908,7 +1908,6 @@ MechanicalGuidance =
         allowedFileIds[], allowedSourceIds[]
       },
       diagnostics: {
-        inline: UNBOUND_PATH_REFERENCE,
         unknown: PASSIVE_LITERAL_UNKNOWN,
         stale: PASSIVE_LITERAL_STALE,
         crossUnit: PASSIVE_LITERAL_NOT_ALLOWED,
@@ -1951,10 +1950,7 @@ For a schema allowing only a task-edge proposal:
   "successorInternalKey": "implement-login",
   "reason": {
     "nodes": [
-      {
-        "kind": "literal",
-        "value": "Implementation must make the intended-red verification pass."
-      }
+      "Implementation must make the intended-red verification pass."
     ]
   }
 }

@@ -3407,13 +3407,16 @@ test "bounded protocol assignments continue many valid units and stop repeated o
 
 const ProtocolUnits = struct {
     next: u32 = 0,
+    exclusions: []const @import("domain/model_result_schema.zig").ExcludedVariant = &.{},
     fn select(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         self.next += 1;
         var name: [32]u8 = undefined;
         const unit: identity.ImmutableUnitOwnerId = .{ .reference_global = .{ .reference_state_id = .{ .bytes = "source" }, .unit_slot_id = .{ .bytes = std.fmt.bufPrint(&name, "partition-{d}", .{self.next}) catch return error.OperationExecutionFailed } } };
         const packet = @import("domain/model_input_packet.zig").create(std.testing.allocator, "{}", unit, .initial_generation, null) catch return error.OperationExecutionFailed;
-        return requests.publishPacket(std.testing.allocator, packet);
+        defer @import("domain/model_input_packet.zig").release(packet);
+        const narrowed = @import("domain/model_input_packet.zig").withExcludedVariants(std.testing.allocator, packet, self.exclusions) catch return error.OperationExecutionFailed;
+        return requests.publishPacket(std.testing.allocator, narrowed);
     }
 };
 
@@ -3921,8 +3924,8 @@ fn correctionAllocation(allocator: std.mem.Allocator, fixture: *Fixture, graph: 
 fn protocolReview(a: std.mem.Allocator, count: usize, misplaced: bool) ![]const u8 {
     const rows = try a.alloc([]const u8, count);
     for (rows, 1..) |*row, ordinal| {
-        const provenance = .{ .claim_ids = .{.{ .ordinal = @as(u32, 1) }}, .clarification_response_ids = [0]u32{} };
-        const sources = .{.{ .ordinal = @as(u32, 1) }};
+        const provenance = .{ .claim_ids = [1]u32{1}, .clarification_response_ids = [0]u32{} };
+        const sources = [1]u32{1};
         const detail = try std.fmt.allocPrint(a, "Evidence for requirement {d}.", .{ordinal});
         const loss = .{ .kind = "unlocalized" };
         row.* = if (misplaced)
@@ -6454,7 +6457,7 @@ test "configured parts keep admitted siblings through protocol recovery and exha
             var fixture: Fixture = undefined;
             try fixture.init(std.testing.allocator);
             defer fixture.deinit();
-            var input: ProtocolUnits = .{};
+            var input: ProtocolUnits = .{ .exclusions = &.{.{ .kind = "unavailable" }} };
             fixture.entries[fixture.entries.len - 1] = .{
                 .contract = .{ .id = "test.observe-request", .kind = .step, .requires = &.{ .assembled_json, .validated_assembled_json }, .outcomes = &.{.ok}, .side_effect = .none },
                 .binding = bindings.bind(void, null, CompositionCalls.observe),
@@ -6835,7 +6838,7 @@ test "production request capture failure records non-delivery and response captu
         var sink: ModelCaptureSink = .{ .allocator = fixture.arena.allocator(), .fail_direction = case.direction };
         runner.model_capture.logs = sink.barrier();
         try runtime.bind(&runner);
-        const body = if (case.overshoot) try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":2,\"totalTokens\":100002") else bedrock_complete_body;
+        const body = if (case.overshoot) try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12", "\"prompt_tokens\":100000,\"completion_tokens\":2,\"total_tokens\":100002") else bedrock_complete_body;
         var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = body };
         runtime.provider.?.aws_bedrock.transport = wire.port();
         var harness: Harness = .{ .runner = &runner };
@@ -7043,7 +7046,7 @@ test "production Bedrock YAML records budget overshoot and blocks another call" 
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     try runtime.bind(&runner);
-    const body = try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":2,\"totalTokens\":100002");
+    const body = try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12", "\"prompt_tokens\":100000,\"completion_tokens\":2,\"total_tokens\":100002");
     var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = body };
     runtime.provider.?.aws_bedrock.transport = wire.port();
     var harness: Harness = .{ .runner = &runner };
@@ -7084,7 +7087,7 @@ test "production Bedrock missing credentials follow explicit pre-call terminatio
     try std.testing.expectEqual(.not_invoked_authorization_failure, (try requestLedger(&runner)).record(request.id()).?.terminal_reason.?);
 }
 
-const bedrock_complete_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{\\\"answer\\\":\\\"candidate\\\"}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
+const bedrock_complete_body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"answer\\\":\\\"candidate\\\"}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}";
 
 test "production missing-answer observation retains usage and can close without correction" {
     for ([_]bool{ false, true }) |overshoot| {
@@ -7106,9 +7109,9 @@ test "production missing-answer observation retains usage and can close without 
         try std.testing.expectEqual(@as(usize, 0), runner.envelope.records.items.len);
         try runtime.bind(&runner);
         const body = if (overshoot)
-            "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":100000,\"outputTokens\":48,\"totalTokens\":100048}}"
+            "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"<reasoning>metadata</reasoning>\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":100000,\"completion_tokens\":48,\"total_tokens\":100048}}"
         else
-            "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"metrics\":{\"latencyMs\":416},\"usage\":{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}";
+            "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"<reasoning>metadata</reasoning>\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":884,\"completion_tokens\":48,\"total_tokens\":932}}";
         var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = body };
         runtime.provider.?.aws_bedrock.transport = wire.port();
         var harness: Harness = .{ .runner = &runner };
@@ -7149,7 +7152,7 @@ test "production missing-answer observation retains usage and can close without 
 }
 
 test "missing answers share protocol allowance through mixed failure and successful recovery" {
-    const missing = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"reasoning must not become an answer\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
+    const missing = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"<reasoning>reasoning must not become an answer</reasoning>\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}";
     const shapes = [_]struct { schema: []const u8, valid: []const u8 }{
         .{ .schema = schema_bytes, .valid = "{\"answer\":\"complete\"}" },
         .{ .schema = "{\"type\":\"object\",\"properties\":{\"ready\":{\"type\":\"boolean\"},\"names\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":20},\"maxItems\":3}},\"required\":[\"ready\",\"names\"],\"additionalProperties\":false}", .valid = "{\"ready\":true,\"names\":[\"first\",\"second\"]}" },
@@ -7179,9 +7182,8 @@ test "missing answers share protocol allowance through mixed failure and success
             const succeeds = sequence == 0 and attempt == 2;
             const body = if (succeeds) shape.valid else if (sequence == 2) "{}" else "{";
             wire.inference_body = if (absent) missing else try std.json.Stringify.valueAlloc(fixture.arena.allocator(), .{
-                .output = .{ .message = .{ .role = "assistant", .content = .{.{ .text = body }} } },
-                .stopReason = "end_turn",
-                .usage = .{ .inputTokens = @as(u64, 10), .outputTokens = @as(u64, 2), .totalTokens = @as(u64, 12) },
+                .choices = .{.{ .index = @as(u32, 0), .message = .{ .role = "assistant", .content = body }, .finish_reason = "stop" }},
+                .usage = .{ .prompt_tokens = @as(u64, 10), .completion_tokens = @as(u64, 2), .total_tokens = @as(u64, 12) },
             }, .{});
             try prepareProtocolAttempt(&runner, attempt != 0);
             const request = try currentRequest(&runner);
@@ -7304,4 +7306,38 @@ fn restoreCapturedSources(a: std.mem.Allocator, fragments: []const ModelCaptureS
     var archive: @import("domain/request_debugger_archive.zig").Archive = .{ .allocator = a };
     try archive.ingest(rows.items);
     return archive.calls();
+}
+
+test "detailed and consolidated requests bind native exclusions to the same canonical schema" {
+    const packets = @import("domain/model_input_packet.zig");
+    const alternatives =
+        \\{"type":"object","properties":{"value":{"oneOf":[{"type":"string","maxLength":40},{"type":"object","properties":{"kind":{"const":"reference"},"id":{"type":"integer","minimum":1,"maximum":99}},"required":["kind","id"],"additionalProperties":false}]}},"required":["value"],"additionalProperties":false}
+    ;
+    for ([_]bool{ false, true }) |consolidated| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const a = fixture.arena.allocator();
+        const no_resource = try std.mem.replaceOwned(u8, a, yaml, ", input: input.txt", "");
+        const no_input = try std.mem.replaceOwned(u8, a, no_resource, ", input: input", "");
+        const graph = try fixture.compileWithAssets(if (consolidated) try consolidatedPreparation(a, no_input) else no_input, alternatives, false);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        const base = try packets.create(std.testing.allocator, "{\"references\":[]}", .workflow_step, .initial_generation, null);
+        defer packets.release(base);
+        const restricted = try packets.withExcludedVariants(std.testing.allocator, base, &.{.{ .kind = "reference" }});
+        defer packets.release(restricted);
+        const packet = try packets.withContext(bool, std.testing.allocator, restricted, "retained", true);
+        runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.ok, harness.run());
+        const request = (try currentRequest(&runner)).prepared().?;
+        try std.testing.expect(std.mem.indexOf(u8, request.response_schema.modelBytes(), "reference") == null);
+        try std.testing.expect(std.mem.indexOf(u8, request.response_schema.bytes(), "reference") != null);
+        const valid = try std.json.parseFromSlice(std.json.Value, a, "{\"value\":\"Ordinary supported prose\"}", .{});
+        const invalid = try std.json.parseFromSlice(std.json.Value, a, "{\"value\":{\"kind\":\"reference\",\"id\":1}}", .{});
+        try std.testing.expect(payload_validation.validateValue(@import("domain/model_envelope.zig").value(&valid.value), request.response_schema.root()) == null);
+        try std.testing.expect(payload_validation.validateValue(@import("domain/model_envelope.zig").value(&invalid.value), request.response_schema.root()) != null);
+        try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+    }
 }

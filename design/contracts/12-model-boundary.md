@@ -113,11 +113,25 @@ Each generation request contains only what the current unit needs:
 
 - For display prose, the packet also carries `PassiveLiteralGuidance` selected from the exact
   registry and current unit evidence.
+- Source-document names remain citation metadata. Only captured source-body occurrences
+  make filenames available as passive content choices; semantic relevance still requires review.
+- Native availability facts may exclude unavailable tagged alternatives from the selected
+  compiled schema (approved 25 September 2026). The existing schema owner derives a narrower
+  view; it never adds fields, values or semantic decisions. Initial reference/specification
+  requests and their repairs omit `passive` when their evidence permits no passive references.
+  Specification requests omit `exact_copy` when no token/citation choice is available;
+  fixed-provenance repairs use the pinned selection, not unrelated sibling evidence.
+  Nonempty sets still require native ID, scope and token/citation-pair validation.
+- Packet context/repair projections retain these facts out of band. Request preparation binds
+  the derived schema once; provider serialization, payload validation and protocol corrections
+  use that same view. Composition accepts only its exact part schema or a restriction derived
+  from that schema, then validates the complete assembled candidate. No alternate schema
+  configuration, retry owner or persisted policy is introduced.
 - It says explicitly that passive IDs may be selected only at the listed presentation field
   pointers and authorize no read, write, copy, command, import, context request, or URI fetch.
 - Operational references use only locally allowed file/source IDs.
-- The path-token grammar still scans ordinary literal segments, so a nano model cannot bypass
-  the distinction by copying the display bytes inline.
+- Prose and references follow the shared typed-content contract in §7.1. Literal
+  punctuation does not select a resource or grant operational authority.
 
 - A dependency-capable plan unit receives `DependencyGuidance` from the exact
   `DependencyPolicyRegistry`: allowed target project/manifest IDs, ecosystems, registry-source
@@ -153,6 +167,16 @@ Raw whole-repository listings, principle categories not selected by the configur
 - The engine validates trusted call association separately from model-data decoding and
   validation.
 - Native schema compliance, an echoed ID or a model claim never proves correctness or authority.
+
+- The approved ADR 0006 compact-wire amendment permits nested alternatives proven
+  disjoint by JSON type. Same-type object alternatives retain distinct `kind` tags;
+  repeated primitive types and overlapping alternatives reject before invocation.
+- The shared candidate codec maps declared ordinal wrappers to integers, literal
+  segments to strings and normalized business values to segment arrays. Explicit
+  passive/source references and exact-copy selections remain typed candidates.
+  A selected scalar/array repair stays inside a closed `value` object envelope.
+  This lossless representation is shared by initial output, evidence and repairs;
+  native validation and stored canonical formats do not change.
 
 - Allowed variants come from the workflow-declared result schema and selected generic operation.
 - A generation operation cannot return a patch; a repair operation cannot return a whole
@@ -534,10 +558,20 @@ authority fields to force the two producers into identical internal shapes.
 Evidence-selection repair selects its response shape from the retained native
 evidence minimum. A `claim_required` rule selects the canonical named shape with
 nonempty `claim_ids`; optional and claim-or-source rules retain the generic shape.
+Initial and inserted `supported`/`not_applicable` findings reference that same
+nonempty provenance shape. Conformance tests compare configured shapes with the
+native evidence minimum; schemas do not create a separate evidence policy.
 The same evidence owner supplies concise guidance to initial review, insertion
 and repair: `not_applicable` still needs supporting claims. Native validation and
 persisted readback retain eligibility, exact-set and current-provenance checks;
 schema cardinality never establishes semantic support or selects citations.
+Review insertion and replacement reuse the initial guidance for the **same
+assessment purpose**, returning only the authorized replacement and retaining
+any existing verdict. Shared orchestration does not require source and principle
+assessment to share semantic instructions; §17.3.1 owns the policy boundary. A
+`missing_finding` diagnostic identifies an absent assessment, not missing source
+information or candidate content. Insertion must assess the supplied content;
+it must not infer a candidate omission from the mechanical diagnostic.
 For entity applicability, the shared requirement description asks whether required
 business behavior needs entities. An entity heading or explicit declaration of
 absence is unnecessary; displayed values alone do not establish business entities.
@@ -584,9 +618,12 @@ authenticated answer acceptance and protected history (§23.2).
 
 - Authority completeness is a shared engine contract, not behavior duplicated in prompts or
   implemented separately for particular domains.
-- Before generation and again before stage commit, the engine deterministically builds an
-  `AuthorityRequirementLedger` from every required field, decision slot, obligation, policy
-  predicate, and accepted upstream authority applicable to that stage.
+- Required upstream authority is validated before generation. Execution-local
+  drafting need not establish semantic support for output fields before they exist:
+  [§17.3](17-specify.md#173-llm-work) defines Specify's draft-first sequence.
+  Before stage commit, the engine builds and resolves the complete
+  `AuthorityRequirementLedger` from every required field, decision slot, obligation,
+  policy predicate and accepted upstream authority applicable to that stage.
 - Requiredness is closed: it comes only from a versioned schema, compiler-locked
   ownership/reconciliation policy, accepted canonical record, or explicit obligation.
 - The engine does not ask about every fact that could exist, and the model cannot remove a
@@ -724,7 +761,7 @@ Source-only evidence is valid only for loss locations that permit it. A selected
 signal/conflict requires its exact producer claims; disposition loss may use its
 claim or source-only evidence. An unlocalized finding retains ordinary eligibility.
 Native source-review evidence retains `loss`, so readback repeats those same joins;
-principle evidence has no loss location. `specification-state/v4` rejects previous
+principle evidence has no loss location. `specification-state/v5` rejects previous
 snapshot contracts rather than silently supplying the missing diagnostic binding.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 

@@ -274,6 +274,8 @@ const Compiler = struct {
         return result;
     }
     fn projectVariants(self: Compiler, variants: []const *const schema.Node, path: Pointer, part: usize) Error![]const Projection {
+        // Type-disjoint values must stay whole; only tagged objects can be split.
+        for (variants) |variant| if (variant.* != .object) return invalid();
         const discriminator = try self.extend(path, "kind");
         const producer = self.owner(discriminator) orelse return invalid();
         const groups = try self.allocator.alloc([]const Projection, variants.len);

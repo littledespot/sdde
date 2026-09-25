@@ -88,7 +88,7 @@ pub fn authorize(a: std.mem.Allocator, current: sessions.Session, context: p.Con
 }
 fn matching(a: std.mem.Allocator, context: p.Context, checked: g.Checked, target: ValueTarget, rejection: coverage.Rejection) Error!?ValueTarget {
     const value = try candidates.attributedValue(.canonical, checked.response, target.subject, target.field);
-    if (value.value != .normalized or !r.contains(r.ClaimId, value.provenance.claim_ids, rejection.claim_id)) return null;
+    if (!r.contains(r.ClaimId, value.provenance.claim_ids, rejection.claim_id)) return null;
     // Reuse the canonical text projector, including passive references and any
     // literal segmentation. Equality proves no business bytes are discarded.
     const scalar = try @import("specification_projection.zig").scalar(a, context, value);
@@ -107,7 +107,7 @@ pub fn merge(a: std.mem.Allocator, validator: @import("typed_text.zig").Validato
     if (target.part != .value or authorization.rule != .coverage) return error.InvalidSpecificationCoverageRepair;
     if (authorization.rule.coverage.issue != .missing_exact_copy) return error.InvalidSpecificationCoverageRepair;
     const token = authorization.rule.coverage.issue.missing_exact_copy;
-    return mergeChecked(a, validator, context, facts, authorization, .{ .value = .{ .exact_copy = .{ .token_id = token.value.id, .citation_id = token.citation_id } } }, null);
+    return mergeChecked(a, validator, context, facts, authorization, .{ .value = .{ .segments = &.{.{ .exact_copy = .{ .token_id = token.value.id, .citation_id = token.citation_id } }} } }, null);
 }
 
 fn reviewedFacts(a: std.mem.Allocator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, support: Support) Error!Facts {
@@ -148,13 +148,21 @@ pub fn authorizeOmission(a: std.mem.Allocator, validator: @import("typed_text.zi
     }
     return error.UnsafeSpecificationOmissionRepair;
 }
+/// The reviewed requirement owns insertion kind, independently of request grouping.
+pub fn omissionRecordKind(id: authority.Id) Error!g.spec.Kind {
+    if (id.kind != .feature_intent or id.unit != .feature or authority.policy(id) == null) return error.UnsafeSpecificationOmissionRepair;
+    return switch (id.slot) {
+        .acceptance_criteria, .scenario_coverage => .acceptance_criterion,
+        .functional_requirements => .functional_requirement,
+        else => error.UnsafeSpecificationOmissionRepair,
+    };
+}
 fn omissionTarget(content: g.spec.IdentifiedContent, id: authority.Id, current: sessions.Session) Error!Target {
     if (id.kind != .feature_intent or authority.policy(id) == null) return error.UnsafeSpecificationOmissionRepair;
     switch (id.unit) {
         .feature => return switch (id.slot) {
             .acceptance_criteria, .scenario_coverage, .functional_requirements => insert: {
-                const kind: g.spec.Kind = if (id.slot == .functional_requirements) .functional_requirement else .acceptance_criterion;
-                const index = 3 + @as(usize, @intFromEnum(kind));
+                const index = sessions.records_index;
                 break :insert .{ .unit = index, .part = .{ .record = current.units[index].?.response.content.records.len } };
             },
             .display_name => .{ .unit = 0, .part = .{ .value = .{ .subject = .title, .field = .value } } },
@@ -164,9 +172,7 @@ fn omissionTarget(content: g.spec.IdentifiedContent, id: authority.Id, current: 
             else => error.UnsafeSpecificationOmissionRepair,
         },
         .record => |selected| {
-            var index: usize = 0;
             for (content.records) |record| {
-                if (record.id.kind != selected.kind) continue;
                 if (std.meta.eql(record.id, selected)) {
                     const field: candidates.ValueField = if (id.slot == .relationship) .{ .relationship = std.math.sub(usize, id.member, 1) catch return error.UnsafeSpecificationOmissionRepair } else field: {
                         inline for (std.meta.fields(candidates.ValueField)) |value| {
@@ -174,9 +180,8 @@ fn omissionTarget(content: g.spec.IdentifiedContent, id: authority.Id, current: 
                         }
                         return error.UnsafeSpecificationOmissionRepair;
                     };
-                    return .{ .unit = 3 + @as(usize, @intFromEnum(selected.kind)), .part = .{ .value = .{ .subject = .{ .record = index }, .field = field } } };
+                    return .{ .unit = sessions.records_index, .part = .{ .value = .{ .subject = .{ .record = try sessions.recordIndex(current, selected) }, .field = field } } };
                 }
-                index += 1;
             }
             return error.UnsafeSpecificationOmissionRepair;
         },
@@ -194,9 +199,15 @@ pub fn omissionPacket(a: std.mem.Allocator, current: sessions.Session, context: 
     defer packets.release(base);
     const contextual = try packets.withContext(g.spec.IdentifiedContent, a, base, "candidate", candidate);
     defer packets.release(contextual);
-    const definition = if (authorization.target.part == .record) try std.fmt.allocPrint(a, "record_{s}", .{@tagName((try sessions.unit(authorization.target.unit)).records)}) else "value";
+    const definition = if (authorization.target.part == .record) try std.fmt.allocPrint(a, "repair_record_{s}", .{@tagName(try omissionRecordKind(authorization.rule.omission.requirement))}) else "value";
     defer if (authorization.target.part == .record) a.free(definition);
-    return atomic.packet(a, authorization, contextual, .{ .bytes = definition }, current.units[authorization.target.unit].?.origins.at(switch (authorization.target.part) {
+    const narrowed = if (authorization.target.part == .value) narrow: {
+        const target = authorization.target.part.value;
+        const value = try candidates.attributedValue(.canonical, current.units[authorization.target.unit].?.response, target.subject, target.field);
+        break :narrow try sessions.withSelectionChoices(a, contextual, context, .{ .claim_ids = value.provenance.claim_ids, .clarification_response_ids = value.provenance.clarification_response_ids });
+    } else try packets.withExcludedVariants(a, contextual, contextual.excludedVariants());
+    defer packets.release(narrowed);
+    return atomic.packet(a, authorization, narrowed, .{ .bytes = definition }, current.units[authorization.target.unit].?.origins.at(switch (authorization.target.part) {
         .record => .unit,
         .value => |field| .{ .target = .{ .value = .{ .subject = field.subject, .field = field.field } } },
     }));
@@ -229,6 +240,7 @@ fn mergeChecked(a: std.mem.Allocator, validator: @import("typed_text.zig").Valid
         },
         .record => |index| record: {
             if (authorization.rule != .omission or replacement != .record or response.content != .records or index != response.content.records.len) return error.InvalidSpecificationCoverageRepair;
+            if (std.meta.activeTag(replacement.record.content) != try omissionRecordKind(authorization.rule.omission.requirement)) return error.InvalidSpecificationCoverageRepair;
             try r.sameSet(r.ClaimId, authorization.rule.omission.review.?.provenance.claim_ids, replacement.record.provenance.claim_ids);
             const added = try p.checkRecord(.model, a, validator, context, replacement.record);
             const records = try a.alloc(g.spec.RecordProposal, index + 1);

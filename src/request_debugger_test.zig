@@ -156,7 +156,7 @@ test "response inspection reuses extraction and reports the exact schema path an
     var fixture: Fixture = undefined;
     try fixture.init(a);
     defer fixture.environment.deinit();
-    const response = try std.json.Stringify.valueAlloc(a, .{ .output = .{ .message = .{ .role = "assistant", .content = .{.{ .text = "{\"answer\":null}" }} } }, .stopReason = "end_turn", .usage = .{ .inputTokens = 10, .outputTokens = 2, .totalTokens = 12 } }, .{});
+    const response = try std.json.Stringify.valueAlloc(a, .{ .choices = .{.{ .index = @as(u32, 0), .message = .{ .role = "assistant", .content = "{\"answer\":null}" }, .finish_reason = "stop" }}, .usage = .{ .prompt_tokens = 10, .completion_tokens = 2, .total_tokens = 12 } }, .{});
     const checked = try fixture.provider.provider().inspect(a, description, response);
     try std.testing.expectEqual(.valid, checked.extraction);
     try std.testing.expectEqual(.valid, checked.json);
@@ -307,7 +307,7 @@ test "replay retains redacted partial errors and native schema modifications wit
     const replacement = "{\"type\":\"object\",\"properties\":{\"updated\":{\"type\":\"boolean\"}},\"required\":[\"updated\"],\"additionalProperties\":false}";
     const modified = try fixture.replay().replay(a, replayIdentity("b" ** 32, 2), parent, .{ .call = 0, .mode = .modified, .edit = .{ .content = description.content, .schema = replacement } });
     try std.testing.expect(std.mem.indexOf(u8, modified.request.body, "updated") != null);
-    try std.testing.expect(std.mem.indexOf(u8, modified.request.body, "outputConfig") != null);
+    try std.testing.expect(std.mem.indexOf(u8, modified.request.body, "response_format") != null);
     try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
 }
 
@@ -353,7 +353,7 @@ test "native JSON diagnostic probes retain controls and inspect normalized and v
             try std.testing.expectEqualStrings(description.reasoning_effort.?, result.request.description.reasoning_effort.?);
             try std.testing.expectEqual(.native_schema, result.request.description.response_mode);
             const wire = try std.json.parseFromSlice(std.json.Value, a, result.request.body, .{});
-            const native_bytes = wire.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
+            const native_bytes = try std.json.Stringify.valueAlloc(a, wire.value.object.get("response_format").?.object.get("json_schema").?.object.get("schema").?, .{});
             const native = try std.json.parseFromSlice(std.json.Value, a, native_bytes, .{});
             try std.testing.expectEqual(probe.union_root, native.value.object.contains("anyOf"));
             if (!probe.union_root) {
@@ -684,7 +684,7 @@ test "selected request schemas survive capture and graph release without whole-s
 }
 
 fn debugResponse(a: std.mem.Allocator, content: []const u8) ![]const u8 {
-    return std.json.Stringify.valueAlloc(a, .{ .output = .{ .message = .{ .role = "assistant", .content = .{.{ .text = content }} } }, .stopReason = "end_turn", .usage = .{ .inputTokens = 10, .outputTokens = 2, .totalTokens = 12 } }, .{});
+    return std.json.Stringify.valueAlloc(a, .{ .choices = .{.{ .index = @as(u32, 0), .message = .{ .role = "assistant", .content = content }, .finish_reason = "stop" }}, .usage = .{ .prompt_tokens = 10, .completion_tokens = 2, .total_tokens = 12 } }, .{});
 }
 
 fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_result_schema_compiler.zig").Compiler, shape: usize) !struct { schema: *const @import("domain/model_result_schema.zig").Schema, response: []const u8 } {
@@ -710,9 +710,9 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
     const canonical = try compiler.compile(a, raw);
     const plan = try compiler.compileComposition(a, config, canonical);
     if (shape == 6) return .{ .schema = try plan.selectSchema(0, &.{}), .response =
-    \\{"kind":"claims","claims":[{"content":{"kind":"business","segments":[{"kind":"literal","value":"The application must start successfully."},{"kind":"literal","value":"When started, the application must display `Hello, World!`."},{"kind":"literal","value":"Should also output date and time in UTC."}]},"citations":[{"first":{"ordinal":5},"last":{"ordinal":7}}]},{"content":{"kind":"technical","nodes":[{"kind":"literal","value":"The application displays the string `Hello, World!`."},{"kind":"literal","value":"The application outputs the current date and time in UTC."}]},"citations":[{"first":{"ordinal":6},"last":{"ordinal":7}}]}]}
+    \\{"kind":"claims","claims":[{"content":{"kind":"business","segments":["The application must start successfully.","When started, the application must display `Hello, World!`.","Should also output date and time in UTC."]},"citations":[{"first":5,"last":7}]},{"content":{"kind":"technical","nodes":["The application displays the string `Hello, World!`.","The application outputs the current date and time in UTC."]},"citations":[{"first":6,"last":7}]}]}
     };
-    const content = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[{\"kind\":\"literal\",\"value\":\"No feature behavior.\"}]}}";
+    const content = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[\"No feature behavior.\"]}}";
     const prior = try std.json.parseFromSlice(std.json.Value, a, content, .{});
     if (shape == 2) return .{ .schema = try plan.selectSchema(0, &.{}), .response = content };
     if (shape == 3) return .{ .schema = try plan.selectSchema(1, &.{.{ .part = 0, .value = prior.value }}), .response = "{\"token_classifications\":[]}" };

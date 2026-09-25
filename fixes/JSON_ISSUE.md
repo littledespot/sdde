@@ -5,10 +5,30 @@ the user subsequently approved the narrow, logged normalization described below.
 The provider defect and live workflow effectiveness remain unproven. This work
 uses the existing [Chunk 18 owners](IMP_001.md#per-model-json-output--21-september-2026).
 
+## InvokeModel-only amendment — 25 September 2026
+
+The user selected InvokeModel as the sole Bedrock inference API. Generation,
+correction, debugger replay and grading share the existing request/response
+owners. Native mode sends `response_format.type: "json_schema"` with the selected
+schema object; local validation, bounded retries and token accounting remain
+mandatory. The old codec is removed, with no fallback. See
+[F0007](../design/features/F0007-AWSBedrockProvider.md) for the current contract.
+
+Historical captures below retain their original API/bytes; they are not evidence
+of InvokeModel effectiveness. No live comparison was authorized for this change.
+
+## Grading follow-up — 23 September 2026
+
+The engine requests native output, but grading previously used an explicit
+prompt-only profile. The user approved replacing that grading profile with the
+existing shared native encoder and capability check. [FIX_002 §22](FIX_002.md#22-native-structured-output-for-grading--23-september-2026)
+records implementation and pending live evidence. It does not resolve or broaden
+the approved workaround for the distinct provider-prefix issue below.
+
 ## Conclusion
 
-SDDE already sends the documented native JSON Schema configuration. The latest
-failure is malformed text returned by Bedrock despite that configuration, followed
+The retained September comparisons sent the documented native JSON Schema
+configuration. They returned malformed text despite that configuration, followed
 by unsuccessful bounded corrections. Internet research found related integration
 failures, but **no verified public diagnosis or fix for this exact failure**.
 
@@ -86,7 +106,7 @@ in the latest run is why provider-conformance investigation remains necessary.
 ## What our captured run establishes
 
 Run `2026-09-20T22-07-24Z-4f7e04d262338e262caad159d63ba53f` used
-`openai.gpt-oss-20b-1:0`, Converse, `ap-southeast-2`, temperature `0` and reasoning
+`openai.gpt-oss-20b-1:0`, the then-current API, `ap-southeast-2`, temperature `0` and reasoning
 effort `low`. See the [full analysis](FIX_001.md#latest-native-json-run--malformed-output-despite-native-schema)
 and [report](../zig-out/e2e-spec/2026-09-20T22-07-24Z-4f7e04d262338e262caad159d63ba53f/report.json).
 
@@ -109,25 +129,24 @@ and [report](../zig-out/e2e-spec/2026-09-20T22-07-24Z-4f7e04d262338e262caad159d6
 | Finding | Consequence for SDDE |
 | --- | --- |
 | Native structured outputs became generally available on 4 February 2026. [AWS announcement](https://aws.amazon.com/about-aws/whats-new/2026/02/structured-outputs-available-amazon-bedrock/) | Older reports about prompt-only or forced-tool output cannot establish a defect in the current native API. |
-| Converse accepts schema constraints through `outputConfig.textFormat`; InvokeModel's open-weight request uses `response_format`. [AWS guide](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html) | Our captured Converse field placement is correct. Moving `response_format` into Converse is not the documented fix. |
+| InvokeModel open-weight requests use `response_format`, with the schema as an object. [AWS guide](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html) | This is the approved current API. Older captures used the prior documented `outputConfig.textFormat` field; they do not measure this route. |
 | `JsonSchemaDefinition.schema` is a required string; `name` and `description` are optional. [API reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_JsonSchemaDefinition.html) | A serialized schema string is expected, not accidental double encoding. This definition has no `strict` field. |
 | `strict: true` is a tool-definition option; schema output and strict tools are separate mechanisms. [AWS guide](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html) | Adding a tool or an unrecognized `strict` property is not required to enable the existing text-output contract. |
 | The supported subset includes `const` and `anyOf` with limitations; unsupported schema features should produce HTTP 400. [AWS guide](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html) | No authoritative general prohibition on root `anyOf` for this text-output/model combination was found. Its actual behavior needs testing; HTTP 200 alone does not prove correct constraint enforcement. |
-| The GPT-OSS-20B model card lists native structured outputs, Converse and Sydney availability. [Model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-oss-20b.html) | Our configured combination is documented. The observed violation merits provider investigation rather than an assumption that the feature is unavailable. |
+| The GPT-OSS-20B model card lists native structured outputs and Sydney availability. [Model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-oss-20b.html) | Our configured combination is documented. The observed violation merits provider investigation rather than an assumption that the feature is unavailable. |
 | AWS warns that refusal and output-token exhaustion can yield nonconforming output, and recommends checking the stop reason and testing increasingly complex schemas. [AWS engineering article, 6 February 2026](https://aws.amazon.com/blogs/machine-learning/structured-outputs-on-amazon-bedrock-schema-compliant-ai-responses/) | Neither exception is reported in this run. Increasing output limits is not supported by these captures. |
 
-The [Converse reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)
-also distinguishes `max_tokens`, filtering, context exhaustion and
-`malformed_model_output`. Our response owner already handles these separately;
-`end_turn` still requires strict model-text validation. Native constraints never
-replace SDDE's evidence, relationship, provenance or publication checks.
+The older captures used `end_turn` and the prior response envelope. Current
+InvokeModel decoding checks `finish_reason`, final text and usage through the
+shared response owner. Native constraints never replace SDDE's evidence,
+relationship, provenance or publication checks.
 
 ## Public reports: useful distinctions, not a diagnosis
 
 | First-hand report | Reported problem/remedy | Relevance here |
 | --- | --- | --- |
 | [LangChain AWS #571](https://github.com/langchain-ai/langchain-aws/issues/571), 6 August 2025 | GPT-OSS structured-output helper returns no parsed tool result. | Predates native structured outputs and uses a tool parser. It does not explain our native final-text failure. |
-| [LiteLLM #35214](https://github.com/BerriAI/litellm/issues/35214), 30 July 2026 | Reporter finds `json_object` silently omitted from the outgoing Converse request; supplying `json_schema` works in that example. | Inspecting the actual wire request is essential. SDDE uses neither that library nor that mode; its native schema is present. This workaround is already satisfied here. |
+| [LiteLLM #35214](https://github.com/BerriAI/litellm/issues/35214), 30 July 2026 | Reporter finds `json_object` silently omitted from the outgoing Bedrock request; supplying `json_schema` works in that example. | Inspecting the actual wire request is essential. SDDE uses neither that library nor that mode; its native schema is present. This workaround is already satisfied here. |
 
 These reports are observations by their authors, not AWS confirmation of our
 provider-side cause. No matching public incident or patch was found for the

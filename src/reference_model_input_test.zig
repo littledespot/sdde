@@ -39,7 +39,7 @@ fn exercisePackets(allocator: std.mem.Allocator) !void {
         var reconstructed: std.ArrayList(u8) = .empty;
         defer reconstructed.deinit(a);
         for (body.value.object.get("source_lines").?.array.items, 1..) |line, ordinal| {
-            try std.testing.expectEqual(@as(i64, @intCast(ordinal)), line.object.get("id").?.object.get("ordinal").?.integer);
+            try std.testing.expectEqual(@as(i64, @intCast(ordinal)), line.object.get("id").?.integer);
             try reconstructed.appendSlice(a, line.object.get("text").?.string);
         }
         try std.testing.expectEqualStrings(inputs.corpus.sources[0].bytes[chunk.span.start.byte..chunk.span.end.byte], reconstructed.items);
@@ -108,7 +108,7 @@ pub fn checkProjectedPacket(a: std.mem.Allocator, bytes: []const u8) !void {
         if (content == .preserved_token) {
             const id = content.preserved_token.token_id;
             for (body.get("preserved_tokens").?.array.items) |token| {
-                if (token.object.get("id").?.object.get("ordinal").?.integer == id.ordinal) {
+                if (token.object.get("id").?.integer == id.ordinal) {
                     try std.testing.expect(token.object.get("value").?.string.len != 0);
                     break;
                 }
@@ -152,7 +152,7 @@ test "every reference content kind projects validated text into the shared model
         try std.testing.expectEqualStrings(@tagName(kind), model.get("kind").?.string);
         try std.testing.expect(model.get("value") == null);
         const nodes = model.get(if (kind == .business or kind == .scope_guard) "segments" else "nodes").?.array.items;
-        try std.testing.expectEqualStrings("literal", nodes[0].object.get("kind").?.string);
+        try std.testing.expectEqualStrings("A librarian renews a loan.", nodes[0].string);
     }
 }
 test "extraction collection rejects missing duplicate foreign and out of order scope" {

@@ -9,18 +9,33 @@ Markdown is a presentation format, not the internal source of truth while a stag
 
 [View the Shared domain types sample](../code.md#shared-domain-types).
 
-- Every workflow-declared model result schema types model-authored prose explicitly.
-- Business-specification leaves use the closed `BusinessValue` union: ordinary segmented
-  `NormalizedBusinessValue {text: BusinessText}` or `ExactBusinessCopy {tokenId, citationId}`.
-- Technical/reference/plan/task/implementation explanations use `SemanticText`.
-- Literal segments may be ordinary text; operational project/reference mentions must be
-  `FileReference {fileId}` or `SourceReference {sourceId}`; and a filename, display path, or
-  external URI that is only part of the prose must be an engine-registered
-  `PassiveLiteralReference {passiveLiteralId}`.
-- The exact-copy and passive-literal variants contain no model-authored display bytes and are
-  never path/file/fetch capabilities.
-- No schema contains an untyped prose string in which a project or reference path is
-  semantically actionable.
+#### Approved typed-content amendment — 25 September 2026
+
+The user approved implementation of the shared typed-content recommendations. This
+amends invariant 18 and the prose restrictions in §§11, 12, 16, 17, 22 and 23; it does
+not change operational path authorization or the overall Proposed design status.
+
+- Content separates ordinary prose, exact source values and explicit references.
+  Prose is normalized inert text; punctuation alone establishes neither reference
+  identity nor intent. Semantic grounding remains with existing review owners.
+- Business values are ordered segments: prose strings, `passive` registry IDs and
+  `exact_copy` token/citation pairs. Exact copies can appear within a sentence.
+  The former whole-value exact-copy union is removed, without a dual reader.
+- Exact selections resolve through the current source evidence and the field's
+  fixed provenance. They carry no model-authored replacement bytes. Passive
+  references retain filename/path/URI kinds and source occurrences in their
+  existing registry. Source references keep their separate source identity.
+- Source markup supplies structure, not semantic approval: inline code, fenced
+  blocks and explicit link destinations retain source coordinates and raw values
+  under registered extractors. Existing classification decides relevance. A code
+  example is not an executable capability or automatic permission to publish code
+  in a business specification.
+- Renderers own formatting. Persisted selections and editable-view comparisons
+  preserve exact bytes and reference bindings; formatting alone cannot mint them.
+- Literal text never supplies a filesystem path, command, import or fetch to an
+  adapter. Operational fields continue through existing IDs, scope, containment
+  and operation authorization. This boundary applies across workflows, not by
+  workflow name. Source scanning remains a discovery mechanism, not a prose gate.
 
 - `PassiveLiteralRegistryState` is a feature-scoped immutable revision authority.
 - The engine scans decoded mandatory-reference spans, reference manifest labels, and
