@@ -1,6 +1,6 @@
 # LLM_REWORK — Derive mechanical facts; ask models for semantic choices
 
-**Date:** 25 September 2026. **Status:** Cross-workflow feasibility reviewed; contract decisions remain open.
+**Reviewed:** 26 September 2026. **Status:** Feasible with a coordinated contract change; approval and implementation evidence remain outstanding.
 **Scope:** Documentation only. No code, schema, workflow, configuration or governing
 design changes are implemented or approved by this document. No live calls were made.
 
@@ -41,6 +41,7 @@ code audit found substantive gaps in the earlier proposal:
 | Canonical pairs would require conversions that the atomic repair API does not currently support. | Prefer the same claim handle across text boundaries; do not add conversion infrastructure merely to preserve old pairs (§5.4). |
 | Fixed-evidence repair can change authority when a reference is removed. | Pin effective evidence; a change outside that scope requires an authorized coupled target (§5.5). |
 | An invalid handle prevents complete effective provenance from being calculated. | Bind candidate repair to independently validated facts; do not require unavailable old provenance or infer authority from the invalid handle (§5.5). |
+| Rebuilding repair choices from each rejected replacement can enlarge its allowance. | Retain the original validated repair bound through the existing repair context, separately from the changing candidate/revision (§5.5). |
 | New response IDs would still require model-side joins in today's request. | Expose directly claim-addressable choices through the existing evidence projection (§5.1). |
 | Review evidence and completed readback consume the existing provenance contract. | Update these consumers together; pending clarification state has a different storage contract (§6). |
 | The current shared reference helper imports Spec types; Spec eligibility is not universal. | Refactor the existing mechanical owner and retain purpose policy with consuming domains (§6.1). |
@@ -49,6 +50,9 @@ code audit found substantive gaps in the earlier proposal:
 These are reasons to settle the focused contract before coding, not to add a fixer
 agent, reference registry, evidence store or execution framework. The proposal
 removes one avoidable failure class; it cannot guarantee meaningful prose.
+The rollout in §10 separates an independently testable ownership refactor from
+one coordinated format change. Readback and repair are prerequisites to activating
+that change, not later hardening work.
 
 ## 2. Evidence: the retained failure
 
@@ -283,16 +287,28 @@ prevents `L` from being constructed. Requiring equality with a nonexistent old `
 would disable repair; treating the bad handle as evidence would invent authority.
 Today explicit provenance can resolve independently before the value fails.
 
-The focused amendment should preserve bounded candidate recovery: the existing
-authorization owner binds the exact rejected value, fixed explicit selection and
-independently validated eligible reference facts for the owning unit. Use those
-facts as the permitted replacement scope, not as complete accepted provenance.
-A replacement cannot introduce evidence outside that bound; unchanged siblings
-remain fixed and complete validation computes the resulting `L`. Unknown handles
-contribute no scope. If these facts cannot support a valid replacement, a separately
-authorized coupled repair is required or the candidate blocks. The exact permitted
-set and comparison rule belong in the amendment and owning regression before
-implementation; this proposal does not grant arbitrary citation selection.
+**Recommended narrow amendment for approval:** bind a repair baseline
+`B = stableUnique(valid S + independently valid exact handles already present in
+the owning singleton/record)`. Resolve those handles through the same lookup and
+the original assignment's eligibility policy; unknown, wrong-kind and ineligible
+handles contribute nothing. `B` is a bound for recovery, not an assertion that the
+rejected candidate is valid. Do not substitute the entire request catalogue.
+
+Pin `S` exactly, preserve outside siblings, and require the replacement's effective
+claim and derived citation **sets** to equal `B` and its citation union. Always
+recompute canonical order from the replacement using §5.2. Source/omission evidence
+already uses set comparisons; harmless segment reordering must not accidentally
+become an evidence change. Native expected-value and revision comparisons remain
+exact. Where complete old `L` exists, use it as the fixed baseline instead.
+
+This narrow option permits, for example, replacing an invented handle with prose
+supported by valid `S`. It does not permit choosing a new token occurrence outside
+`B`. Such a repair can pass the field and still fail later exact-token coverage;
+that is not successful workflow recovery. Empty effective support, unavailable
+required tokens or other unresolved defects block unless a separately authorized
+repair covers them. A broader alternative allowing new choices from the original
+assignment catalogue needs explicit coupled evidence-change authority; it is not
+implied by §36 and is not recommended for this first patch.
 
 Invalid explicit support cannot be treated as fixed, trusted scope. If both `S`
 and an exact handle fail, use the existing evidence-repair path first, or an
@@ -301,6 +317,12 @@ existing retry families and accounting. A replacement must not enlarge its own
 allowance by introducing a new handle and then treating that rejected response as
 fresh eligibility on the next attempt. Bind permitted choices through the existing
 authorization facts; changed upstream authority invalidates that authorization.
+Today `specification_repair.authorize` recaptures candidate facts on each attempt;
+`pending_repair` retains the permit/target, not a fixed choice baseline. Retain the
+original `B` in the existing domain repair context while expected value/revision
+advance through the existing atomic owner. Do not add a parallel permission store.
+Coupled, membership, reviewed insertion and native coverage repairs retain their
+own approved policies; `B` must not silently replace those policies.
 
 Distinguish bad candidate data from a broken evidence context. An unavailable
 model-selected handle under a valid binding is a native candidate defect. Missing,
@@ -591,10 +613,10 @@ model contract. The following focused decisions are still proposed:
    add/remove cases; otherwise block them. Update membership/omission equality and
    precise targeting, retiring only mechanics made obsolete by the removed tuple.
 
-The invalid-handle permitted set and comparison rule in §5.5 remain a readiness
-blocker until this amendment specifies them. An implementation request must not
-silently choose broader authority. Review evidence attachment, reconciliation token
-metadata removal, multiple-ledger attribution and zero-scope typed text remain
+The narrow invalid-handle baseline and comparison rule proposed in §5.5 need an
+explicit decision before implementation; their documentation is not approval.
+An implementation request must not silently choose broader authority. Review
+evidence attachment, reconciliation token metadata removal, multiple-ledger attribution and zero-scope typed text remain
 separate follow-ups, not prerequisites to be folded into this patch.
 
 Governing amendment surfaces: [§7.1](../design/contracts/07-domain-representations.md),
@@ -611,43 +633,212 @@ Proposed design.
 Summary-key removal and batch-review changes need their own bounded decisions;
 they are not prerequisites for the first exact-reference change.
 
-## 10. Smallest architecturally complete rollout
+## 10. Phased rollout with testable checkpoints
 
-1. **Settle the three decisions above and capture conformance cases.** Map every
-   existing model/canonical consumer before changing its shape. Establish a concrete
-   source-scope and add/remove dependency policy, plus the reusable contract and
-   domain-policy split. Do not interpret this as approval to implement new workflows.
-2. **Prove the bounded native contract first.** Using existing ledger, evidence and
-   typed-text owners, remove Spec type dependencies from shared mechanics and test
-   handle resolution, the two ambiguous-union examples, effective scope and bounded
-   repair. Prove reuse through a non-Spec test consumer with a different shape and
-   native policy. This is offline construction/rejection evidence, not live quality.
-   Do not leave a parallel production path or reusable helper that still imports Spec.
-3. **Change all affected producers/consumers together.** Initial content, selected
-   repairs, protocol schemas, all model-visible context, canonical validation,
-   coverage, supported/diagnostic review and readback must agree. Domain owners
-   perform the pure work through existing actions; orchestrators only coordinate
-   typed outcomes through the runner. Replace prompt wording; add no prompt or agent.
-4. **Remove superseded machinery.** Old exact-copy tuple schemas, the redundant supporting
-   claim requirement and repair cases specific to reconstructing that tuple must
-   not survive as alternate supported formats. Preserve validation for unknown
-   selections, unchanged reconciliation token contracts and all still-applicable
-   bounded repair behavior. Do not delete a shared projection merely because one
-   consumer's representation changed.
-5. **Verify and measure offline.** Run relevant registered target tests, full
-   `zig build verify`, clean-environment native packaging checks and `git diff --check`.
-   Measure serialized initial/repair/correction requests, compiled graph and native
-   allocation/runtime cost on varied reference sets. Use existing request/accounting
-   owners; do not predict token savings from example JSON length alone.
-6. **Obtain separate approval for controlled model and full E2E tests.** Use captured
-   assignments and unchanged sources/model settings, varying only the approved
-contract/projection as a unit. Then
-   inspect actual requirements, acceptance criteria, principles, publication/readback
-   and rubric output. Retain failures and report incomplete evidence; no automatic rerun.
+**All chunks below are planned, not implemented.** Begin with Phase 0; contract
+implementation waits for its approval gate. There are five phases and eleven
+chunks. Each chunk produces a reviewable diff, named regression evidence and a
+recorded proceed/revise decision. §11 supplies the common acceptance matrix;
+passing a safe-block test must never be reported as successful recovery.
 
-This replaces a redundant representation through one shared contract. It does not
-require redesigning reconciliation semantics, adding model calls, changing provider
-transport, raising retry allowances or removing validation.
+The smallest change that can land independently is the behavior-preserving owner
+refactor in Phase 1. Phase 2 changes a closed format and must activate as **one
+coherent change**: model/canonical types, schemas, repair and readback cannot run in
+mixed versions. Develop its chunks in an isolated working change, test each owning
+boundary, and integrate them before activation. They are review checkpoints, not
+independent releases. Coalesce inseparable edits if necessary to keep their owning
+tests executable; do not introduce temporary runtime flags, dual readers, skipped
+tests or conversion adapters to manufacture smaller deployable patches.
+
+### Phase 0 — Establish evidence and settle authority
+
+**0.1 — Baseline and failure-class regression.**
+
+- **Outcome/owners:** extend existing generation/request tests with the retained
+  failure (§2): valid source occurrence, inconsistent tuple/support, repeated repair,
+  and exhaustion. Include unrelated literals, two sources with equal bytes, a
+  meaningful successful candidate and a mechanically valid but meaningless one.
+- **Checks:** capture actual initial, native-repair and protocol-correction requests
+  through existing fake ports; record request/schema bytes, compiled graph size and
+  retained usage. Label existing failures as containment. Adapt these cases to the
+  new contract later; never keep the old format as an accepted alternate.
+- **Exit/revise:** every claimed failure has an observed boundary and every proposed
+  success has assertions beyond parsing. If the motivating defect cannot be
+  reproduced, correct the diagnosis before implementation. No live call is needed.
+
+**0.2 — Approve the closed contract and repair table.** Depends on 0.1.
+
+- **Outcome:** resolve §9 through the named governing contracts: shared claim handle,
+  explicit selection versus derived lineage, version rejection, and §5.5's proposed
+  invalid-handle bound. Specify each repair's target, fixed facts, permissible change,
+  comparison and dependent validation. Identify tuple-specific authority to retire.
+- **Checks:** trace initial generation, value/provenance/coupled/membership/omission
+  repairs, positive/negative review and both state variants against that table. Work
+  through reference addition/removal, invalid `S`, unavailable `L` and reordered text.
+- **Exit/revise:** explicit approval and unambiguous accepted/rejected examples are
+  required. If a case needs broader authority, expose that decision; do not defer it
+  to request-building code. No new provider mode, workflow or retry policy is included.
+
+### Phase 1 — Remove coupling without changing behavior
+
+**1.1 — Refactor the existing reference owner.** Depends on Phase 0.
+
+- **Outcome/owners:** move common selection/lineage mechanics below Spec types in
+  `reference_support`; adapt its consumers. Keep Spec eligibility and non-reference
+  support with their domains. Retain the current response and persisted formats.
+- **Checks:** existing accepted/rejected selections, citation ordering, scope and
+  rendered bytes remain unchanged; architecture checks enforce dependency direction.
+  Request comparisons confirm the refactor has not changed model instructions or
+  choices. Exercise allocation failure and cleanup at changed ownership boundaries.
+- **Exit/revise:** this chunk may land independently once applicable tests and full
+  verification pass. If it requires a second resolver, policy registry or a shared
+  module importing Spec, revise the boundary before the contract change.
+
+### Phase 2 — Implement one coordinated format change
+
+**2.1 — Native handle resolution and lineage construction.** Depends on 1.1.
+
+- **Outcome/owners:** change typed exact segments and canonical selection according
+  to the approved contract. Reuse reference lookup/union and typed-text validation;
+  consuming domains enumerate only their declared fields and owning evidence units.
+- **Checks:** both §5.2 ambiguity examples round-trip; repeat references preserve
+  text, derived membership deduplicates, explicit duplicates reject, and empty `S`
+  follows the approved rule. Test arrays/optional fields/shared records, wrong-kind
+  handles, same-value occurrences and stale producer bindings under the same state ID.
+- **Exit/revise:** native construction and error localization pass at their owners.
+  Ordinary JSON remains structural; no reflective search for `claim_id` keys and no
+  literal-text guessing. Stop if the implementation loses explicit/derived roles.
+
+**2.2 — Requests and configured schemas.** Depends on 2.1.
+
+- **Outcome/owners:** update `model_evidence`, session/repair packets and configured
+  complete schemas. Derive selected/part schemas through existing owners. Initial
+  generation, embedded prior content, repair `current_value` and correction use the
+  same handle syntax and eligibility. Replace superseded prompt instructions.
+- **Checks:** inspect serialized requests, not only helper results. Offered choices
+  identify the claim directly; old tuple fields reject; initial/repair schemas agree
+  with native admission. Unchanged extraction/reconciliation/review consumers retain
+  needed token metadata. No request contains parallel exact-choice catalogues.
+- **Exit/revise:** contract tests pass for each request purpose, including selected
+  repairs and omitted-record context. Any need for a whole-candidate conversion API
+  or duplicated schema authority sends this chunk back to the ownership review.
+
+**2.3 — Repair, coverage and dependency renewal.** Depends on 2.1–2.2.
+
+- **Outcome/owners:** adapt native and coverage repair through their existing atomic
+  authorizations. Retain the original approved invalid-handle baseline across attempts
+  while updating expected value/revision. Compare effective evidence where required;
+  keep coupled, membership and reviewed-insertion policies distinct. Update native
+  exact reconstruction and remove the obsolete tuple-specific trigger/guidance.
+- **Checks:** unknown handle → bounded valid replacement; unchanged/alternating errors
+  → exhaustion; invalid `S` → its authorized recovery or block. A later rejected
+  handle cannot enlarge the original bound. Reordering preserves evidence sets;
+  adding/removing dependencies outside authority rejects. Verify siblings, origins,
+  full-unit validation, dependent rebuilding and exact usage/retry accounting.
+- **Exit/revise:** include a repair that passes its field but fails later coverage,
+  proving no publication, alongside real bounded recovery. Missing/corrupt trusted
+  bindings terminate without another model call. If recovery needs new authority,
+  return to 0.2 rather than weakening equality or increasing retries.
+
+**2.4 — Review, rendering and persisted readback.** Depends on 2.1–2.3.
+
+- **Outcome/owners:** coverage, source/principle evidence, projection and completed
+  state consume the same derived lineage. Preserve negative diagnostic eligibility.
+  Update affected version contracts and pending-state handling together; pending
+  state still does not store attributed specification content.
+- **Checks:** meaningful fake-provider output reaches generation, coverage, semantic
+  routing, publication and readback. Corrupt handles/selection/review projections
+  reject. Test old versions, both current state variants, exact Markdown expansion,
+  clarification failure precedence and downstream gates. A trusted-join pass cannot
+  turn an inconclusive finding into a user question or completion.
+- **Exit/revise:** every producer/consumer in §6 agrees; superseded formats, readers,
+  tuple-only repair branches and fixtures are removed. Keep negative tests that reject
+  old shapes. Any readback discrepancy blocks the whole Phase 2 change. No activation
+  until Phase 3's integration gate passes.
+
+### Phase 3 — Prove reuse and integration offline
+
+**3.1 — Independent consumer and cross-boundary regressions.** Depends on Phase 2.
+
+- **Outcome/owners:** prove the §6.4 contract through a test-owned registered non-Spec
+  consumer with different fields and eligibility, using the same reference mechanism
+  and existing runner/composition. Add no production demonstration workflow/framework.
+- **Checks:** nested/array/optional typed fields, no-reference workflows and mixed
+  domain evidence retain their boundaries. Sliced results, renewed dependencies,
+  stale reads and operational IDs behave correctly. Combine successful assignments
+  with repeated/alternating protocol and native errors under the global budget.
+- **Exit/revise:** independent integration and negative tests pass without Spec/session
+  imports or workflow-name branches. This proves a reusable contract, not completed
+  Plan/Tasks/Implement workflows. A helper test or renamed Spec workflow is insufficient.
+
+**3.2 — Measurements and complete verification.** Depends on 3.1.
+
+- **Outcome:** compare 0.1's requests with the new contract across brief/story,
+  records, selected repairs and corrections. Record input/schema/output bytes,
+  configured graph/operation count and native runtime/allocation behavior over small
+  and larger valid ledgers. Use existing measurement owners; add no permanent cache,
+  benchmark framework or local model-call ceiling merely for this change.
+- **Checks:** run the registered checks below, then full `zig build verify` and
+  `git diff --check`. Full verify already includes clean-directory native packaging
+  smoke; repeat it only when later changes invalidate that evidence. Review packaged
+  workflow/schema resources and the full diff for duplicate policy and dead paths.
+- **Exit/revise:** all applicable tests pass; no unexplained request/resource growth
+  or additional orchestration/model call is accepted as automatic simplification.
+  Bytes are not token counts. Offline usage fixtures prove accounting only; record
+  actual model tokens in Phase 4. Failed checks reopen the owning chunk, not the judge.
+
+### Phase 4 — Measure live effectiveness with separate approvals
+
+**4.1 — Controlled assignments.** Depends on 3.2 and explicit call approval.
+
+- **Outcome:** prepare comparable captured assignments from the reported and unrelated
+  cases. Hold sources, semantic task and provider settings fixed; change the approved
+  contract/projection together. Use the existing debugger and capture, with a declared
+  call count and budget. Keep the old response as evidence, not a second runtime path.
+- **Checks:** record final-answer presence, JSON/schema/native validity, literal and
+  meaning preservation, repair outcomes, actual tokens and latency for every attempt.
+  A failed earlier baseline alone does not establish a statistical improvement rate.
+- **Exit/revise:** report whether the redundant join failure was removed and whether
+  new failures appeared. Do not proceed on shape success alone. If poor semantic
+  content remains, identify its owner separately; do not add guessed evidence or
+  tuning for the greeting. No automatic rerun or workflow publication in this chunk.
+
+**4.2 — Whole-workflow publication and rubric.** Depends on 4.1 and a separate E2E approval.
+
+- **Outcome:** use `./scripts/e2e-spec.sh --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json` with an explicitly
+  approved fresh target under this project's `zig-out` and the case's configured
+  generation/grading budgets. Prepare the concrete proposal before asking approval.
+- **Checks:** inspect original source obligations, meaningful story/FRs/Given–When–Then,
+  exact values, principles, necessary clarifications, persisted readback, publication
+  and the actual rubric report. Offline fixtures or hand-written expected Markdown
+  cannot substitute for generated/scored output. Broader live claims need separately
+  approved unrelated cases, not just the Hello World fixture.
+- **Exit/revise:** close live readiness only with completed, validated publication
+  and the configured rubric acceptance result. A pause, failure or ungraded output
+  leaves the relevant gate open; retain its evidence and revise the owning chunk.
+  Each further E2E execution needs approval. Do not bundle §7's deferred work to mask
+  a failed result.
+
+### Registered verification commands
+
+These are existing [build.zig](../build.zig) steps to extend/use during implementation,
+not tests executed by this documentation review. New tests must be registered in
+the complete suite; do not use standalone `zig test` as a parallel build path.
+
+| Boundary/chunks | Targeted commands |
+| --- | --- |
+| Reference mechanics, 1.1/2.1 | `zig build test-reference-evidence test-reference-model-input test-typed-text test-architecture` |
+| Closed shapes/requests, 2.1–2.2 | `zig build test-specification-contract test-model-candidate-json test-model-result-schema test-model-request-preparation` |
+| Native generation/repair/readback, 0.1/2.3–2.4 | `zig build test-specification-generation test-workflow-repair-retry` |
+| Protocol/accounting/integration, 2.3/3.1 | `zig build test-model-request-workflow test-model-attempt-accounting test-pipeline-envelope test-atomic-execution test-workflow-graph` |
+| Preserved upstream behavior and gates, 2.4/3.1 | `zig build test-reference-extraction test-reference-reconciliation test-required-authority test-clarification-inputs` |
+| Independently landable change / complete integration, 1.1/3.2 | `zig build verify` and `git diff --check`; `zig build smoke` is available for targeted packaging iteration |
+
+Keep revision decisions local to the owning chunk while validating their dependent
+closure. If Phase 2 must be reversed before activation, reverse the coherent format
+change, not selected readers. An older executable cannot be assumed to read newly
+written state; version rejection remains mandatory. Preserve retained run evidence
+and user clarification records rather than adding migrations or fallback readers.
 
 ## 11. Acceptance and regression matrix
 
@@ -664,10 +855,10 @@ transport, raising retry allowances or removing validation.
 | Empty explicit selection | In source-backed Spec, `S=[]` is permitted when eligible exact segments supply nonempty effective evidence; empty effective evidence rejects. Other domains retain their accepted non-reference support. No semantic-quality pass is implied. |
 | Reference added, replaced or removed | Correct dependency recomputation for the whole authorized unit; unrelated sibling data and producer origins unchanged. |
 | Shared-provenance acceptance record | All fields contribute exact dependencies; Given/When/Then retain separate meaning and unaffected content. |
-| Fixed-evidence repair | Reference removal cannot silently shrink fixed effective evidence; addition cannot expand it. Unchanged siblings contribute to the full-record check. Changes need their approved coupled target. |
-| Invalid candidate without complete provenance | Valid explicit support/siblings plus one unknown handle can recover within the bound validated choices. Unknown handles grant no scope; unavailable valid evidence cannot be fabricated. Do not demand equality with an old `L` that never existed. |
+| Fixed-evidence repair | Pin explicit `S` exactly and compare effective claim/citation sets. Harmless segment reordering recomputes stable canonical order; it does not fail merely because the derived list order changed. Reference removal/addition cannot shrink/expand evidence without its authorized coupled target; include unchanged siblings in the full-record check. |
+| Invalid candidate without complete provenance | Cover valid explicit support/siblings plus an unknown handle recovering within approved `B`, and empty/insufficient `B` blocking. Unknown handles grant no scope. A field-only success followed by exact-coverage failure must not publish. Do not demand equality with old `L` that never existed. |
 | Invalid explicit support and invalid handle | Existing evidence repair or an authorized group handles invalid `S`; it is never pinned as trusted scope. Cover staged recovery and exhaustion with unchanged retry families, sibling data and accounting. |
-| Repair cannot expand its own scope | Alternating rejected handles cannot enlarge the next request's permitted set. Upstream changes invalidate existing authorization through its normal dependency checks. |
+| Repair cannot expand its own scope | Retain original `B` while expected values/revisions advance. A later rejected response containing a newly eligible handle cannot enlarge the next request's permitted set. Upstream changes invalidate existing authorization through its normal dependency checks. |
 | Bad selection versus broken binding | Unknown model choices under valid authority may repair. Invalid/missing trusted ledger or choice binding follows existing terminal rejection, with no extra model call, clarification or publication. |
 | Passive references and source scope | Equivalent valid candidates retain their available choices; removed dependencies force sibling revalidation. Operational path capabilities remain unchanged. |
 | Native expected value / model presentation | Existing atomic checks still bind exact native expected values and dependencies. Shared handle syntax must not conceal differences in evidence shape or authorize lossy comparisons. |
@@ -675,7 +866,7 @@ transport, raising retry allowances or removing validation.
 | Supported and negative review evidence | Supported findings compare with effective provenance. Loss/negative findings retain their existing distinct eligibility; validate both live in-memory and on completed-state readback. |
 | Sliced response/dependency renewal | Stale completed parts reject; renewed dependencies rebuild all affected validators/reviews before publication. |
 | Missing answers, invalid JSON/schema and repeated invalid handles | Existing retry identities, exhaustion, failure precedence and exact usage accounting remain unchanged. Successful unrelated work continues within budget. |
-| Completed versus pending state | Completed readback revalidates stored content selection, reference handles and coverage/review projections. Pending readback retains its reference/clarification identity contract without new content storage. |
+| Completed versus pending state | Completed readback revalidates stored content selection, reference handles and coverage/review projections. Pending readback retains its reference/clarification identity contract without new content storage. Both share the state-version tag today; cover accepted current variants and rejected old versions together. |
 | Canonical state tampering | Foreign/deleted claims, invalid exact handles and mismatched retained coverage/review projections reject on readback. Derived views are computed; corrupt authoritative values are never silently repaired. |
 | Empty/meaningless but correctly linked story or AC | Never counted as semantic recovery merely because joins pass. Scripted review tests routing; approved live rubric tests actual quality. |
 | Pre-ledger extraction and reconciliation | Their existing allowed shapes and source selections remain intact; exact-copy business segments are not newly admitted there. |
@@ -693,8 +884,9 @@ transport, raising retry allowances or removing validation.
 the first integration.** The engine already has occurrence identities, structural
 composition and registered-operation boundaries. The remaining work is the shared
 reference refactor, canonical selection representation and repair/readback conformance.
-It needs the decisions in §9 and the cross-workflow proof in §11 before implementation
-readiness or production reuse can be claimed.
+The decisions in §9 are prerequisites to contract implementation. Phase 3 supplies
+the offline integration/reuse evidence; Phase 4 separately assesses live outcomes.
+Neither the approved contract nor successful helper tests establish those outcomes.
 
 This does not promise automatic support for every JSON Schema, authority namespace
 or future workflow. New domains reuse the mechanism by supplying their declared
