@@ -101,21 +101,25 @@ Typed content covers these concerns; each concern does not require a separate ca
 
 - The LLM does not assign the feature ID, IDs, headings, paths, dates, status, checklist state,
   passive-literal values, clarification lifecycle, or execution status.
-- Every initial brief/spec record selects real claim IDs, one or more exact resolved
+- Every initial brief/spec record has eligible effective reference claims from
+  explicit selections or exact segments, one or more current resolved
   clarification-response IDs, or an allowed combination.
-- Meaningful exact-copy and source selections remain explicit.
-  Each exact-copy segment requires its preserved-token claim in the owning field/record's
-  provenance. Generation guidance embeds exact values in meaningful business content;
-  a reference alone does not describe the feature's behavior or goal.
-- The engine assigns canonical IDs, validates current authority and selection joins, and
-  constructs reference citation lists as the stable unique union of the selected claims'
-  canonical citations.
+- Meaningful exact-copy and source selections remain explicit. At the coordinated
+  [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md) cutover, each
+  exact segment selects one eligible preserved-token claim occurrence; the
+  model does not repeat its citation or that claim in explicit support merely
+  to satisfy a join. Generation guidance embeds exact values in meaningful
+  business content; a reference alone does not describe behavior or a goal.
+- The engine assigns canonical IDs, validates current authority and selection
+  joins, and derives effective claims and their citation union from explicit
+  support plus exact segments through the shared reference owner.
 - The model does not reproduce that determined union; user answers never receive fabricated
   reference citations.
 - Semantic entailment of arbitrary prose is model-assisted and ultimately user-reviewed; it is
   never misrepresented as deterministic proof.
-- For explicit path/filename/URI references the model selects a unit-allowlisted passive ID
-  or an admitted exact-copy token/citation pair. Ordinary prose punctuation is not a reference.
+- For explicit path/filename/URI references the model selects a unit-allowlisted
+  passive ID or an admitted exact occurrence as defined by ADR 0020. Ordinary
+  prose punctuation is not a reference.
 - A valid display reference proves neither business meaning nor source preservation.
   Existing source review must distinguish a path-valued requirement from a filename
   substituted for the behavior described in that file; confirmed candidate loss
@@ -313,7 +317,7 @@ The engine validates:
 - duplicate or byte-identical requirements;
 - typed clarification state rather than fragile substring matching;
 - citation validity and reference-file accounting;
-- for every spec record, each authority is either a resolvable claim/citation set, a current resolved clarification response, or an allowed combination; reference citations equal the stable unique union of selected claim citations, while user answers never receive fabricated citations;
+- for every spec record, each authority is either a resolvable reference-claim/citation set, a current resolved clarification response, or an allowed combination; reference citations equal the stable unique union derived under ADR 0020 from explicit support and exact dependencies, while user answers never receive fabricated citations;
 - every retained reference claim has exactly one closed specification disposition: mapped to one or more fixed/allocated spec record keys, context-only signal IDs (including reference-context question signals), a blocking conflict, a specification clarification need bound to its `SNN` record, or an explicit non-spec reason; no claim disappears between the snapshot and specification, and no question becomes a specification content record;
 - derived-feature-brief records cite the reference claims from which they were generated; a later user-authored record requires its explicit acknowledgement provenance;
 - exact user-facing copy obligations;

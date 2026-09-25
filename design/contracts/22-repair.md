@@ -142,13 +142,15 @@ The repair guidance contains:
 - the exact replacement schema;
 - the instruction that unrelated fields must not be returned or changed.
 
-Unavailable passive/exact-copy diagnostics identify the rejected ID or token/citation pair and location. Existing
-native evidence choices drive both schema narrowing (§12.2) and concise corrective guidance:
-state validation failed, name unavailable alternatives, and identify source-backed text or
-permitted references as appropriate. A value-only repair preserves its exact provenance;
-it cannot borrow an exact-copy choice from another claim. A pair may exist in the supplied
-evidence yet be unavailable for the selected claims. The same choice-guidance owner handles
-both reference kinds; when neither is permitted, explicitly request source-backed text strings.
+Unavailable passive/exact-copy diagnostics identify the rejected selection and
+location. Existing native evidence choices drive both schema narrowing (§12.2)
+and concise corrective guidance: state validation failed, name unavailable
+alternatives, and identify source-backed text or permitted references as
+appropriate. A value-only repair preserves its bound explicit support and
+effective evidence under [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md);
+it cannot borrow an exact choice from a sibling or enlarge its bound on retry.
+The same choice-guidance owner handles both reference kinds; when neither is
+permitted, explicitly request source-backed text strings.
 Keep the rejected value once when
 its containing field adds no other content; retain record siblings when needed for meaning.
 This does not grant new repair targets, semantic reassessment or additional retries.
@@ -160,22 +162,16 @@ limit writable content. Recover original source meaning within that scope while
 preserving correct surrounding content. Mechanical repair acceptance does not prove
 semantic recovery; full coverage and the existing semantic review remain mandatory.
 
-**Approved coupled-evidence amendment (25 September 2026, FIX_002 §36):** when
-native `unknown_exact` validation establishes an existing, currently eligible
-token/citation pair whose supporting claim is absent from otherwise valid selected
-provenance, repair may replace one attributed singleton or one shared-provenance
-record. Preserve the record kind and all outside siblings. Invented/ineligible
-pairs, stale evidence and unlocalized omissions do not grant this authority.
-The model chooses the corrected content and evidence; the engine adds no citations
-and infers no meaning. Subsequent defects within the selected group retain that
-group's identity and bound through existing authorization, merge and retry owners.
-Once its content/evidence joins pass, independently established membership or
-redundancy defects use their existing repair authority; a resolved evidence group
-must not force a forbidden kind or prevent authorized duplicate deletion.
-Revalidate the full unit before dependent generation, then assemble and run complete
-coverage, semantic/principle review and publication/readback validation. A group
-replacement grants no completed-unit rewrite, verdict reassessment or coverage
-bypass. Existing reviewed omission and dependency-renewal rules remain unchanged.
+The 25 September FIX_002 §36 coupled-evidence authorization applies to the
+currently deployed token/citation tuple. ADR 0020 retires that tuple-specific
+trigger at its coordinated format cutover and supplies the replacement
+value-only bounds, including an invalid-handle baseline. It grants no general
+coupled evidence add/remove repair. Independently authorized membership,
+reviewed insertion and native exact reconstruction keep their own targets.
+Revalidate the full unit, affected dependencies, coverage, semantic/principle
+review and publication/readback before acceptance. The engine derives reference
+citations from permitted selections; it never chooses semantic support to make
+a repair pass.
 
 Evidence repair obtains the diagnostic and permitted references from their existing
 validator/registry, including any applicable source-line bounds. The request builder
@@ -502,7 +498,7 @@ A code repair requires an undeclared second file. This is not treated as a large
 The approved [§7.1 amendment](07-domain-representations.md#71-shared-types) uses the
 same ordered segment shape for initial business values and selected value repairs.
 An invalid reference diagnostic retains its segment location and rejected IDs;
-permitted choices derive from the fixed provenance. Literal punctuation is not a
+permitted choices derive from the bound evidence under ADR 0020. Literal punctuation is not a
 repair trigger. Repair keeps siblings, exact-byte obligations, dependency freshness,
 full validation, retry identities and token accounting with their existing owners.
 Native coverage repair remains limited to its existing whole-display equality proof;

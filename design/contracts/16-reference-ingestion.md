@@ -163,6 +163,9 @@ Initial readers should cover:
   neither quotations nor coordinates.
 - Exact-token citations retain their finer extractor-owned spans.
 - Canonical citation IDs are still assigned only after validation.
+- [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md) changes only
+  post-ledger typed-content exact selections. These pre-ledger source ranges,
+  token candidates and reconciliation token/citation identities remain unchanged.
 - This shared source-selection contract applies to every workflow using reference evidence; it
   grants no semantic approval, file permission, or execution authority.
 

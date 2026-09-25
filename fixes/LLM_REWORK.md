@@ -1,8 +1,8 @@
 # LLM_REWORK — Derive mechanical facts; ask models for semantic choices
 
-**Reviewed:** 26 September 2026. **Status:** Feasible with a coordinated contract change; approval and implementation evidence remain outstanding.
-**Scope:** Documentation only. No code, schema, workflow, configuration or governing
-design changes are implemented or approved by this document. No live calls were made.
+**Reviewed:** 26 September 2026. **Status:** Phase 0 done; runtime cutover pending.
+**Scope:** Phase 0 baseline tests and approved [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md).
+No production schema or workflow changed; no live calls were made.
 
 ## 1. Finding and recommendation
 
@@ -126,11 +126,11 @@ It must not manufacture FRs/ACs from a counter, choose every available citation,
 merge semantically similar prose using string heuristics, or default an uncertain
 finding to success. Existing semantic review remains explicitly model-assisted.
 
-## 5. Proposed exact-reference contract — source-backed content
+## 5. Approved target exact-reference contract — source-backed content
 
 ### 5.1 Use an existing identity once
 
-Illustrative **proposed model segment**, not an accepted schema:
+Illustrative **approved target segment**, not the deployed schema:
 
 ```json
 {"kind":"exact_copy","claim_id":2}
@@ -287,7 +287,7 @@ prevents `L` from being constructed. Requiring equality with a nonexistent old `
 would disable repair; treating the bad handle as evidence would invent authority.
 Today explicit provenance can resolve independently before the value fails.
 
-**Recommended narrow amendment for approval:** bind a repair baseline
+**Approved ADR 0020 rule:** bind a repair baseline
 `B = stableUnique(valid S + independently valid exact handles already present in
 the owning singleton/record)`. Resolve those handles through the same lookup and
 the original assignment's eligibility policy; unknown, wrong-kind and ineligible
@@ -592,51 +592,25 @@ failures. Native membership checks and bounded recovery remain necessary.
 | Pre-/post-extraction identities are confused | Keep token-candidate classification separate from later claim selection. No runtime guessing between formats. |
 | Simpler schema is mistaken for a solved workflow | Require downstream semantic assessment, publication/readback and rubric evidence. Safe failure is containment, not completion. |
 
-## 9. Decisions required before implementation
+## 9. Approved Phase 0.2 decision
 
-The user's request authorizes this assessment only. Prior §36 approval authorized
-bounded coupled repair, not native construction of new provenance under a changed
-model contract. The following focused decisions are still proposed:
+The user approved the focused contract on 26 September 2026. [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md)
+is the governing authority for the exact claim handle, explicit versus derived
+lineage, bounded value-only repair, version cutover, readback and failure
+precedence. §§5–8 record the analysis behind that decision; they are not a
+second implementation policy. The current runtime still uses its old format
+until Phase 2 activates the coordinated replacement.
 
-1. **Shared exact-reference shape:** use one preserved-token claim handle in model
-   and canonical segments; update the closed content/version contracts and reject
-   old formats. Apply through registered typed fields in any workflow, with the
-   shared/domain split in §6.1. Preserve pre-ledger identities and other namespaces.
-2. **Content selection and effective provenance:** persist explicit selection once;
-   derive reference dependencies and their stable union. Keep this reference view
-   consistent across its consumers without replacing other workflow support types.
-   Spec positive review/readback and passive choices follow §5; other purpose and
-   diagnostic policies retain their existing owners.
-3. **Fixed/coupled repair:** pin available valid effective evidence for value-only
-   repair; specify the independently validated scope used when a rejected handle
-   prevents that evidence from existing. Define any additional authorized coupled
-   add/remove cases; otherwise block them. Update membership/omission equality and
-   precise targeting, retiring only mechanics made obsolete by the removed tuple.
-
-The narrow invalid-handle baseline and comparison rule proposed in §5.5 need an
-explicit decision before implementation; their documentation is not approval.
-An implementation request must not silently choose broader authority. Review
-evidence attachment, reconciliation token metadata removal, multiple-ledger attribution and zero-scope typed text remain
-separate follow-ups, not prerequisites to be folded into this patch.
-
-Governing amendment surfaces: [§7.1](../design/contracts/07-domain-representations.md),
-[§12](../design/contracts/12-model-boundary.md),
-[§16.3](../design/contracts/16-reference-ingestion.md),
-[§17.3](../design/contracts/17-specify.md),
-[§22](../design/contracts/22-repair.md), and affected persistence/rendering contracts
-in [§§23–24](../design/design.md#23-rendering-and-editability-strategy).
-In particular §17 currently requires the supporting claim in model-selected
-provenance, and §22's approved §36 amendment says the engine adds no citations.
-This document does not silently override those rules or accept the overall
-Proposed design.
-
-Summary-key removal and batch-review changes need their own bounded decisions;
-they are not prerequisites for the first exact-reference change.
+Approval does not grant broader coupled evidence changes, verdict reassessment,
+multiple-ledger attribution, zero-scope typed text, reconciliation-token or
+summary-key removal, or batch-review redesign. Those remain separate decisions
+if later work needs them. In particular, the bounded invalid-handle baseline
+cannot acquire a fresh claim from the whole assignment catalogue on retry.
 
 ## 10. Phased rollout with testable checkpoints
 
-**All chunks below are planned, not implemented.** Begin with Phase 0; contract
-implementation waits for its approval gate. There are five phases and eleven
+**Phase 0 is done; the remaining chunks are planned.** The approved contract
+activates only at the coordinated Phase 2 cutover. There are five phases and eleven
 chunks. Each chunk produces a reviewable diff, named regression evidence and a
 recorded proceed/revise decision. §11 supplies the common acceptance matrix;
 passing a safe-block test must never be reported as successful recovery.
@@ -652,7 +626,7 @@ tests or conversion adapters to manufacture smaller deployable patches.
 
 ### Phase 0 — Establish evidence and settle authority
 
-**0.1 — Baseline and failure-class regression.**
+**0.1 — Baseline and failure-class regression — done.**
 
 - **Outcome/owners:** extend existing generation/request tests with the retained
   failure (§2): valid source occurrence, inconsistent tuple/support, repeated repair,
@@ -666,10 +640,10 @@ tests or conversion adapters to manufacture smaller deployable patches.
   success has assertions beyond parsing. If the motivating defect cannot be
   reproduced, correct the diagnosis before implementation. No live call is needed.
 
-**0.2 — Approve the closed contract and repair table.** Depends on 0.1.
+**0.2 — Approve the closed contract and repair table — done.** Depends on 0.1.
 
 - **Outcome:** resolve §9 through the named governing contracts: shared claim handle,
-  explicit selection versus derived lineage, version rejection, and §5.5's proposed
+  explicit selection versus derived lineage, version rejection, and §5.5's approved
   invalid-handle bound. Specify each repair's target, fixed facts, permissible change,
   comparison and dependent validation. Identify tuple-specific authority to retire.
 - **Checks:** trace initial generation, value/provenance/coupled/membership/omission
@@ -678,6 +652,38 @@ tests or conversion adapters to manufacture smaller deployable patches.
 - **Exit/revise:** explicit approval and unambiguous accepted/rejected examples are
   required. If a case needs broader authority, expose that decision; do not defer it
   to request-building code. No new provider mode, workflow or retry policy is included.
+
+**Phase 0 complete (26 September 2026):** 0.1 has the baseline regression and
+measurements below. The user approved 0.2; ADR 0020 records the decision and
+accepted/rejected repair examples. The retained
+[failed run](../zig-out/e2e-spec/2026-09-25T08-21-44Z-b16638b5493910a4b1d29436213dcde9/report.md)
+has 13 accounted calls, 18,512 actual tokens, two story-repair executions and no
+publication or rubric grade. Its requests measure:
+
+| Assignment | Serialized Bedrock request bytes | Selected schema bytes | Actual input / total tokens |
+| --- | ---: | ---: | ---: |
+| Brief initial, call 9 | 10,242 | 3,927 | 1,583 / 1,763 |
+| Brief repair, call 10 | 5,107 | 837 | 976 / 1,270 |
+| Story initial, call 11 | 7,529 | 2,115 | 1,282 / 1,462 |
+| Story repair, calls 12 and 13 | 5,850 each; byte-identical | 837 each | 1,132 / 1,661; 1,132 / 1,297 |
+
+These are retained-run measurements, not model predictions or before/after
+improvement claims. The failed run had no separate protocol-correction call; its
+prefix normalizations stayed in the existing decoder. Existing fake-provider
+[protocol correction tests](../src/model_request_workflow_test.zig) retain the
+selected schema and original request identity. The current Spec graph has 717
+compiled operations under the [root compilation test](../src/composition/root.zig);
+the retained run does not separately report a compiled graph count. The new
+[generation regression](../src/specification_generation_test.zig) exercises the
+same invalid exact join, unchanged repair response and exhaustion for two unrelated
+requirements; it also checks bounded native recovery and keeps mechanical text
+acceptance distinct from semantic adequacy. The existing meaningful-content test
+in that owner covers source obligations, requirements, criteria and rendering.
+§11 lists the later contract tests.
+`zig build test-specification-generation` and the full
+`zig build verify --summary all` passed (126/126 steps, 1,248/1,248 tests,
+including packaged smoke checks). `git diff --check` passed. These offline
+checks do not establish live model quality or implementation of the approved contract.
 
 ### Phase 1 — Remove coupling without changing behavior
 
@@ -900,9 +906,9 @@ business evidence, or hide unresolved model errors behind mechanically complete
 coverage. Broader bookkeeping simplifications should follow measured evidence,
 independently of this first contract.
 
-**Evidence limit:** this review inspected current code and governing contracts;
-it made documentation changes only. The proposed types/schemas have not been
-compiled or exercised, and no live effectiveness claim follows from this review.
+**Evidence limit:** Phase 0 exercises current behavior through offline regression
+tests. The approved target types/schemas have not been compiled or exercised, and no live
+effectiveness claim follows from this review.
 Existing regression owners include [specification generation tests](../src/specification_generation_test.zig),
 [typed-text tests](../src/typed_text_test.zig), [request workflow tests](../src/model_request_workflow_test.zig)
 and [native packaging smoke](../test/packaging/smoke.zig); implementation must extend

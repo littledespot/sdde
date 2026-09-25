@@ -19,12 +19,16 @@ not change operational path authorization or the overall Proposed design status.
   Prose is normalized inert text; punctuation alone establishes neither reference
   identity nor intent. Semantic grounding remains with existing review owners.
 - Business values are ordered segments: prose strings, `passive` registry IDs and
-  `exact_copy` token/citation pairs. Exact copies can appear within a sentence.
+  `exact_copy` selections. [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md)
+  replaces each post-ledger exact token/citation pair with one preserved-token
+  claim handle in model and canonical content at the coordinated format cutover.
+  Exact copies can appear within a sentence.
   The former whole-value exact-copy union is removed, without a dual reader.
 - Exact selections resolve through the current source evidence and the field's
-  fixed provenance. They carry no model-authored replacement bytes. Passive
-  references retain filename/path/URI kinds and source occurrences in their
-  existing registry. Source references keep their separate source identity.
+  bound explicit support plus derived lineage. They carry no model-authored
+  replacement bytes. Passive references retain filename/path/URI kinds and
+  source occurrences in their existing registry. Source references keep their
+  separate source identity.
 - Source markup supplies structure, not semantic approval: inline code, fenced
   blocks and explicit link destinations retain source coordinates and raw values
   under registered extractors. Existing classification decides relevance. A code

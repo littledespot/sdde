@@ -695,6 +695,10 @@ ClarificationOwnershipRegistry {
 
 ## 7. Specification IR
 
+This sample describes the deployed `specification/v1` shape. The approved
+[ADR 0020](decisions/0020-derived-exact-reference-lineage.md) defines its
+coordinated `v2` replacement; the two shapes are never concurrent readers.
+
 ```text
 Provenance { claim_ids[], citation_ids[], clarification_response_ids[] }
 AttributedValue { value: BusinessValue, provenance: Provenance }

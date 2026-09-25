@@ -4095,6 +4095,122 @@ test "coupled evidence repair keeps one identity across alternating defects and 
     try std.testing.expect((try provenance.eligibleExactClaim(a, ineligible, pair)) == null);
 }
 
+test "exact-reference join failure retains one repair identity through unchanged responses" {
+    const sessions = @import("domain/specification_session.zig");
+    const repair = @import("domain/specification_repair.zig");
+    const retry = @import("domain/workflow_retry.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        "The application must start and display `Hello, World!`. It should show UTC time.",
+        "The library must renew eligible loans and display `Renewed!`. It should show the deadline.",
+    }) |source| {
+        var fixture = try Fixture.initContent(a, source, .business_exact_string, true, source, 1);
+        defer fixture.deinit();
+        const good = try fixture.proposal(source);
+        const token_claim = (try provenance.items(fixture.context)).entries[1].claim;
+        const token = token_claim.content.preserved_token;
+        const pair: @import("domain/typed_text.zig").ExactCopy = .{ .token_id = token.value.id, .citation_id = token.citation_id };
+
+        // A serialized reference inside prose passes the mechanical text check;
+        // that is not evidence that the title preserves the source's meaning.
+        var metadata = good;
+        metadata.value = (try fixture.proposal("The application displays {\"kind\":\"exact_copy\"}. ")).value;
+        const initial = try sessions.initialize(fixture.context.inputs.corpus.feature_id, fixture.context);
+        try std.testing.expect((try g.validate(a, text.validator, fixture.context, .brief, .{ .content = .{ .brief = .{ .title = metadata, .description = good, .primary_goal = good } } })) == .valid);
+        const current = try sessions.append(initial, (try g.validate(a, text.validator, fixture.context, .brief, .{ .content = .{ .brief = .{ .title = good, .description = good, .primary_goal = good } } })).valid);
+        const first_packet = try sessions.packet(std.testing.allocator, current, fixture.context);
+        defer packets.release(first_packet);
+        const first_body = (try std.json.parseFromSlice(std.json.Value, a, first_packet.body(), .{})).value.object;
+        try std.testing.expect(first_packet.body().len > 0);
+        try std.testing.expectEqual(@as(usize, 2), first_body.get("claims").?.array.items.len);
+        try std.testing.expectEqual(@as(usize, 1), first_body.get("preserved_tokens").?.array.items.len);
+
+        var bad = good;
+        bad.value = .{ .segments = &.{.{ .exact_copy = pair }} };
+        const original: repair.Candidate = .{ .response = .{ .content = .{ .primary_user_story = bad } }, .origins = .{ .initial = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } } } };
+        const rejected = (try validate_unit.execute(a, current, fixture.context, original)).invalid;
+        try std.testing.expectEqual(.unknown_exact, rejected.issue.text_issue.?.reason);
+        var authorization = try repair.authorize(a, current, fixture.context, original, rejected);
+        try std.testing.expectEqual(.attributed, std.meta.activeTag(authorization.target));
+        const original_authorization = authorization;
+
+        const repaired_value: spec.Model.AttributedValue = .{
+            .value = .{ .segments = &.{ .{ .literal = .{ .value = "The requested action displays " } }, .{ .exact_copy = pair } } },
+            .provenance = .{ .claim_ids = &.{ good.provenance.claim_ids[0], token_claim.id }, .clarification_response_ids = &.{} },
+        };
+        const recovered = try repair.merge(a, current, fixture.context, original, original_authorization, .{ .attributed = repaired_value }, null);
+        try std.testing.expect((try validate_unit.execute(a, current, fixture.context, recovered)) == .valid);
+        try std.testing.expectEqualDeep(current.units[0], (try sessions.append(current, (try validate_unit.execute(a, current, fixture.context, recovered)).valid)).units[0]);
+
+        var state = retry.State.init(std.testing.allocator);
+        defer state.deinit();
+        var candidate = original;
+        var first_repair_body: ?[]const u8 = null;
+        const key = authorization.retry.?.key;
+        for (0..2) |attempt| {
+            const packet = try repair.packet(std.testing.allocator, current, fixture.context, authorization);
+            defer packets.release(packet);
+            const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+            try std.testing.expect(body.contains("input"));
+            try std.testing.expect(body.get("repair").?.object.contains("current_value"));
+            if (first_repair_body) |previous| try std.testing.expectEqualStrings(previous, packet.body()) else first_repair_body = try a.dupe(u8, packet.body());
+
+            try state.commit(try state.prepare(.{ .authorized = authorization.retry.? }));
+            try std.testing.expectEqual(@as(u64, attempt + 1), (try state.beginAttempt(.{ .bytes = "repair" }, .{ .value = 1 }, authorization.retry.?)).allowed);
+            candidate = try repair.merge(a, current, fixture.context, candidate, authorization, .{ .attributed = bad }, .{ .request = .{ .value = attempt + 2 }, .attempt = .{ .value = 1 } });
+            try state.commit(try state.prepare(.{ .merged = .{ .permit = authorization.retry.?, .revision_after = candidate.revision } }));
+            const validation = (try repair.retryValidation(a, text.validator, current, fixture.context, candidate)).?;
+            try std.testing.expectEqual(.recurring, validation.validated.result);
+            try state.commit(try state.prepare(validation));
+            const next_rejection = (try validate_unit.execute(a, current, fixture.context, candidate)).invalid;
+            try std.testing.expectEqual(.unknown_exact, next_rejection.issue.text_issue.?.reason);
+            authorization = try repair.authorize(a, current, fixture.context, candidate, next_rejection);
+            try std.testing.expectEqualDeep(key, authorization.retry.?.key);
+        }
+        try state.commit(try state.prepare(.{ .authorized = authorization.retry.? }));
+        try std.testing.expectEqual(@as(u64, 2), (try state.beginAttempt(.{ .bytes = "repair" }, .{ .value = 1 }, authorization.retry.?)).exhausted);
+    }
+}
+
+test "identical exact values in separate sources retain occurrence identity" {
+    const upstream = @import("reference_reconciliation_test.zig");
+    const r = references.r;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try upstream.prepare(a, &.{ "Show `Done!` on startup.\n", "Show `Done!` after renewal.\n" });
+    defer fixture.deinit();
+    const selected = fixture.context();
+    const progress = try references.summaries(a, try references.initialize(a, fixture.inputs, fixture.extracted, 2), selected);
+    const accounted = (try references.finish(a, progress, try references.global(a, progress), selected)).valid;
+    const context: provenance.Context = .{ .inputs = fixture.inputs, .references = accounted, .registry = selected.registry, .current = selected.current };
+    const items = try provenance.items(context);
+    var handles: [2]struct { claim: r.ClaimId, pair: @import("domain/typed_text.zig").ExactCopy, bytes: []const u8 } = undefined;
+    var count: usize = 0;
+    for (items.entries) |item| {
+        if (item.claim.content != .preserved_token) continue;
+        try std.testing.expect(count < handles.len);
+        const token = item.claim.content.preserved_token;
+        handles[count] = .{ .claim = item.claim.id, .pair = .{ .token_id = token.value.id, .citation_id = token.citation_id }, .bytes = token.value.raw_value.bytes };
+        count += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 2), count);
+    try std.testing.expectEqualStrings(handles[0].bytes, handles[1].bytes);
+    try std.testing.expect(!std.meta.eql(handles[0].claim, handles[1].claim));
+    try std.testing.expect(!std.meta.eql(handles[0].pair, handles[1].pair));
+    for (handles, 0..) |handle, index| {
+        try std.testing.expectEqualDeep(handle.claim, (try provenance.eligibleExactClaim(a, context, handle.pair)).?);
+        const candidate: spec.Model.AttributedValue = .{ .value = .{ .segments = &.{.{ .exact_copy = handle.pair }} }, .provenance = .{ .claim_ids = &.{handle.claim}, .clarification_response_ids = &.{} } };
+        _ = try provenance.checkAttributed(.model, a, text.validator, context, candidate);
+        var wrong = candidate;
+        wrong.value = .{ .segments = &.{.{ .exact_copy = handles[1 - index].pair }} };
+        try std.testing.expectError(error.InvalidTypedText, provenance.checkAttributed(.model, a, text.validator, context, wrong));
+    }
+}
+
 test "all same-kind record repairs share canonical schemas and retain group identity and siblings" {
     const sessions = @import("domain/specification_session.zig");
     const repair = @import("domain/specification_repair.zig");
