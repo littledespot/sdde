@@ -259,3 +259,19 @@ test "composition clone rebinds canonical schema and keeps equal destination val
     try std.testing.expectEqualStrings("shipping", shipping.root().object[0].name);
     try std.testing.expect(billing.root().object[0].schema == schema.findProperty(canonical.root().object, "billing").?.schema);
 }
+
+test "composition retains type-disjoint values whole and rejects inferred discriminator splits" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const canonical = try compileSchema(a,
+        \\{"type":"object","properties":{"payload":{"oneOf":[{"type":"string","maxLength":100},{"type":"object","properties":{"kind":{"const":"ref"},"id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","id"],"additionalProperties":false}]}},"required":["payload"],"additionalProperties":false}
+    );
+    const whole = try compilePlan(a,
+        \\{"schema":"json-composition/v1","result":"shape","parts":{"content":{"paths":["/payload"]}}}
+    , canonical);
+    try std.testing.expectEqual(@as(usize, 1), whole.parts().len);
+    try std.testing.expectError(error.InvalidJsonComposition, compilePlan(a,
+        \\{"schema":"json-composition/v1","result":"shape","parts":{"content":{"paths":["/payload/kind","/payload/id"]}}}
+    , canonical));
+}

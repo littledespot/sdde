@@ -615,13 +615,14 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         _ = directory.add(".sddtoolkit.json", configured);
         _ = directory.add(".sddproviders.json", @embedFile("../../design/examples/.sddproviders.json"));
         _ = directory.addCopyFile(b.path("design/workflows/spec.workflow.yaml"), ".sddtoolkit/workflows/spec.workflow.yaml");
-        inline for (.{ "reconciliation", "generation", "support", "repair" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
+        inline for (.{ "reconciliation", "generation", "support" }) |name| inline for (.{ "prompt.md", "schema.json" }) |extension| {
             _ = directory.addCopyFile(b.path("design/workflows/spec/" ++ name ++ "." ++ extension), ".sddtoolkit/workflows/spec/" ++ name ++ "." ++ extension);
         };
-        inline for (.{ "extraction-content.prompt.md", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation-summary.composition.json", "reconciliation-global.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md" }) |name| {
+        inline for (.{ "principle.prompt.md", "entities.prompt.md", "records.prompt.md", "extraction-content.prompt.md", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation-summary.composition.json", "reconciliation-global.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md" }) |name| {
             _ = directory.addCopyFile(b.path("design/workflows/spec/" ++ name), ".sddtoolkit/workflows/spec/" ++ name);
         }
         _ = directory.addCopyFile(b.path("design/workflows/spec/protocol.prompt.md"), ".sddtoolkit/workflows/spec/protocol.prompt.md");
+        _ = directory.addCopyFile(b.path("design/workflows/spec/repair.prompt.md"), ".sddtoolkit/workflows/spec/repair.prompt.md");
         _ = directory.add(".sddtoolkit/principles/toolchain.yaml", "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n");
         _ = directory.addCopyFile(b.path("test/e2e/wf-001-hello-world/reference/stories.md"), "references/Hello/stories.md");
         const check = std.Build.Step.Run.create(b, "load packaged generation YAML and resources without source assets or credentials");
@@ -645,10 +646,10 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         const provider_bytes = @embedFile("../../design/examples/.sddproviders.json");
         const catalogue = if (invalid_region) std.mem.replaceOwned(u8, b.allocator, provider_bytes, "ap-southeast-2", "us-west-2") catch @panic("allocate invalid deployment") else provider_bytes;
         _ = directory.add("config/.sddproviders.json", catalogue);
-        _ = directory.add(".sddtoolkit/workflows/provider-request.workflow.yaml", @embedFile("../../design/examples/provider-request.workflow.yaml"));
-        _ = directory.add(".sddtoolkit/workflows/provider-request.prompt.md", @embedFile("../../design/examples/provider-request.prompt.md"));
-        _ = directory.add(".sddtoolkit/workflows/provider-request.input.txt", @embedFile("../../design/examples/provider-request.input.txt"));
-        _ = directory.add(".sddtoolkit/workflows/provider-request.schema.json", @embedFile("../../design/examples/provider-request.schema.json"));
+        _ = directory.add(".sddtoolkit/workflows/provider-request.workflow.yaml", @embedFile("fixtures/provider-request/provider-request.workflow.yaml"));
+        _ = directory.add(".sddtoolkit/workflows/provider-request.prompt.md", @embedFile("fixtures/provider-request/provider-request.prompt.md"));
+        _ = directory.add(".sddtoolkit/workflows/provider-request.input.txt", @embedFile("fixtures/provider-request/provider-request.input.txt"));
+        _ = directory.add(".sddtoolkit/workflows/provider-request.schema.json", @embedFile("fixtures/provider-request/provider-request.schema.json"));
         const check = std.Build.Step.Run.create(b, "run packaged external Bedrock catalogue without credentials or network");
         check.addFileArg(packaged);
         check.addArg("provider-request");

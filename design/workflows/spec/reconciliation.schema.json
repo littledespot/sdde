@@ -1,37 +1,15 @@
 {
   "$defs": {
     "ordinal": {
-      "type": "object",
-      "properties": {
-        "ordinal": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 4294967295
-        }
-      },
-      "required": [
-        "ordinal"
-      ],
-      "additionalProperties": false
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
     },
     "business_segment": {
       "oneOf": [
         {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "literal"
-            },
-            "value": {
-              "type": "string",
-              "maxLength": 4294967295
-            }
-          },
-          "required": [
-            "kind",
-            "value"
-          ],
-          "additionalProperties": false
+          "type": "string",
+          "maxLength": 4294967295
         },
         {
           "type": "object",
@@ -48,27 +26,34 @@
             "passive_literal_id"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "exact_copy"
+            },
+            "token_id": {
+              "$ref": "#/$defs/ordinal"
+            },
+            "citation_id": {
+              "$ref": "#/$defs/ordinal"
+            }
+          },
+          "required": [
+            "kind",
+            "token_id",
+            "citation_id"
+          ],
+          "additionalProperties": false
         }
       ]
     },
     "reference_node": {
       "oneOf": [
         {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "literal"
-            },
-            "value": {
-              "type": "string",
-              "maxLength": 4294967295
-            }
-          },
-          "required": [
-            "kind",
-            "value"
-          ],
-          "additionalProperties": false
+          "type": "string",
+          "maxLength": 4294967295
         },
         {
           "type": "object",

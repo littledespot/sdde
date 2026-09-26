@@ -5,6 +5,7 @@ const c = @import("clarification_inputs.zig");
 const refresh = @import("clarification_refresh.zig");
 pub fn build(allocator: std.mem.Allocator, inputs: a.Inputs, observations: a.Observations, result: a.Result) a.Error!refresh.Needs {
     if (try a.validate(allocator, inputs, observations, result)) return error.InvalidRequiredAuthority;
+    for (result.entries) |entry| if (entry.candidate_defect != null) return error.InvalidRequiredAuthority;
     var needs: std.ArrayList(refresh.Need) = .empty;
     for (result.entries) |entry| {
         const gap: a.Gap = switch (entry.outcome) {
@@ -53,6 +54,12 @@ pub fn build(allocator: std.mem.Allocator, inputs: a.Inputs, observations: a.Obs
             .stale => "The earlier decision no longer applies to the current inputs.",
             .unsupported => "The review could not establish support for this decision.",
             .unregistered_ownership_or_policy => return error.InvalidRequiredAuthority,
+        };
+        // A descriptor can phrase a mechanically missing decision, but cannot
+        // manufacture a question for an unresolved semantic assessment.
+        if (questions.items.len == 0 and inputs.projection != .principle_assessment) switch (gap.reason) {
+            .missing, .stale => {},
+            else => return error.InvalidRequiredAuthority,
         };
         const prepared = @import("clarification_preparation.zig").prepare(allocator, if (questions.items.len != 0) questions.items else try @import("required_authority_description.zig").question(allocator, entry.requirement), reason, if (inputs.references) |refs| refs.items.entries else &.{}, .{ .citation_ids = citations.items, .source_ids = sources.items }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
         try needs.append(allocator, .{

@@ -59,6 +59,70 @@ test "oneOf compiles disjoint closed variants and retains domain selections" {
     try std.testing.expect(schema.findProperty(targets, "target-b").?.required);
 }
 
+test "integer choice restrictions bind tagged fields without restricting unrelated integer support" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const source =
+        \\{"type":"object","properties":{"value":{"type":"array","maxItems":2,"items":{"oneOf":[{"type":"string","maxLength":20},{"type":"object","properties":{"kind":{"const":"exact_copy"},"claim_id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","claim_id"],"additionalProperties":false}]}},"support":{"type":"array","maxItems":2,"items":{"type":"integer","minimum":1,"maximum":100}}},"required":["value","support"],"additionalProperties":false}
+    ;
+    const complete = try compile(a, source);
+    const selected = try schema.restrict(std.testing.allocator, complete, &.{}, &.{.{ .kind = "exact_copy", .field = "claim_id", .allowed = &.{ 2, 7 } }});
+    defer selected.release();
+    const value = schema.findProperty(selected.selected().root().object, "value").?.schema;
+    const exact = schema.findProperty(value.array.items.one_of[1].object, "claim_id").?.schema;
+    try std.testing.expectEqualDeep(&[_]i64{ 2, 7 }, exact.integer_enumeration);
+    try std.testing.expect(schema.findProperty(selected.selected().root().object, "support").?.schema.array.items.* == .integer);
+    const validator = @import("domain/model_payload_schema.zig");
+    try std.testing.expect(validator.validateValue(.{ .number = "2e0" }, exact) == null);
+    try std.testing.expectEqual(.enum_mismatch, validator.validateValue(.{ .number = "1" }, exact).?.reason);
+    var adapter: parser.Adapter = .{};
+    for (std.enums.values(@import("domain/model_schema_projection.zig").Profile)) |profile| {
+        const projection = try @import("domain/model_schema_projection.zig").render(a, selected.selected(), profile);
+        if (profile == .complete) {
+            const restored = try adapter.compiler().compileSelected(a, projection);
+            try std.testing.expectEqualDeep(selected.selected().root().*, restored.root().*);
+        } else try std.testing.expect(std.mem.indexOf(u8, projection, "\"enum\":[2,7]") != null);
+    }
+    for ([_]schema.IntegerChoice{
+        .{ .kind = "exact_copy", .field = "other", .allowed = &.{2} },
+        .{ .kind = "exact_copy", .field = "claim_id", .allowed = &.{101} },
+        .{ .kind = "exact_copy", .field = "claim_id", .allowed = &.{} },
+    }) |bad| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, complete, &.{}, &.{bad}));
+    // A retained packet may carry text choices into a provenance-only repair.
+    // With no text selector in that selected schema, there is nothing to narrow.
+    const provenance_only = try compile(a, "{\"type\":\"object\",\"properties\":{\"claim_ids\":{\"type\":\"array\",\"maxItems\":2,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}}},\"required\":[\"claim_ids\"],\"additionalProperties\":false}");
+    const no_text = try schema.restrict(std.testing.allocator, provenance_only, &.{}, &.{.{ .kind = "exact_copy", .field = "claim_id", .allowed = &.{2} }});
+    defer no_text.release();
+    try std.testing.expectEqualDeep(provenance_only.root().*, no_text.selected().root().*);
+}
+
+test "derived integer choice sets accept 1024 values and reject larger sets" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const source =
+        \\{"type":"object","properties":{"value":{"type":"object","properties":{"kind":{"const":"selected"},"id":{"type":"integer","minimum":1,"maximum":2000}},"required":["kind","id"],"additionalProperties":false}},"required":["value"],"additionalProperties":false}
+    ;
+    const complete = try compile(a, source);
+    for ([_]usize{ 1024, 1025 }) |count| {
+        const ids = try a.alloc(i64, count);
+        for (ids, 0..) |*id, index| id.* = @intCast(index + 1);
+        const choices = &[_]schema.IntegerChoice{.{ .kind = "selected", .field = "id", .allowed = ids }};
+        if (count > schema.max_choices) {
+            try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, complete, &.{}, choices));
+        } else {
+            const selected = try schema.restrict(std.testing.allocator, complete, &.{}, choices);
+            defer selected.release();
+            const id = schema.findProperty(schema.findProperty(selected.selected().root().object, "value").?.schema.object, "id").?.schema;
+            try std.testing.expectEqual(count, id.integer_enumeration.len);
+            var adapter: parser.Adapter = .{};
+            const restored = try adapter.compiler().compileSelected(a, selected.selected().modelBytes());
+            try std.testing.expectEqualDeep(selected.selected().root().*, restored.root().*);
+        }
+    }
+}
+
 test "bounded scalar collection and optional property shapes are supported" {
     const accepted = [_][]const u8{
         "{\"type\":\"string\",\"maxLength\":0}",
@@ -70,6 +134,7 @@ test "bounded scalar collection and optional property shapes are supported" {
         "{\"const\":7}",
         "{\"const\":\"Unicode \\u00e9\"}",
         "{\"enum\":[\"one\",\"two\"]}",
+        "{\"enum\":[1,2]}",
         "{\"type\":\"array\",\"items\":{\"type\":\"boolean\"},\"minItems\":0,\"maxItems\":4}",
         "{\"type\":\"object\",\"properties\":{\"optional\":{\"type\":\"boolean\"}},\"required\":[],\"additionalProperties\":false}",
     };
@@ -114,11 +179,11 @@ test "unknown contradictory unbounded and unsupported schema fields reject at an
         "{\"type\":\"boolean\",\"default\":true}",                                                                 "{\"type\":\"null\",\"nullable\":true}",                                                             "{\"type\":\"integer\",\"minimum\":0}",                                                                                          "{\"type\":\"integer\",\"minimum\":1,\"maximum\":0}",
         "{\"type\":\"integer\",\"minimum\":0,\"maximum\":9223372036854775808}",                                    "{\"type\":\"integer\",\"minimum\":0,\"maximum\":1e9999}",                                           "{\"type\":\"array\",\"items\":{\"type\":\"boolean\"}}",                                                                         "{\"type\":\"array\",\"maxItems\":2}",
         "{\"type\":\"array\",\"items\":[],\"maxItems\":2}",                                                        "{\"type\":\"array\",\"items\":{\"type\":\"boolean\"},\"minItems\":3,\"maxItems\":2}",               "{\"enum\":[]}",                                                                                                                 "{\"enum\":[\"x\",\"x\"]}",
-        "{\"enum\":[\"x\",\"\\u0078\"]}",                                                                          "{\"enum\":[1]}",                                                                                    "{\"const\":{}}",                                                                                                                "{\"const\":1.5}",
+        "{\"enum\":[\"x\",\"\\u0078\"]}",                                                                          "{\"enum\":[1,\"1\"]}",                                                                              "{\"const\":{}}",                                                                                                                "{\"const\":1.5}",
         "{\"const\":true,\"enum\":[\"yes\"]}",                                                                     "{\"enum\":[\"x\"],\"type\":\"string\"}",                                                            "{\"type\":\"object\"}",                                                                                                         "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":true}",
         "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":{\"type\":\"boolean\"}}", "{\"type\":\"object\",\"properties\":{},\"required\":[\"missing\"],\"additionalProperties\":false}", "{\"type\":\"object\",\"properties\":{\"x\":{\"type\":\"boolean\"}},\"required\":[\"x\",\"x\"],\"additionalProperties\":false}", "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
         "{\"type\":\"object\",\"properties\":[],\"required\":[],\"additionalProperties\":false}",                  "{\"type\":\"object\",\"properties\":{},\"required\":true,\"additionalProperties\":false}",          "{\"anyOf\":[{},{}]}",                                                                                                           "{\"oneOf\":[]}",
-        "{\"oneOf\":[{}]}",                                                                                        "{\"oneOf\":[{\"type\":\"boolean\"},{\"type\":\"null\"}]}",
+        "{\"oneOf\":[{}]}",                                                                                        "{\"oneOf\":[{\"type\":\"boolean\"},{\"type\":\"boolean\"}]}",                                       "{\"enum\":[1,1]}",                                                                                                              "{\"enum\":[1,2.0]}",
     };
     for (rejected) |field| {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -203,7 +268,7 @@ test "property enumeration variant and total-node guards accept boundaries and r
     const allocator = arena.allocator();
     _ = try compile(allocator, try objectProperties(allocator, schema.max_properties, "{\"type\":\"boolean\"}"));
     try std.testing.expectError(error.InvalidModelResultSchema, compile(allocator, try objectProperties(allocator, schema.max_properties + 1, "{\"type\":\"boolean\"}")));
-    for ([_]usize{ schema.max_choices, schema.max_choices + 1 }) |count| {
+    for ([_]usize{ 256, 257, 1024, 1025 }) |count| {
         var buffer: std.array_list.Managed(u8) = .init(allocator);
         try buffer.appendSlice("{\"enum\":[");
         for (0..count) |index| {
@@ -212,9 +277,28 @@ test "property enumeration variant and total-node guards accept boundaries and r
         }
         try buffer.appendSlice("]}");
         const bytes = try fieldSchema(allocator, buffer.items);
-        if (count == schema.max_choices) {
-            _ = try compile(allocator, bytes);
-        } else try std.testing.expectError(error.InvalidModelResultSchema, compile(allocator, bytes));
+        var adapter: parser.Adapter = .{};
+        if (count <= 1024) {
+            const compiled = try compile(allocator, bytes);
+            const cloned = try compiled.clone(allocator);
+            const projection = @import("domain/model_schema_projection.zig");
+            const validation = @import("domain/model_payload_schema.zig");
+            for (std.enums.values(projection.Profile)) |profile| {
+                const projected = try projection.render(allocator, cloned, profile);
+                const restored = try adapter.compiler().compileSelected(allocator, projected);
+                try std.testing.expectEqualDeep(compiled.root().*, restored.root().*);
+                const choices = restored.root().object[0].schema;
+                try std.testing.expectEqual(count, choices.enumeration.len);
+                try std.testing.expect(validation.validateValue(.{ .string = "value-0" }, choices) == null);
+                const last = try std.fmt.allocPrint(allocator, "value-{d}", .{count - 1});
+                try std.testing.expect(validation.validateValue(.{ .string = last }, choices) == null);
+                const unavailable = try std.fmt.allocPrint(allocator, "value-{d}", .{count});
+                try std.testing.expectEqual(.enum_mismatch, validation.validateValue(.{ .string = unavailable }, choices).?.reason);
+            }
+        } else {
+            try std.testing.expectError(error.InvalidModelResultSchema, compile(allocator, bytes));
+            try std.testing.expectError(error.InvalidModelResultSchema, adapter.compiler().compileSelected(allocator, bytes));
+        }
     }
     for ([_]usize{ schema.max_variants, schema.max_variants + 1 }) |count| {
         var buffer: std.array_list.Managed(u8) = .init(allocator);
@@ -346,4 +430,53 @@ test "reference expansion enforces node and depth bounds after substitution" {
     }
     try defs.appendSlice(try std.fmt.allocPrint(a, ",\"d{d}\":{s}", .{ schema.max_depth + 1, replacement }));
     try std.testing.expectError(error.InvalidModelResultSchema, compile(a, try std.mem.concat(a, u8, &.{ "{\"$defs\":{", defs.items, "},\"$ref\":\"#/$defs/d0\"}" })));
+}
+
+test "nested type-disjoint alternatives accept but overlapping and nonobject response roots reject" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const disjoint = "{\"oneOf\":[{\"type\":\"boolean\"},{\"type\":\"null\"}]}";
+    _ = try compile(a, try fieldSchema(a, disjoint));
+    try std.testing.expectError(error.InvalidModelResultSchema, compile(a, disjoint));
+    for ([_][]const u8{
+        "{\"oneOf\":[{\"type\":\"string\",\"maxLength\":8},{\"const\":\"overlap\"}]}",
+        "{\"oneOf\":[{\"type\":\"integer\",\"minimum\":0,\"maximum\":9},{\"const\":10}]}",
+        "{\"oneOf\":[{\"type\":\"boolean\"},{\"oneOf\":[{\"type\":\"string\",\"maxLength\":8},{\"type\":\"null\"}]}]}",
+    }) |bad| try std.testing.expectError(error.InvalidModelResultSchema, compile(a, try fieldSchema(a, bad)));
+}
+
+test "native availability narrows nested alternatives without altering canonical schemas" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, restrictChoices, .{});
+}
+
+fn restrictChoices(allocator: std.mem.Allocator) !void {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const original = try compile(a, try fieldSchema(a, variants));
+    const narrowed = try schema.restrict(allocator, original, &.{.{ .kind = "clarification_needed" }}, &.{});
+    defer narrowed.release();
+    try std.testing.expect(narrowed.selected().isRestrictionOf(original));
+    try std.testing.expect(!original.isRestrictionOf(narrowed.selected()));
+    try std.testing.expectEqualStrings(original.bytes(), narrowed.selected().bytes());
+    try std.testing.expect(std.mem.indexOf(u8, original.modelBytes(), "clarification_needed") != null);
+    try std.testing.expect(std.mem.indexOf(u8, narrowed.selected().modelBytes(), "clarification_needed") == null);
+    const check = @import("domain/model_payload_schema.zig");
+    for ([_][]const u8{ "{\"value\":{\"kind\":\"content\",\"answer\":\"Supported\"}}", "{\"value\":{\"kind\":\"clarification_needed\",\"question\":\"Choose\"}}" }, 0..) |bytes, index| {
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
+        try std.testing.expect(check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), original.root()) == null);
+        try std.testing.expectEqual(index == 0, check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), narrowed.selected().root()) == null);
+    }
+    if (schema.restrict(allocator, original, &.{ .{ .kind = "content" }, .{ .kind = "clarification_needed" } }, &.{})) |unexpected| {
+        unexpected.release();
+        return error.TestUnexpectedResult;
+    } else |err| switch (err) {
+        error.OutOfMemory => return err,
+        error.InvalidModelResultSchema => {},
+    }
+    const different = try compile(a, try fieldSchema(a, variants));
+    try std.testing.expect(!narrowed.selected().isRestrictionOf(different));
+    const copy = try narrowed.selected().clone(a);
+    try std.testing.expectEqualStrings(narrowed.selected().modelBytes(), copy.modelBytes());
 }

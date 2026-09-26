@@ -17,6 +17,11 @@ open forms exist. Unrepaired JSON/schema rejection remains a terminal error unde
 [§22.6](../contracts/22-repair.md#226-unparseable-output), with no new specification
 publication. Successful correction may continue to a validated clarification pause.
 
+The [§12.8.1 corrective admission contract](../contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
+defines which findings can establish that pause. Unresolved candidate or review
+failure cannot become `needs_user` merely because another valid question exists.
+That enforcement is implementation work tracked in FIX_002, not a delivered result.
+
 A clarification pause publishes the complete registered set: incomplete `spec.md`,
 current `reference-context.md`, clarification registry/forms, and a canonical
 `spec_clarification_pending` workflow-state variant. The pending state replaces

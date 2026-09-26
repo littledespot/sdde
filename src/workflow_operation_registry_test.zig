@@ -154,24 +154,6 @@ test "one registry rejects duplicate and structurally invalid operations" {
     invalid_model_registry.operations = &.{model_without_slot};
     try std.testing.expect(!invalid_model_registry.validate());
 
-    const hidden_slot: Entry = .{
-        .contract = .{
-            .id = "model.hidden-slot",
-            .kind = .step,
-            .parameters = &.{.{
-                .id = "slot",
-                .kind = .model_slot,
-                .required = true,
-                .workflow_definition_safe = true,
-            }},
-            .outcomes = &.{.ok},
-            .side_effect = .none,
-        },
-        .binding = bindings.bind(void, null, fixture.unused),
-    };
-    invalid_model_registry.operations = &.{hidden_slot};
-    try std.testing.expect(!invalid_model_registry.validate());
-
     var zero_budget = valid;
     zero_budget.policies = &.{.{
         .id = "core.safe@1",
@@ -285,7 +267,7 @@ test "repair roles keep declared guards native and cannot acquire accounting eff
 test "pure model-binding contracts derive authority only from the typed slot" {
     const parameters = [_]operation.ParameterDescriptor{
         .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
-    } ++ @import("domain/workflow_model.zig").parameters;
+    };
     const entry: Entry = .{
         .contract = .{
             .id = "test.prepare",
@@ -312,7 +294,10 @@ test "pure model-binding contracts derive authority only from the typed slot" {
                 descriptors[0].required = false;
                 changed.contract.parameters = descriptors[0..parameters.len];
             },
-            2 => changed.contract.parameters = parameters[0..1],
+            2 => {
+                descriptors[1] = .{ .id = "response-mode", .kind = .enumeration, .required = true, .workflow_definition_safe = true, .allowed_values = &.{"native-schema"} };
+                changed.contract.parameters = &descriptors;
+            },
             3 => {
                 descriptors[0].allowed_values = &.{"hidden-slot"};
                 changed.contract.parameters = descriptors[0..parameters.len];
@@ -363,4 +348,93 @@ test "registry rejects absent typed operation context" {
     try std.testing.expect(registry.validate());
     entry.binding.context = null;
     try std.testing.expect(!registry.validate());
+}
+
+test "schema registration covers the complete key space and rejects distant duplicates" {
+    const data = @import("domain/pipeline_data.zig");
+    const pipeline = @import("domain/pipeline.zig");
+    const keys = std.meta.tags(pipeline.DataKey);
+    var schemas: [data.key_count + 1]data.Schema = undefined;
+    for (keys, 0..) |key, index| schemas[index] = .{ .key = key, .version = 1, .type_name = "test.value", .maximum_bytes = null };
+    var registry: Registry = .{ .operations = &.{}, .data_schemas = schemas[0..data.key_count], .policies = &.{}, .gates = &.{} };
+    try std.testing.expect(registry.validate());
+    for ([_]usize{ 0, data.key_count / 2, data.key_count - 1 }) |index| {
+        schemas[data.key_count] = schemas[index];
+        registry.data_schemas = &schemas;
+        try std.testing.expect(!registry.validate());
+        // Different metadata cannot make a duplicate key unambiguous.
+        schemas[data.key_count].version += 1;
+        try std.testing.expect(!registry.validate());
+        registry.data_schemas = schemas[0..data.key_count];
+        try std.testing.expect(registry.validate());
+    }
+}
+
+test "each operation data declaration requires its current registered schema" {
+    const data = @import("domain/pipeline_data.zig");
+    const pipeline = @import("domain/pipeline.zig");
+    const keys = std.meta.tags(pipeline.DataKey);
+    inline for (.{ "requires", "optional", "produces", "replaces", "invalidates" }) |field| {
+        for ([_]pipeline.DataKey{ keys[0], keys[keys.len / 2], keys[keys.len - 1] }) |key| {
+            var schema: data.Schema = .{ .key = key, .version = 1, .type_name = "test.value", .maximum_bytes = null };
+            var entry: Entry = .{ .contract = .{ .id = "test.data", .kind = .step, .outcomes = &.{.ok}, .side_effect = .none }, .binding = bindings.bind(void, null, fixture.unused) };
+            @field(entry.contract, field) = &.{key};
+            var registry: Registry = .{ .operations = (&entry)[0..1], .data_schemas = (&schema)[0..1], .policies = &.{}, .gates = &.{} };
+            try std.testing.expect(registry.validate());
+            registry.data_schemas = &.{};
+            try std.testing.expect(!registry.validate());
+            registry.data_schemas = (&schema)[0..1];
+            // Revalidate the same storage after both metadata and key mutation.
+            schema.version = 0;
+            try std.testing.expect(!registry.validate());
+            schema.version = 1;
+            schema.key = if (key == keys[0]) keys[keys.len - 1] else keys[0];
+            try std.testing.expect(!registry.validate());
+            schema.key = key;
+            schema.type_name = "";
+            try std.testing.expect(!registry.validate());
+            schema.type_name = "test.value";
+            schema.maximum_bytes = 0;
+            try std.testing.expect(!registry.validate());
+            schema.maximum_bytes = null;
+            try std.testing.expect(registry.validate());
+        }
+    }
+}
+
+test "gate schema lookups recheck current authority retention and evidence metadata" {
+    const data = @import("domain/pipeline_data.zig");
+    const gate = @import("domain/workflow_gate.zig");
+    var schemas = [_]data.Schema{
+        .{ .key = .workflow_invocation, .version = 1, .type_name = "test.authority", .maximum_bytes = null },
+        .{ .key = .workflow_operation_registry_evidence, .version = 1, .type_name = @typeName(gate.Decision), .maximum_bytes = null },
+    };
+    var entries = [_]Entry{
+        .{ .contract = .{ .id = "test.issue", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.workflow_operation_registry_evidence}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = bindings.bind(void, null, fixture.unused) },
+        .{ .contract = .{ .id = "test.consume", .kind = .step, .gates = &.{"test.authority@1"}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = bindings.bind(void, null, fixture.unused) },
+    };
+    const contract: gate.Contract = .{ .id = .{ .bytes = "test.authority@1" }, .issuer = .{ .bytes = "test.issue" }, .evidence = .workflow_operation_registry_evidence, .authority = &.{.workflow_invocation} };
+    var registry: Registry = .{ .operations = &entries, .data_schemas = &schemas, .policies = &.{}, .gates = &.{contract} };
+    try std.testing.expect(registry.validate());
+    for (0..9) |change| {
+        const original_schemas = schemas;
+        const original_entries = entries;
+        switch (change) {
+            0 => schemas[0].retention = .captured,
+            1 => schemas[0].retention = .execution_control,
+            2 => schemas[1].version = 2,
+            3 => schemas[1].type_name = "wrong.evidence",
+            4 => registry.data_schemas = schemas[0..1],
+            5 => registry.data_schemas = schemas[1..],
+            6 => entries[1].contract.produces = &.{.workflow_operation_registry_evidence},
+            7 => entries[1].contract.replaces = &.{.workflow_operation_registry_evidence},
+            8 => entries[0].contract.id = "test.different-issuer",
+            else => unreachable,
+        }
+        try std.testing.expect(!registry.validate());
+        schemas = original_schemas;
+        entries = original_entries;
+        registry.data_schemas = &schemas;
+        try std.testing.expect(registry.validate());
+    }
 }

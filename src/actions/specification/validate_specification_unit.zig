@@ -7,7 +7,11 @@ pub const Action = struct {
     pub fn execute(self: Action, allocator: std.mem.Allocator, current: @import("../../domain/specification_session.zig").Session, context: @import("../../domain/specification_provenance.zig").Context, proposed: @import("../../domain/specification_candidate.zig").Candidate) @import("../../domain/specification_session.zig").Error!@import("../../domain/specification_candidate.zig").Result {
         const session = @import("../../domain/specification_session.zig");
         if (proposed.revision == 0 or !current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
-        const result = try g.validate(allocator, self.validator, context, try session.unit(current.completed), proposed.response);
+        var result = try g.validate(allocator, self.validator, context, try session.unit(current.completed), proposed.response);
+        if (result == .valid) if (try session.checkMembership(current, result.valid)) |issue| {
+            result = .{ .invalid = issue };
+        };
+        @import("../../domain/specification_repair.zig").retainGroupTarget(proposed, &result) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
         return switch (result) {
             .valid => |checked| .{ .valid = .{ .unit = checked.unit, .response = checked.response, .origins = proposed.origins, .last_repair = proposed.last_repair } },
             .invalid => |issue| .{ .invalid = .{ .owner = try session.owner(allocator, current), .revision = proposed.revision, .last_repair = proposed.last_repair, .origin = proposed.origins.at(issue.field), .issue = issue, .dependencies = try @import("../../domain/specification_candidate_context.zig").snapshot(allocator, current, context, proposed) } },

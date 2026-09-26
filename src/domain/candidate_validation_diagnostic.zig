@@ -1,6 +1,11 @@
 //! Typed validator evidence for observers. This projection grants no repair or
 //! workflow authority; the retained validator/authorization values own that.
 const std = @import("std");
+pub const Attribution = union(enum) {
+    response: @import("model_candidate_origin.zig").Origin,
+    candidate,
+    missing_response,
+};
 pub const Diagnostic = union(enum) {
     extraction_text: @import("reference_extraction.zig").TextRejection,
     reconciliation: @import("reference_reconciliation_diagnostic.zig").Rejection,
@@ -23,6 +28,24 @@ pub const Diagnostic = union(enum) {
             .support => |value| if (value.selected()) |selected| selected.origin else null,
             .principle_review => |value| if (value.selected()) |selected| selected.origin else null,
             .specification => |value| value.origin,
+        };
+    }
+
+    /// Coverage checks the assembled candidate before authorization selects a
+    /// replacement and its producer. Other live rejections belong to a response.
+    pub fn attribution(self: Diagnostic) Attribution {
+        if (self.origin()) |value| return .{ .response = value };
+        return switch (self) {
+            .coverage => .candidate,
+            .extraction_text,
+            .reconciliation,
+            .token_classifications,
+            .source_selections,
+            .support_findings,
+            .support,
+            .principle_review,
+            .specification,
+            => .missing_response,
         };
     }
 

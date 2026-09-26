@@ -1,4 +1,3 @@
-const std = @import("std");
 const feature_log_format = @import("../../domain/feature_log_format.zig");
 const log_binding = @import("../../domain/feature_log_binding.zig");
 const log_stream = @import("../../domain/feature_log_stream.zig");
@@ -17,17 +16,13 @@ pub const Action = struct {
 
     pub fn execute(
         _: Action,
-        allocator: std.mem.Allocator,
+        event_id_buffer: *[32]u8,
         binding: *const log_binding.ValidatedFeatureLogBinding,
         state: log_stream.StreamState,
-        reading: log_stream.ClockReading,
+        reading: *const log_stream.ClockReading,
         attributed: telemetry.WorkflowTelemetryFact,
     ) Error!feature_log_format.EventRecord {
-        if (state.next_sequence == 0) return error.InvalidLogEvent;
-        const event_id_bytes = std.fmt.allocPrint(allocator, "EVENT-{d}", .{state.next_sequence}) catch {
-            return error.InvalidLogEvent;
-        };
-        const event_id = telemetry.Identifier.validate(event_id_bytes) orelse return error.InvalidLogEvent;
+        const event_id = feature_log_format.eventId(event_id_buffer, state.next_sequence) orelse return error.InvalidLogEvent;
         return .{
             .log_policy_id = binding.logPolicyId(),
             .binding_id = binding.bindingId(),

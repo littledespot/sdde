@@ -191,9 +191,9 @@ For example, a single-target replacement response is simply:
 | Integer | `type: "integer"`, required `minimum` and `maximum`, both signed 64-bit JSON integer literals. |
 | Boolean / null | Only `type: "boolean"` or `type: "null"`. |
 | Constant | Only `const`, containing a string, signed 64-bit integer, boolean or null. |
-| Enumeration | Only `enum`, containing a nonempty list of distinct strings. Constants/enumerations are already finite and need no redundant type or length declaration. |
+| Enumeration | Only `enum`, containing a nonempty homogeneous list of distinct strings or signed 64-bit integer literals. Constants/enumerations are already finite and need no redundant type or length declaration. Integer enum support was approved for native choice restriction on 26 September 2026. |
 | Array | `type: "array"`, one `items` schema and required `maxItems`; optional `minItems` means zero when absent. |
-| Alternatives | Only `oneOf`, containing 2–32 closed object schemas. Each requires `kind` with a distinct nonempty string `const`; no inferred or overlapping branch is allowed. |
+| Alternatives | Only `oneOf`, containing 2–32 alternatives. Nested alternatives may have distinct JSON types; alternatives sharing object type require distinct nonempty string `kind` constants. Repeated primitive types, nested alternative groups and overlapping branches reject. Complete response roots remain closed objects or tagged-object alternatives. |
 
 ### Local references and root rules
 
@@ -236,7 +236,9 @@ For example, a single-target replacement response is simply:
 - The compiler reuses the existing 1,048,576-byte workflow-resource ceiling and adds
   structural guards: at most 64 JSON container levels, 16 schema-node levels (root is
   level 1), 4,096 schema nodes including alternative objects and their fields, 256
-  properties per object, and 256 enum values.
+  properties per object, and 1,024 enum values (enum limit increased by user approval
+  on 26 September 2026). The same enum bound applies to captured selected-schema
+  reconstruction.
 - These are compiler safety bounds for compiling the schema resource, not model-call
   size limits, workflow token budgets or retry limits.
 - They cannot be repurposed as request or response byte ceilings.
@@ -290,3 +292,23 @@ For example, a single-target replacement response is simply:
 - No compatibility reader or legacy metadata-emitting prompt is retained.
 - Schema compilation adds no workflow operation, hidden transition or provider support;
   it is part of the existing workflow-compilation kernel.
+
+## Approved compact wire amendment — 25 September 2026
+
+The user approved FIX_002 §30. Nested alternatives may be disjoint by JSON type,
+with the same compiler proof reused by validation, diagnostics and provider
+projection. This supersedes the object-only alternatives restriction. Composition
+keeps such mixed-type values whole; unsupported decomposition rejects at compile
+time. It does not infer a discriminator or a missing value.
+
+The shared candidate codec supports explicit native declarations for lossless
+single-field wrappers and scalar/array union payloads. Declared ordinal IDs encode
+as integers, literal text segments as strings, and normalized business values as
+segment arrays. Passive/source references and exact-copy token/citation selections
+stay explicit. A selected repair whose value can be scalar or array retains one
+closed object envelope (`value`); complete workflow responses remain objects.
+
+Configured result schemas remain acceptance authority. Native declarations only
+map wire representation to existing types; they neither choose evidence nor relax
+validation. Initial responses, repairs and their evidence use the same codec.
+Superseded wire forms reject; stored canonical formats remain unchanged.

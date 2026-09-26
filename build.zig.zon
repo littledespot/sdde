@@ -17,6 +17,7 @@
         "README.md",
         "build.zig",
         "build.zig.zon",
+        "tests.zig",
         "build",
         "src",
         "test",

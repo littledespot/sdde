@@ -89,6 +89,58 @@ test "information retention and current-value publication are atomic under alloc
     try std.testing.checkAllAllocationFailures(std.testing.allocator, informationAllocationExercise, .{});
 }
 
+test "one application shares origin metadata across outputs and releases it after partial changes" {
+    var envelope = envelope_module.PipelineEnvelope.init(std.testing.allocator, &schemas);
+    defer envelope.deinit();
+    var delta: pipeline.NodeDelta = .{};
+    defer envelope.discard(&delta);
+    const both: pipeline.NodeContract = .{ .id = "test.both", .kind = .action, .requires = &.{}, .produces = &.{ .workflow_invocation, .canonical_log_level }, .side_effect = .none };
+    delta.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "first", .attempts = 1 });
+    delta.data_writes[count_index] = try values.create(std.testing.allocator, count_schema, u32, 7);
+    try envelope.apply(both, &delta, .ok);
+    const shared = envelope.origins[context_index].?;
+    try std.testing.expect(shared == envelope.origins[count_index].?);
+
+    var invalidate: pipeline.NodeDelta = .{ .data_invalidations = .initOne(.workflow_invocation) };
+    try envelope.apply(.{ .id = "test.invalidate", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{.workflow_invocation}, .side_effect = .none }, &invalidate, .ok);
+    try std.testing.expect(envelope.origins[context_index] == null);
+    try std.testing.expect(envelope.origins[count_index].? == shared);
+    try std.testing.expectEqual(@as(u64, 1), envelope.origins[count_index].?.generation);
+
+    const replace: pipeline.NodeContract = .{ .id = "test.replace", .kind = .action, .requires = &.{.canonical_log_level}, .produces = &.{}, .replaces = &.{.canonical_log_level}, .side_effect = .none };
+    delta.data_replacements[count_index] = try values.create(std.testing.allocator, count_schema, u32, 8);
+    try envelope.apply(replace, &delta, .ok);
+    try std.testing.expectEqual(@as(u64, 3), envelope.origins[count_index].?.generation);
+}
+
+test "multi-output application allocates one origin and abandons every failed preparation" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, multiOutputAllocationCase, .{});
+    var measured = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+    var envelope = envelope_module.PipelineEnvelope.init(measured.allocator(), &schemas);
+    defer envelope.deinit();
+    const occurrence = try envelope.beginOccurrence("test.both");
+    var delta: pipeline.NodeDelta = .{};
+    defer envelope.discard(&delta);
+    delta.data_writes[context_index] = try values.create(std.testing.allocator, context_schema, Context, .{ .text = "first", .attempts = 1 });
+    delta.data_writes[count_index] = try values.create(std.testing.allocator, count_schema, u32, 7);
+    const before = measured.alloc_index;
+    try envelope.applyOccurrence(occurrence, multi_output, &delta, .ok);
+    try std.testing.expectEqual(before + 1, measured.alloc_index);
+}
+
+const multi_output: pipeline.NodeContract = .{ .id = "test.both", .kind = .action, .requires = &.{}, .produces = &.{ .workflow_invocation, .canonical_log_level }, .side_effect = .none };
+
+fn multiOutputAllocationCase(allocator: std.mem.Allocator) !void {
+    var envelope = envelope_module.PipelineEnvelope.init(allocator, &schemas);
+    defer envelope.deinit();
+    const occurrence = try envelope.beginOccurrence(multi_output.id);
+    var delta: pipeline.NodeDelta = .{};
+    defer envelope.discard(&delta);
+    delta.data_writes[context_index] = try values.create(allocator, context_schema, Context, .{ .text = "first", .attempts = 1 });
+    delta.data_writes[count_index] = try values.create(allocator, count_schema, u32, 7);
+    try envelope.applyOccurrence(occurrence, multi_output, &delta, .ok);
+}
+
 test "retained information shares payload ownership and duplicate placement allocates nothing" {
     var live_bytes: [2]usize = undefined;
     for ([_]data.Schema{ context_schema, context_schema.recorded() }, 0..) |schema, index| {

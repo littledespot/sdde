@@ -53,12 +53,26 @@ test "production provider wiring retains fact-only authority and no-I/O lease pr
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(provider_source, "self.transport.exchange("));
     const http = @embedFile("adapters/provider/bedrock_http.zig");
     inline for (.{ "Environ", "initDefaultProxies", "ssl_key_log", "getenv", "@constCast" }) |forbidden| try expectAbsent(http, forbidden);
-    try std.testing.expect(std.mem.indexOf(u8, http, "pub const Adapter = HttpAdapter(std.http.Client.request);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, http, "pub const Adapter = HttpAdapter(native.request);") != null);
+    try std.testing.expect(std.mem.indexOf(u8, http, "@import(\"native_model_http.zig\")") != null);
     try std.testing.expectEqual(@as(usize, 1), countOccurrences(http, "try open_request("));
     const dispatch = @embedFile("adapters/provider/provider_dispatch.zig");
     try expectAbsent(dispatch, "anyopaque");
     try expectAbsent(dispatch, "else =>");
 }
+test "all native model HTTP adapters use the test-disabled connection owner" {
+    const native = @embedFile("adapters/provider/native_model_http.zig");
+    try std.testing.expect(std.mem.indexOf(u8, native, "if (builtin.is_test) false else @import(\"root\").live_model_connections") != null);
+    const guard = std.mem.indexOf(u8, native, "if (!enabled) return error.LiveModelCallsDisabled;").?;
+    const connect = std.mem.indexOf(u8, native, "return client.request(").?;
+    try std.testing.expect(guard < connect);
+    try expectAbsent(@embedFile("adapters/provider/bedrock_http.zig"), "client.request(");
+    const evaluator = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "test/harness/http.zig", std.testing.allocator, .limited(1024 * 1024));
+    defer std.testing.allocator.free(evaluator);
+    try expectAbsent(evaluator, "client.request(");
+    try std.testing.expect(std.mem.indexOf(u8, evaluator, "native_model_http.zig\").request(&client,") != null);
+}
+
 const bootstrap_root_registry = @import("domain/bootstrap_root_registry.zig");
 const bootstrap_root_registry_service = @import("application/bootstrap_root_registry_service.zig");
 const workflow_registry = @import("domain/workflow_registry.zig");
@@ -203,6 +217,12 @@ test "domain and port dependency direction is enforced repository wide" {
             try expectAbsent(source, "../adapters/");
         }
     }
+}
+
+test "shared reference support does not import Spec policy" {
+    const source = @embedFile("domain/reference_support.zig");
+    try expectAbsent(source, "specification.zig");
+    try expectAbsent(source, "specification_provenance.zig");
 }
 
 test "bootstrap orchestrator imports only binding and result contracts" {
@@ -591,6 +611,8 @@ test "model-binding requirement is immutable data not a provider-call capability
     const operation = @import("domain/workflow_operation.zig");
     const registry = @import("ports/workflow_operation_registry.zig");
     try std.testing.expect(@FieldType(compilation.CompiledStep, "model") == ?@import("domain/workflow_model.zig").Requirements);
+    try std.testing.expect(@FieldType(@import("domain/workflow_model.zig").Requirements, "slot") == @import("domain/llm_provider_identity.zig").ModelSlotId);
+    try std.testing.expect(!@hasField(@import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding, "response_mode"));
     try std.testing.expect(@hasDecl(operation.Contract, "requiresModelBinding"));
     try std.testing.expect(!@hasField(operation.Contract, "model_capacity"));
     try std.testing.expect(@FieldType(registry.StepInput, "model_binding") == ?*const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding);
@@ -1788,7 +1810,7 @@ test "path-token rules share toolchain authority and scanner bindings are capabi
     }
 }
 
-test "typed extraction has one shared prose gate and no passive operational capability" {
+test "typed content has one shared boundary and no passive or exact operational capability" {
     const binding = @import("application/workflow_operation_binding.zig");
     const operations = @import("application/passive_literal_workflow.zig");
     const extraction = @import("application/reference_extraction_workflow.zig");
@@ -1803,7 +1825,11 @@ test "typed extraction has one shared prose gate and no passive operational capa
     try std.testing.expect(!@hasField(text.ReferenceNode, "file"));
     try std.testing.expect(!@hasField(text.PassiveReference, "value"));
     try expectAbsent(@embedFile("domain/typed_text.zig"), "hasEncodedDotOrSeparator");
-    try std.testing.expect(std.mem.indexOf(u8, @embedFile("domain/typed_text.zig"), "scan.scan(") != null);
+    try expectAbsent(@embedFile("domain/typed_text.zig"), "path_token_scan.zig");
+    try std.testing.expect(@hasField(text.BusinessSegment, "exact_copy"));
+    try std.testing.expect(!@hasField(text.ExactCopy, "value"));
+    try std.testing.expect(!@hasField(text.ExactCopy, "path"));
+    try std.testing.expect(!@hasField(text.ExactCopy, "operation"));
     try expectAbsent(@embedFile("actions/reference/validate_reference_claims.zig"), "nonempty");
     try expectAbsent(@embedFile("application/workflow_engine_orchestrator.zig"), "passive_literal");
     try std.testing.expectEqualSlices(@import("domain/pipeline.zig").DataKey, &.{ .citable_reference_inputs, .prepared_reference_claims }, extraction.Validate.Action.contract.requires);

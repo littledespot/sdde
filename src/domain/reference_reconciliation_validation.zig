@@ -303,6 +303,10 @@ pub fn relations(a: std.mem.Allocator, validator: r.text.Validator, ctx: TextCon
                         if (r.contains(r.ClaimId, prior.claim_ids, id)) result.competing = true;
                     };
                 }
+                if (rejection.unit == .summary and try removableProjection(a, validator, ctx, parsed, dispositions, .{ .statement = index })) {
+                    result.redundant = index;
+                    return result;
+                }
             }
         },
         .signal => |index| if (rejection.issue.rule == .duplicate_signal) {
@@ -344,8 +348,71 @@ pub fn relations(a: std.mem.Allocator, validator: r.text.Validator, ctx: TextCon
         },
         else => {},
     }
+    if (selected != null and result.redundant == null and try removableProjection(a, validator, ctx, parsed, dispositions, rejection.unit)) {
+        result.redundant = switch (rejection.unit) {
+            .statement => |index| index,
+            .signal => |index| index,
+            else => unreachable,
+        };
+    }
     return result;
 }
+
+/// An incorrectly bound extra projection is removable only when its content and
+/// every selected claim survive independently in a fully valid collection.
+/// This proof chooses no replacement content or evidence; merge still validates
+/// the exact candidate/dependencies and reruns all dependent validators.
+fn removableProjection(allocator: std.mem.Allocator, validator: r.text.Validator, ctx: TextContext, parsed: r.Parsed, dispositions: []const r.ClaimDisposition, unit: d.Unit) r.Error!bool {
+    var scratch: std.heap.ArenaAllocator = .init(allocator);
+    defer scratch.deinit();
+    const a = scratch.allocator();
+    const items = parsed.input.progress.plan.layout.items;
+    const selected: r.SignalProposal = switch (unit) {
+        .statement => |index| .{ .claim_ids = parsed.proposal.summary.statements[index].claim_ids, .content = parsed.proposal.summary.statements[index].content },
+        .signal => |index| parsed.proposal.global.signals[index],
+        else => return false,
+    };
+    if (claims(items, selected.claim_ids, parsed.input.partition.group.claim_ids) != null) return false;
+    if (unit == .signal) for (selected.claim_ids) |id| {
+        if (!try signalEligible(dispositions, id)) return false;
+    };
+    var candidate = parsed;
+    const remaining: []const r.SignalProposal = switch (unit) {
+        .statement => |index| blk: {
+            const old = parsed.proposal.summary.statements;
+            const values = try a.alloc(r.StatementProposal, old.len - 1);
+            @memcpy(values[0..index], old[0..index]);
+            @memcpy(values[index..], old[index + 1 ..]);
+            candidate.proposal.summary.statements = values;
+            const projections = try a.alloc(r.SignalProposal, values.len);
+            for (values, projections) |value, *projection| projection.* = .{ .claim_ids = value.claim_ids, .content = value.content };
+            break :blk projections;
+        },
+        .signal => |index| blk: {
+            const old = parsed.proposal.global.signals;
+            const values = try a.alloc(r.SignalProposal, old.len - 1);
+            @memcpy(values[0..index], old[0..index]);
+            @memcpy(values[index..], old[index + 1 ..]);
+            candidate.proposal.global.signals = values;
+            break :blk values;
+        },
+        else => unreachable,
+    };
+    for (selected.claim_ids) |id| {
+        for (remaining) |value| {
+            if (r.contains(r.ClaimId, value.claim_ids, id)) break;
+        } else return false;
+    }
+    for (remaining) |witness| {
+        if (try equivalentContent(a, validator, ctx, items, witness.claim_ids, witness.content, witness.claim_ids, selected.content)) break;
+    } else return false;
+    return switch (unit) {
+        .statement => (try checkSummary(a, validator, candidate, ctx)) == .valid,
+        .signal => (try checkSignals(a, validator, .{ .source = parsed.source, .input = parsed.input, .proposal = candidate.proposal.global, .dispositions = dispositions }, ctx)) == .valid,
+        else => unreachable,
+    };
+}
+
 fn equivalentContent(a: std.mem.Allocator, validator: r.text.Validator, ctx: TextContext, items: r.Items, left_ids: []const r.ClaimId, left: r.ContentProposal, right_ids: []const r.ClaimId, right: r.ContentProposal) r.Error!bool {
     if (!sameMembers(left_ids, right_ids) or claims(items, left_ids, left_ids) != null) return false;
     const first = switch (try content(a, validator, ctx, items, left_ids, left)) {
@@ -412,4 +479,43 @@ pub fn input(allocator: std.mem.Allocator, current: r.Input) r.Error!void {
         if (id.ordinal != child.value + 1 or summary.id.ordinal != id.ordinal) return error.InvalidReferenceReconciliation;
     }
     for (current.items, expected.group.claim_ids) |item, id| if (item.claim.id.ordinal != id.ordinal) return error.InvalidReferenceReconciliation;
+}
+
+pub fn checkSummary(allocator: std.mem.Allocator, validator: r.text.Validator, parsed: r.Parsed, context: TextContext) r.Error!d.Result(r.CheckedSummary) {
+    if (parsed.input.purpose != .summary or parsed.proposal != .summary) return error.InvalidReferenceReconciliation;
+    try input(allocator, parsed.input);
+    if (parsed.source.revision == 0) return error.InvalidReferenceReconciliation;
+    try bind(allocator, parsed.input.progress.plan.layout.items, context, validator);
+    const proposal = parsed.proposal.summary;
+    const statements = try allocator.alloc(r.ValidatedStatement, proposal.statements.len);
+    var represented: std.ArrayList(r.ClaimId) = .empty;
+    for (proposal.statements, statements, 0..) |statement, *result, index| {
+        result.* = switch (try checkStatement(allocator, validator, context, parsed.input, proposal.statements, index)) {
+            .valid => |value| value,
+            .invalid => |issue| return d.reject(r.CheckedSummary, parsed.input, parsed.source, .{ .statement = index }, issue),
+        };
+        try represented.appendSlice(allocator, statement.claim_ids);
+    }
+    r.sameSet(r.ClaimId, represented.items, parsed.input.partition.group.claim_ids) catch return d.reject(r.CheckedSummary, parsed.input, parsed.source, .summary, .{ .rule = .membership, .observed = .{ .claims = represented.items }, .expected = .{ .claims = parsed.input.partition.group.claim_ids } });
+    std.mem.sort(r.ValidatedStatement, statements, {}, struct {
+        fn less(_: void, a: r.ValidatedStatement, b: r.ValidatedStatement) bool {
+            return a.local_key < b.local_key;
+        }
+    }.less);
+    return .{ .valid = .{ .input = parsed.input, .statements = statements } };
+}
+
+pub fn checkSignals(allocator: std.mem.Allocator, validator: r.text.Validator, prior: r.CheckedDispositions, context: TextContext) r.Error!d.Result(r.CheckedSignals) {
+    const items = prior.input.progress.plan.layout.items;
+    try input(allocator, prior.input);
+    try bind(allocator, items, context, validator);
+    const signals = try allocator.alloc(r.ValidatedSignal, prior.proposal.signals.len);
+    for (signals, 0..) |*signal, index| {
+        signal.* = switch (try checkSignal(allocator, validator, context, prior, index)) {
+            .valid => |value| value,
+            .invalid => |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .{ .signal = index }, issue),
+        };
+    }
+    if (try signalCoverage(allocator, items, prior.dispositions, prior.proposal.signals)) |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .signals, issue);
+    return .{ .valid = .{ .prior = prior, .signals = signals } };
 }

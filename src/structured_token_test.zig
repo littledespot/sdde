@@ -30,7 +30,62 @@ fn run(allocator: std.mem.Allocator, inputs: evidence.Inputs, available: tokens.
 }
 const token_only = "{\"kind\":\"claims\",\"claims\":[],\"token_classifications\":[]}";
 
-test "Markdown eligibility excludes prose quotes fences and unmatched delimiters" {
+test "structured Markdown preserves raw code and link destinations without interpreting their interiors" {
+    const scan = @import("domain/markdown_code_spans.zig");
+    const Expected = struct { form: scan.Form, bytes: []const u8 };
+    const Case = struct { source: []const u8, expected: []const Expected };
+    for ([_]Case{
+        .{ .source = "Use `Cafe\u{301}` with [report](reports/weekly.csv).\n```txt\n[not a link](hidden.csv) `raw`\n```\n", .expected = &.{ .{ .form = .inline_code, .bytes = "Cafe\u{301}" }, .{ .form = .link_destination, .bytes = "reports/weekly.csv" }, .{ .form = .code_block, .bytes = "[not a link](hidden.csv) `raw`\n" } } },
+        .{ .source = "[policy](https://example.org/a(b) \"Title\") [data](<data/a b.csv>) date/time input/output", .expected = &.{ .{ .form = .link_destination, .bytes = "https://example.org/a(b)" }, .{ .form = .link_destination, .bytes = "data/a b.csv" } } },
+        .{ .source = "```html\r\n<div>\r\n```\r\n[shown](visible.csv)", .expected = &.{ .{ .form = .code_block, .bytes = "<div>\r\n" }, .{ .form = .link_destination, .bytes = "visible.csv" } } },
+        .{ .source = "~~~\nunfinished\n", .expected = &.{.{ .form = .code_block, .bytes = "unfinished\n" }} },
+        .{ .source = "[ambiguous](a`part`.csv)", .expected = &.{.{ .form = .inline_code, .bytes = "part" }} },
+        .{ .source = "`[hidden](code.csv)`\n\n    [hidden](indent.csv)\n\n<div>\n[hidden](html.csv)\n</div>\n\n<!-- [hidden](comment.csv) --> [shown](ok.csv)", .expected = &.{ .{ .form = .inline_code, .bytes = "[hidden](code.csv)" }, .{ .form = .link_destination, .bytes = "ok.csv" } } },
+        .{ .source = "[broken](unclosed [broken](a(b) \\[escaped](hidden.csv) date/time", .expected = &.{} },
+    }) |case| {
+        const ranges = try scan.scanAll(std.testing.allocator, case.source);
+        defer std.testing.allocator.free(ranges);
+        try std.testing.expectEqual(case.expected.len, ranges.len);
+        for (ranges, case.expected) |range, expected| {
+            try std.testing.expectEqual(expected.form, range.form);
+            try std.testing.expectEqualStrings(expected.bytes, case.source[range.start..range.end]);
+        }
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const inputs = try inputsFor(arena.allocator(), case.source);
+        const available = try fixture.candidates(arena.allocator(), inputs);
+        try std.testing.expectEqual(ranges.len, available.entries.len);
+        for (available.entries, case.expected) |candidate, expected| {
+            try std.testing.expectEqualStrings(expected.bytes, candidate.fact.citation.verbatim.?);
+            try std.testing.expectEqual(candidate.id.extractor_id, candidate.fact.extractor_id);
+        }
+        try tokens.validateCandidates(arena.allocator(), inputs, available);
+    }
+}
+
+test "fences retain source form while classification owns code versus required output" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const inputs = try inputsFor(a, "Example:\n```text\nprint(\"hello\")\n```\n");
+    const available = try fixture.candidates(a, inputs);
+    try std.testing.expectEqual(@as(usize, 1), available.entries.len);
+    const choices = try fixture.classifications(a, available, inputs.chunks.entries[0]);
+    try std.testing.expectEqual(.code_sample, choices[0].preserve.kind);
+    const completed = try run(a, inputs, available, &.{result(inputs, inputs.chunks.entries[0], try fixture.wire(a, token_only, choices))});
+    try std.testing.expectEqualStrings("print(\"hello\")\n", completed.ledger.claims[0].content.preserved_token.value.raw_value.bytes);
+    var required_output = choices[0];
+    required_output.preserve.kind = .business_exact_string;
+    const as_output = try run(a, inputs, available, &.{result(inputs, inputs.chunks.entries[0], try fixture.wire(a, token_only, &.{required_output}))});
+    try std.testing.expectEqual(.business_exact_string, as_output.ledger.claims[0].content.preserved_token.value.kind);
+    var forged = completed.ledger;
+    const claims = try a.dupe(extraction.Claim, forged.claims);
+    claims[0].content.preserved_token.value.kind = .business_exact_string;
+    forged.claims = claims;
+    try std.testing.expectError(error.InvalidStructuredTokens, account.execute(inputs, completed.assigned, forged));
+}
+
+test "inline Markdown eligibility excludes block interiors prose quotes and unmatched delimiters" {
     const Case = struct { source: []const u8, exact: []const []const u8 };
     for ([_]Case{
         .{ .source = "Display `Hello, World!`.", .exact = &.{"Hello, World!"} },
@@ -63,12 +118,15 @@ test "Markdown eligibility excludes prose quotes fences and unmatched delimiters
         defer arena.deinit();
         const inputs = try inputsFor(arena.allocator(), case.source);
         const available = try fixture.candidates(arena.allocator(), inputs);
-        try std.testing.expectEqual(case.exact.len, available.entries.len);
-        for (case.exact, available.entries, 1..) |expected, candidate, ordinal| {
-            try std.testing.expectEqualStrings(expected, candidate.fact.citation.verbatim.?);
+        var ordinal: usize = 0;
+        for (available.entries) |candidate| {
+            if (candidate.id.extractor_id != .markdown_inline_code_v1) continue;
+            try std.testing.expect(ordinal < case.exact.len);
+            try std.testing.expectEqualStrings(case.exact[ordinal], candidate.fact.citation.verbatim.?);
+            ordinal += 1;
             try std.testing.expectEqual(ordinal, candidate.id.ordinal);
-            try std.testing.expectEqual(.markdown_inline_code_v1, candidate.id.extractor_id);
         }
+        try std.testing.expectEqual(case.exact.len, ordinal);
     }
 }
 
@@ -258,7 +316,7 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const scratch = arena.allocator();
-    const inputs = try inputsFor(scratch, "`exact value`");
+    const inputs = try inputsFor(scratch, "`exact value` [reference](reports/weekly.csv)\n~~~\nraw `code`\n~~~");
     const available = try fixture.candidates(scratch, inputs);
     const chunk = inputs.chunks.entries[0];
     _ = try run(scratch, inputs, available, &.{result(inputs, chunk, try fixture.wire(scratch, token_only, try fixture.classifications(scratch, available, chunk)))});

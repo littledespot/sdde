@@ -12,6 +12,7 @@ fn passive(w: *std.Io.Writer, value: snapshot.Snapshot, id: @import("passive_lit
 }
 pub fn business(w: *std.Io.Writer, value: snapshot.Snapshot, content: text.BusinessText) Error!void {
     for (content.segments) |segment| switch (segment) {
+        .exact_copy => return error.InvalidReferenceSnapshot,
         .literal => |literal| try markdown.literal(w, literal.value),
         .passive => |reference| try passive(w, value, reference.passive_literal_id),
     };

@@ -105,6 +105,8 @@ test "shipped workflow conforms to native registrations and rejects contract dri
         .{ "selection: input", "selection: missing-definition" },
         .{ "composition-part: content", "composition-part: classifications" },
         .{ "use: retain-json-part", "use: check-model-request-phase" },
+        // Draft admission cannot bypass the final review/publication contracts.
+        .{ "  generate:\n    call: generate-specification\n    on:\n      ok: review", "  generate:\n    call: generate-specification\n    on:\n      ok: publish" },
     };
     for (0..mutations.len + 1) |index| {
         var project = std.testing.tmpDir(.{});
@@ -248,7 +250,9 @@ test "production E2E binding honors configured models and cannot succeed without
             // Claude has no registered reasoning-effort control.
             try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.mem.replaceOwned(u8, a, model_config, "\"reasoningEffort\": \"low\"", "\"reasoningEffort\": null") });
             const catalogue = try @import("../files.zig").read(io, a, project.dir, ".sddtoolkit/providers/.sddproviders.json");
-            const replaced = try std.mem.replaceOwned(u8, a, catalogue, "openai.gpt-oss-20b-1:0", model);
+            const model_catalogue = try std.mem.replaceOwned(u8, a, catalogue, "openai.gpt-oss-20b-1:0", model);
+            // This registered model only supports prompt guidance.
+            const replaced = try std.mem.replaceOwned(u8, a, model_catalogue, "\"json\": true", "\"json\": false");
             try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit/providers/.sddproviders.json", .data = try std.mem.replaceOwned(u8, a, replaced, "ap-southeast-2", "us-west-2") });
             try project.dir.writeFile(io, .{ .sub_path = "references/hello-world/stories.md", .data = "A library user renews a loan and sees its new due date.\n" });
         }
@@ -344,7 +348,7 @@ test "rubric handoff preserves poor output and scores without changing workflow 
         failed.workflow_outcome = outcome;
         try std.testing.expectError(error.GenerationNotCompleted, evaluation.inputs(a, failed, captured.evaluation, "stale output", "run-124"));
     }
-    const config = try @import("../configuration.zig").parse(a, captured.evaluation.config_bytes, .{ .api = .bedrock_converse, .model = @import("../contracts.zig").ModelId.parse("openai.gpt-oss-20b-1:0").?, .region = .@"ap-southeast-2" });
+    const config = try @import("../configuration.zig").parse(a, captured.evaluation.config_bytes, .{ .api = .bedrock_invoke, .model = @import("../contracts.zig").ModelId.parse("openai.gpt-oss-20b-1:0").?, .region = .@"ap-southeast-2" });
     const result: @import("../report.zig").Report = .{ .capture = inputs, .configuration = config, .attempts = &.{}, .outcome = .{ .evaluated = .{ .results = &.{}, .assessment = .scored, .score_percent = 10, .threshold = .not_met } } };
     evaluation.apply(&report, result);
     try std.testing.expectEqual(.scored, report.semantic_quality);
@@ -638,7 +642,7 @@ test "later budget transport and capture stops retain separate protocol and exch
     const obs = @import("observation.zig");
     const Usage = @import("../../../src/domain/llm_provider_operation.zig").ProviderUsage;
     var calls: [35]obs.Call = undefined;
-    for (&calls, 1..) |*call, ordinal| call.* = .{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = @intCast(ordinal) } }, .step = "repair", .raw_response_available = true, .output_available = ordinal < 35 };
+    for (&calls, 1..) |*call, ordinal| call.* = .{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = @intCast(ordinal) } }, .step = "repair", .raw_response_available = true, .output = if (ordinal < 35) .available else .not_projected };
     var retained: obs.LastModelRejection = .{};
     defer retained.deinit(std.testing.allocator);
     try retained.observe(std.testing.allocator, 34, .{ .started_at_utc = "", .status = .workflow_failed, .last_model_origin = calls[33].origin, .model_diagnostic = "SyntaxError", .json_error = .{ .reason = .SyntaxError } });
@@ -655,6 +659,7 @@ test "later budget transport and capture stops retain separate protocol and exch
             .evidence_error = if (stop == 3) "EvidenceWriteFailed" else null,
         };
         calls[34].raw_response_available = stop != 2;
+        calls[34].output = if (stop == 3) .capture_failed else .not_projected;
         calls[34].usage = null;
         try retained.observe(std.testing.allocator, 35, report);
         try retained.project(a, 35, &report);
@@ -753,8 +758,8 @@ test "unrepairable responses preserve complete production logs and forbid public
             try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
             try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
             try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
-            var wire: @import("../../../src/bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}" };
-            if (mode != 0) wire.inference_body = try std.fmt.allocPrint(a, "{{\"output\":{{\"message\":{{\"role\":\"assistant\",\"content\":[{{\"text\":{s}}}]}}}},\"stopReason\":\"end_turn\",\"usage\":{{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}}}", .{try std.json.Stringify.valueAlloc(a, if (mode == 1) "{" else "{}", .{})});
+            var wire: @import("../../../src/bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"<reasoning>metadata</reasoning>\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":884,\"completion_tokens\":48,\"total_tokens\":932}}" };
+            if (mode != 0) wire.inference_body = try std.fmt.allocPrint(a, "{{\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":{s}}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":884,\"completion_tokens\":48,\"total_tokens\":932}}}}", .{try std.json.Stringify.valueAlloc(a, if (mode == 1) "{" else "{}", .{})});
             runtime.provider_runtime.provider.?.aws_bedrock.transport = wire.port();
             const Prepared = struct {
                 fn selected(_: *anyopaque) @import("../../../src/application/workflow_engine_child_bindings.zig").SelectionStepOutcome {
@@ -951,8 +956,8 @@ test "step events keep the newer exchange usage separate from an older rejected 
     const repair: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
     const Usage = @import("../../../src/domain/llm_provider_operation.zig").ProviderUsage;
     var calls = [_]obs.Call{
-        .{ .origin = original, .step = "extract", .usage = Usage.init(100, 20, 120).?, .output_available = true },
-        .{ .origin = repair, .step = "repair", .output_available = true },
+        .{ .origin = original, .step = "extract", .usage = Usage.init(100, 20, 120).?, .output = .available },
+        .{ .origin = repair, .step = "repair", .output = .available },
     };
     var report: c.Report = .{
         .started_at_utc = "",
@@ -995,14 +1000,24 @@ test "step events keep the newer exchange usage separate from an older rejected 
         try std.testing.expect(std.mem.indexOf(u8, rendered, "operation_failed") != null);
     }
     // Correlation cannot fill missing evidence by assuming the latest call.
-    calls[0].output_available = false;
+    calls[0].output = .not_projected;
     try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
-    calls[0].output_available = true;
+    calls[0].output = .available;
     report.candidate_error.?.source_selections.origin.?.attempt.value = 9;
     try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
     report.candidate_error.?.source_selections.origin = null;
+    try std.testing.expectEqual(.missing_response, report.candidate_error.?.attribution());
     try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
+    // A correlation failure does not erase a successfully captured response.
     report.candidate_error = null;
+    report.evidence_error = "MissingRequestEvidence";
+    try obs.correlate(a, &calls, &report);
+    try std.testing.expectEqual(.available, report.exchange_evidence.?.text);
+    try std.testing.expect(report.last_model_output != null);
+    calls[1].output = .not_projected;
+    calls[1].raw_response_available = true;
+    try obs.correlate(a, &calls, &report);
+    try std.testing.expectEqual(.not_projected, report.exchange_evidence.?.text);
     calls[0].origin = repair;
     try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
 }
@@ -1016,7 +1031,7 @@ test "reports preserve native extraction reconciliation specification and comple
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var retained: [5]Diagnostic = undefined;
+    var retained: [6]Diagnostic = undefined;
     {
         var source: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer source.deinit();
@@ -1038,13 +1053,18 @@ test "reports preserve native extraction reconciliation specification and comple
         const missing = (try @import("../../../src/domain/specification_support.zig").Source.collect(scratch, review_inputs, context, "{\"entries\":[]}", origin)).rejected;
         try std.testing.expect(missing.rejection.diagnostics.len > 1);
         retained[3] = try (Diagnostic{ .support = missing.rejection }).copy(a);
+        const registry = @import("../../../src/domain/principle_registry.zig");
+        const policies = try @import("../../../src/test_fixtures/principles.zig").registry(scratch, "Use UTC timestamps.\n");
+        const selection = try registry.select(scratch, policies, .{ .stage = .spec, .environment = null, .fileKind = null });
+        const citation = (try registry.validateCitation(policies, selection, .{ .chunk = .{ .ordinal = 8 }, .first_line = 1, .last_line = 1 })).?;
+        retained[5] = try (Diagnostic{ .principle_review = .{ .diagnostics = &.{.{ .issue = .invalid_evidence, .requirement = .{ .kind = .policy_predicate, .unit = .{ .decision = .{ .ordinal = 8 } }, .slot = .compliance }, .ordinal = 8, .revision = 1, .origin = origin, .entry_index = 7, .evidence = .{ .issue = .invalid_principle_citation, .rule = .{ .citations_required = true, .permitted_chunks = selection.chunks }, .citation = .{ .index = 0, .diagnostic = citation } } }} } }).copy(a);
         var current = try @import("../../../src/domain/specification_session.zig").initialize(.{ .bytes = "chosen" }, context);
         current.completed = 1;
         const action = @import("../../../src/actions/specification/validate_specification_unit.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
-        const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .primary_user_story = .{ .value = .{ .normalized = .{ .segments = &.{.{ .literal = .{ .value = "A reservation is confirmed." } }} } }, .provenance = .{ .claim_ids = &.{.{ .ordinal = 999 }}, .clarification_response_ids = &.{} } } } } })).invalid;
+        const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .primary_user_story = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "A reservation is confirmed." } }} }, .provenance = .{ .claim_ids = &.{.{ .ordinal = 999 }}, .clarification_response_ids = &.{} } } } } })).invalid;
         retained[1] = try (Diagnostic{ .specification = spec }).copy(a);
         const extraction_action = @import("../../../src/actions/reference/validate_reference_extraction_text.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
-        const lexical = (try extraction_action.execute(scratch, context.registry, context.current, input.inputs, .{ .entries = &.{.{ .scope = .{ .state_id = input.inputs.corpus.state_id, .chunk_id = input.inputs.chunks.entries[0].id }, .origin = origin, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .literal = .{ .value = "unbound/reference.md" } }} } } }} })).invalid;
+        const lexical = (try extraction_action.execute(scratch, context.registry, context.current, input.inputs, .{ .entries = &.{.{ .scope = .{ .state_id = input.inputs.corpus.state_id, .chunk_id = input.inputs.chunks.entries[0].id }, .origin = origin, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } }} })).invalid;
         retained[2] = try (Diagnostic{ .extraction_text = lexical }).copy(a);
     }
     for (retained) |diagnostic| {
@@ -1082,7 +1102,7 @@ test "events and reports preserve native repair changes and text spans after rel
         var proposal = try reference.global(scratch, current);
         const signals = try scratch.dupe(reference.r.SignalProposal, proposal.signals);
         const good = signals[0].content;
-        signals[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display \\\"a result\\\"." } }} } } };
+        signals[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } };
         proposal.signals = signals;
         const candidate: reference.r.Parsed = .{ .input = current, .proposal = .{ .global = proposal } };
         const rejected = (try reference.validate_signals.execute(scratch, (try reference.validate_dispositions.execute(scratch, candidate)).valid, inputs.context())).invalid;
@@ -1094,7 +1114,7 @@ test "events and reports preserve native repair changes and text spans after rel
             if (index == 0) retained = try (Diagnostic{ .reconciliation = validation.invalid }).copy(a) else try std.testing.expect(validation == .valid);
         }
     }
-    try std.testing.expectEqualStrings("\\", retained.reconciliation.issue.expected.text_issue.path_match.?.lexeme);
+    try std.testing.expectEqual(.invalid_scalar, retained.reconciliation.issue.expected.text_issue.reason);
     for (merged, 0..) |merge, index| {
         const report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = if (index == 0) .invalid else .ok, .terminal_step = "validate-signals", .candidate_error = if (index == 0) retained else null, .repairs = &.{merge} };
         const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));

@@ -6,7 +6,7 @@ const reference = @import("reference_snapshot.zig");
 const authority = @import("required_authority.zig");
 const clarification = @import("clarification_inputs.zig");
 const ids = @import("specification_identity.zig");
-pub const schema = "specification-state/v3";
+pub const schema = "specification-state/v6";
 pub const max_bytes = 64 * 1024 * 1024;
 pub const State = struct {
     schema: []const u8,
@@ -93,6 +93,11 @@ pub fn validate(allocator: std.mem.Allocator, state: State, feature: @import("fe
         state.clarification.state_ordinal == 0 or state.clarification.revision == 0 or
         !state.reference.inputs.corpus.state_id.eql(state.reference.extraction.state_id) or
         state.reference.conflicts.len != 0) return error.InvalidSpecificationState;
+    var entity_count: usize = 0;
+    for (state.content.records) |record| if (record.proposal.content == .entity) {
+        entity_count += 1;
+    };
+    if (!spec.entityMembershipSatisfied(state.content.entities.disposition, entity_count)) return error.InvalidSpecificationState;
     validateAssociations(allocator, state) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationState;
     var largest: [std.meta.tags(spec.Kind).len]u32 = @splat(0);
     for (spec.required_record_families) |kind| if (!spec.hasRecords(state.content, kind)) return error.InvalidSpecificationState;
@@ -127,7 +132,7 @@ fn validateAssociations(backing: std.mem.Allocator, state: State) !void {
     defer scratch.deinit();
     const allocator = scratch.allocator();
     const records = try @import("reference_support.zig").snapshot(allocator, state.reference);
-    try @import("specification_provenance.zig").validateStored(allocator, state.reference.inputs, records, state.brief, state.content);
+    try @import("specification_provenance.zig").validateStored(allocator, state.reference.inputs, .{ .records = state.reference.passive_records, .occurrences = state.reference.passive_occurrences }, records, state.brief, state.content);
     const coverage = @import("specification_coverage.zig");
     const checked = try coverage.checkRecords(allocator, records, state.brief, state.content);
     if (checked != .valid) return error.InvalidSpecificationState;

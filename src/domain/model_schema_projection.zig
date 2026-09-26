@@ -69,6 +69,11 @@ pub fn outline(allocator: std.mem.Allocator, node: *const schema.Node) std.mem.A
             try object.put(allocator, "maxItems", .{ .integer = items.maximum });
             return .{ .object = object };
         },
+        .integer_enumeration => {
+            var object: std.json.ObjectMap = .{};
+            try object.put(allocator, "type", .{ .string = "integer" });
+            return .{ .object = object };
+        },
         else => return value(allocator, node, .complete),
     }
 }
@@ -83,9 +88,14 @@ fn fieldOutline(allocator: std.mem.Allocator, node: *const schema.Node) std.mem.
         .array => try object.put(allocator, "type", .{ .string = "array" }),
         .one_of => |choices| {
             var tags: std.array_list.Managed(std.json.Value) = .init(allocator);
-            for (choices) |choice| try tags.append(.{ .string = schema.findProperty(choice.object, "kind").?.schema.constant.string });
-            try object.put(allocator, "kind", .{ .array = tags });
+            var types: std.array_list.Managed(std.json.Value) = .init(allocator);
+            for (choices) |choice| {
+                if (choice.* == .object) try tags.append(.{ .string = schema.findProperty(choice.object, "kind").?.schema.constant.string }) else try types.append(.{ .string = if (schema.jsonType(choice).? == .null_value) "null" else @tagName(schema.jsonType(choice).?) });
+            }
+            if (tags.items.len != 0) try object.put(allocator, "kind", .{ .array = tags });
+            if (types.items.len != 0) try object.put(allocator, "types", .{ .array = types });
         },
+        .integer_enumeration => try object.put(allocator, "type", .{ .string = "integer" }),
         else => return value(allocator, node, .complete),
     }
     return .{ .object = object };
@@ -138,6 +148,11 @@ pub fn value(allocator: std.mem.Allocator, node: *const schema.Node, profile: Pr
             for (choices) |choice| try list.append(.{ .string = choice });
             try object.put(allocator, "enum", .{ .array = list });
         },
+        .integer_enumeration => |choices| {
+            var list: std.array_list.Managed(std.json.Value) = .init(allocator);
+            for (choices) |choice| try list.append(.{ .integer = choice });
+            try object.put(allocator, "enum", .{ .array = list });
+        },
         .array => |items| {
             try object.put(allocator, "type", .{ .string = "array" });
             try object.put(allocator, "items", try value(allocator, items.items, profile));
@@ -147,7 +162,7 @@ pub fn value(allocator: std.mem.Allocator, node: *const schema.Node, profile: Pr
         .one_of => |choices| {
             var list: std.array_list.Managed(std.json.Value) = .init(allocator);
             for (choices) |choice| try list.append(try value(allocator, choice, profile));
-            // The schema compiler proves variants have distinct constant kind tags.
+            // The compiler proves disjoint JSON types or distinct constant kind tags.
             try object.put(allocator, if (profile == .complete) "oneOf" else "anyOf", .{ .array = list });
         },
     }

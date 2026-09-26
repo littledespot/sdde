@@ -1,6 +1,6 @@
 # Live Spec E2E test
 
-Run one explicitly selected live case from the repository root:
+Run one live case from the repository root:
 
 1. Configure credentials and judge selection under [Environment setup](#environment-setup).
 2. Obtain explicit user approval for this E2E run under
@@ -24,7 +24,12 @@ Run one explicitly selected live case from the repository root:
 
 - The command makes live API calls for generation and grading; there is no mock mode.
 - The script requires the pinned Zig compiler and locates the checkout from its own path.
-- Case paths are repository-relative.
+- Case paths are repository-relative. With no arguments, the script selects the
+  checked-in Hello World case. Use `--case <path>` to select another case.
+- Automated tests cannot open native model connections, including with credentials
+  present. Smoke subprocesses use the same application entry points with model
+  connections compiled out. Test/verification build steps reject transitive dependencies on live
+  generation or evaluation. Building or testing the harness never opts into a live run.
 - The development script loads the checkout's `.env.e2e` for live invocations;
   `--help` does not source it. The executable does not load an environment file.
 - The local file replaces values for names it exports. If absent, the script uses
@@ -67,6 +72,12 @@ Run one explicitly selected live case from the repository root:
   approval does not authorize another run.
 
 ## Execution and quality assessment
+
+For a first-call HTTP 403 with an API-key authentication message, inspect the
+retained `response.json` and correct `TEST_AWS_BEARER_TOKEN_BEDROCK` in the credential
+source above. The launcher reloads `.env.e2e`, including any stale exported value.
+Authentication/authorization failures are terminal; JSON correction cannot repair
+credentials. No model answer means no evidence yet about schema conformance.
 
 - The harness captures the case's declared inputs and copies them into one new, isolated
   project.
@@ -319,8 +330,12 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
 - Terminal output, `report.json`, `report.md` and `events.jsonl` project the same
   retained evidence.
 - Successful repairs clear current rejection data; earlier step events remain available.
+- Correlation follows the [shared diagnostic attribution contract](../contracts/27-observability.md).
+  An assembled-candidate rejection retains its diagnostic without a fictitious model-call
+  link. Required response provenance still needs one exact captured association. The last
+  exchange and its per-call text-capture status remain separate from candidate attribution.
 
-- Classification and specification repairs use the normal live provider path.
+- Model-assisted repairs use the normal live provider path.
 - Each attempt retains its request, context, provider response, final text and transport
   outcome like generation.
 - The harness neither invents classifications nor rewrites responses.
@@ -353,53 +368,4 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
 - Earlier reports based on scripted generation or golden comparison are not live E2E
   evidence.
 
-## Historical verification records
-
-- Dated commands, results, failure analyses and run tables are retained in [E2E
-  verification history](e2e-verification-history.md).
-- They do not establish current verification or successful generation and grading.
-- Active work remains in [FIX_001](../../fixes/IMP_001.md).
-
-<a id="source-selection-verification--2026-09-12"></a>
-
-- [Source selection verification —
-  2026-09-12](e2e-verification-history.md#source-selection-verification--2026-09-12).
-
-<a id="provider-normalization-discovered-by-live-execution"></a>
-
-- [Provider normalization discovered by live
-  execution](e2e-verification-history.md#provider-normalization-discovered-by-live-execution).
-
-<a id="live-evidence--2026-09-11"></a>
-
-- [Live evidence — 2026-09-11](e2e-verification-history.md#live-evidence--2026-09-11).
-
-<a id="universal-response-guidance--2026-09-12"></a>
-
-- [Universal response guidance —
-  2026-09-12](e2e-verification-history.md#universal-response-guidance--2026-09-12).
-
-<a id="mechanical-verification--2026-09-12"></a>
-
-- [Mechanical verification —
-  2026-09-12](e2e-verification-history.md#mechanical-verification--2026-09-12).
-
-<a id="shared-atomic-repair-verification--2026-09-12"></a>
-
-- [Shared atomic-repair verification —
-  2026-09-12](e2e-verification-history.md#shared-atomic-repair-verification--2026-09-12).
-
-<a id="shared-model-input-and-protocol-retry-verification--2026-09-12"></a>
-
-- [Shared model-input and protocol-retry verification —
-  2026-09-12](e2e-verification-history.md#shared-model-input-and-protocol-retry-verification--2026-09-12).
-
-<a id="protocol-retry-ownership-verification--2026-09-12"></a>
-
-- [Protocol retry ownership verification —
-  2026-09-12](e2e-verification-history.md#protocol-retry-ownership-verification--2026-09-12).
-
-<a id="fix_001-phase-2--proposal-boundaries"></a>
-
-- [FIX_001 Phase 2 — proposal
-  boundaries](e2e-verification-history.md#fix_001-phase-2--proposal-boundaries).
+Active corrective work and its evidence remain in [FIX_001](../../fixes/IMP_001.md).

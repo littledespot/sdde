@@ -91,6 +91,7 @@ pub const Request = opaque {
             .model_visible_input_id = input_id,
             .result_resource = &value.result,
             .composition = value.composition,
+            .restriction = value.restriction,
         };
     }
 
@@ -133,6 +134,7 @@ const Storage = struct {
     result_definition: ?@import("model_result_schema.zig").DefinitionId = null,
     input: ?Input,
     composition: ?composition.Binding = null,
+    restriction: ?*@import("model_result_schema.zig").Restricted = null,
     protocol_rejection: ?retry.Diagnostic = null,
     phase: union(enum) {
         assigned,
@@ -221,6 +223,13 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         const definition_id = packet.packet.resultDefinition() orelse return error.ModelRequestAssociationInvalid;
         bound_result.content = .{ .result_schema = result.content.result_schema.select(definition_id) orelse return error.ModelRequestAssociationInvalid };
     }
+    const excluded = if (input != null and input.? == .packet) input.?.packet.excludedVariants() else &.{};
+    const integer_choices = if (input != null and input.? == .packet) input.?.packet.integerChoices() else &.{};
+    const restriction = if (excluded.len != 0 or integer_choices.len != 0)
+        @import("model_result_schema.zig").restrict(allocator, if (part_binding) |part| part.schema else bound_result.content.result_schema, excluded, integer_choices) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidModelRequestSource
+    else
+        null;
+    defer if (restriction) |owned| owned.release();
     return create(.{
         .allocator = allocator,
         .ledger_owner = ledger_owner,
@@ -232,6 +241,7 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         .result_definition = if (selection == .input) input.?.packet.resultDefinition() else null,
         .input = input,
         .composition = part_binding,
+        .restriction = restriction,
         .phase = .assigned,
     });
 }
@@ -267,6 +277,7 @@ pub fn prepared(current: *const Request, owned: preparation.Owned, correction: ?
 pub fn destroy(request: *Request) void {
     const value: *Storage = @ptrCast(@alignCast(request));
     if (value.phase == .prepared) value.phase.prepared.deinit();
+    if (value.restriction) |restriction| restriction.release();
     if (value.protocol_rejection) |diagnostic| diagnostic.deinit(value.allocator);
     if (value.input) |input| if (input == .packet) packets.release(input.packet);
     if (value.composition) |part| {
@@ -301,6 +312,7 @@ fn create(value: Storage) Error!*Request {
         value.allocator.free(result.composition.?.prerequisites);
     };
     if (value.protocol_rejection) |diagnostic| result.protocol_rejection = try diagnostic.copy(value.allocator);
+    if (value.restriction) |restriction| restriction.retain();
     return @ptrCast(result);
 }
 

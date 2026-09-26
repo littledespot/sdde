@@ -67,6 +67,7 @@ pub const Action = struct {
                 };
                 candidate.entries[entry_index] = .{
                     .provider = provider_id,
+                    .json = model.json,
                     .model = model_id,
                     .implementation_id = registered.implementation_id,
                     .config = config_schema.decode(registered.config_schema, model.config) orelse {

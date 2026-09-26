@@ -21,7 +21,7 @@ pub const Adapter = struct {
         if (!std.unicode.utf8ValidateSlice(bytes)) return error.MalformedText;
         for (bytes) |byte| if ((byte < 32 and byte != '\t' and byte != '\r' and byte != '\n') or byte == 127) return error.MalformedText;
         const started: std.Io.Clock.Timestamp = .now(self.io, .boot);
-        const exact_spans = try @import("../../domain/markdown_code_spans.zig").scan(allocator, bytes);
+        const exact_spans = try @import("../../domain/markdown_code_spans.zig").scanAll(allocator, bytes);
         defer allocator.free(exact_spans);
         var exact_index: usize = 0;
         var blocks: std.ArrayList(reference.BlockProposal) = .empty;

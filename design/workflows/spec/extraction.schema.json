@@ -3,21 +3,8 @@
     "business_segment": {
       "oneOf": [
         {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "literal"
-            },
-            "value": {
-              "type": "string",
-              "maxLength": 4294967295
-            }
-          },
-          "required": [
-            "kind",
-            "value"
-          ],
-          "additionalProperties": false
+          "type": "string",
+          "maxLength": 4294967295
         },
         {
           "type": "object",
@@ -34,41 +21,39 @@
             "passive_literal_id"
           ],
           "additionalProperties": false
-        }
-      ]
-    },
-    "ordinal": {
-      "type": "object",
-      "properties": {
-        "ordinal": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 4294967295
-        }
-      },
-      "required": [
-        "ordinal"
-      ],
-      "additionalProperties": false
-    },
-    "reference_node": {
-      "oneOf": [
+        },
         {
           "type": "object",
           "properties": {
             "kind": {
-              "const": "literal"
+              "const": "exact_copy"
             },
-            "value": {
-              "type": "string",
-              "maxLength": 4294967295
+            "token_id": {
+              "$ref": "#/$defs/ordinal"
+            },
+            "citation_id": {
+              "$ref": "#/$defs/ordinal"
             }
           },
           "required": [
             "kind",
-            "value"
+            "token_id",
+            "citation_id"
           ],
           "additionalProperties": false
+        }
+      ]
+    },
+    "ordinal": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
+    },
+    "reference_node": {
+      "oneOf": [
+        {
+          "type": "string",
+          "maxLength": 4294967295
         },
         {
           "type": "object",
@@ -112,7 +97,9 @@
         },
         "extractor_id": {
           "enum": [
-            "markdown_inline_code_v1"
+            "markdown_inline_code_v1",
+            "markdown_fenced_code_v1",
+            "markdown_link_destination_v1"
           ]
         },
         "ordinal": {
@@ -398,7 +385,8 @@
                     "visual_motion",
                     "business_exact_string",
                     "numeric_constraint",
-                    "exact_identifier"
+                    "exact_identifier",
+                    "code_sample"
                   ]
                 }
               },

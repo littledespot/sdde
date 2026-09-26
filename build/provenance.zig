@@ -2,7 +2,7 @@
 const std = @import("std");
 
 pub const Identity = struct { revision: []const u8, source_sha256: []const u8, modified: bool };
-const roots = [_][]const u8{ "build.zig", "build.zig.zon", "build", "src", "test", "design", "scripts", "e2e.zig", "harness.zig" };
+const roots = [_][]const u8{ "build.zig", "build.zig.zon", "build", "src", "test", "design", "scripts", "e2e.zig", "harness.zig", "tests.zig" };
 
 pub fn main(init: std.process.Init) !void {
     const a = init.arena.allocator();

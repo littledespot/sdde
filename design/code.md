@@ -523,6 +523,9 @@ allocator, checkpoint or provider journal is implied.
 ### 6.1 Authority reconciliation contract
 
 - This sample illustrates the broader design, not a second wire schema.
+- Clarification outcomes require [§12.8.1 admission](contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence).
+  The sample's gap enum alone grants no publication authority; candidate/review
+  failures retain their separate native rejection path.
 - [`required_authority.zig`](../src/domain/required_authority.zig) owns H-008's
   execution-local types and compiler-locked policies.
 - Closed observations reference supplied evidence; they cannot author rules,
@@ -692,6 +695,12 @@ ClarificationOwnershipRegistry {
 
 ## 7. Specification IR
 
+This sample describes `specification/v2` under
+[ADR 0020](decisions/0020-derived-exact-reference-lineage.md). Exact segments
+select a preserved-token claim. Canonical `claim_ids` hold explicit selection;
+the effective claims and citations are derived from that selection plus exact
+segments. Earlier shapes have no reader.
+
 ```text
 Provenance { claim_ids[], citation_ids[], clarification_response_ids[] }
 AttributedValue { value: BusinessValue, provenance: Provenance }
@@ -728,7 +737,7 @@ Native [content contract](../src/domain/specification.zig) interpretation:
 
 - Tagged unions encode as single-key objects, e.g.
   `{"functional_requirement":{"text":...}}`; title/story keep fixed provenance keys.
-- `BusinessValue` holds normalized typed text or `exact_copy` token/citation IDs.
+- `BusinessValue` holds ordered prose, passive-ID and `exact_copy` token/citation segments.
   Requirement wording carries modality; there is no separate modality field.
 - Parsing yields a candidate. H-008/H-010/H-012 must assemble and validate current
   reference, passive, clarification, identity and provenance state before it
@@ -1905,7 +1914,6 @@ MechanicalGuidance =
         allowedFileIds[], allowedSourceIds[]
       },
       diagnostics: {
-        inline: UNBOUND_PATH_REFERENCE,
         unknown: PASSIVE_LITERAL_UNKNOWN,
         stale: PASSIVE_LITERAL_STALE,
         crossUnit: PASSIVE_LITERAL_NOT_ALLOWED,
@@ -1948,10 +1956,7 @@ For a schema allowing only a task-edge proposal:
   "successorInternalKey": "implement-login",
   "reason": {
     "nodes": [
-      {
-        "kind": "literal",
-        "value": "Implementation must make the intended-red verification pass."
-      }
+      "Implementation must make the intended-red verification pass."
     ]
   }
 }
@@ -2537,7 +2542,7 @@ stage.started | stage.completed | stage.blocked | stage.failed |
 stage.clarification_pending
 action.started | action.completed | action.invalid | action.failed
 model.requested | model.completed | model.protocol_failed |
-model.schema_failed
+model.schema_failed | model.response_normalized
 validation.completed | validation.failed
 repair.requested | repair.applied | repair.rejected | repair.exhausted
 review.requested | review.approved | review.rejected

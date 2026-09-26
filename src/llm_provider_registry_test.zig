@@ -50,8 +50,8 @@ const valid_provider_document =
     \\  "providers": [{
     \\    "provider": "compiled-provider",
     \\    "models": [
-    \\      { "model": "model-a", "config": {} },
-    \\      { "model": "model-b", "config": {} }
+    \\      { "model": "model-a", "json": false, "config": {} },
+    \\      { "model": "model-b", "json": false, "config": {} }
     \\    ]
     \\  }]
     \\}
@@ -157,13 +157,13 @@ test "unsupported duplicate invalid-config and partially valid catalogues publis
     const invalid = [_][]const u8{
         \\{"providers":[{"provider":"unknown-provider","models":[]}]}
         ,
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{"extra":true}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{"extra":true}}]}]}
         ,
         \\{"providers":[{"provider":"compiled-provider","models":[]},{"provider":"compiled-provider","models":[]}]}
         ,
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{}},{"model":"model-a","config":{}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{}},{"model":"model-a","json": false, "config":{}}]}]}
         ,
-        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","config":{}},{"model":"not-compiled","config":{}}]}]}
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json": false, "config":{}},{"model":"not-compiled","json": false, "config":{}}]}]}
         ,
     };
 
@@ -284,4 +284,30 @@ fn toolkitSuffix() []const u8 {
     return
     \\},"paths":{"specs":"specs","references":"references","specsArchive":"specs/archive","workflows":"workflows","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":".sddproviders.json"}}
     ;
+}
+
+test "catalogue JSON selection retains per-model choices and rejects unsupported siblings" {
+    const a = std.testing.allocator;
+    var registered_entries = compiled_contracts.entries[0..2].*;
+    registered_entries[0].capabilities.structured_response = .bedrock_json_schema;
+    const registered: contracts.Registry = .{ .entries = &registered_entries };
+    const bytes =
+        \\{"providers":[{"provider":"compiled-provider","models":[{"model":"model-a","json":true,"config":{}},{"model":"model-b","json":false,"config":{}}]}]}
+    ;
+    var decoded = try (decode_provider.Action{}).execute(a, bytes);
+    defer decoded.deinit();
+    var candidate = try (build_registry.Action{ .contracts = &registered }).execute(a, decoded.value());
+    defer candidate.deinit();
+    try std.testing.expect(candidate.entries[0].json);
+    try std.testing.expect(!candidate.entries[1].json);
+    const owner = try registry_contract.createValidated(a, candidate, registered);
+    defer registry_contract.deinitOwner(owner);
+    const captured = registry_contract.registry(owner);
+    try std.testing.expectEqual(.native_schema, captured.resolveId(.{ .ordinal = 1 }).?.responseMode());
+    try std.testing.expectEqual(.prompt_only, captured.resolveId(.{ .ordinal = 2 }).?.responseMode());
+    candidate.entries[0].json = false;
+    // The owned invocation snapshot does not reread mutable candidate configuration.
+    try std.testing.expect(captured.resolveId(.{ .ordinal = 1 }).?.json);
+    candidate.entries[1].json = true;
+    try std.testing.expectError(error.InvalidLLMProviderRegistry, registry_contract.createValidated(a, candidate, registered));
 }

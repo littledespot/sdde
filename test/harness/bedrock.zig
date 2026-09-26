@@ -15,14 +15,15 @@ const Region = @import("../../src/domain/llm_provider_contracts.zig").BedrockReg
 
 pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Capture) c.Error![]const u8 {
     try configuration.validate(config);
-    if (config.api != .bedrock_converse) return error.InvalidEvaluationContract;
+    if (config.api != .bedrock_invoke) return error.InvalidEvaluationContract;
     const content = [_]operation.ModelVisibleContent{
         .{ .system = packet.instructions },
         .{ .user = try packet.input(a, capture) },
     };
+    const schema = try packet.resultSchema(a);
     return encoding.encodeText(a, .{
         .content = &content,
-        .schema = .{ .prompt_only = try packet.resultSchema(a) },
+        .schema = .{ .native = .{ .guidance = schema, .structure = schema } },
         .schema_name = "rubric_judgment",
         .temperature = if (config.temperature != null) .zero else null,
         .reasoning_effort = encoding.reasoningEffort(if (config.reasoning_effort) |effort| @tagName(effort) else null) catch return error.InvalidEvaluationContract,
@@ -61,8 +62,8 @@ pub const Adapter = struct {
             result.request_id = received.received.request_id;
             result.response_body = received.received.body;
         }
-        // Converse has no response/model identity fields. Record only the
-        // exact transport target; do not invent an echoed model or response ID.
+        // Workflow identity remains the authorized transport target. Provider
+        // response metadata is retained in the raw evidence, not used as authority.
         result.identity = .{ .bedrock_target = .{ .model = self.model.bytes, .region = self.region } };
         return result;
     }
@@ -79,7 +80,7 @@ pub fn response(a: std.mem.Allocator, received: transport.Response) std.mem.Allo
     } };
     var parsed = strict.parse(a, received.received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else .{ .failure = .invalid_response };
     defer parsed.deinit();
-    const decoded = decoding.decodeConverse(parsed.value) catch return .{ .failure = .invalid_response };
+    const decoded = decoding.decodeInvoke(parsed.value) catch return .{ .failure = .invalid_response };
     return switch (decoded.output) {
         .invalid => .{ .usage = decoded.usage, .failure = .invalid_response },
         .text => |text| .{ .usage = decoded.usage, .payload = try a.dupe(u8, text) },

@@ -108,7 +108,9 @@ rule once, preserving the decision; insertion retains the available choices.
 Absent presentation fields are omitted without removing source/extraction evidence.
 
 **After every response**, the engine independently requires one complete JSON object.
-It rejects fences, duplicate keys, trailing text and schema violations. Rejected
+The approved [§22.6 prefix normalization](../contracts/22-repair.md#226-unparseable-output)
+is logged and preserves the raw response. It rejects fences, duplicate keys,
+trailing text and schema violations. Rejected
 bytes remain evidence. Valid shape yields candidate data, not business-quality
 proof or publication authority.
 
@@ -127,6 +129,13 @@ optional containers remain whole. These paths are implemented; the retained runs
 do not establish a measured reliability improvement or a completed, scored baseline.
 
 ## Proposed conformance improvements — 20 September 2026
+
+The [21 September Bedrock comparisons](../../fixes/JSON_ISSUE.md#11-plain-string-versus-constant--completed-follow-up)
+reproduced malformed native-schema output with a minimal constant-constrained field;
+the plain-string counterpart passed. This narrows the measured boundary without
+isolating native constraints from schema guidance or proving a remedy. Preserve
+canonical discriminator constraints, admission and bounded correction. These
+diagnostics justify neither more decomposition nor workflow completion authority.
 
 The table distinguishes implemented guidance from remaining assessments; linked
 contracts own each boundary. [Chunk 18's current follow-up](../../fixes/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance)
@@ -189,21 +198,32 @@ approved controlled calls are still needed to measure model outcomes under §28.
 
 ## Provider mode and implementation evidence
 
-- In `native-schema` mode, the shared serializer projects Bedrock-supported
-  `outputConfig` constraints from the compiled schema.
+- The model catalogue’s required `json` boolean selects response mode (ADR 0012).
+  With `true`, the shared Bedrock serializer sends Structured Outputs through
+  `response_format.type: "json_schema"`, derived from the compiled schema.
 - The complete schema remains in system guidance and engine validation.
 - Tagged `oneOf` becomes disjoint `anyOf`; unsupported bounds stay engine-enforced.
 - Explicit token counting uses the same text input as inference.
-- The Specify E2E case uses `prompt-only`: its configured model failed native
-  tagged-schema live checks. This records the existing case selection, not a
-  waiver of validation or new E2E evidence.
+- The maintained Specify catalogue now sets `json: true` under the user’s
+  21 September direction. Earlier prompt-only runs and native tagged-schema
+  failures remain historical evidence; enabling native output is not live
+  evidence that those failures have been resolved.
 
 AWS documents [structured-output support for gpt-oss-20b](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-oss-20b.html)
-and [schema-constrained Converse output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
-(checked 20 September 2026). Availability does not overturn the
+and [schema-constrained InvokeModel output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
+(checked 25 September 2026). Availability does not overturn the
 [retained native-mode failures](../../fixes/FIX_001.md#47-native-mode-and-retry-counts-are-not-demonstrated-solutions)
 or prove improvement for the configured provider/model/schema combination. A
 comparison must record the actual mode and full engine-validation results.
+
+The [latest captured native-mode run](../../fixes/FIX_001.md#latest-native-json-run--malformed-output-despite-native-schema)
+returned malformed JSON on all three attempts despite the native schema and explicit
+correction errors. Raw provider text and decoded text match; the engine correctly
+exhausted and withheld publication. Before another prompt/schema refactor, isolate
+the provider behavior with approved comparisons through existing diagnostic replay:
+exact baseline, minimal object, representative tagged union. Keep production
+acceptance schemas unchanged during these diagnostic probes. Neither native-mode
+availability nor one successful probe establishes reliable model conformance.
 
 | Responsibility | Source |
 | --- | --- |

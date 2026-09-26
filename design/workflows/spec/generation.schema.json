@@ -17,67 +17,17 @@
       "additionalProperties": false
     },
     "business_value": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "normalized"
-            },
-            "segments": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/business_segment"
-              },
-              "maxItems": 4294967295
-            }
-          },
-          "required": [
-            "kind",
-            "segments"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "exact_copy"
-            },
-            "token_id": {
-              "$ref": "#/$defs/ordinal"
-            },
-            "citation_id": {
-              "$ref": "#/$defs/ordinal"
-            }
-          },
-          "required": [
-            "kind",
-            "token_id",
-            "citation_id"
-          ],
-          "additionalProperties": false
-        }
-      ]
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/business_segment"
+      },
+      "maxItems": 4294967295
     },
     "business_segment": {
       "oneOf": [
         {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "literal"
-            },
-            "value": {
-              "type": "string",
-              "maxLength": 4294967295
-            }
-          },
-          "required": [
-            "kind",
-            "value"
-          ],
-          "additionalProperties": false
+          "type": "string",
+          "maxLength": 4294967295
         },
         {
           "type": "object",
@@ -94,22 +44,29 @@
             "passive_literal_id"
           ],
           "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "exact_copy"
+            },
+            "claim_id": {
+              "$ref": "#/$defs/ordinal"
+            }
+          },
+          "required": [
+            "kind",
+            "claim_id"
+          ],
+          "additionalProperties": false
         }
       ]
     },
     "ordinal": {
-      "type": "object",
-      "properties": {
-        "ordinal": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 4294967295
-        }
-      },
-      "required": [
-        "ordinal"
-      ],
-      "additionalProperties": false
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4294967295
     },
     "provenance": {
       "type": "object",
@@ -142,11 +99,7 @@
           "const": "clarification"
         },
         "reason": {
-          "enum": [
-            "missing",
-            "ambiguous",
-            "conflicting"
-          ]
+          "$ref": "#/$defs/clarification_reason"
         },
         "question": {
           "$ref": "#/$defs/attributed_value"
@@ -190,6 +143,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -220,6 +176,9 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
@@ -253,10 +212,199 @@
         },
         {
           "$ref": "#/$defs/clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
-    "content_acceptance_criterion": {
+    "inconclusive": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "inconclusive"
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        }
+      },
+      "required": [
+        "kind",
+        "detail"
+      ],
+      "additionalProperties": false
+    },
+    "record_acceptance_criterion": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "acceptance_criterion"
+        },
+        "given": {
+          "$ref": "#/$defs/business_value"
+        },
+        "when": {
+          "$ref": "#/$defs/business_value"
+        },
+        "then": {
+          "$ref": "#/$defs/business_value"
+        }
+      },
+      "required": [
+        "kind",
+        "given",
+        "when",
+        "then"
+      ],
+      "additionalProperties": false
+    },
+    "record_user_visible_outcome": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "user_visible_outcome"
+        },
+        "text": {
+          "$ref": "#/$defs/business_value"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "record_edge_case": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "edge_case"
+        },
+        "condition": {
+          "$ref": "#/$defs/business_value"
+        },
+        "expected_outcome": {
+          "$ref": "#/$defs/business_value"
+        }
+      },
+      "required": [
+        "kind",
+        "condition",
+        "expected_outcome"
+      ],
+      "additionalProperties": false
+    },
+    "record_functional_requirement": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "functional_requirement"
+        },
+        "text": {
+          "$ref": "#/$defs/business_value"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "record_business_rule": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "business_rule"
+        },
+        "text": {
+          "$ref": "#/$defs/business_value"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "record_assumption": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "assumption"
+        },
+        "text": {
+          "$ref": "#/$defs/business_value"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "record_non_goal": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "non_goal"
+        },
+        "text": {
+          "$ref": "#/$defs/business_value"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "record_prohibited_behavior": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "prohibited_behavior"
+        },
+        "text": {
+          "$ref": "#/$defs/business_value"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "record_entity": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "const": "entity"
+        },
+        "name": {
+          "$ref": "#/$defs/business_value"
+        },
+        "business_meaning": {
+          "$ref": "#/$defs/business_value"
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/business_value"
+          },
+          "maxItems": 4294967295
+        }
+      },
+      "required": [
+        "kind",
+        "name",
+        "business_meaning",
+        "relationships"
+      ],
+      "additionalProperties": false
+    },
+    "content_records": {
       "type": "object",
       "properties": {
         "kind": {
@@ -265,41 +413,7 @@
         "records": {
           "type": "array",
           "items": {
-            "type": "object",
-            "properties": {
-              "content": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "acceptance_criterion"
-                  },
-                  "given": {
-                    "$ref": "#/$defs/business_value"
-                  },
-                  "when": {
-                    "$ref": "#/$defs/business_value"
-                  },
-                  "then": {
-                    "$ref": "#/$defs/business_value"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "given",
-                  "when",
-                  "then"
-                ],
-                "additionalProperties": false
-              },
-              "provenance": {
-                "$ref": "#/$defs/provenance"
-              }
-            },
-            "required": [
-              "content",
-              "provenance"
-            ],
-            "additionalProperties": false
+            "$ref": "#/$defs/record"
           },
           "maxItems": 4294967295
         }
@@ -310,479 +424,204 @@
       ],
       "additionalProperties": false
     },
-    "acceptance_criterion": {
+    "records": {
       "oneOf": [
         {
-          "$ref": "#/$defs/content_acceptance_criterion"
+          "$ref": "#/$defs/content_records"
         },
         {
-          "$ref": "#/$defs/clarification"
+          "$ref": "#/$defs/record_clarification"
+        },
+        {
+          "$ref": "#/$defs/inconclusive"
         }
       ]
     },
-    "content_user_visible_outcome": {
+    "record": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/record_acceptance_criterion"
+            },
+            {
+              "$ref": "#/$defs/record_user_visible_outcome"
+            },
+            {
+              "$ref": "#/$defs/record_edge_case"
+            },
+            {
+              "$ref": "#/$defs/record_functional_requirement"
+            },
+            {
+              "$ref": "#/$defs/record_business_rule"
+            },
+            {
+              "$ref": "#/$defs/record_assumption"
+            },
+            {
+              "$ref": "#/$defs/record_non_goal"
+            },
+            {
+              "$ref": "#/$defs/record_prohibited_behavior"
+            },
+            {
+              "$ref": "#/$defs/record_entity"
+            }
+          ]
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "required": [
+        "content",
+        "provenance"
+      ],
+      "additionalProperties": false
+    },
+    "clarification_reason": {
+      "enum": [
+        "missing",
+        "ambiguous",
+        "conflicting"
+      ]
+    },
+    "record_clarification": {
       "type": "object",
       "properties": {
         "kind": {
-          "const": "records"
+          "const": "clarification"
         },
-        "records": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "content": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "user_visible_outcome"
-                  },
-                  "text": {
-                    "$ref": "#/$defs/business_value"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "text"
-                ],
-                "additionalProperties": false
-              },
-              "provenance": {
-                "$ref": "#/$defs/provenance"
-              }
-            },
-            "required": [
-              "content",
-              "provenance"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
+        "reason": {
+          "$ref": "#/$defs/clarification_reason"
+        },
+        "question": {
+          "$ref": "#/$defs/attributed_value"
+        },
+        "record_kind": {
+          "enum": [
+            "acceptance_criterion",
+            "user_visible_outcome",
+            "edge_case",
+            "functional_requirement",
+            "business_rule",
+            "assumption",
+            "non_goal",
+            "prohibited_behavior",
+            "entity"
+          ]
         }
       },
       "required": [
         "kind",
-        "records"
+        "reason",
+        "question",
+        "record_kind"
       ],
       "additionalProperties": false
     },
-    "user_visible_outcome": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/content_user_visible_outcome"
-        },
-        {
-          "$ref": "#/$defs/clarification"
-        }
-      ]
-    },
-    "content_edge_case": {
+    "repair_record_entity": {
       "type": "object",
       "properties": {
-        "kind": {
-          "const": "records"
+        "content": {
+          "$ref": "#/$defs/record_entity"
         },
-        "records": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "content": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "edge_case"
-                  },
-                  "condition": {
-                    "$ref": "#/$defs/business_value"
-                  },
-                  "expected_outcome": {
-                    "$ref": "#/$defs/business_value"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "condition",
-                  "expected_outcome"
-                ],
-                "additionalProperties": false
-              },
-              "provenance": {
-                "$ref": "#/$defs/provenance"
-              }
-            },
-            "required": [
-              "content",
-              "provenance"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
+        "provenance": {
+          "$ref": "#/$defs/provenance"
         }
       },
       "required": [
-        "kind",
-        "records"
+        "content",
+        "provenance"
       ],
       "additionalProperties": false
     },
-    "edge_case": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/content_edge_case"
-        },
-        {
-          "$ref": "#/$defs/clarification"
-        }
-      ]
-    },
-    "content_functional_requirement": {
+    "repair_record_acceptance_criterion": {
       "type": "object",
       "properties": {
-        "kind": {
-          "const": "records"
+        "content": {
+          "$ref": "#/$defs/record_acceptance_criterion"
         },
-        "records": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "content": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "functional_requirement"
-                  },
-                  "text": {
-                    "$ref": "#/$defs/business_value"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "text"
-                ],
-                "additionalProperties": false
-              },
-              "provenance": {
-                "$ref": "#/$defs/provenance"
-              }
-            },
-            "required": [
-              "content",
-              "provenance"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
+        "provenance": {
+          "$ref": "#/$defs/provenance"
         }
       },
       "required": [
-        "kind",
-        "records"
+        "content",
+        "provenance"
       ],
       "additionalProperties": false
     },
-    "functional_requirement": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/content_functional_requirement"
-        },
-        {
-          "$ref": "#/$defs/clarification"
-        }
-      ]
-    },
-    "content_business_rule": {
+    "repair_record_functional_requirement": {
       "type": "object",
       "properties": {
-        "kind": {
-          "const": "records"
+        "content": {
+          "$ref": "#/$defs/record_functional_requirement"
         },
-        "records": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "content": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "business_rule"
-                  },
-                  "text": {
-                    "$ref": "#/$defs/business_value"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "text"
-                ],
-                "additionalProperties": false
-              },
-              "provenance": {
-                "$ref": "#/$defs/provenance"
-              }
-            },
-            "required": [
-              "content",
-              "provenance"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
+        "provenance": {
+          "$ref": "#/$defs/provenance"
         }
       },
       "required": [
-        "kind",
-        "records"
+        "content",
+        "provenance"
       ],
       "additionalProperties": false
     },
-    "business_rule": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/content_business_rule"
-        },
-        {
-          "$ref": "#/$defs/clarification"
-        }
-      ]
-    },
-    "content_assumption": {
+    "repair_record_non_entity": {
       "type": "object",
       "properties": {
-        "kind": {
-          "const": "records"
-        },
-        "records": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "content": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "assumption"
-                  },
-                  "text": {
-                    "$ref": "#/$defs/business_value"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "text"
-                ],
-                "additionalProperties": false
-              },
-              "provenance": {
-                "$ref": "#/$defs/provenance"
-              }
+        "content": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/record_acceptance_criterion"
             },
-            "required": [
-              "content",
-              "provenance"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
+            {
+              "$ref": "#/$defs/record_user_visible_outcome"
+            },
+            {
+              "$ref": "#/$defs/record_edge_case"
+            },
+            {
+              "$ref": "#/$defs/record_functional_requirement"
+            },
+            {
+              "$ref": "#/$defs/record_business_rule"
+            },
+            {
+              "$ref": "#/$defs/record_assumption"
+            },
+            {
+              "$ref": "#/$defs/record_non_goal"
+            },
+            {
+              "$ref": "#/$defs/record_prohibited_behavior"
+            }
+          ]
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
         }
       },
       "required": [
-        "kind",
-        "records"
+        "content",
+        "provenance"
       ],
       "additionalProperties": false
     },
-    "assumption": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/content_assumption"
-        },
-        {
-          "$ref": "#/$defs/clarification"
-        }
-      ]
-    },
-    "content_non_goal": {
+    "value": {
       "type": "object",
       "properties": {
-        "kind": {
-          "const": "records"
-        },
-        "records": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "content": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "non_goal"
-                  },
-                  "text": {
-                    "$ref": "#/$defs/business_value"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "text"
-                ],
-                "additionalProperties": false
-              },
-              "provenance": {
-                "$ref": "#/$defs/provenance"
-              }
-            },
-            "required": [
-              "content",
-              "provenance"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
+        "value": {
+          "$ref": "#/$defs/business_value"
         }
       },
       "required": [
-        "kind",
-        "records"
+        "value"
       ],
       "additionalProperties": false
-    },
-    "non_goal": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/content_non_goal"
-        },
-        {
-          "$ref": "#/$defs/clarification"
-        }
-      ]
-    },
-    "content_prohibited_behavior": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "const": "records"
-        },
-        "records": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "content": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "prohibited_behavior"
-                  },
-                  "text": {
-                    "$ref": "#/$defs/business_value"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "text"
-                ],
-                "additionalProperties": false
-              },
-              "provenance": {
-                "$ref": "#/$defs/provenance"
-              }
-            },
-            "required": [
-              "content",
-              "provenance"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
-        }
-      },
-      "required": [
-        "kind",
-        "records"
-      ],
-      "additionalProperties": false
-    },
-    "prohibited_behavior": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/content_prohibited_behavior"
-        },
-        {
-          "$ref": "#/$defs/clarification"
-        }
-      ]
-    },
-    "content_entity": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "const": "records"
-        },
-        "records": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "content": {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "const": "entity"
-                  },
-                  "name": {
-                    "$ref": "#/$defs/business_value"
-                  },
-                  "business_meaning": {
-                    "$ref": "#/$defs/business_value"
-                  },
-                  "relationships": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/business_value"
-                    },
-                    "maxItems": 4294967295
-                  }
-                },
-                "required": [
-                  "kind",
-                  "name",
-                  "business_meaning",
-                  "relationships"
-                ],
-                "additionalProperties": false
-              },
-              "provenance": {
-                "$ref": "#/$defs/provenance"
-              }
-            },
-            "required": [
-              "content",
-              "provenance"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
-        }
-      },
-      "required": [
-        "kind",
-        "records"
-      ],
-      "additionalProperties": false
-    },
-    "entity": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/content_entity"
-        },
-        {
-          "$ref": "#/$defs/clarification"
-        }
-      ]
     }
   },
   "$ref": "#/$defs/brief"

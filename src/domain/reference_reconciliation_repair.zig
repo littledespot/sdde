@@ -228,8 +228,8 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
         },
         .signal => |index| {
             if (parsed.proposal != .global or index >= parsed.proposal.global.signals.len) return error.InvalidAtomicRepair;
+            if (rejection.relations.redundant) |redundant| return deletion(a, parsed, facts, .{ .signal = redundant }, rule);
             if (rejection.issue.rule == .duplicate_signal) {
-                if (rejection.relations.redundant) |redundant| return deletion(a, parsed, facts, .{ .signal = redundant }, rule);
                 return .{ .blocked = .competing_entries };
             }
             return replace(a, parsed, facts, switch (rejection.issue.rule) {

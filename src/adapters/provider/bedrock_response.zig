@@ -52,66 +52,78 @@ pub const Inference = struct {
     output: union(enum) { text: []const u8, stopped: operation.ProviderNonCandidateStopReason, invalid: operation.ProviderContentDiagnostic },
 };
 
-// Borrowed wire facts, with no workflow identities or completion authority.
-pub fn decodeConverse(raw: std.json.Value) Invalid!Inference {
-    try fields(raw, &.{ "output", "stopReason", "usage", "metrics" });
-    const stop = try string(try field(raw, "stopReason"));
+// Borrowed InvokeModel wire facts. Usage survives a rejected candidate; returned
+// identities and reasoning never become workflow authority.
+pub fn decodeInvoke(raw: std.json.Value) Invalid!Inference {
+    try fields(raw, &.{ "id", "object", "created", "model", "choices", "usage", "service_tier", "system_fingerprint" });
+    for ([_][]const u8{ "id", "model" }) |name| if (raw.object.get(name)) |v| {
+        _ = try string(v);
+    };
+    if (raw.object.get("object")) |v| if (!std.mem.eql(u8, try string(v), "chat.completion")) return error.InvalidResponse;
+    if (raw.object.get("created")) |v| {
+        _ = try integer(v);
+    }
+    for ([_][]const u8{ "service_tier", "system_fingerprint" }) |name| if (raw.object.get(name)) |v| {
+        if (v != .null) _ = try string(v);
+    };
     const usage = try field(raw, "usage");
-    try fields(usage, &.{ "inputTokens", "outputTokens", "totalTokens", "serverToolUsage" });
-    // No server tools are configured or authorized by this adapter. Bedrock
-    // may still emit the empty usage object on an ordinary text response.
-    if (usage.object.get("serverToolUsage")) |tools| try fields(tools, &.{});
+    try fields(usage, &.{ "prompt_tokens", "completion_tokens", "total_tokens", "prompt_tokens_details", "completion_tokens_details" });
+    try usageDetails(usage, "prompt_tokens_details", &.{ "cached_tokens", "audio_tokens" });
+    try usageDetails(usage, "completion_tokens_details", &.{ "reasoning_tokens", "audio_tokens", "accepted_prediction_tokens", "rejected_prediction_tokens" });
     const reported = operation.ProviderUsage.init(
-        try integer(try field(usage, "inputTokens")),
-        try integer(try field(usage, "outputTokens")),
-        try integer(try field(usage, "totalTokens")),
+        try integer(try field(usage, "prompt_tokens")),
+        try integer(try field(usage, "completion_tokens")),
+        try integer(try field(usage, "total_tokens")),
     ) orelse return error.InvalidResponse;
-    var latency: ?u32 = null;
-    if (raw.object.get("metrics")) |metrics| {
-        try fields(metrics, &.{"latencyMs"});
-        latency = std.math.cast(u32, try integer(try field(metrics, "latencyMs"))) orelse return error.InvalidResponse;
-    }
-    return .{ .usage = reported, .latency_ms = latency, .output = decodeOutput(raw, stop) catch .{ .invalid = .invalid_content } };
+    return .{ .usage = reported, .latency_ms = null, .output = decodeOutput(raw) catch .{ .invalid = .invalid_content } };
 }
 
-fn decodeOutput(raw: std.json.Value, stop: []const u8) Invalid!@FieldType(Inference, "output") {
-    if (std.mem.eql(u8, stop, "end_turn")) {
-        const output = try field(raw, "output");
-        try fields(output, &.{"message"});
-        const message = try field(output, "message");
-        try fields(message, &.{ "role", "content" });
-        if (!std.mem.eql(u8, try string(try field(message, "role")), "assistant")) return error.InvalidResponse;
-        const content = try field(message, "content");
-        if (content != .array) return error.InvalidResponse;
-        var text: ?[]const u8 = null;
-        for (content.array.items) |block| {
-            try fields(block, &.{ "text", "reasoningContent" });
-            if (block.object.count() != 1) return error.InvalidResponse;
-            if (block.object.get("text")) |value| {
-                if (text != null) return error.InvalidResponse;
-                text = try string(value);
-            } else {
-                try reasoning(try field(block, "reasoningContent"));
-            }
-        }
-        return if (text) |answer| .{ .text = answer } else .{ .invalid = .missing_final_text };
-    }
-    const reason: operation.ProviderNonCandidateStopReason = if (std.mem.eql(u8, stop, "max_tokens")) .output_limit else if (std.mem.eql(u8, stop, "tool_use")) .unsupported_tool_request else if (std.mem.eql(u8, stop, "guardrail_intervened") or std.mem.eql(u8, stop, "content_filtered")) .content_filtered else if (std.mem.eql(u8, stop, "malformed_model_output") or std.mem.eql(u8, stop, "malformed_tool_use")) .malformed_output else if (std.mem.eql(u8, stop, "model_context_window_exceeded")) .context_limit else return error.InvalidResponse;
-    return .{ .stopped = reason };
+fn usageDetails(usage: std.json.Value, name: []const u8, allowed: []const []const u8) Invalid!void {
+    const detail = usage.object.get(name) orelse return;
+    if (detail == .null) return;
+    try fields(detail, allowed);
+    for (detail.object.values()) |v| _ = try integer(v);
 }
 
-// Converse reasoning is provider metadata, not the workflow result. Validate
-// its closed wire shape without exposing it as candidate text or authority.
-fn reasoning(raw: std.json.Value) Invalid!void {
-    try fields(raw, &.{"reasoningText"});
-    const value = try field(raw, "reasoningText");
-    try fields(value, &.{ "text", "signature" });
-    _ = try string(try field(value, "text"));
-    if (value.object.get("signature")) |signature| _ = try string(signature);
+fn decodeOutput(raw: std.json.Value) Invalid!@FieldType(Inference, "output") {
+    const choices = try field(raw, "choices");
+    if (choices != .array or choices.array.items.len != 1) return error.InvalidResponse;
+    const choice = choices.array.items[0];
+    try fields(choice, &.{ "index", "message", "finish_reason", "logprobs" });
+    if (try integer(try field(choice, "index")) != 0) return error.InvalidResponse;
+    if (choice.object.get("logprobs")) |v| if (v != .null) return error.InvalidResponse;
+    const stop = try string(try field(choice, "finish_reason"));
+    if (!std.mem.eql(u8, stop, "stop")) {
+        const reason: operation.ProviderNonCandidateStopReason = if (std.mem.eql(u8, stop, "length")) .output_limit else if (std.mem.eql(u8, stop, "tool_calls") or std.mem.eql(u8, stop, "function_call")) .unsupported_tool_request else if (std.mem.eql(u8, stop, "content_filter")) .content_filtered else return error.InvalidResponse;
+        return .{ .stopped = reason };
+    }
+    const message = try field(choice, "message");
+    try fields(message, &.{ "role", "content", "refusal", "tool_calls" });
+    if (!std.mem.eql(u8, try string(try field(message, "role")), "assistant")) return error.InvalidResponse;
+    if (message.object.get("refusal")) |v| if (v != .null) {
+        _ = try string(v);
+        return .{ .stopped = .content_filtered };
+    };
+    if (message.object.get("tool_calls")) |v| if (v != .null) {
+        if (v != .array) return error.InvalidResponse;
+        if (v.array.items.len != 0) return .{ .stopped = .unsupported_tool_request };
+    };
+    const content = message.object.get("content") orelse return .{ .invalid = .missing_final_text };
+    if (content == .null) return .{ .invalid = .missing_final_text };
+    const text = try string(content);
+    // AWS documents one leading <reasoning> block for this API. Strip that
+    // framing only, never scan for JSON or repair arbitrary provider text.
+    const trimmed = std.mem.trimStart(u8, text, " \r\n\t");
+    const answer = if (std.mem.startsWith(u8, trimmed, "<reasoning>")) answer: {
+        const close = std.mem.indexOf(u8, trimmed, "</reasoning>") orelse return .{ .invalid = .missing_final_text };
+        break :answer std.mem.trimStart(u8, trimmed[close + "</reasoning>".len ..], " \r\n\t");
+    } else text;
+    if (std.mem.trim(u8, answer, " \r\n\t").len == 0) return .{ .invalid = .missing_final_text };
+    return .{ .text = answer };
 }
 
 fn decodeInference(allocator: std.mem.Allocator, raw: std.json.Value, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId) (Invalid || std.mem.Allocator.Error)!operation.ProviderInvocationObservation {
-    const decoded = try decodeConverse(raw);
+    const decoded = try decodeInvoke(raw);
     return .{ .completed = .{ .operation_id = id, .raw_result = switch (decoded.output) {
         .invalid => |reason| .{ .rejected = .{
             .request_id = request.model_request_id,

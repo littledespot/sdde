@@ -85,11 +85,22 @@ test "principle chunks cover every selected byte and citations reject stale fore
     var bytes: std.ArrayList(u8) = .empty;
     for (guidance) |span| try bytes.appendSlice(a, span.text);
     try std.testing.expectEqualStrings(prose, bytes.items);
-    try r.validateCitation(registry, selected, .{ .chunk = selected.chunks[0], .first_line = 1, .last_line = 1 });
-    try std.testing.expectError(error.InvalidPrincipleRegistry, r.validateCitation(registry, selected, .{ .chunk = .{ .ordinal = 999 }, .first_line = 1, .last_line = 1 }));
-    try std.testing.expectError(error.InvalidPrincipleRegistry, r.validateCitation(registry, selected, .{ .chunk = selected.chunks[0], .first_line = 0, .last_line = 1 }));
+    try std.testing.expectEqual(null, try r.validateCitation(registry, selected, .{ .chunk = selected.chunks[0], .first_line = 1, .last_line = 1 }));
+    try std.testing.expectEqualDeep(r.CitationDiagnostic{ .field = .chunk, .rejected = 999 }, (try r.validateCitation(registry, selected, .{ .chunk = .{ .ordinal = 999 }, .first_line = 1, .last_line = 1 })).?);
+    try std.testing.expectEqualDeep(r.CitationDiagnostic{ .field = .first_line, .rejected = 0, .bounds = .{ .minimum = 1, .maximum = guidance[0].last_line } }, (try r.validateCitation(registry, selected, .{ .chunk = selected.chunks[0], .first_line = 0, .last_line = 1 })).?);
+    for (guidance) |span| {
+        try std.testing.expectEqual(null, try r.validateCitation(registry, selected, .{ .chunk = span.id, .first_line = span.first_line, .last_line = span.last_line }));
+        const bounds: r.LineBounds = .{ .minimum = span.first_line, .maximum = span.last_line };
+        for ([_]u32{ span.first_line - 1, span.last_line + 1 }) |line| {
+            try std.testing.expectEqualDeep(r.CitationDiagnostic{ .field = .first_line, .rejected = line, .bounds = bounds }, (try r.validateCitation(registry, selected, .{ .chunk = span.id, .first_line = line, .last_line = span.last_line })).?);
+            try std.testing.expectEqualDeep(r.CitationDiagnostic{ .field = .last_line, .rejected = line, .bounds = bounds }, (try r.validateCitation(registry, selected, .{ .chunk = span.id, .first_line = span.first_line, .last_line = line })).?);
+        }
+    }
+    // Transport and validation share source coordinates, including mid-line splits.
+    try std.testing.expect(registry.chunks[1].span.start.column > 1);
     var broken = selected;
     broken.registry.revision += 1;
+    try std.testing.expectError(error.InvalidPrincipleRegistry, r.validateCitation(registry, broken, .{ .chunk = selected.chunks[0], .first_line = 1, .last_line = 1 }));
     try std.testing.expectError(error.InvalidPrincipleRegistry, r.validateSelection(a, registry, broken));
     broken = selected;
     broken.chunks = broken.chunks[1..];
@@ -104,7 +115,23 @@ test "principle chunks cover every selected byte and citations reject stale fore
     try std.testing.expect(changed.sources[0].id.ordinal >= registry.next_source);
     try std.testing.expect(changed.chunks[0].id.ordinal >= registry.next_chunk);
     try std.testing.expectError(error.InvalidPrincipleRegistry, r.validateSelection(a, changed, selected));
+    const renewed = try r.select(a, changed, selected.scope);
+    try std.testing.expect(renewed.chunks[0].ordinal > renewed.chunks.len);
+    try std.testing.expectEqual(null, try r.validateCitation(changed, renewed, .{ .chunk = renewed.chunks[0], .first_line = 1, .last_line = 1 }));
+    try std.testing.expectEqualDeep(r.CitationDiagnostic{ .field = .chunk, .rejected = selected.chunks[0].ordinal }, (try r.validateCitation(changed, renewed, .{ .chunk = selected.chunks[0], .first_line = 1, .last_line = 1 })).?);
     var missing = registry;
     missing.chunks = missing.chunks[1..];
     try std.testing.expectError(error.InvalidPrincipleRegistry, r.validate(missing));
+}
+
+test "citation membership uses the selected policy rather than all captured chunks" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const base = try fixture.registry(a, "Require authenticated requests.\n");
+    const registry = try r.build(a, .{ .inventory = base.inventory, .sources = &.{.{ .entry = 1, .bytes = base.sources[0].bytes }} }, .{ .hints = &.{.{ .basename = "core.md", .category = .security }}, .selections = &.{fixture.selection} }, base);
+    const selection = try r.select(a, registry, .{ .stage = .spec, .environment = null, .fileKind = null });
+    try std.testing.expectEqual(@as(usize, 0), selection.chunks.len);
+    const id = registry.chunks[0].id;
+    try std.testing.expectEqualDeep(r.CitationDiagnostic{ .field = .chunk, .rejected = id.ordinal }, (try r.validateCitation(registry, selection, .{ .chunk = id, .first_line = 1, .last_line = 1 })).?);
 }

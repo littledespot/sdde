@@ -16,7 +16,10 @@ pub const Limits = struct {
 };
 pub const limits: Limits = .{};
 pub const Error = std.mem.Allocator.Error || error{ InvalidReferenceInventory, InvalidReferenceAccounting };
-pub const SourceId = struct { ordinal: u32 };
+pub const SourceId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
 pub const BlockId = struct { source: SourceId, ordinal: u32 };
 pub const RelativePath = struct { bytes: []const u8 };
 pub const FileObservation = identity.FileObservation;

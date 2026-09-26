@@ -3,15 +3,25 @@
 const std = @import("std");
 const literals = @import("passive_literals.zig");
 const evidence = @import("reference_evidence.zig");
-const scan = @import("path_token_scan.zig");
 const naming = @import("naming_policy.zig");
 const unicode = @import("../ports/unicode_normalizer.zig");
-pub const Error = literals.Error || error{ InvalidTypedText, UnboundPathReference };
+pub const Error = literals.Error || error{InvalidTypedText};
 pub const Literal = struct { value: []const u8 };
 pub const PassiveReference = struct { passive_literal_id: literals.Id };
 pub const SourceReference = struct { source_id: evidence.identity.SourceId };
-pub const BusinessSegment = union(enum) { literal: Literal, passive: PassiveReference };
-pub const ReferenceNode = union(enum) { literal: Literal, passive: PassiveReference, source: SourceReference };
+pub const ExactCopy = struct { claim_id: @import("reference_identity.zig").ClaimId };
+pub const BusinessSegment = union(enum) {
+    pub const model_inline = .{ .literal = "value" };
+    literal: Literal,
+    passive: PassiveReference,
+    exact_copy: ExactCopy,
+};
+pub const ReferenceNode = union(enum) {
+    pub const model_inline = .{ .literal = "value" };
+    literal: Literal,
+    passive: PassiveReference,
+    source: SourceReference,
+};
 pub const BusinessText = struct { segments: []const BusinessSegment };
 pub const ReferenceSemanticText = struct { nodes: []const ReferenceNode };
 pub const ValidatedBusinessText = struct { value: BusinessText };
@@ -34,7 +44,7 @@ fn equivalentNodes(comptime Node: type, left: []const Node, right: []const Node)
     return true;
 }
 pub const Context = struct { registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, scope: evidence.Scope };
-pub const ScopeSetContext = struct { registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, scopes: []const evidence.Scope };
+pub const ScopeSetContext = struct { registry: literals.Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, inputs: evidence.Inputs, scopes: []const evidence.Scope, exact_copies: []const ExactCopy = &.{} };
 /// Native read dependencies, independent of model packet presentation. Runtime
 /// toolchain identity is checked before capture; no capability enters a snapshot.
 pub const Dependencies = struct {
@@ -55,24 +65,22 @@ pub fn dependencies(inputs: evidence.Inputs, registry: literals.Registry, curren
     return .{ .inputs = inputs, .grammar_contract = grammar.contract, .policy_contract = grammar.policy.contract, .policy_ids = grammar.policy.policy_ids, .rules = grammar.policy.rules, .reference_state_id = grammar.reference_state_id, .feature_id = grammar.feature_id, .reference_names = grammar.reference_names, .records = registry.records, .occurrences = registry.occurrences };
 }
 pub const Issue = struct {
-    reason: enum { empty, invalid_scalar, unbound_path, unknown_passive, unknown_source, blank },
+    reason: enum { empty, invalid_scalar, unknown_exact, unknown_passive, unknown_source, blank },
     first_node: usize,
     last_node: usize,
-    /// Byte offsets address the normalized concatenation of first_node..last_node.
-    /// The lexeme is owned by the validation allocator, not the lexer result.
-    path_match: ?struct { normalized_literal_run: scan.Match, lexeme: []const u8 } = null,
+    rejected_passive: ?literals.Id = null,
+    rejected_exact: ?ExactCopy = null,
     pub fn description(self: Issue) []const u8 {
         return switch (self.reason) {
             .empty, .blank => "Supply nonblank content using the supplied typed text choices.",
             .invalid_scalar => "Literal text must be nonempty valid Unicode without forbidden control characters.",
-            .unbound_path => "Represent filenames, paths and URIs with supplied passive reference IDs, outside literal text.",
+            .unknown_exact => "Select an eligible preserved-token claim supplied for this evidence scope; do not invent or rewrite an exact value.",
             .unknown_passive => "Use only passive reference IDs supplied for this source scope.",
             .unknown_source => "Use only source IDs supplied for this source scope.",
         };
     }
     pub fn failure(self: Issue) Error {
         return switch (self.reason) {
-            .unbound_path => error.UnboundPathReference,
             .unknown_passive => error.InvalidPassiveLiteral,
             else => error.InvalidTypedText,
         };
@@ -84,7 +92,6 @@ pub fn Result(comptime T: type) type {
 pub const Validator = struct {
     normalizer: unicode.Normalizer,
     folder: unicode.CaseFolder,
-    classifier: unicode.LexicalClassifier,
 
     pub fn business(self: Validator, allocator: std.mem.Allocator, context: Context, candidate: BusinessText) Error!ValidatedBusinessText {
         return self.businessIn(allocator, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = &.{context.scope} }, candidate);
@@ -126,32 +133,30 @@ pub const Validator = struct {
         while (index < candidates.len) {
             switch (candidates[index]) {
                 inline else => |node, tag| if (comptime tag == .literal) {
-                    const first = index;
                     var joined: std.ArrayList(u8) = .empty;
-                    // Adjacent segments are one lexical surface: splitting a
-                    // filename into two strings cannot evade the shared lexer.
+                    // Prose is inert content. Normalize adjacent text without
+                    // inferring a reference or capability from its punctuation.
                     while (index < candidates.len and candidates[index] == .literal) : (index += 1) {
                         const bytes = candidates[index].literal.value;
                         if (!validScalar(bytes) or bytes.len == 0) return reject(issue, .invalid_scalar, index, index);
                         try joined.appendSlice(allocator, bytes);
                     }
                     const text = try naming.normalize(allocator, joined.items, true, self.normalizer, self.folder);
-                    const matches = try scan.scan(allocator, context.registry.grammar, text, self.normalizer, self.folder, self.classifier);
-                    defer scan.destroy(matches);
-                    if (matches.matches.len != 0) {
-                        const match = matches.matches[0];
-                        issue.* = .{ .reason = .unbound_path, .first_node = first, .last_node = index - 1, .path_match = .{
-                            .normalized_literal_run = match,
-                            .lexeme = try allocator.dupe(u8, matches.text[match.start_byte..match.end_byte]),
-                        } };
-                        return error.UnboundPathReference;
-                    }
                     visible = visible or std.mem.trim(u8, text, " \t\r\n").len != 0;
                     try result.append(allocator, .{ .literal = .{ .value = text } });
+                } else if (comptime std.mem.eql(u8, @tagName(tag), "exact_copy")) {
+                    if (!permitsExact(context.exact_copies, node)) {
+                        issue.* = .{ .reason = .unknown_exact, .first_node = index, .last_node = index, .rejected_exact = node };
+                        return error.InvalidTypedText;
+                    }
+                    try result.append(allocator, .{ .exact_copy = node });
+                    visible = true;
+                    index += 1;
                 } else if (comptime tag == .passive) {
-                    _ = literals.resolveIn(context.registry, context.inputs, context.scopes, node.passive_literal_id) catch |err| return switch (err) {
-                        error.InvalidPassiveLiteral => reject(issue, .unknown_passive, index, index),
-                        else => err,
+                    _ = literals.resolveIn(context.registry, context.inputs, context.scopes, node.passive_literal_id) catch |err| {
+                        if (err != error.InvalidPassiveLiteral) return err;
+                        issue.* = .{ .reason = .unknown_passive, .first_node = index, .last_node = index, .rejected_passive = node.passive_literal_id };
+                        return error.InvalidPassiveLiteral;
                     };
                     try result.append(allocator, .{ .passive = node });
                     visible = true;
@@ -171,6 +176,11 @@ pub const Validator = struct {
         return result.toOwnedSlice(allocator);
     }
 };
+
+pub fn permitsExact(choices: []const ExactCopy, selected: ExactCopy) bool {
+    for (choices) |choice| if (std.meta.eql(choice, selected)) return true;
+    return false;
+}
 
 fn reject(target: *?Issue, reason: @FieldType(Issue, "reason"), first: usize, last: usize) Error {
     const issue: Issue = .{ .reason = reason, .first_node = first, .last_node = last };

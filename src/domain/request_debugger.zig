@@ -19,6 +19,7 @@ pub const Validation = struct {
     extraction: enum { unavailable, valid, invalid } = .unavailable,
     json: enum { unavailable, valid, invalid } = .unavailable,
     schema: enum { unavailable, valid, invalid } = .unavailable,
+    normalization: @import("model_envelope.zig").Normalization = .none,
     model_text: ?[]const u8 = null,
     parsed: ?std.json.Value = null,
     reason: ?[]const u8 = null,

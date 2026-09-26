@@ -19,10 +19,12 @@ resources:
   signals-prompt: spec/reconciliation-signals.prompt.md
   conflicts-prompt: spec/reconciliation-conflicts.prompt.md
   generation-prompt: spec/generation.prompt.md
+  entities-prompt: spec/entities.prompt.md
+  records-prompt: spec/records.prompt.md
   generation-schema: spec/generation.schema.json
   repair-prompt: spec/repair.prompt.md
-  repair-schema: spec/repair.schema.json
   support-prompt: spec/support.prompt.md
+  principle-prompt: spec/principle.prompt.md
   support-schema: spec/support.schema.json
 steps:
   toolchain:
@@ -67,9 +69,12 @@ steps:
   check-references:
     use: validate-reference-reconciliation-completeness
     on:
-      ok: review-source
-      blocked: review-source
+      ok: source-readiness
+      blocked: source-readiness
       failed: end.failed
+  source-readiness:
+    use: check-specification-source-readiness
+    on: {ok: generate, blocked: review-source, failed: end.failed}
   review-source:
     call: review-source
     with: {retry-limit: 2}
@@ -82,11 +87,14 @@ steps:
   source-authority:
     call: authority-gate
     on:
-      ok: generate
+      ok: retire-source-review
       invalid: repair-source
       needs-user: source-gaps
       blocked: end.blocked
       failed: end.failed
+  retire-source-review:
+    use: retire-required-authority-projection
+    on: {ok: generate, failed: end.failed}
   repair-upstream:
     call: repair-upstream
     on: {ok: rebuild-extraction, more: validate, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
@@ -586,7 +594,7 @@ subgraphs:
         on: {ok: review, failed: end.failed}
       review:
         call: review-support
-        with: {retry-limit: {param: retry-limit}}
+        with: {prompt: support-prompt, retry-limit: {param: retry-limit}}
         on: {ok: apply, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
       apply:
         use: apply-specification-support
@@ -602,14 +610,14 @@ subgraphs:
         on: {ok: source, failed: end.failed}
       source:
         call: review-support
-        with: {retry-limit: 1}
+        with: {prompt: support-prompt, retry-limit: 1}
         on: {ok: advance, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
       advance:
         use: advance-specification-review
         on: {ok: apply, more: policy, failed: end.failed}
       policy:
         call: review-support
-        with: {retry-limit: 1}
+        with: {prompt: principle-prompt, retry-limit: 1}
         on: {ok: advance, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
       apply:
         use: apply-specification-support
@@ -623,7 +631,7 @@ subgraphs:
       model:
         call: model-request
         with:
-          prompt: support-prompt
+          prompt: {param: prompt}
           schema: support-schema
           selection: input
           retry-limit: {param: retry-limit}
@@ -646,7 +654,7 @@ subgraphs:
       repair:
         call: model-request
         with:
-          prompt: repair-prompt
+          prompt: {param: prompt}
           schema: support-schema
           selection: input
           retry-limit: 1
@@ -664,17 +672,36 @@ subgraphs:
     steps:
       initialize-specification:
         use: initialize-specification-generation
-        on: {ok: check-specification, failed: end.failed}
+        on: {ok: brief, failed: end.failed}
+      brief:
+        call: generate-unit
+        with: {prompt: generation-prompt}
+        on: {ok: story, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+      story:
+        call: generate-unit
+        with: {prompt: generation-prompt}
+        on: {ok: entities, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+      entities:
+        call: generate-unit
+        with: {prompt: entities-prompt}
+        on: {ok: records, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+      records:
+        call: generate-unit
+        with: {prompt: records-prompt}
+        on: {ok: end.ok, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+  generate-unit:
+    start: check-specification
+    steps:
       check-specification:
         use: check-specification-generation-progress
-        on: {ok: retire-pre-authority, more: generation-input, failed: end.failed}
+        on: {ok: end.ok, more: generation-input, failed: end.failed}
       generation-input:
         use: build-specification-model-input
         on: {ok: gen, failed: end.failed}
       gen:
         call: model-request
         with:
-          prompt: generation-prompt
+          prompt: {param: prompt}
           schema: generation-schema
           selection: input
           retry-limit: 2
@@ -690,7 +717,7 @@ subgraphs:
         on: {ok: advance-specification, invalid: authorize-repair, needs-user: end.needs-user, failed: end.failed}
       advance-specification:
         use: advance-specification-generation
-        on: {ok: check-specification, failed: end.failed}
+        on: {ok: end.ok, failed: end.failed}
       gen-release:
         call: release-request
         on: {ok: validate-specification, failed: end.failed}
@@ -703,8 +730,8 @@ subgraphs:
       repair:
         call: model-request
         with:
-          prompt: repair-prompt
-          schema: repair-schema
+          prompt: {param: prompt}
+          schema: generation-schema
           selection: input
           retry-limit: 1
         on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
@@ -719,9 +746,6 @@ subgraphs:
       repair-release:
         call: release-request
         on: {ok: merge-repair, failed: end.failed}
-      retire-pre-authority:
-        use: retire-required-authority-projection
-        on: {ok: end.ok, failed: end.failed}
   review-specification:
     start: assemble-specification
     steps:
@@ -747,7 +771,6 @@ subgraphs:
         on:
           ok: assemble-specification
           invalid: end.invalid
-          blocked: end.blocked
           failed: end.failed
           cancelled: end.cancelled
       gate:
@@ -856,7 +879,6 @@ subgraphs:
         use: prepare-model-request
         with:
           slot: spec_generation
-          response-mode: prompt-only
           protocol-prompt: protocol-prompt
           prompt: {param: prompt}
           result-schema: {param: schema}
@@ -873,7 +895,6 @@ subgraphs:
         use: prepare-model-request
         with:
           slot: spec_generation
-          response-mode: prompt-only
           protocol-prompt: protocol-prompt
           prompt: {param: prompt}
           composition-part: {param: composition-part}
@@ -1002,7 +1023,7 @@ subgraphs:
     steps:
       authorize:
         use: authorize-specification-omission-repair
-        on: {ok: input, blocked: end.blocked, failed: end.failed}
+        on: {ok: input, invalid: end.invalid, failed: end.failed}
       input:
         use: build-specification-omission-repair-input
         on: {ok: model, failed: end.failed}
@@ -1010,7 +1031,7 @@ subgraphs:
         call: model-request
         with:
           prompt: repair-prompt
-          schema: repair-schema
+          schema: generation-schema
           selection: input
           retry-limit: 1
         on: {ok: parse, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}

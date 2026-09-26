@@ -1,0 +1,7 @@
+{
+  "content": [
+    {"guidance": "Extract the package name as kind=present and value. Return only the assigned response."},
+    {"user": "Package: orchard"}
+  ],
+  "schema": "{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"present\"},\"value\":{\"type\":\"string\",\"maxLength\":64}},\"required\":[\"kind\",\"value\"],\"additionalProperties\":false}"
+}

@@ -4,7 +4,7 @@ const std = @import("std");
 const text = @import("typed_text.zig");
 const reference = @import("reference_extraction.zig");
 
-pub const version = "specification/v1";
+pub const version = "specification/v2";
 pub const Error = error{InvalidSpecification};
 pub const Kind = enum {
     acceptance_criterion,
@@ -75,7 +75,10 @@ pub const Id = struct {
     }
 };
 
-pub const ResponseId = struct { ordinal: u64 };
+pub const ResponseId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u64,
+};
 pub const Selection = struct {
     claim_ids: []const reference.ClaimId,
     clarification_response_ids: []const ResponseId,
@@ -85,10 +88,11 @@ pub const Provenance = struct {
     citation_ids: []const reference.CitationId,
     clarification_response_ids: []const ResponseId,
 };
-pub const BusinessValue = union(enum) {
-    normalized: text.BusinessText,
-    exact_copy: struct { token_id: reference.tokens.Id, citation_id: reference.CitationId },
+pub const BusinessValue = struct {
+    pub const model_scalar = "segments";
+    segments: []const text.BusinessSegment,
 };
+
 pub const Boundary = enum { model, canonical };
 /// The two evidence boundaries share business fields, never evidence authority.
 pub fn Values(comptime boundary: Boundary) type {
@@ -124,6 +128,9 @@ pub fn Content(comptime Value: type) type {
 
 pub const RecordProposal = Values(.canonical).RecordProposal;
 pub const Applicability = enum { required, not_applicable };
+pub fn entityMembershipSatisfied(disposition: Applicability, entity_count: usize) bool {
+    return (disposition == .required) == (entity_count != 0);
+}
 pub const ApplicabilityProposal = Values(.canonical).ApplicabilityProposal;
 pub const ContentProposal = struct {
     display_name: AttributedValue,

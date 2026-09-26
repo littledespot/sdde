@@ -186,9 +186,9 @@ test "composition source preserves exact part schema execution unit and purpose 
     try std.testing.expect(prepared.request.response_schema == part.schema);
     var native_entry = fixture.registry_entry;
     native_entry.capabilities.structured_response = .bedrock_json_schema;
+    native_entry.json = true;
     var native_binding = fixture.provider_binding;
     native_binding.registry_entry = &native_entry;
-    native_binding.response_mode = .native_schema;
     var native_source = selected;
     native_source.provider_binding = &native_binding;
     var native_request = try preparation.build(std.testing.allocator, native_source, fixture.request.content);
@@ -240,7 +240,7 @@ test "request validation rejects divergent binding controls and modes" {
     fixture.registry_entry.capabilities.temperature = false;
     try std.testing.expectError(error.ModelRequestBindingInvalid, preparation.validateRequest(selected, owned.request));
     fixture.registry_entry.capabilities.temperature = true;
-    fixture.provider_binding.response_mode = .native_schema;
+    fixture.registry_entry.json = true;
     try std.testing.expectError(error.ModelRequestBindingInvalid, (build.Action{}).execute(std.testing.allocator, selected, fixture.request.content));
 }
 
@@ -308,4 +308,19 @@ fn source(fixture: *Fixture, resource: *const compilation.CompiledResource) !pre
         .model_visible_input_id = fixture.request.model_visible_input_id,
         .result_resource = resource,
     };
+}
+
+test "request mode cannot override catalogue JSON selection" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    fixture.registry_entry.capabilities.structured_response = .bedrock_json_schema;
+    // Both wire modes are supported; only the captured catalogue choice is allowed.
+    for ([_]bool{ false, true }) |json| {
+        fixture.registry_entry.json = json;
+        fixture.request.response_guidance_mode = fixture.registry_entry.responseMode();
+        try std.testing.expect(fixture.request.matchesBinding(fixture.provider_binding));
+        fixture.request.response_guidance_mode = if (json) .prompt_only else .native_schema;
+        try std.testing.expect(!fixture.request.matchesBinding(fixture.provider_binding));
+    }
 }

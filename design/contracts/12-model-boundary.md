@@ -56,8 +56,9 @@ storage does not change retry eligibility or the execution-wide token ledger.
   those steps.
 
 - Native `decode-model-envelope` separately parses only complete validated content, retaining
-  its evidence with the owned tree.
-- Malformed JSON returns `invalid`, including through the inference profile's permitted
+  its evidence with the owned tree. The sole approved prefix-normalization exception
+  and its logging are defined in [§22.6](22-repair.md#226-unparseable-output).
+- JSON still malformed after that exception returns `invalid`, including through the inference profile's permitted
   `end.invalid`; non-complete observations keep their failure/cancellation outcome without
   parsing.
 - This proves syntax only and performs no provider call, accounting or payload-schema check.
@@ -112,11 +113,36 @@ Each generation request contains only what the current unit needs:
 
 - For display prose, the packet also carries `PassiveLiteralGuidance` selected from the exact
   registry and current unit evidence.
+- Source-document names remain citation metadata. Only captured source-body occurrences
+  make filenames available as passive content choices; semantic relevance still requires review.
+- Native availability facts may exclude unavailable tagged alternatives from the selected
+  compiled schema (approved 25 September 2026). The existing schema owner derives a narrower
+  view; it never adds fields, values or semantic decisions. Initial reference/specification
+  requests and their repairs omit `passive` when their evidence permits no passive references.
+  At [ADR 0020's coordinated cutover](../decisions/0020-derived-exact-reference-lineage.md),
+  specification requests omit `exact_copy` when no eligible preserved-token claim
+  is available; fixed-evidence repairs use their bound choices, not unrelated
+  sibling evidence. Nonempty sets still require native ID, scope and occurrence
+  validation through the same reference owner that projects request choices.
+- The integer-choice amendment approved on 26 September 2026 narrows declared
+  tagged integer selectors to the eligible IDs supplied by their native evidence
+  owner. The packet retains those IDs out of band; request preparation checks
+  the tag, field and canonical integer bounds, then derives one selected schema
+  for provider and local validation. Empty required choices and sets above
+  ADR 0006's bound reject before invocation. Spec repairs narrow their visible
+  display catalogues to the same evidence scope. A selected repair schema with
+  no matching text selector leaves carried text-choice facts unused. Native
+  validation still checks provenance, source scope and semantics.
+- Packet context/repair projections retain these facts out of band. Request preparation binds
+  the derived schema once; provider serialization, payload validation and protocol corrections
+  use that same view. Composition accepts only its exact part schema or a restriction derived
+  from that schema, then validates the complete assembled candidate. No alternate schema
+  configuration, retry owner or persisted policy is introduced.
 - It says explicitly that passive IDs may be selected only at the listed presentation field
   pointers and authorize no read, write, copy, command, import, context request, or URI fetch.
 - Operational references use only locally allowed file/source IDs.
-- The path-token grammar still scans ordinary literal segments, so a nano model cannot bypass
-  the distinction by copying the display bytes inline.
+- Prose and references follow the shared typed-content contract in §7.1. Literal
+  punctuation does not select a resource or grant operational authority.
 
 - A dependency-capable plan unit receives `DependencyGuidance` from the exact
   `DependencyPolicyRegistry`: allowed target project/manifest IDs, ecosystems, registry-source
@@ -138,6 +164,8 @@ Raw whole-repository listings, principle categories not selected by the configur
   schema association.
 - Workflow result-schema resources compile under ADR 0006's closed `model-result-schema/v1`
   profile.
+- ADR 0006's enum cardinality guard applies to both workflow resources and captured
+  selected schemas through the shared compiler.
 - Its opaque typed authority replaces the raw schema-only compiled resource; the registry
   retains the exact capture and owns the schema through execution.
 - Unsupported or unbounded schemas reject before provider preparation.
@@ -152,6 +180,16 @@ Raw whole-repository listings, principle categories not selected by the configur
 - The engine validates trusted call association separately from model-data decoding and
   validation.
 - Native schema compliance, an echoed ID or a model claim never proves correctness or authority.
+
+- The approved ADR 0006 compact-wire amendment permits nested alternatives proven
+  disjoint by JSON type. Same-type object alternatives retain distinct `kind` tags;
+  repeated primitive types and overlapping alternatives reject before invocation.
+- The shared candidate codec maps declared ordinal wrappers to integers, literal
+  segments to strings and normalized business values to segment arrays. Explicit
+  passive/source references and exact-copy selections remain typed candidates.
+  A selected scalar/array repair stays inside a closed `value` object envelope.
+  This lossless representation is shared by initial output, evidence and repairs;
+  native validation and stored canonical formats do not change.
 
 - Allowed variants come from the workflow-declared result schema and selected generic operation.
 - A generation operation cannot return a patch; a repair operation cannot return a whole
@@ -174,10 +212,10 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 
 - A context request asks only for already-held evidence.
 - It cannot stand in for absent business authority.
-- When a workflow model operation generates specification content, if the supplied
-  reference/clarification authorities do not support a required business fact, the only valid
-  semantic alternative is `clarification_needed`; inventing a default, silently omitting the
-  affected behavior, or repeatedly asking the model to guess is invalid.
+- A required business fact genuinely absent from the supplied authorities may produce
+  `clarification_needed` only under §12.8.1. Failure to interpret available evidence
+  is a candidate/review failure. Neither route permits invented defaults, silent
+  omission or repeated guessing.
 
 ### 12.5 Low-capability model operating rules
 
@@ -191,7 +229,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 - no request to reproduce engine-known filenames, IDs, headings, checkboxes, or status;
 - no open-ended “inspect the repo” instruction;
 - no unrestricted tool use;
-- no invention of an absent business fact; return the workflow operation's typed clarification variant when available;
+- no invention of an absent business fact; admit a typed clarification only under §12.8.1;
 - no full-document retry for a local validation failure;
 - one complete schema-valid result and explicit operation-local retry limits;
 - an optional YAML-declared fallback operation only after deterministic retry exhaustion, never as hidden behavior.
@@ -215,8 +253,11 @@ control. OpenAI rubric evaluation remains outside this amendment.
 
 - The engine ships no model-route registry.
 - The originating model-request step calls a registered generic operation and declares its model
-  slot, prompt/guidance resources, result schema, response mode, allowed context behavior,
+  slot, prompt/guidance resources, result schema, allowed context behavior,
   and outcome transitions in the workflow definition.
+- Response mode comes only from the selected catalogue model’s required `json` boolean
+  (§9; ADR 0012). Bindings derive it from their immutable catalogue entry rather than
+  retaining another selector. Workflow response-mode overrides reject; schemas remain workflow-owned.
 - Large resources are declared once and referenced by concise local IDs.
 - The compiler captures and validates every declared resource before execution; there is no
   packaged route descriptor, prompt, schema, slot assignment, or fallback.
@@ -416,25 +457,28 @@ control. OpenAI rubric evaluation remains outside this amendment.
 
 - The feature-brief result schema selected by the workflow yields a `FeatureBriefProposal`
   grounded only in the completed reference claim/citation registries, or a typed specification
-  clarification need.
+  clarification need, or the approved `inconclusive` diagnostic result.
 - The model supplies a business title, description, and primary goal plus existing
   claim/citation or resolved clarification-response IDs; it cannot supply the `featureId`, any
   workflow or project path, or a reference selector.
 - Before the call, the engine binds `featureId` to the validated supplied directory's lossless
   `paths.specs`-relative key under [ADR 0010](../decisions/0010-explicit-feature-directory.md).
   The independent reference selector and model output cannot name or rename the feature.
-- An unsupported fact takes the YAML-declared clarification branch; a path-shaped or
-  structurally invalid value follows the normal passive-literal/atomic protocol.
+- An admitted authority gap takes the YAML-declared clarification branch under
+  §12.8.1; candidate defects follow their existing validation/repair boundary.
 
 - Specification-section, plan-unit, and task-cluster workflows declare discriminated result
-  schemas that return either stage content or one `ClarificationNeedProposal`.
+  schemas for stage content or a `ClarificationNeedProposal`. Specification generation
+  also permits `inconclusive` with diagnostic `detail`; it terminates through the
+  existing invalid-result path and cannot authorize a user question.
 - A clarification carries a bounded user-answer schema and engine-known subject authorities
   explaining the gap.
-- It is a successful semantic pause, consumes no operation-local retry, and is never sent
-  through repair to manufacture content.
-- A malformed need is an ordinary invalid model candidate; content that asserts an unsupported
-  fact is a semantic no-invention finding and must be replaced by the clarification variant
-  under one atomic authorization.
+- An admitted need is a normal semantic pause, consumes no operation-local retry,
+  and is never sent through repair to manufacture content. Returning the model's
+  clarification variant alone does not admit the need.
+- A malformed need is an invalid model candidate. The existing one-use no-invention
+  replacement may yield a clarification only for an identifiable authority gap;
+  it cannot turn an interpretation failure into a request for user information.
 - The engine validates/deduplicates the need, assigns an `SNN`, `PNN`, or `TNN` ID when
   necessary, persists its form under `clarify/`, and enters the matching clarification-pending
   state.
@@ -465,7 +509,10 @@ what the answer must add or choose. Explain why that decision is needed for this
 subject; a generic absence message and a byte limit are insufficient. Do not ask
 the user to reproduce known requirements in internal specification categories.
 If admitted evidence does not identify the semantic gap, return to the existing
-review/validation boundary; formatting must not invent a question or change a finding.
+review/validation boundary under §12.8.1; formatting must not invent a question or
+change a finding. A missing semantic decision cannot be filled by a generic
+requirement-descriptor question or a copied diagnostic. Descriptor-based questions
+remain valid for mechanically established gaps with a known required decision.
 For a claimed conflict, the evidence must identify the incompatible meanings, why
 they cannot both hold and the precise choice the answer must resolve. A conflict ID,
 an unresolved status, copied rejection prose or an answer byte limit does not supply
@@ -480,18 +527,70 @@ correction and persisted validation share this contract; detail correction retai
 the verdict/provenance. Its selected schema requires both `detail` and `question`
 for a retained negative finding, and permits only `detail` otherwise. Diagnostics
 identify missing, invalid or forbidden questions separately from invalid detail;
-they retain one repair unit and retry family. Initial/insertion findings still use
-native decision-dependent validation within their existing wire shape. Generation
-uses its existing question shape. Presence and association checks are structural,
+they retain one repair unit and retry family. The user-approved D1 amendment uses
+closed `kind`-discriminated source findings for initial reviews and insertion:
+`ambiguous`, `conflicting` and `unsupported` require `detail` and `question`;
+`supported`, `not_applicable`, `candidate_omission` and `inconclusive` forbid
+`question`. Shared fields remain schema references; `kind` is the sole source
+decision field. Principle findings retain their separate `decision` contract.
+The existing codec decodes source candidates with `kind`; native candidates retain
+optional question data for diagnostics and the same decision-dependent checks.
+Persisted evidence retains its existing finding/resolution representation.
+Missing/forbidden questions now reject at schema admission, before native collection.
+Existing protocol correction resubmits the whole assigned review under its original
+assignment allowance, including otherwise correct siblings; insertion still corrects
+only its selected finding. No partial-response merge, new counter or verdict
+reassessment is introduced. Selected native text repairs retain their narrow scope.
+Remove the superseded source `decision` wire format without a compatibility reader.
+Generation uses its existing question shape. Presence and association checks are structural,
 not deterministic proof of actionability.
+
+**User-facing output:** reuse the current controlled form and fields:
+
+| Information | Existing owner/field |
+| --- | --- |
+| Known facts/preconditions, current evidence and why a choice is required | Review `detail` → `why_required`; generation's existing attributed `question` carries its context; cited excerpts shown once |
+| Exact missing decision and expected answer format | `question`; the workflow supplies the format and leaves the answer blank |
+| Permitted input and lifecycle controls | Native `answer_schema`, existing Allowed answer and editable Answer regions |
+
+Illustrative genuine gap, not a prompt example or hard-coded fixture:
+
+- **Preconditions:** customers may cancel paid bookings; the supplied source gives
+  no rule for the payment after cancellation.
+- **Question:** What should happen to the payment when a customer cancels a paid booking?
+- **Expected answer:** one sentence stating the payment outcome and any condition.
+- **User answer:** empty until supplied by the user.
+
+If the source already states the payment rule, asking this question fails semantic
+conformance. A byte limit alone is not an expected answer. No additional form field,
+summary call, answer-sharing rule or renderer-owned semantic check is introduced.
+Generation's reason enum remains a reason code; a generic enum description alone
+does not explain its missing decision. Do not parse free text into a second set of
+authority fields to force the two producers into identical internal shapes.
 
 Evidence-selection repair selects its response shape from the retained native
 evidence minimum. A `claim_required` rule selects the canonical named shape with
 nonempty `claim_ids`; optional and claim-or-source rules retain the generic shape.
+Initial and inserted `supported`/`not_applicable` findings reference that same
+nonempty provenance shape. Conformance tests compare configured shapes with the
+native evidence minimum; schemas do not create a separate evidence policy.
 The same evidence owner supplies concise guidance to initial review, insertion
 and repair: `not_applicable` still needs supporting claims. Native validation and
 persisted readback retain eligibility, exact-set and current-provenance checks;
 schema cardinality never establishes semantic support or selects citations.
+Review insertion and replacement reuse the initial guidance for the **same
+assessment purpose**, returning only the authorized replacement and retaining
+any existing verdict. Shared orchestration does not require source and principle
+assessment to share semantic instructions; §17.3.1 owns the policy boundary. A
+`missing_finding` diagnostic identifies an absent assessment, not missing source
+information or candidate content. Insertion must assess the supplied content;
+it must not infer a candidate omission from the mechanical diagnostic.
+For entity applicability, the shared requirement description asks whether required
+business behavior needs entities. An entity heading or explicit declaration of
+absence is unnecessary; displayed values alone do not establish business entities.
+A genuine missing data decision must state its behavioral effect and request the
+details needed to resolve it, rather than a bare yes/no about entities. This guidance
+does not authorize native inference from question prose or verdict reassessment.
 
 Consolidate only the same engine-built subject under existing identity rules.
 Equal wording or shared citations across subjects do not establish equivalent
@@ -532,9 +631,12 @@ authenticated answer acceptance and protected history (§23.2).
 
 - Authority completeness is a shared engine contract, not behavior duplicated in prompts or
   implemented separately for particular domains.
-- Before generation and again before stage commit, the engine deterministically builds an
-  `AuthorityRequirementLedger` from every required field, decision slot, obligation, policy
-  predicate, and accepted upstream authority applicable to that stage.
+- Required upstream authority is validated before generation. Execution-local
+  drafting need not establish semantic support for output fields before they exist:
+  [§17.3](17-specify.md#173-llm-work) defines Specify's draft-first sequence.
+  Before stage commit, the engine builds and resolves the complete
+  `AuthorityRequirementLedger` from every required field, decision slot, obligation,
+  policy predicate and accepted upstream authority applicable to that stage.
 - Requiredness is closed: it comes only from a versioned schema, compiler-locked
   ownership/reconciliation policy, accepted canonical record, or explicit obligation.
 - The engine does not ask about every fact that could exist, and the model cannot remove a
@@ -557,11 +659,11 @@ authenticated answer acceptance and protected history (§23.2).
   conventional-choice, model-memory, or current-stage-fallback variant.
 - Exact equality and equivalence use the registered policy for that requirement kind.
 - If deterministic comparison cannot prove equivalence, a bounded YAML-declared semantic
-  operation may classify only the supplied candidates with citations; uncertainty remains a
-  clarification and is never promoted to proof.
+  operation may classify only supplied candidates with citations. An identifiable
+  user choice follows §12.8.1; inconclusive interpretation remains a review failure.
 - Multiple directly equivalent candidates may collapse only when the policy defines canonical
-  equivalence and records total member evidence; multiple non-equivalent candidates require
-  clarification.
+  equivalence and records total member evidence. Non-equivalence requires clarification
+  only when current evidence establishes an actual unresolved authority choice.
 
 - `ClarificationOwnershipRegistry` maps every registered `(requirementKind, requiredSlotId)` to
   its earliest owner and allowed resolution policies.
@@ -628,6 +730,105 @@ This contract is deliberately domain-neutral. Adding a new requirement kind requ
 - Production generation, support review and registered publication use this boundary.
   [F0100](../features/F0100-SpecWorkflow.md#implementation-status) tracks remaining
   clarification and workflow acceptance work; the shared gate alone does not establish it.
+
+#### 12.8.1 Clarification admission and candidate-failure precedence
+
+**Corrective contract — 22 September 2026.**
+This section replaces blanket unsupported/uncertain → clarification interpretations
+in §§12, 17 and 21. The overall design remains Proposed. It does not authorize
+verdict reassessment prohibited by §22.1; [FIX_002](../../fixes/FIX_002.md) tracks
+that separate decision and implementation work.
+
+**Admission:** `needs_user` requires a current required subject and an identifiable
+decision the user can supply. Existing review/generation evidence must establish
+known facts, the precise missing choice, why it affects the required subject and
+the expected answer. Conflicts require the incompatible source meanings and their
+exact subject/claim/source joins. A negative enum, conflict label, copied diagnostic,
+nonempty question or absence of prewritten specification headings is insufficient.
+
+Engine execution failures are never clarification evidence or question text in
+generated Markdown. Preserve their typed rejection in operational reports/logs;
+do not convert them into `needs_user`, missing business information or a fallback
+question. Existing open clarifications do not permit continuation after failure.
+
+The existing admission owner checks requiredness, permitted applicability, complete
+assignment coverage, evidence identity/freshness, decision-dependent shape and
+candidate-defect disposition. Existing semantic review assesses whether the decision
+is actually absent. Text/citation checks cannot prove that semantic conclusion;
+record it as model-assisted. Do not add keyword heuristics, a second reviewer by
+default, or a parallel gap certificate/store. A known inconclusive review cannot
+enter clarification just because the wire shape has no uncertainty alternative:
+its owner must expose a closed rejection through the existing invalid-result path.
+The user-approved focused amendment adds `inconclusive` to source-review decisions
+and native findings: nonempty `detail`, no `question`, no localized loss or repair
+authority. Specification generation has a corresponding `inconclusive` result with
+`detail`. Existing invalid-result handling retains diagnostics and terminates if no
+eligible producer repair can cause a dependent reassessment. The approved D1 source
+schema variants follow §12.7; D2 verdict reassessment remains separate and unapproved.
+
+**Diagnostic evidence:** the existing evidence owner must admit source-backed loss
+against the selected producer even when its claims are ineligible for positive
+content. The loss owner validates the exact producer/claim/source combination;
+packet guidance, selected schemas, collection and readback project those same rules.
+Source-only evidence is valid only for loss locations that permit it. A selected
+signal/conflict requires its exact producer claims; disposition loss may use its
+claim or source-only evidence. An unlocalized finding retains ordinary eligibility.
+Native source-review evidence retains `loss`, so readback repeats those same joins;
+principle evidence has no loss location. `specification-state/v6` rejects earlier
+snapshot contracts rather than silently supplying a missing binding. ADR 0020
+governs the derived exact-reference lineage.
+Diagnostic eligibility never grants positive support or automatically selects citations.
+
+A reconciliation conflict starts as an unresolved candidate assertion. Only current
+review evidence for that exact subject establishing incompatible original meanings
+and a concrete user choice can classify it as a genuine source conflict. An unrelated
+negative finding, generic `unsupported`, or a positive verdict cannot discharge it.
+Native joins establish association; the incompatibility judgment remains semantic.
+
+Disagreement between model findings is not itself a source contradiction. If current
+evidence already resolves the same registered decision against the same authorities,
+a contrary need must account for that evidence. Unresolved assessment disagreement
+stays at the review boundary; it does not ask the user to repeat known facts. Match
+exact subject/purpose/dependency bindings, never similar wording or shared citations.
+Changed source or a different decision still requires its own current assessment.
+
+The shared authority owner combines the complete findings using this precedence;
+the source-loss owner selects targets and the runner executes declared operations:
+
+| Current state | Required continuation |
+| --- | --- |
+| Terminal validation/runner/provider failure, exhausted applicable retry, or token budget preventing required work | Terminal error; no new specification or clarification publication |
+| Administrative block or required upstream rework | Preserve that typed outcome; no caller-local repair or clarification bypass |
+| Repairable malformed review/need | Existing bounded correction and full admission; no authority gate on the partial result |
+| One or more uniquely authorized localized candidate repairs, with current dependencies and allowance | Select deterministically from eligible targets; repair, rebuild affected dependents and reassess the complete ledger before choosing another outcome |
+| No eligible repair remains, but candidate loss or interpretation failure remains unresolved | Terminal invalid/error with the native reason; no generic question, new forms or incomplete specification |
+| No unresolved candidate/review defect and one or more admitted user decisions | `needs_user`; validate the complete clarification output under the owning workflow policy |
+| All required authorities resolved and candidate validation passes | Continue the declared workflow; completion still requires all later gates |
+
+An earlier unlocalized finding must not hide a later authorized repair. Retain it
+for reassessment; never discard it. A genuine gap alongside a candidate defect cannot
+mask the defect or cause early publication. A missing external authority that makes
+the proposed repair unsafe prevents its authorization. Stable native ordering,
+old-value/revision checks, independent defect identities, recurrence history and the
+global actual-token limit remain with existing owners; selection cannot reset them.
+
+Need construction and formatting occur after this gate. Text/evidence repair never
+reclassifies a semantic verdict. If existing authority cannot safely correct an
+inconclusive finding, reject it; optional reassessment requires its separate decision.
+Apply this boundary to source review, generated needs, candidate review, selected
+repairs and rerun/output validation. No special Spec YAML exception owns the policy.
+
+For an admitted Spec pause, publish the validated incomplete `spec.md` and linked
+forms under ADR 0017; report `awaiting_clarification`, IDs/paths and actual publication
+status, with completed-spec grading `not_run`. Errors grant no new publication;
+preserve prior artifacts/protected forms and retain diagnostics/logs. Pending forms
+remain questions/answers, not semantic proof: readback checks current bindings and
+fresh invocations rebuild the review/gate rather than trusting stored question prose.
+
+This contract closes specified unsafe transitions once implemented. It cannot
+guarantee that every model judgment is true. False-gap recognition requires the
+offline and separately approved live evidence in §28.9; documentation alone is not
+an implementation or a reliability result.
 
 ### 12.9 Configured JSON response composition
 

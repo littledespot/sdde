@@ -9,7 +9,12 @@ clarification routes are unfinished. Phase 3 repair is verified offline. See
 
 [ADR 0015](../decisions/0015-specification-principle-review.md) adds principle
 consistency review and shared actionable-question preparation to this design.
-Those additions are **not implemented** by the supplied workflow.
+Native assessment and question-preparation owners exist; complete semantic readiness
+is outstanding. The corrective [§12.8.1 clarification gate](../contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
+has offline-verified admission and repair-precedence coverage.
+[FIX_002](../../fixes/FIX_002.md) tracks the remaining semantic acceptance work and
+the approved D1 source-response schema change under §12.7. Historical delivery
+notes below do not establish live question necessity or completed readiness.
 
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) defines the
 implemented generic response-composition integration: extraction content/citations,
@@ -341,7 +346,7 @@ explicit in the selected YAML:
 
 - These candidates require the later reconciliation and required-authority gates; the
   extraction validator alone does not establish semantic support.
-- Markdown inline-code candidates are implemented; other format extractors remain future
+- Markdown inline-code, fenced-body and inline-link-destination candidates are implemented; other format extractors remain future
   work.
 - Model/resource/gate integration is described in §3.11.
 - Native values own their data and retain only execution-local predecessors; they impose
@@ -352,10 +357,9 @@ explicit in the selected YAML:
 ### 3.6 Shared naming-policy and path-token grammar
 
 The shared `BusinessText` / `ReferenceSemanticText` and passive-literal
-contracts follow Design §7.1. Their
-inline-literal validator must use §11's `SupersetPathTokenGrammar`, compiled
-from all resolved environment naming/extension rules, reserved/manifest names
-and current reference basenames. A unit allowlist cannot narrow that detector.
+contracts follow Design §7.1. Source discovery uses §11's `SupersetPathTokenGrammar`,
+compiled from resolved naming/extension rules, reserved/manifest names and reference
+basenames. It does not classify ordinary prose as an operational reference.
 
 The initial native boundary is implemented through three pure registered
 operations:
@@ -418,15 +422,15 @@ The native JSON text shapes are closed:
 {"segments":[{"literal":{"value":"Display "}},{"passive":{"passive_literal_id":{"ordinal":1}}}]}
 ```
 
-`BusinessText` uses `segments` and permits only `literal` and `passive`.
-`ReferenceSemanticText` uses `nodes` and additionally permits
+`BusinessText` uses prose, passive and exact-copy segments under §7.1. Extraction
+and reconciliation narrow away exact-copy segments until their evidence authority
+exists; preserved-token claims/signals retain their existing separate representation.
+`ReferenceSemanticText` uses `nodes` with literal/passive references and additionally permits
 `{"source":{"source_id":{"ordinal":1}}}`. Neither permits a project-file
 node. A passive node contains only its ID, never model-provided display bytes.
 
-- `validate-reference-extraction-text` normalizes literal runs to NFC and rejects
-  empty/control-invalid text and inline path/filename/URI matches.
-- Adjacent literal segments are joined before scanning so splitting a token cannot
-  bypass it.
+- `validate-reference-extraction-text` normalizes adjacent literal runs to NFC and
+  rejects empty/control-invalid text. Punctuation does not infer a reference.
 - Passive IDs require an occurrence inside the exact chunk, or that chunk's source
   manifest name; source IDs must identify that same source.
 - Unknown, stale and cross-unit references fail.
@@ -439,10 +443,10 @@ introduced. Semantic review, live reconciliation and publication remain required
 
 ### 3.8 Exact-value preservation
 
-- Design §16.3's approved `markdown_inline_code_v1` descriptor makes parsed Markdown
-  inline-code spans eligible.
-- Prose, quotation-marked text and fenced code blocks do not qualify through this
-  extractor.
+- Design §16.3 registers inline-code, fenced-body and explicit inline-link-destination
+  extractors. Prose and quotation marks alone do not create exact candidates.
+- Source form is captured evidence; classification determines whether a block is
+  illustrative `code_sample`, required exact output, another permitted kind or irrelevant.
 - Equal-length backtick runs identify the exact interior source bytes; escaped/unmatched
   delimiters do not create invented spans.
 - Code-block/HTML regions are not inline code.
@@ -462,11 +466,11 @@ introduced. Semantic review, live reconciliation and publication remain required
 The closed model classifications are:
 
 ```json
-{"kind":"preserve","preserve":{"token_candidate_id":{"source_id":{"ordinal":1},"extractor_id":"markdown_inline_code_v1","ordinal":1},"kind":"business_exact_string"}}
+{"kind":"preserve","preserve":{"token_candidate_id":{"source_id":1,"extractor_id":"markdown_inline_code_v1","ordinal":1},"kind":"business_exact_string"}}
 ```
 
 - or
-  `{"kind":"irrelevant","source_id":{"ordinal":1},"extractor_id":"markdown_inline_code_v1","ordinal":1}`.
+  `{"kind":"irrelevant","source_id":1,"extractor_id":"markdown_inline_code_v1","ordinal":1}`.
 - The discriminator follows ADR 0006; the preserved token's classification remains a
   separate domain field.
 - The model never supplies scalar bytes, citations, canonical token IDs or obligation
@@ -621,6 +625,10 @@ A global proposal contains `claim_dispositions`, `signals` and `conflicts`:
 - Every member must still be accounted for before acceptance.
 - Redundancy uses validated, normalized text together with identical claim evidence and
   obligations; adjacent literal segmentation alone does not create a competing claim.
+  The approved [§22.3 amendment](../contracts/22-repair.md#223-repair-authorization)
+  also permits removing a misbound extra projection when its content and all selected
+  claims independently survive in a fully valid remaining collection. It never
+  reassigns evidence or discards novel content.
 - Exact authorization/CAS comparisons remain byte-exact native comparisons.
 
 - All text uses §3.7's shared validator with the explicit contributing-claim scope set;
@@ -651,9 +659,9 @@ closed requiredness/ownership policies, current support checks and outcomes.
   reference signal/conflict; and each exact-preservation obligation.
 - Optional collections add no minimum record count.
 - The gate rebuilds this projection to reject omitted/invented entries.
-- Signals retain the existing claim/citation/token lineage and unresolved conflicts
-  force a gap; neither a citation nor reconciliation membership supplies semantic
-  support by itself.
+- Signals retain claim/citation/token lineage. Reconciliation conflict labels are
+  candidate assertions until assessed under §12.8.1; neither membership nor a
+  citation supplies semantic support or independently authorizes a user question.
 
 | Registered YAML operation | Responsibility |
 | --- | --- |
@@ -737,17 +745,20 @@ closed requiredness/ownership policies, current support checks and outcomes.
   common evidence owner and do not grant model output authority.
 - `candidate_omission` describes established meaning lost in extraction or generated
   content. Native missing-family obligations remain invalid even after a positive
-  review. Genuine source gaps route to clarification or the earliest upstream owner.
+  review. Genuine source gaps route under §12.8.1 only after candidate/interpretation
+  defects are resolved. `inconclusive` findings grant no question or repair authority.
 - Malformed review repair changes one authorized detail or evidence selection,
   inserts a missing finding or deletes an identical duplicate. It cannot change an
   existing substantive verdict or repair a forbidden applicability decision.
   Current inputs, old value and revision are checked before dispatch and merge.
-- Source-backed content repair reuses the existing coverage repair owner; unsafe targets
-  block. Assembly, coverage and semantic review run again after a content edit.
-- The approved upstream-repair draft attributes loss to an extraction chunk,
-  token classification, reconciliation signal or disposition. Native owners check
-  the target and source association; attribution remains model-assisted. Its
-  execution-private `loss` field is not persisted review authority. The runner
+- Source-backed content repair reuses the existing coverage repair owner, selecting
+  the first safe target while retaining other defects. No eligible target means invalid;
+  assembly, coverage and semantic review run again after a content edit.
+- Upstream repair attributes loss to an extraction chunk, token classification,
+  reconciliation signal, disposition or conflict. Native owners check the exact
+  producer/claim/source joins; attribution remains model-assisted. Source review
+  retains `loss` for the same admission checks on readback; it does not grant
+  positive-content provenance. The runner
   renews explicitly replaced dependencies under §12.8 and requires complete
   rebuilding. Semantic progress still needs a stable subject join; regenerated
   ordinals alone cannot resolve the original omission.
@@ -894,7 +905,7 @@ validators:
   remain mandatory Plan-owned obligations, rendered in `reference-context.md`; Specify
   creates no Plan form and cannot use policy findings as business provenance. Plan must
   reassess current principles and resolve those obligations under its own input authority.
-- The native closed `specification-state/v3` contract distinguishes `specified` and
+- The native closed `specification-state/v6` contract distinguishes `specified` and
   `spec_clarification_pending`. The pending variant holds the current reference snapshot,
   clarification binding/open IDs and prior ID ledger; it cannot supply completed content.
   The specified variant contains the feature key,
@@ -1189,17 +1200,25 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 
 ### 5.7 Generation, coverage and repair (H-010)
 
-- The native generation candidate is a closed content-or-clarification union.
+- The native generation candidate is a closed content/clarification/inconclusive union.
 - Content units are a feature brief (title, description, primary goal), primary story,
-  entity applicability, or one registered record family.
-- Native validation normalizes typed text, rejects the wrong family and identical
+  entity applicability, or the complete mixed record collection (§17.3).
+- Native validation normalizes typed text, checks closed record variants and identical
   normalized records, and keeps questions outside specification content.
 
 - The model's `kind` selects `brief`, `primary_user_story`, `entities`, `records` or
   `clarification`, with that variant's fields directly, without the IR's `content`
   wrapper.
+- Record-assignment clarifications also require a closed `record_kind`; narrative
+  and applicability clarifications prohibit it. Native validation and the shared
+  question builder retain the previous per-family clarification subject.
 - Repair uses the same compact codec, and its expected-value guidance uses the response
   wire shape.
+- Under ADR 0006's approved compact-wire amendment, normalized business values are
+  arrays of literal strings and explicit passive-reference objects; ordinal IDs are
+  integers. Exact-copy objects still select token/citation IDs. Selected value repairs
+  use a closed `value` envelope. Native types, field targets and persisted provenance
+  remain unchanged; no literal matching chooses citations or passive authority.
 - Existing provenance, repair and gate validators remain the owners of meaning and
   authority.
 
@@ -1219,31 +1238,59 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Engine code allocates monotonic per-family record IDs; no model identity, completion,
   approval or artifact-path field is accepted.
 
-- Registered actions generate units sequentially through the generic model path.
+- Four configured calls reuse the same generation subgraph and generic model path;
+  narrative, applicability and records use concise purpose-specific guidance.
+  The record schema defines each content variant once under one collection envelope.
 - Every retained business claim maps to native content keys; non-spec context remains in
   identified reference signals.
 - Every retained exact business token has an exact-copy target.
 - Coverage is mechanical accounting, not semantic proof.
-- Model review supplies scoped evidence for the shared gate before generation and after
-  assembly, including the brief description/goal and every record field.
+- Complete validated references with selectable retained claims admit private
+  section generation directly. `check-specification-source-readiness` reuses the
+  provenance owner's eligibility rule. Blocked references or absent selectable
+  claims retain their source review/repair route. After assembly, model review
+  supplies scoped evidence for the publication gate, including the brief
+  description/goal and every record field. Initial and repair generation packets
+  carry original source text through the same projection as source review;
+  retained claims still own positive provenance (§17.3).
 
 - An invalid mechanically repairable candidate authorizes one independent value or
   provenance selection in stable diagnostic order.
 - Record-field and relationship locations are closed native targets.
-- Whole-record replacement is limited to a record-kind defect; exact evidence-equivalent
-  duplicates can be deleted, while competing records remain blocked.
-- The engine retains owner, revision, old value, source choices and policy facts; the
-  model returns only the selected value or provenance shape.
+- Exact evidence-equivalent duplicates can be deleted, while competing records remain
+  blocked. Per-family initial assignments and their whole-record kind replacement
+  are superseded: closed variant/schema correction handles malformed record shapes.
+  The approved FIX_002 §31 exception permits replacing one contradictory entity
+  with a non-entity record using the same evidence selection, or inserting one
+  missing required entity, bound to the unchanged applicability decision.
+  One whole-record target remains bounded across field-level failures of that
+  replacement; successful siblings, full coverage and semantic review remain.
+  Existing reviewed omission insertion still binds the exact required record kind
+  through the same requirement owner, including native merge validation.
+- The engine retains owner, revision, old value, source choices and policy facts;
+  the model returns only the authorized value, provenance or record shape.
 - Provenance repairs receive the unchanged attributed value or entire shared-provenance
   record; value repairs receive that unchanged provenance.
-- The value validator retains allowed normalized/exact-copy alternatives, including only
-  token/citation pairs supported by the fixed provenance.
+- Under ADR 0020, an exact-copy segment selects one eligible preserved-token
+  claim. Native lineage combines explicit claims with valid handles in the
+  owning field or shared record; the old tuple-specific coupled repair is retired.
+- Value repair fixes the explicit selection and effective claim/citation sets
+  from its original authorized unit. It cannot gain evidence on retry.
 - It never reconstructs business meaning or automatically converts an exact copy to
   prose.
-- The former broad attributed-field repair schema is removed.
+- Existing membership and reviewed insertion repairs retain their separate
+  authority and selected schemas. There is no parallel repair schema resource.
 - Merge preserves siblings, increments revision and repeats unit validation.
-- Assembly revalidates all units, checks conditional entities and assigns IDs before
-  coverage and final authority review.
+- Session-owned conditional entity membership is checked during unit admission,
+  completed-unit replacement and assembly. Candidate diagnostics retain the fixed
+  applicability decision, entity count and first conflicting record; they are not
+  collapsed into an assembly operation failure. Initial and repair record shapes
+  select definitions from the same generation schema; the duplicated repair
+  schema resource is removed.
+- Assembly revalidates all units and projects canonical
+  section order before assigning IDs, coverage and final authority review. The retained
+  candidate order, occurrence identities and field origins do not change; canonical
+  ID lookup maps back to that order for downstream repairs.
 - All repair consumers use the same `atomic_repair.Contract`: immutable authorization
   IDs bind owner, revision, operation, target, expected value, native rule and read
   dependencies; response parsing verifies the exact repair packet, and merge checks the
@@ -1266,10 +1313,8 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
 - Coverage reconstruction continues to use no model call and must pass unit and
   full-candidate validation.
 
-- Text repair retains the shared validator's reason, inclusive node range and, for an
-  unbound path, the first lexer match and matching bytes.
-- Match offsets address the normalized concatenation of that literal-node range, not
-  JSON source bytes.
+- Text repair retains the shared validator's reason, inclusive node range and rejected
+  passive ID or exact claim handle. Ordinary prose punctuation is not a path defect.
 - Reconciliation and specification retain this issue as extraction already did; the same
   issue and description reach the authorized packet and provider request.
 - The selected rejected value and permitted source/passive choices remain in that

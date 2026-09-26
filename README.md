@@ -66,11 +66,31 @@ zig build verify
 `verify` runs formatting/AST checks, all unit and integration tests, architecture
 checks and clean native packaging smoke tests. It makes no live API calls and
 needs no credentials. Packaging smoke runs the executable in isolated temporary
-projects with a cleared environment and no source-tree fallback.
+projects with a cleared environment and no source-tree fallback. Smoke subprocesses
+use the same application entry points with native model connections compiled out;
+the production executables are also compiled. Live transport execution is reserved
+for manually approved harness runs.
 
 Use `zig build --help` for the repository's individual test steps. There is no
 separate changed-scope aggregate; run the relevant owning-boundary steps during
 iteration and `zig build verify` before completing cross-cutting work.
+
+Full verification imports the engine, architecture and harness tests through
+`tests.zig`, so shared source tests execute once. Dependency-module tests keep
+their own roots. `test-engine`, `test-architecture`, `test-e2e-harness` and
+`test-rubric-evaluator` remain available for targeted runs; running those together
+with `test` repeats their coverage.
+
+The specification-generation integration matrix emits tab-separated
+`scenario-cost` rows to stderr, with the zero-based scenario index, outcome and
+milliseconds spent in fixture setup, bootstrap, runner setup, execution,
+assertions and cleanup. `scenario-total` reports phase totals and measured/total
+scenario counts, including partial runs. If a scenario fails early, its cleanup
+time is included in the phase that failed. Capture a full run for comparison with:
+
+```sh
+zig build verify --summary all > .zig-cache/verify-costs.log 2>&1
+```
 
 ## Configure and run a workflow
 
@@ -162,8 +182,13 @@ E2E run requires explicit user approval under [AGENTS.md](AGENTS.md).
 ./scripts/e2e-spec.sh
 ```
 
-The launcher loads the checkout's optional `.env.e2e` and selects the Hello World
-case by default. It uses real APIs for both generation and grading. The
+Automated tests and verification cannot make live model calls. Test executables
+compile out native model connections, and automated build steps reject dependencies
+on live harness execution.
+
+The launcher defaults to the checked-in Hello World case and loads the checkout's
+optional `.env.e2e`. Use `--case <path>` to select another case. It uses real APIs
+for both generation and grading. The
 [supplied-spec evaluator](design/harness/evaluator.md) separately grades a given
 specification; it cannot establish engine-generation success. Neither harness
 ships with the production executable.

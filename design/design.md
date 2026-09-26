@@ -11,6 +11,13 @@ implementation and known gaps are tracked in the [feature contracts](features/)
 and [FIX_001 rollout](../fixes/IMP_001.md); design requirements are not
 claims that the engine already satisfies them.
 
+**22 September corrective design:** [§12.8.1](contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
+owns clarification admission and candidate-failure precedence;
+[FIX_002](../fixes/FIX_002.md) tracks implementation and semantic validation still
+required. Shared admission and repair precedence have offline verification; the
+approved D1 response shapes follow §12.7. Verdict reassessment remains unapproved.
+The overall design remains Proposed.
+
 **Reading this design:** Sections 1, 3, 4, 30–32 retain the overview, invariants,
 responsibility boundary, delivery sequence and acceptance criteria. Other sections
 link to focused contracts below. Those contracts are part of this same proposed
@@ -171,7 +178,7 @@ references, and normative resolutions are retained in the linked sections.
 15. The same normalized engine input and the same accepted structured model payload produce byte-stable rendered artifacts.
 16. Only `spec.md` accepts free user edits as a stage artifact. A registered clarification form accepts edits only in its declared status/answer regions; generated plan/task/reference views are never parsed as authoritative state.
 17. Implementation cannot begin until the user has approved the current plan and current task graph.
-18. Every actionable project-file reference in model output is a typed `fileId` or a planning-stage `ProjectPathCandidate`; path-shaped tokens in free-text fields are invalid.
+18. Every actionable project-file reference in model output is a typed `fileId` or a planning-stage `ProjectPathCandidate`. Prose and display content are inert: punctuation or a rendered link never authorizes a file, command or network operation. The approved typed-content amendment in §7.1 supersedes blanket path-shaped prose rejection.
 19. Every datum or decision marked required by a closed schema, obligation, policy, or accepted authority has exactly one current supported resolution before its owning stage can commit.
 20. Zero resolutions, multiple non-equivalent resolutions, semantic ambiguity, conflict, staleness, or unsupported authority produces a typed clarification, explicit upstream rework, or administrative block; it never selects a default, approximation, nearest match, warning-only continuation, or caller-local exception.
 21. Clarification ownership is derived from a compiler-locked requirement-kind/decision-slot registry. A model, prompt, caller, principle, preset, or configuration value cannot choose a more convenient stage.
@@ -831,7 +838,7 @@ The new engine is ready for production evaluation when all of the following are 
       their producing calls. Explicit exact/modified replay sends one selected request
       at most once, retains an immutable linked result and grants no workflow authority.
 
-9. Fixed workflow artifact paths are engine-assigned, and every path-like model field is
+9. Fixed workflow artifact paths are engine-assigned, and every operational path field is
     structured, normalized, contained, classified, preset-validated, and authorized before it
     can enter specification, plan, tasks, or a published output.
 
@@ -841,7 +848,7 @@ The new engine is ready for production evaluation when all of the following are 
       `pathCandidateId` choices before minting a `fileId`; the option indivisibly binds project,
       environment, kind, role, templates, and capability ceiling.
     - Every actionable project-file reference in tasks/implementation is only a `fileId`,
-      renderers alone display validated paths, and unbound path-shaped prose is rejected.
+      renderers alone display validated paths. Inert prose never supplies operational authority.
 
 11. React, Node, Maven/Gradle Java, and multi-project .NET fixtures have accepted and rejected
     option-binding, registered name-transform, zero/over-limit candidate, filename, placement,
@@ -895,9 +902,10 @@ The new engine is ready for production evaluation when all of the following are 
 17. Persisted reference citations, provenance, claims, conflicts, and exact preserved tokens are
     mechanically verifiable across restart without a content fingerprint.
 
-18. An unsupported semantic assertion is converted only through the one-use no-invention repair
-    authorization into `clarification_needed`; the engine and model never invent a plausible
-    requirement, architecture decision, task fact, path, command, or resolution.
+18. The one-use no-invention repair may produce `clarification_needed` only for an
+    admitted authority gap under §12.8.1. Candidate loss and inconclusive review
+    retain their repair/rejection outcome. Neither engine nor model invents a
+    requirement, architecture decision, task fact, path, command or resolution.
 
 19. **Clarification identity and stage gates.**
     - Clarifications use only registered `<feature>/clarify/S01..S99.md`, `P01..P99.md`, and
@@ -907,6 +915,8 @@ The new engine is ready for production evaluation when all of the following are 
       under §12.7; equal wording across subjects does not authorize answer sharing.
     - Review diagnostics alone are not actionable questions. Do not ask users to
       restate supported behavior in the engine's internal specification categories.
+    - Combined candidate defects and genuine gaps obey §12.8.1 in every finding
+      order; §28.9 tests the complete path through publication and fresh readback.
     - Open forms expose only controlled fields; closed historical views are read-only.
     - Reruns reconsider current reference/principle/answer authorities and regenerate the
       complete owning stage.
@@ -1011,7 +1021,9 @@ The new engine is ready for production evaluation when all of the following are 
 36. One shared, domain-neutral authority-reconciliation contract enumerates every
     schema/obligation/policy/accepted-authority-required datum or decision, assigns structural
     identity and a compiler-locked earliest owner, and produces exactly one validated closed
-    outcome per entry before generation and commit.
+    outcome per entry before commit. Required upstream authority gates generation;
+    execution-local drafts follow §17.3 without requiring a prior semantic verdict
+    on output fields that have not yet been generated.
 
 37. Zero support, multiple non-equivalent support, ambiguity, conflict, staleness, unsupported
     authority, and unregistered ownership can never satisfy a stage gate or enter ordinary
@@ -1068,6 +1080,7 @@ decision history:
 | [0017](decisions/0017-incomplete-specification-publication.md) | Clarification pauses publish a validated incomplete specification and pending state without completion authority. |
 | [0018](decisions/0018-debug-model-exchange-logging.md) | Debug/trace capture complete credential-redacted production model exchanges, including failed attempts, without silent truncation. |
 | [0019](decisions/0019-single-request-debugger.md) | The native browser debugger inspects captured calls and explicitly replays one selected prompt with immutable parent links and no workflow execution. |
+| [0020](decisions/0020-derived-exact-reference-lineage.md) | One preserved-token claim handle selects an exact occurrence; the shared reference owner derives its lineage and bounds repair. The coordinated format cutover remains to be implemented. |
 
 Additional accepted feature boundaries:
 

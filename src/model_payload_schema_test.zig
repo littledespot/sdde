@@ -56,14 +56,14 @@ test "reconciliation repair definitions admit only the natively selected payload
     const schema = try parser.compiler().compile(a, bytes);
     try std.testing.expect(schema.select(.{ .bytes = "repair_content" }) == null);
     for ([_][2][]const u8{
-        .{ "business_text", "{\"segments\":[{\"kind\":\"literal\",\"value\":\"Display a greeting.\"}]}" },
-        .{ "reference_text", "{\"nodes\":[{\"kind\":\"source\",\"source_id\":{\"ordinal\":1}}]}" },
-        .{ "token_reference", "{\"token_id\":{\"ordinal\":1}}" },
+        .{ "business_text", "{\"segments\":[\"Display a greeting.\"]}" },
+        .{ "reference_text", "{\"nodes\":[{\"kind\":\"source\",\"source_id\":1}]}" },
+        .{ "token_reference", "{\"token_id\":1}" },
     }) |example| {
         const selected = schema.select(.{ .bytes = example[0] }).?;
         try checkDocument(selected.modelBytes(), .{ .bytes = example[1] });
         for ([_][]const u8{
-            "{\"kind\":\"preserved_token\",\"token_id\":{\"ordinal\":1}}",
+            "{\"kind\":\"preserved_token\",\"token_id\":1}",
             "{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[]}}",
             "{\"current_value\":{}}",
         }) |invalid| try checkDocument(selected.modelBytes(), .{ .bytes = invalid, .rejection = .unknown_property, .path = if (std.mem.startsWith(u8, invalid, "{\"kind\"")) "/kind" else "/current_value" });
@@ -110,9 +110,9 @@ test "child requirements stay inside selected definitions parts and repair schem
             const bytes = try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference);
             const wire = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
             var count: usize = 0;
-            for (wire.value.object.get("system").?.array.items) |part| count += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, schema.modelBytes()));
+            for (wire.value.object.get("messages").?.array.items[0].object.get("content").?.array.items) |part| count += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, schema.modelBytes()));
             try std.testing.expectEqual(@as(usize, 1), count);
-            try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("outputConfig"));
+            try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("response_format"));
         }
     }
 }
@@ -246,8 +246,8 @@ test "correction locators resolve escaped names root alternatives and selected d
     const compiled = try parser.compiler().compile(a, bytes);
     const selected = compiled.select(.{ .bytes = "summary" }).?;
     const cases = [_]Case{
-        .{ .bytes = "{\"statements\":[{\"local_key\":1,\"claim_ids\":[{\"ordinal\":1}],\"content\":{\"model\":{\"kind\":\"business\",\"segments\":[]}}}]}", .rejection = .missing_required_property, .path = "/statements/0/content/kind" },
-        .{ .bytes = "{\"statements\":[{\"local_key\":1,\"claim_ids\":[{\"ordinal\":1}],\"kind\":\"model\",\"content\":{\"model\":{\"kind\":\"business\",\"segments\":[]}}}]}", .rejection = .unknown_property, .path = "/statements/0/kind" },
+        .{ .bytes = "{\"statements\":[{\"local_key\":1,\"claim_ids\":[1],\"content\":{\"model\":{\"kind\":\"business\",\"segments\":[]}}}]}", .rejection = .missing_required_property, .path = "/statements/0/content/kind" },
+        .{ .bytes = "{\"statements\":[{\"local_key\":1,\"claim_ids\":[1],\"kind\":\"model\",\"content\":{\"model\":{\"kind\":\"business\",\"segments\":[]}}}]}", .rejection = .unknown_property, .path = "/statements/0/kind" },
     };
     for (cases) |case| try checkDocument(selected.modelBytes(), case);
     const projection = @import("domain/model_schema_projection.zig");
@@ -356,11 +356,13 @@ test "unrelated schemas retain one universal framing instruction across initial 
             for ([_]provider.ProviderOperationKind{ .inference, .input_token_count }) |kind| {
                 const bytes = try encoding.encode(std.testing.allocator, request, kind);
                 defer std.testing.allocator.free(bytes);
-                try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, bytes, framing));
-                var parsed = try @import("domain/strict_json.zig").parse(std.testing.allocator, bytes, .{ .maximum_depth = 64 }, false, null);
+                const decoded_body = try @import("bedrock_transport_test_fixture.zig").requestBody(std.testing.allocator, bytes, kind);
+                defer std.testing.allocator.free(decoded_body);
+                try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, decoded_body, framing));
+                var parsed = try @import("domain/strict_json.zig").parse(std.testing.allocator, decoded_body, .{ .maximum_depth = 64 }, false, null);
                 defer parsed.deinit();
-                const root = if (kind == .inference) parsed.value else parsed.value.object.get("input").?.object.get("converse").?;
-                const system = root.object.get("system").?.array.items;
+                const root = parsed.value;
+                const system = root.object.get("messages").?.array.items[0].object.get("content").?.array.items;
                 try std.testing.expectEqualStrings(framing, system[system.len - 2].object.get("text").?.string);
                 try std.testing.expectEqualStrings(request.response_schema.modelBytes(), system[system.len - 1].object.get("text").?.string);
             }
@@ -514,6 +516,11 @@ test "boolean null constants and enumerations reject wrong values and types with
         .{ .bytes = "\"yes\"" },                                   .{ .bytes = "\"\\u00e9\"" },                       .{ .bytes = "\"YES\"", .rejection = .enum_mismatch },
         .{ .bytes = "\"e\\u0301\"", .rejection = .enum_mismatch }, .{ .bytes = "true", .rejection = .type_mismatch },
     });
+    try checkField("{\"enum\":[-9223372036854775808,2,9223372036854775807]}", &.{
+        .{ .bytes = "2" },                                  .{ .bytes = "2.0" },                              .{ .bytes = "2e0" },
+        .{ .bytes = "-9223372036854775808" },               .{ .bytes = "9223372036854775807" },              .{ .bytes = "1", .rejection = .enum_mismatch },
+        .{ .bytes = "\"2\"", .rejection = .type_mismatch }, .{ .bytes = "2.5", .rejection = .type_mismatch }, .{ .bytes = "9223372036854775808", .rejection = .integer_range },
+    });
 }
 
 test "arrays validate all elements and exact item bounds including empty arrays" {
@@ -642,7 +649,7 @@ pub fn checkDocument(contract: []const u8, case: Case) !void {
             const wire = try @import("adapters/provider/bedrock_request.zig").encode(a, retried.request, .inference);
             const request = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
             var occurrences: usize = 0;
-            for (request.value.object.get("system").?.array.items) |part|
+            for (request.value.object.get("messages").?.array.items[0].object.get("content").?.array.items) |part|
                 occurrences += std.mem.count(u8, part.object.get("text").?.string, retried.request.response_schema.modelBytes());
             try std.testing.expectEqual(@as(usize, 1), occurrences);
             try std.testing.expectEqual(@as(usize, 3), guidance.value.object.count());
@@ -690,4 +697,24 @@ pub fn checkDocument(contract: []const u8, case: Case) !void {
     try std.testing.expectEqual(@as(usize, 1), fixture.fake.invocation_call_count);
     try std.testing.expectEqual(@as(usize, 0), fixture.fake.count_call_count);
     try std.testing.expectEqual(@as(usize, 1), fixture.base.preloader.destroyed_count);
+}
+
+test "type-disjoint nested alternatives retain bounds tags diagnostics and provider shape" {
+    const selected = "{\"oneOf\":[{\"type\":\"string\",\"maxLength\":4},{\"type\":\"array\",\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":9},\"maxItems\":2},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"reference\"},\"id\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":9}},\"required\":[\"kind\",\"id\"],\"additionalProperties\":false}]}";
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const contract = try std.mem.concat(a, u8, &.{ "{\"type\":\"object\",\"properties\":{\"value\":", selected, "},\"required\":[\"value\"],\"additionalProperties\":false}" });
+    const compiled = try compiler.compiler().compile(a, contract);
+    const projected = try @import("domain/model_schema_projection.zig").render(a, compiled, .bedrock);
+    const tree = try std.json.parseFromSlice(std.json.Value, a, projected, .{});
+    const choices = tree.value.object.get("properties").?.object.get("value").?.object.get("anyOf").?.array.items;
+    for (choices, [_][]const u8{ "string", "array", "object" }) |choice, expected| try std.testing.expectEqualStrings(expected, choice.object.get("type").?.string);
+    try checkField(selected, &.{
+        .{ .bytes = "\"loan\"" },                                                                      .{ .bytes = "[1,9]" },                                       .{ .bytes = "{\"kind\":\"reference\",\"id\":3}" },
+        .{ .bytes = "\"excess\"", .rejection = .string_length },                                       .{ .bytes = "[0]", .rejection = .integer_range },            .{ .bytes = "[1,2,3]", .rejection = .array_length },
+        .{ .bytes = "true", .rejection = .type_mismatch },                                             .{ .bytes = "{}", .rejection = .missing_required_property }, .{ .bytes = "{\"kind\":\"foreign\",\"id\":3}", .rejection = .unknown_variant },
+        .{ .bytes = "{\"kind\":\"reference\",\"id\":3,\"extra\":0}", .rejection = .unknown_property },
+    });
 }

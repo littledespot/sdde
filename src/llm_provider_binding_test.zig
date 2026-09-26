@@ -117,7 +117,7 @@ test "binding rejects catalogue models missing inference or response support" {
 test "binding projection rejects missing duplicate malformed or unprojected slots" {
     var fixture = try Fixture.init();
     defer fixture.deinit();
-    for (0..5) |variant| {
+    for (0..6) |variant| {
         var step = model_step;
         var parameters = model_parameters ++ [_]compilation.CompiledParameter{
             .{ .id = .{ .bytes = "other-slot" }, .value = .{ .model_slot = identity.ModelSlotId.parse("spec-generation").? } },
@@ -135,6 +135,7 @@ test "binding projection rejects missing duplicate malformed or unprojected slot
                 step.parameters = &.{};
                 step.capabilities = &.{"model-provider"};
             },
+            5 => step.model.?.slot = .{ .bytes = "another-slot" },
             else => unreachable,
         }
         try std.testing.expect(!@import("domain/workflow_model.zig").validProjection(step));
@@ -159,23 +160,13 @@ test "binding retains the exact catalogue authority without capacity configurati
     try std.testing.expectEqualDeep(contract.capabilities.inferenceControls(), result.controls);
 }
 
-test "binding omits unsupported temperature and rejects unsupported native schema" {
+test "binding omits unsupported temperature" {
     var contract = provider_contracts.entries[0];
     contract.capabilities.temperature = false;
     var fixture = try Fixture.initWith(.{ .entries = &.{contract} });
     defer fixture.deinit();
     const resolved = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
     try std.testing.expect(resolved.controls.temperature == null);
-    var step = model_step;
-    var graph = model_graph;
-    var native_parameters = model_parameters;
-    for (&native_parameters) |*parameter| {
-        if (std.mem.eql(u8, parameter.id.bytes, "response-mode")) parameter.value = .{ .enumeration = "native-schema" };
-    }
-    step.parameters = &native_parameters;
-    step.model = @import("domain/workflow_model.zig").resolve(&native_parameters).?;
-    graph.authority.steps = &.{step};
-    try std.testing.expectError(error.ProviderModelBindingInvalid, (resolve_binding.Action{}).execute(&graph, step.id, fixture.services.registry(), fixture.services.allowlist()));
 }
 
 test "runner rejects altered or missing compiled model controls before operation invocation" {
@@ -184,7 +175,7 @@ test "runner rejects altered or missing compiled model controls before operation
     var control: OperationControl = .{};
     var registry = control.registry();
     var barrier: FakeBarrier = .{};
-    for (0..3) |variant| {
+    for (0..4) |variant| {
         var step = model_step;
         const forbidden = model_parameters ++ [_]compilation.CompiledParameter{
             .{ .id = .{ .bytes = "temperature" }, .value = .{ .integer = 0 } },
@@ -192,7 +183,10 @@ test "runner rejects altered or missing compiled model controls before operation
         switch (variant) {
             0 => step.model = null,
             1 => step.parameters = &forbidden,
-            2 => step.model.?.response_mode = .native_schema,
+            2 => step.parameters = &(model_parameters ++ [_]compilation.CompiledParameter{
+                .{ .id = .{ .bytes = "response-mode" }, .value = .{ .enumeration = "native-schema" } },
+            }),
+            3 => step.model.?.slot = .{ .bytes = "another-slot" },
             else => unreachable,
         }
         var graph = model_graph;
@@ -303,6 +297,10 @@ const Fixture = struct {
     }
 
     fn initWith(registered: contracts.Registry) !Fixture {
+        return initJSON(registered, false);
+    }
+
+    fn initJSON(registered: contracts.Registry, json: bool) !Fixture {
         var toolkit = try (decode_toolkit.Action{}).execute(std.testing.allocator, toolkit_config);
         errdefer toolkit.deinit();
         var candidate = try provider_registry.Candidate.init(std.testing.allocator, 1);
@@ -312,6 +310,7 @@ const Fixture = struct {
             .model = model_id,
             .implementation_id = implementation_id,
             .config = .empty_object,
+            .json = json,
             .capabilities = registered.entries[0].capabilities,
             .supported_reasoning_efforts = &.{"low"},
         };
@@ -342,7 +341,7 @@ const Fixture = struct {
 const model_parameters = [_]compilation.CompiledParameter{.{
     .id = .{ .bytes = "slot" },
     .value = .{ .model_slot = identity.ModelSlotId.parse("spec-generation").? },
-}} ++ @import("model_contract_test_fixture.zig").compiled_parameters;
+}};
 const model_step: compilation.CompiledStep = .{
     .model = @import("domain/workflow_model.zig").resolve(&model_parameters).?,
     .id = .{ .bytes = "generate" },
@@ -391,7 +390,7 @@ const OperationControl = struct {
                     .kind = .model_slot,
                     .required = true,
                     .workflow_definition_safe = true,
-                }} ++ @import("domain/workflow_model.zig").parameters),
+                }}),
                 .outcomes = &.{.ok},
                 .side_effect = .none,
             },
@@ -440,3 +439,17 @@ const FakeBarrier = struct {
 const toolkit_config =
     \\{"logs":{"level":"info","console":false},"models":{"slots":{"spec-generation":{"provider":"compiled-provider","model":"model-a","reasoningEffort":"low"}}},"paths":{"specs":"specs","references":"references","specsArchive":"specs/archive","workflows":"workflows","toolchainPreset":"presets","principles":"principles","templates":"templates","providers":".sddproviders.json"}}
 ;
+
+test "model JSON selection owns binding mode independently of workflow identity" {
+    var contract = provider_contracts.entries[0];
+    contract.capabilities.structured_response = .bedrock_json_schema;
+    for ([_]bool{ false, true }) |json| {
+        var fixture = try Fixture.initJSON(.{ .entries = &.{contract} }, json);
+        defer fixture.deinit();
+        const selected = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
+        try std.testing.expectEqual(json, selected.registry_entry.json);
+        try std.testing.expectEqual(@as(@import("domain/model_controls.zig").ResponseGuidanceMode, if (json) .native_schema else .prompt_only), selected.registry_entry.responseMode());
+        try std.testing.expectEqualDeep(contract.capabilities, selected.registry_entry.capabilities);
+    }
+    try std.testing.expectError(error.InvalidLLMProviderRegistry, Fixture.initJSON(provider_contracts, true));
+}

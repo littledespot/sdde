@@ -16,7 +16,7 @@ pub fn selection(environment: *const std.process.Environ.Map) c.Error!configurat
             if (raw_region) |region| if (region.len != 0) return error.InvalidEvaluationContract;
             break :blk .{ .api = .openai_responses, .model = model };
         },
-        .bedrock => .{ .api = .bedrock_converse, .model = model, .region = std.meta.stringToEnum(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion, raw_region orelse return error.InvalidEvaluationContract) orelse return error.InvalidEvaluationContract },
+        .bedrock => .{ .api = .bedrock_invoke, .model = model, .region = std.meta.stringToEnum(@import("../../src/domain/llm_provider_contracts.zig").BedrockRegion, raw_region orelse return error.InvalidEvaluationContract) orelse return error.InvalidEvaluationContract },
     };
 }
 
@@ -24,7 +24,7 @@ pub fn selection(environment: *const std.process.Environ.Map) c.Error!configurat
 pub fn credentialName(api: configuration.Api) []const u8 {
     return switch (api) {
         .openai_responses => "TEST_OPENAI_API_KEY",
-        .bedrock_converse => "TEST_AWS_BEARER_TOKEN_BEDROCK",
+        .bedrock_invoke => "TEST_AWS_BEARER_TOKEN_BEDROCK",
     };
 }
 

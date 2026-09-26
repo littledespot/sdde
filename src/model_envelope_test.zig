@@ -100,6 +100,74 @@ test "malformed non-object fenced prefixed and trailing model output rejects wit
     }) |bytes| try checkDocument(bytes, false);
 }
 
+test "approved prefix normalization preserves content evidence and accounting" {
+    const envelope = @import("domain/model_envelope.zig");
+    for ([_][]const u8{
+        "{\"{ \"kind\":\"claims\",\"items\":[1,2],\"sibling\":{\"kept\":true}}",
+        "{\"{\"value\":\"orchard\"}",
+        "{\"{\"loan\":{\"days\":1e3},\"note\":\"é😀\"}",
+    }) |bytes| {
+        var fixture: Fixture = undefined;
+        try fixture.init();
+        defer fixture.deinit();
+        fixture.fake.invocation_plan = .{ .complete = .{ .content = bytes, .input_tokens = 10, .output_tokens = 2 } };
+        var response = try fixture.response();
+        defer response.deinit();
+        var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
+        defer validated.deinit();
+        const ledger = fixture.base.ledger();
+        const attempts = fixture.base.attempts.current();
+        var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, null);
+        defer decoded.deinit();
+        try std.testing.expectEqual(.removed_leading_brace_quote, decoded.candidate.normalization());
+        var expected = try envelope.parseContent(std.testing.allocator, bytes[2..], null);
+        defer expected.deinit();
+        const actual_bytes = try std.json.Stringify.valueAlloc(std.testing.allocator, decoded.candidate.json().*, .{});
+        defer std.testing.allocator.free(actual_bytes);
+        const expected_bytes = try std.json.Stringify.valueAlloc(std.testing.allocator, expected.parsed.value, .{});
+        defer std.testing.allocator.free(expected_bytes);
+        try std.testing.expectEqualStrings(expected_bytes, actual_bytes);
+        try std.testing.expect(decoded.candidate.association() == validated.evidence);
+        try std.testing.expectEqualStrings(bytes, validated.evidence.result().complete.content());
+        try std.testing.expectEqual(@as(u64, 12), validated.evidence.usage().?.total_tokens);
+        try std.testing.expect(ledger == fixture.base.ledger());
+        try std.testing.expect(attempts == fixture.base.attempts.current());
+        try std.testing.expectEqual(@as(usize, 1), fixture.fake.invocation_call_count);
+        // Configuration, persistence and provider wire parsing remain strict.
+        try std.testing.expectError(error.InvalidJsonDocument, @import("domain/strict_json.zig").parse(std.testing.allocator, bytes, .{ .maximum_depth = schema.max_json_depth }, false, null));
+    }
+}
+
+test "prefix normalization preserves valid keys and rejects every other malformed form" {
+    const envelope = @import("domain/model_envelope.zig");
+    for ([_][]const u8{ "{\"{\":1}", "{\"{name\":\"value\"}", "{\"x\":\"{\\\"{\"}" }) |bytes| {
+        var document = try envelope.parseContent(std.testing.allocator, bytes, null);
+        defer document.deinit();
+        try std.testing.expectEqual(.none, document.normalization);
+        try std.testing.expectEqualStrings(bytes, document.content);
+    }
+    for ([_][]const u8{
+        "{\"{\"{\"value\":1}", // Never strip recursively.
+        " {\"{\"value\":1}", // No fuzzy prefix matching.
+        "{\"{\"value\":1,}",
+        "{\"{\"value\":1,\"value\":2}",
+        "{\"{\"value\":1} trailing",
+        "{\"{\"value\":1}{}",
+        "{\"{\"value\":\"\xff\"}",
+        "{\"{\"value\":",
+        "{\"[1,2]",
+        "```json\n{\"{\"value\":1}\n```",
+    }) |bytes| {
+        var diagnostic: ?envelope.Diagnostic = null;
+        defer if (diagnostic) |failure| failure.deinit(std.testing.allocator);
+        try std.testing.expectError(error.InvalidModelEnvelope, envelope.parseContent(std.testing.allocator, bytes, &diagnostic));
+        var original: ?envelope.Diagnostic = null;
+        defer if (original) |failure| failure.deinit(std.testing.allocator);
+        try std.testing.expectError(error.InvalidJsonDocument, @import("domain/strict_json.zig").parse(std.testing.allocator, bytes, .{ .maximum_depth = schema.max_json_depth }, false, &original));
+        try std.testing.expect(diagnostic.?.eql(original.?));
+    }
+}
+
 test "R36 stray quote then unchanged missing signal brace never becomes an admitted candidate" {
     const initial =
         \\{"claim_dispositions":[{"claim_id":{"ordinal":1},"disposition":{"kind":"retained"}},"{"claim_id":{"ordinal":2},"disposition":{"kind":"retained"}}],"signals":[{"claim_ids":[{"ordinal":1}],"content":{"kind":"model","model":{"kind":"business","segments":[{"kind":"literal","value":"The application must start successfully.When started, the application must display `Hello, World!`.Should also output date and time in UTC"}]}}],"conflicts":[]}
@@ -160,6 +228,9 @@ test "JSON container guard accepts its exact boundary and ignores brackets in st
             try bytes.appendNTimes(if (objects) '}' else ']', depth - 1);
             try bytes.append('}');
             try checkDocument(bytes.items, depth == schema.max_json_depth);
+            const prefixed = try std.fmt.allocPrint(std.testing.allocator, "{{\"{s}", .{bytes.items});
+            defer std.testing.allocator.free(prefixed);
+            try checkDocument(prefixed, depth == schema.max_json_depth);
         }
     }
     try checkDocument("{\"brackets\":\"" ++ "[]{}" ** 100 ++ "\"}", true);
@@ -203,6 +274,8 @@ test "separate decoded candidates own their trees and retain their own associati
 test "every decoding allocation failure and syntax rejection frees partial trees without consuming evidence" {
     for ([_][]const u8{
         "{\"a\":[true,null,{\"text\":\"\\u00e9\",\"number\":1e9999}],\"b\":{}}",
+        "{\"{\"a\":[true,null,{\"text\":\"\\u00e9\",\"number\":1e9999}],\"b\":{}}",
+        "{\"{\"a\":1,\"a\":2}",
         "{\"a\":[{\"key\":\"one\",\"key\":\"two\"}]}",
         "{\"a\":[1,2,3]} {}",
         "[1,2,3]",
@@ -215,7 +288,7 @@ test "every decoding allocation failure and syntax rejection frees partial trees
         defer response.deinit();
         var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
         defer validated.deinit();
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ validated.evidence.result().complete, index == 0 });
+        try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ validated.evidence.result().complete, index < 2 });
         try std.testing.expectEqualStrings(bytes, validated.evidence.result().complete.content());
     }
 }

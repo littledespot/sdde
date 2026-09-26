@@ -97,6 +97,7 @@ fn writeCandidateError(writer: *std.Io.Writer, diagnostic: @import("../../../src
         try writer.print("Repair authorization: {s}\n\n", .{rejection.explanation()});
     try writer.writeAll("Candidate validation: ");
     try std.json.Stringify.value(diagnostic, .{}, writer);
+    if (diagnostic.attribution() == .candidate) try writer.writeAll("\nValidation applies to the assembled candidate; no single model response is selected.");
 }
 
 fn writeRetryError(writer: *std.Io.Writer, diagnostic: @import("../../../src/domain/workflow_retry.zig").Exhaustion.Description) !void {

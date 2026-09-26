@@ -29,6 +29,11 @@ pub const EventRecord = struct {
     fact: telemetry.TelemetryFact,
 };
 
+pub fn eventId(buffer: *[32]u8, sequence: u64) ?telemetry.Identifier {
+    if (sequence == 0) return null;
+    return telemetry.Identifier.validate(std.fmt.bufPrint(buffer, "EVENT-{d}", .{sequence}) catch return null);
+}
+
 pub const PromptRecord = struct {
     log_policy_id: telemetry.Identifier,
     binding_id: telemetry.Identifier,
@@ -43,7 +48,7 @@ pub const PromptRecord = struct {
 };
 
 pub const ControlKind = enum { segment_header, segment_trailer };
-pub const EventControlRecord = struct {
+pub const ControlRecord = struct {
     kind: ControlKind,
     log_policy_id: telemetry.Identifier,
     binding_id: telemetry.Identifier,
@@ -54,70 +59,94 @@ pub const EventControlRecord = struct {
     feature_id: @import("feature_identity.zig").FeatureId,
 };
 
-pub fn serializeEventControl(
-    allocator: std.mem.Allocator,
-    record: EventControlRecord,
-) Error![]u8 {
-    if (record.segment_ordinal == 0 or !validUtcTimestamp(record.occurred_at_utc) or
-        !validControlSequence(record.kind, record.final_sequence))
-    {
-        return error.InvalidFeatureLogRecord;
-    }
-    var row: std.ArrayList(u8) = .empty;
-    errdefer row.deinit(allocator);
-    var first = true;
-    var number_buffer: [32]u8 = undefined;
-    try appendCell(allocator, &row, &first, @tagName(record.kind));
-    try appendCell(allocator, &row, &first, log_limits.schema_version);
-    try appendCell(allocator, &row, &first, "event");
-    try appendCell(allocator, &row, &first, log_limits.event_column_schema_id);
-    try appendCell(allocator, &row, &first, record.log_policy_id.bytes);
-    try appendCell(allocator, &row, &first, record.binding_id.bytes);
-    try appendUnsigned(allocator, &row, &first, record.segment_ordinal, &number_buffer);
-    try appendOptional(allocator, &row, &first, null);
-    try appendOptional(allocator, &row, &first, null);
-    try appendOptionalUnsigned(allocator, &row, &first, record.final_sequence, &number_buffer);
-    try appendCell(allocator, &row, &first, record.occurred_at_utc);
-    try appendOptional(allocator, &row, &first, null);
-    try appendOptional(allocator, &row, &first, null);
-    try appendOptional(allocator, &row, &first, null);
-    try appendOptional(allocator, &row, &first, null);
-    try appendCell(allocator, &row, &first, record.run_id.bytes);
-    try appendCell(allocator, &row, &first, record.feature_id.bytes);
-    for (0..event_column_count - 17) |_| try appendOptional(allocator, &row, &first, null);
-    row.append(allocator, '\n') catch return error.OutOfMemory;
-    try validateEncodedRow(allocator, row.items, event_column_count);
-    return row.toOwnedSlice(allocator) catch return error.OutOfMemory;
+pub fn serializeControl(allocator: std.mem.Allocator, stream: log_stream.Stream, record: ControlRecord) Error![]u8 {
+    var encoder: ControlEncoder = .{ .allocator = allocator };
+    errdefer encoder.row.deinit(allocator);
+    try encodeControl(&encoder, stream, record);
+    try validateEncodedRow(allocator, encoder.row.items, controlColumnCount(stream));
+    return encoder.row.toOwnedSlice(allocator) catch return error.OutOfMemory;
 }
 
-pub fn serializePromptControl(allocator: std.mem.Allocator, record: EventControlRecord) Error![]u8 {
+/// Uses the same field sequence and escaping rules as serialization, without
+/// constructing a row merely to decide whether a segment must rotate.
+pub fn controlLength(stream: log_stream.Stream, record: ControlRecord) Error!usize {
+    var encoder: ControlEncoder = .{};
+    try encodeControl(&encoder, stream, record);
+    return encoder.length;
+}
+
+const ControlEncoder = struct {
+    allocator: ?std.mem.Allocator = null,
+    row: std.ArrayList(u8) = .empty,
+    length: usize = 0,
+    first: bool = true,
+
+    fn cell(self: *ControlEncoder, value: []const u8) Error!void {
+        self.length += @as(usize, @intFromBool(!self.first)) + encodedCellLength(value);
+        if (self.allocator) |allocator| try appendCell(allocator, &self.row, &self.first, value) else self.first = false;
+    }
+
+    fn optional(self: *ControlEncoder, value: ?[]const u8) Error!void {
+        if (value) |present| return self.cell(present);
+        self.length += @as(usize, @intFromBool(!self.first)) + 2;
+        if (self.allocator) |allocator| try appendOptional(allocator, &self.row, &self.first, null) else self.first = false;
+    }
+
+    fn unsigned(self: *ControlEncoder, value: ?u64) Error!void {
+        if (value) |present| {
+            var buffer: [32]u8 = undefined;
+            return self.cell(std.fmt.bufPrint(&buffer, "{d}", .{present}) catch return error.InvalidFeatureLogRecord);
+        }
+        return self.optional(null);
+    }
+
+    fn finish(self: *ControlEncoder) Error!void {
+        self.length += 1;
+        if (self.length > log_limits.max_record_bytes) return error.InvalidFeatureLogRecord;
+        if (self.allocator) |allocator| self.row.append(allocator, '\n') catch return error.OutOfMemory;
+    }
+};
+
+fn encodedCellLength(value: []const u8) usize {
+    var length = value.len;
+    for (value) |byte| switch (byte) {
+        '\\', '|', '\r', '\n' => {
+            length += 1;
+        },
+        else => {},
+    };
+    return length;
+}
+
+fn controlColumnCount(stream: log_stream.Stream) usize {
+    return switch (stream) {
+        .event => event_column_count,
+        .prompt => prompt_column_count,
+    };
+}
+
+fn encodeControl(encoder: *ControlEncoder, stream: log_stream.Stream, record: ControlRecord) Error!void {
     if (record.segment_ordinal == 0 or !validUtcTimestamp(record.occurred_at_utc) or
         !validControlSequence(record.kind, record.final_sequence)) return error.InvalidFeatureLogRecord;
-    var row: std.ArrayList(u8) = .empty;
-    errdefer row.deinit(allocator);
-    var first = true;
-    var number_buffer: [32]u8 = undefined;
-    try appendCell(allocator, &row, &first, @tagName(record.kind));
-    try appendCell(allocator, &row, &first, log_limits.schema_version);
-    try appendCell(allocator, &row, &first, "prompt");
-    try appendCell(allocator, &row, &first, log_limits.prompt_column_schema_id);
-    try appendCell(allocator, &row, &first, record.log_policy_id.bytes);
-    try appendCell(allocator, &row, &first, record.binding_id.bytes);
-    try appendUnsigned(allocator, &row, &first, record.segment_ordinal, &number_buffer);
-    try appendOptional(allocator, &row, &first, null);
-    try appendOptional(allocator, &row, &first, null);
-    try appendOptionalUnsigned(allocator, &row, &first, record.final_sequence, &number_buffer);
-    try appendCell(allocator, &row, &first, record.occurred_at_utc);
-    try appendOptional(allocator, &row, &first, null);
-    try appendOptional(allocator, &row, &first, null);
-    try appendOptional(allocator, &row, &first, null);
-    try appendOptional(allocator, &row, &first, null);
-    try appendCell(allocator, &row, &first, record.run_id.bytes);
-    try appendCell(allocator, &row, &first, record.feature_id.bytes);
-    for (0..prompt_column_count - 17) |_| try appendOptional(allocator, &row, &first, null);
-    row.append(allocator, '\n') catch return error.OutOfMemory;
-    try validateEncodedRow(allocator, row.items, prompt_column_count);
-    return row.toOwnedSlice(allocator) catch return error.OutOfMemory;
+    try encoder.cell(@tagName(record.kind));
+    try encoder.cell(log_limits.schema_version);
+    try encoder.cell(@tagName(stream));
+    try encoder.cell(switch (stream) {
+        .event => log_limits.event_column_schema_id,
+        .prompt => log_limits.prompt_column_schema_id,
+    });
+    try encoder.cell(record.log_policy_id.bytes);
+    try encoder.cell(record.binding_id.bytes);
+    try encoder.unsigned(record.segment_ordinal);
+    try encoder.optional(null);
+    try encoder.optional(null);
+    try encoder.unsigned(record.final_sequence);
+    try encoder.cell(record.occurred_at_utc);
+    for (0..4) |_| try encoder.optional(null);
+    try encoder.cell(record.run_id.bytes);
+    try encoder.cell(record.feature_id.bytes);
+    for (0..controlColumnCount(stream) - 17) |_| try encoder.optional(null);
+    try encoder.finish();
 }
 
 pub fn serializePrompt(allocator: std.mem.Allocator, record: PromptRecord) Error![]u8 {
@@ -127,6 +156,7 @@ pub fn serializePrompt(allocator: std.mem.Allocator, record: PromptRecord) Error
     prompt_log.validate(fragment) catch return error.InvalidFeatureLogRecord;
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(allocator);
+    row.ensureTotalCapacity(allocator, 512 + fragment.content.len) catch return error.OutOfMemory;
     var first = true;
     var number_buffer: [32]u8 = undefined;
     try appendCell(allocator, &row, &first, "prompt");
@@ -185,6 +215,7 @@ pub fn serializeEvent(
 
     var row: std.ArrayList(u8) = .empty;
     errdefer row.deinit(allocator);
+    row.ensureTotalCapacity(allocator, 512) catch return error.OutOfMemory;
     var first = true;
     var number_buffer: [32]u8 = undefined;
     var template_buffer: [96]u8 = undefined;
@@ -505,7 +536,7 @@ test "event rows reject the obsolete transaction column" {
 
 test "event control rows use the same exact heading width" {
     const allocator = std.testing.allocator;
-    const row = try serializeEventControl(allocator, .{
+    const row = try serializeControl(allocator, .event, .{
         .kind = .segment_header,
         .log_policy_id = telemetry.Identifier.validate("LOGPOL-1").?,
         .binding_id = telemetry.Identifier.validate("LOGBIND-1").?,
@@ -518,7 +549,7 @@ test "event control rows use the same exact heading width" {
     try validateEncodedRow(allocator, row, event_column_count);
     try std.testing.expect(std.mem.startsWith(u8, row, "segment_header|feature-log/v2|event|"));
 
-    try std.testing.expectError(error.InvalidFeatureLogRecord, serializeEventControl(allocator, .{
+    try std.testing.expectError(error.InvalidFeatureLogRecord, serializeControl(allocator, .event, .{
         .kind = .segment_trailer,
         .log_policy_id = telemetry.Identifier.validate("LOGPOL-1").?,
         .binding_id = telemetry.Identifier.validate("LOGBIND-1").?,
@@ -527,6 +558,27 @@ test "event control rows use the same exact heading width" {
         .run_id = telemetry.Identifier.validate("RUN-1").?,
         .feature_id = @import("feature_identity.zig").FeatureId.parse("F0002").?,
     }));
+}
+
+test "control lengths match serialized rows for both streams and sequence widths" {
+    const allocator = std.testing.allocator;
+    for ([_]log_stream.Stream{ .event, .prompt }) |stream| {
+        for ([_]?u64{ null, 0, 9, 10, std.math.maxInt(u64) }) |sequence| {
+            const record: ControlRecord = .{
+                .kind = if (sequence == null) .segment_header else .segment_trailer,
+                .log_policy_id = telemetry.Identifier.validate("LOGPOL-1").?,
+                .binding_id = telemetry.Identifier.validate("LOGBIND-1").?,
+                .segment_ordinal = 16,
+                .final_sequence = sequence,
+                .occurred_at_utc = "2026-08-30T10:15:30Z",
+                .run_id = telemetry.Identifier.validate("RUN-1").?,
+                .feature_id = @import("feature_identity.zig").FeatureId.parse("F0002").?,
+            };
+            const row = try serializeControl(allocator, stream, record);
+            defer allocator.free(row);
+            try std.testing.expectEqual(row.len, try controlLength(stream, record));
+        }
+    }
 }
 
 test "prompt rows are scalar bounded and use the exact prompt schema" {

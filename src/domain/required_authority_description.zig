@@ -11,7 +11,7 @@ pub fn question(allocator: std.mem.Allocator, id: a.Id) a.Error![]const u8 {
         .acceptance_criteria => "Which pass/fail outcome is still undecided? Describe when it applies and what the user should observe.",
         .functional_requirements => "What required behavior is missing or undecided? State its trigger and expected result without repeating behavior already established in the source.",
         .scenario_coverage => "Which source-required situation still needs a trigger or outcome clarified? Identify the situation and any exact output it requires.",
-        .entities => "What business information must this feature manage, and what does it represent? If none is involved, state that explicitly.",
+        .entities => "Which required business information is still undecided? Name it and the behavior that depends on it.",
         else => error.InvalidRequiredAuthority,
     };
     const description = try task(allocator, id);
@@ -29,7 +29,7 @@ pub fn task(allocator: std.mem.Allocator, id: a.Id) a.Error![]const u8 {
             .acceptance_criteria => "Observable pass/fail outcomes.",
             .functional_requirements => "Required application behavior.",
             .scenario_coverage => "Source-required triggers, outcomes and exact copy.",
-            .entities => "Whether business entities/data are involved.",
+            .entities => "Whether the specified behavior requires business entities. Judge source meaning, not an entity heading or explicit declaration of absence; displayed values alone do not establish entities.",
             else => error.InvalidRequiredAuthority,
         },
         .record => |id_record| std.fmt.allocPrint(allocator, "Source support for {s} {d}, field {s}, member {d}.", .{ @tagName(id_record.kind), id_record.ordinal, @tagName(id.slot), id.member }),

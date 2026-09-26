@@ -1,0 +1,7 @@
+{
+  "content": [
+    {"guidance": "Extract the package name into value. Return only the assigned response."},
+    {"user": "Package: orchard"}
+  ],
+  "schema": "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\",\"maxLength\":64}},\"required\":[\"value\"],\"additionalProperties\":false}"
+}

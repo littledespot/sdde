@@ -11,8 +11,14 @@ pub const max_total_bytes: usize = 8 * 1024 * 1024;
 pub const chunk_bytes: usize = 16 * 1024;
 pub const Root = struct { path: []const u8, identity: identity.FileIdentity };
 pub const Id = struct { root: identity.FileIdentity, ordinal: u64, revision: u64 };
-pub const SourceId = struct { ordinal: u32 };
-pub const ChunkId = struct { ordinal: u32 };
+pub const SourceId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
+pub const ChunkId = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
 pub const Kind = enum { directory, mechanical_toolchain_layer_excluded, semantic_markdown };
 pub const Entry = struct { descriptor: inventory.Entry, kind: Kind };
 pub const Raw = struct { root: Root, entries: []const inventory.Descriptor };
@@ -32,7 +38,18 @@ pub const Registry = struct {
 };
 pub const Selection = struct { registry: Id, scope: policy.Scope, chunks: []const ChunkId };
 pub const Citation = struct { chunk: ChunkId, first_line: u32, last_line: u32 };
-pub const Guidance = struct { id: ChunkId, category: policy.Category, first_line: u32, text: []const u8 };
+pub const Guidance = struct { id: ChunkId, category: policy.Category, first_line: u32, last_line: u32, text: []const u8 };
+pub const LineBounds = struct { minimum: u32, maximum: u32 };
+pub const CitationDiagnostic = struct {
+    field: enum { chunk, first_line, last_line },
+    rejected: u32,
+    // Chunk membership uses the existing selection's permitted IDs.
+    bounds: ?LineBounds = null,
+};
+
+fn lineBounds(chunk: Chunk) LineBounds {
+    return .{ .minimum = chunk.span.start.line, .maximum = chunk.span.end.line - @as(u32, if (chunk.span.end.column == 1) 1 else 0) };
+}
 
 pub fn classify(a: std.mem.Allocator, raw: Raw, normalizer: @import("../ports/unicode_normalizer.zig").Normalizer, folder: @import("../ports/unicode_normalizer.zig").CaseFolder) Error!Inventory {
     @import("relative_directory_path.zig").validate(raw.root.path) catch return error.InvalidPrincipleRegistry;
@@ -197,18 +214,23 @@ pub fn guidance(a: std.mem.Allocator, registry: Registry, selection: Selection) 
     for (selection.chunks, result) |id, *entry| {
         const chunk = try chunkFor(registry, id);
         const source = try sourceFor(registry, chunk.source);
-        entry.* = .{ .id = id, .category = source.category, .first_line = chunk.span.start.line, .text = source.bytes[chunk.span.start.byte..chunk.span.end.byte] };
+        const bounds = lineBounds(chunk);
+        entry.* = .{ .id = id, .category = source.category, .first_line = bounds.minimum, .last_line = bounds.maximum, .text = source.bytes[chunk.span.start.byte..chunk.span.end.byte] };
     }
     return result;
 }
-pub fn validateCitation(registry: Registry, selection: Selection, citation: Citation) Error!void {
+/// The caller validates the captured selection before admitting candidate citations.
+/// Candidate defects are data; stale or unavailable registry authority remains an error.
+pub fn validateCitation(registry: Registry, selection: Selection, citation: Citation) Error!?CitationDiagnostic {
     if (!std.meta.eql(registry.id, selection.registry)) return error.InvalidPrincipleRegistry;
     for (selection.chunks) |id| {
         if (std.meta.eql(id, citation.chunk)) break;
-    } else return error.InvalidPrincipleRegistry;
+    } else return .{ .field = .chunk, .rejected = citation.chunk.ordinal };
     const chunk = try chunkFor(registry, citation.chunk);
-    const last = chunk.span.end.line - @as(u32, if (chunk.span.end.column == 1) 1 else 0);
-    if (citation.first_line < chunk.span.start.line or citation.first_line > citation.last_line or citation.last_line > last) return error.InvalidPrincipleRegistry;
+    const bounds = lineBounds(chunk);
+    if (citation.first_line < bounds.minimum or citation.first_line > bounds.maximum) return .{ .field = .first_line, .rejected = citation.first_line, .bounds = bounds };
+    if (citation.last_line < citation.first_line or citation.last_line > bounds.maximum) return .{ .field = .last_line, .rejected = citation.last_line, .bounds = .{ .minimum = citation.first_line, .maximum = bounds.maximum } };
+    return null;
 }
 pub fn sourceFor(registry: Registry, id: SourceId) Error!Source {
     for (registry.sources) |source| if (std.meta.eql(source.id, id)) return source;

@@ -163,6 +163,9 @@ Initial readers should cover:
   neither quotations nor coordinates.
 - Exact-token citations retain their finer extractor-owned spans.
 - Canonical citation IDs are still assigned only after validation.
+- [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md) changes only
+  post-ledger typed-content exact selections. These pre-ledger source ranges,
+  token candidates and reconciliation token/citation identities remain unchanged.
 - This shared source-selection contract applies to every workflow using reference evidence; it
   grants no semantic approval, file permission, or execution authority.
 
@@ -190,11 +193,18 @@ Where a parser can decide mechanically, the engine extracts facts before involvi
   and renderers emit the exact scalar sequence through deterministic Markdown escaping without
   Unicode normalization.
 
-- The approved Markdown eligibility rule is `markdown_inline_code_v1`: parsed inline-code spans
-  are preservation-eligible candidates; ordinary prose, quoted text and fenced code blocks are
-  not candidates through this extractor.
-- The candidate retains the exact source bytes between matching backtick delimiters, including
-  whitespace and line endings, rather than Markdown-rendered or Unicode-normalized text.
+- The approved [§7.1 typed-content amendment](07-domain-representations.md#71-shared-types)
+  registers `markdown_inline_code_v1`, `markdown_fenced_code_v1` and
+  `markdown_link_destination_v1`: raw inline interiors, fenced bodies and explicit
+  inline-link destinations. Ordinary prose or quotation marks do not create candidates.
+- The bounded source-range parser does not claim a complete Markdown AST. Opaque
+  code/HTML interiors do not create nested link candidates; ambiguous overlapping
+  markup cannot mint overlapping identities. Other source syntax remains captured evidence.
+- Candidates retain source coordinates, whitespace and line endings rather than
+  Markdown-rendered or Unicode-normalized values. Syntax identifies form, not meaning:
+  a fenced block may be required exact output or illustrative `code_sample`.
+- Existing claim/citation joins revalidate extractor identity and exact source spans
+  for live assembly and persisted readback, without a separate token registry.
 - Eligibility is not relevance, semantic approval or an operational capability.
 - The model still classifies every supplied candidate.
 - Source partitioning must keep each exact span citable within its chunk or fail explicitly; it
@@ -235,8 +245,11 @@ Under the user-approved chunk 14 amendment (18 September 2026), §22 permits rep
 only when captured evidence identifies a unique defective producer and minimal safe
 target. Repair extraction loss in extraction; repair reconciliation loss in
 reconciliation. Preserve unrelated raw units, rebuild all dependent identities and
-projections, and repeat full validation and support review. Unlocalized omissions
-remain candidate defects; genuinely missing source decisions remain clarifications.
+projections, and repeat full validation and support review. Diagnostic eligibility
+and mixed finding selection follow [§12.8.1](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence).
+Retain unlocalized findings while attempting other authorized targets; unresolved
+candidate failures cannot be published as user questions. Only admitted missing
+source decisions enter clarification.
 
 #### False-conflict repair boundary — approved extension
 

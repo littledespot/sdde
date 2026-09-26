@@ -1,23 +1,40 @@
 //! Source-coordinate extractor. Values are raw source, not rendered Markdown.
 const std = @import("std");
-pub const Range = struct { start: usize, end: usize };
+pub const Form = enum { inline_code, code_block, link_destination };
+pub const Range = struct { start: usize, end: usize, form: Form = .inline_code };
 const Run = struct { start: usize, end: usize, opening: bool, closing: bool = true, next: ?usize = null };
 
 /// Equal-length backtick runs delimit an inline value. Block fences, indented
 /// code, blank lines and HTML blocks separate inline regions. No Unicode or
 /// Markdown whitespace normalization is applied to the captured interior.
 pub fn scan(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.Error![]const Range {
+    const all = try scanAll(allocator, bytes);
+    defer allocator.free(all);
+    var result: std.ArrayList(Range) = .empty;
+    errdefer result.deinit(allocator);
+    for (all) |range| if (range.form == .inline_code) try result.append(allocator, range);
+    return result.toOwnedSlice(allocator);
+}
+
+/// One source-coordinate scan owns opaque code regions and explicit link
+/// destinations. The inline-only operation above is a projection of this result.
+pub fn scanAll(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.Error![]const Range {
     var result: std.ArrayList(Range) = .empty;
     errdefer result.deinit(allocator);
     var runs: std.ArrayList(Run) = .empty;
     defer runs.deinit(allocator);
-    var fence: ?struct { byte: u8, length: usize } = null;
+    var excluded_ranges: std.ArrayList(Range) = .empty;
+    defer excluded_ranges.deinit(allocator);
+    var fence: ?struct { byte: u8, length: usize, start: usize } = null;
     var html_block = false;
     var region_start: ?usize = null;
     var markup_end: usize = 0;
     var offset: usize = 0;
     while (offset < bytes.len) {
         const end = std.mem.indexOfAnyPos(u8, bytes, offset, "\r\n") orelse bytes.len;
+        var next = end;
+        if (next < bytes.len and bytes[next] == '\r') next += 1;
+        if (next < bytes.len and bytes[next] == '\n') next += 1;
         const line = bytes[offset..end];
         var prefix = contentStart(line);
         // Indentation cannot start a code block in the middle of a paragraph.
@@ -31,25 +48,31 @@ pub fn scan(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.E
         }
         const blank = std.mem.trim(u8, content, " \t").len == 0;
         var excluded = blank or prefix == line.len or isBlockSeparator(content);
+        var fenced = fence != null;
         if (fence) |active| {
             excluded = true;
             const length = runLength(content, 0, active.byte);
-            if (length >= active.length and std.mem.trim(u8, content[length..], " \t").len == 0) fence = null;
+            if (length >= active.length and std.mem.trim(u8, content[length..], " \t").len == 0) {
+                if (offset > active.start) try result.append(allocator, .{ .start = active.start, .end = offset, .form = .code_block });
+                fence = null;
+            }
         } else if (content.len > 0 and (content[0] == '`' or content[0] == '~')) {
             const length = runLength(content, 0, content[0]);
             if (length >= 3 and (content[0] == '~' or std.mem.indexOfScalar(u8, content[length..], '`') == null)) {
-                fence = .{ .byte = content[0], .length = length };
+                fence = .{ .byte = content[0], .length = length, .start = next };
+                fenced = true;
                 excluded = true;
             }
         }
-        if (html_block) {
+        if (!fenced and html_block) {
             excluded = true;
             if (blank) html_block = false;
-        } else if (isHtmlBlock(content)) {
+        } else if (!fenced and isHtmlBlock(content)) {
             html_block = true;
             excluded = true;
         }
         if (excluded) {
+            try excluded_ranges.append(allocator, .{ .start = offset, .end = next });
             try flush(allocator, bytes, region_start orelse offset, &markup_end, &runs, &result);
             region_start = null;
         } else {
@@ -73,12 +96,117 @@ pub fn scan(allocator: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.E
             try flush(allocator, bytes, region_start orelse offset, &markup_end, &runs, &result);
             region_start = null;
         }
-        offset = end;
-        if (offset < bytes.len and bytes[offset] == '\r') offset += 1;
-        if (offset < bytes.len and bytes[offset] == '\n') offset += 1;
+        offset = next;
     }
     try flush(allocator, bytes, region_start orelse offset, &markup_end, &runs, &result);
+    if (fence) |active| if (active.start < bytes.len) {
+        try result.append(allocator, .{ .start = active.start, .end = bytes.len, .form = .code_block });
+    };
+    // Code regions are opaque to link parsing, including inline literals.
+    try excluded_ranges.appendSlice(allocator, result.items);
+    std.mem.sort(Range, excluded_ranges.items, {}, less);
+    try collectLinks(allocator, bytes, excluded_ranges.items, &result);
+    std.mem.sort(Range, result.items, {}, less);
     return result.toOwnedSlice(allocator);
+}
+fn less(_: void, a: Range, b: Range) bool {
+    return a.start < b.start;
+}
+
+fn collectLinks(a: std.mem.Allocator, bytes: []const u8, protected: []const Range, output: *std.ArrayList(Range)) std.mem.Allocator.Error!void {
+    var i: usize = 0;
+    var protected_index: usize = 0;
+    var labels: usize = 0;
+    while (i < bytes.len) {
+        while (protected_index < protected.len and protected[protected_index].end <= i) protected_index += 1;
+        if (protected_index < protected.len and i >= protected[protected_index].start) {
+            i = protected[protected_index].end;
+            continue;
+        }
+        if (bytes[i] == '\\') {
+            i += @min(@as(usize, 2), bytes.len - i);
+            continue;
+        }
+        if (bytes[i] == '<') if (htmlEnd(bytes, i)) |end| {
+            i = end;
+            continue;
+        };
+        if (bytes[i] == '[') labels += 1;
+        if (bytes[i] == ']' and labels != 0) {
+            labels -= 1;
+            if (i + 1 < bytes.len and bytes[i + 1] == '(') {
+                var examined_end = i + 2;
+                if (linkDestination(bytes, i + 2, &examined_end)) |link| {
+                    // This bounded extractor does not resolve ambiguous Markdown
+                    // precedence. Keep existing exact spans and raw source evidence
+                    // instead of emitting overlapping candidate identities.
+                    const overlap = for (protected[protected_index..]) |range| {
+                        if (range.start >= link.range.end) break false;
+                        if (range.end > link.range.start) break true;
+                    } else false;
+                    if (!overlap) try output.append(a, link.range);
+                    i = link.end;
+                    continue;
+                }
+                // Malformed destinations must not repeatedly rescan a long suffix.
+                i = examined_end;
+                continue;
+            }
+        }
+        if (bytes[i] == '\n') labels = 0;
+        i += 1;
+    }
+}
+const Link = struct { range: Range, end: usize };
+fn linkDestination(bytes: []const u8, begin: usize, examined_end: *usize) ?Link {
+    var i = begin;
+    defer examined_end.* = i;
+    while (i < bytes.len and (bytes[i] == ' ' or bytes[i] == '\t')) i += 1;
+    if (i == bytes.len) return null;
+    const angle = bytes[i] == '<';
+    if (angle) i += 1;
+    const start = i;
+    var depth: usize = 0;
+    while (i < bytes.len) : (i += 1) {
+        const c = bytes[i];
+        if (c == '\\') {
+            if (i + 1 == bytes.len) return null;
+            i += 1;
+            continue;
+        }
+        if (c == '\r' or c == '\n' or c == '<') return null;
+        if (angle) {
+            if (c == '>') break;
+        } else if (c == '(') {
+            depth += 1;
+        } else if (c == ')') {
+            if (depth == 0) break;
+            depth -= 1;
+        } else if (c == ' ' or c == '\t') break;
+    }
+    const end = i;
+    if (start == end or depth != 0 or i == bytes.len) return null;
+    if (angle) {
+        if (bytes[i] != '>') return null;
+        i += 1;
+    }
+    const before_space = i;
+    while (i < bytes.len and (bytes[i] == ' ' or bytes[i] == '\t')) i += 1;
+    if (i < bytes.len and i > before_space and (bytes[i] == '\"' or bytes[i] == '\'' or bytes[i] == '(')) {
+        const closing: u8 = if (bytes[i] == '(') ')' else bytes[i];
+        i += 1;
+        while (i < bytes.len and bytes[i] != closing) : (i += 1) {
+            if (bytes[i] == '\\') {
+                if (i + 1 == bytes.len) return null;
+                i += 1;
+            }
+        }
+        if (i == bytes.len) return null;
+        i += 1;
+        while (i < bytes.len and (bytes[i] == ' ' or bytes[i] == '\t')) i += 1;
+    }
+    if (i == bytes.len or bytes[i] != ')') return null;
+    return .{ .range = .{ .start = start, .end = end, .form = .link_destination }, .end = i + 1 };
 }
 
 fn flush(allocator: std.mem.Allocator, bytes: []const u8, region_start: usize, markup_end: *usize, runs: *std.ArrayList(Run), result: *std.ArrayList(Range)) std.mem.Allocator.Error!void {

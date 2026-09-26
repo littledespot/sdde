@@ -4,15 +4,13 @@ const evidence = @import("reference_evidence.zig");
 const source = @import("reference_ingestion.zig");
 const citation = @import("source_citations.zig");
 pub const Error = evidence.Error || error{InvalidStructuredTokens};
-pub const ExtractorId = enum { markdown_inline_code_v1 };
-pub const Descriptor = struct { id: ExtractorId, eligibility: enum { exact_value } };
-pub const markdown: Descriptor = .{ .id = .markdown_inline_code_v1, .eligibility = .exact_value };
+pub const ExtractorId = enum { markdown_inline_code_v1, markdown_fenced_code_v1, markdown_link_destination_v1 };
 pub const CandidateId = struct { source_id: evidence.identity.SourceId, extractor_id: ExtractorId, ordinal: u32 };
 pub const Fact = struct { extractor_id: ExtractorId, scope: evidence.Scope, citation: evidence.ValidatedCitation };
 pub const Facts = struct { state_id: evidence.identity.StateId, entries: []const Fact };
 pub const Candidate = struct { id: CandidateId, fact: Fact };
 pub const Candidates = struct { state_id: evidence.identity.StateId, entries: []const Candidate };
-pub const Kind = enum { visual_color, visual_spacing, visual_dimension, visual_typography, visual_radius, visual_shadow, visual_motion, business_exact_string, numeric_constraint, exact_identifier };
+pub const Kind = enum { visual_color, visual_spacing, visual_dimension, visual_typography, visual_radius, visual_shadow, visual_motion, business_exact_string, numeric_constraint, exact_identifier, code_sample };
 pub const Classification = union(enum) {
     preserve: struct { token_candidate_id: CandidateId, kind: Kind },
     irrelevant: CandidateId,
@@ -23,7 +21,10 @@ pub const Classification = union(enum) {
         };
     }
 };
-pub const Id = struct { ordinal: u32 };
+pub const Id = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
+};
 pub const ObligationId = struct { token_id: Id };
 pub const RawSourceScalar = struct { bytes: []const u8 };
 /// Canonical citation IDs are bound by the ordinary claim/citation builder.
@@ -41,7 +42,7 @@ pub fn extract(allocator: std.mem.Allocator, inputs: evidence.Inputs) Error!Fact
     errdefer facts.deinit(allocator);
     for (inputs.corpus.sources) |document| {
         const ranges = switch (document.reader) {
-            .markdown_source_v1 => try @import("markdown_code_spans.zig").scan(allocator, document.bytes),
+            .markdown_source_v1 => try @import("markdown_code_spans.zig").scanAll(allocator, document.bytes),
         };
         defer allocator.free(ranges);
         var position: source.Position = .{ .byte = 0, .line = 1, .column = 1 };
@@ -60,7 +61,11 @@ pub fn extract(allocator: std.mem.Allocator, inputs: evidence.Inputs) Error!Fact
             const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = chunk.id };
             const checked = try citation.validate(allocator, inputs, .{ .scope = scope, .entries = &.{.{ .source_id = document.id, .block_id = chunk.block_id, .location = .{ .start = start, .end = position }, .verbatim = document.bytes[range.start..range.end] }} });
             defer allocator.free(checked.entries);
-            try facts.append(allocator, .{ .extractor_id = markdown.id, .scope = scope, .citation = checked.entries[0] });
+            try facts.append(allocator, .{ .extractor_id = switch (range.form) {
+                .inline_code => .markdown_inline_code_v1,
+                .code_block => .markdown_fenced_code_v1,
+                .link_destination => .markdown_link_destination_v1,
+            }, .scope = scope, .citation = checked.entries[0] });
         }
     }
     return .{ .state_id = inputs.corpus.state_id, .entries = try facts.toOwnedSlice(allocator) };

@@ -356,8 +356,8 @@ This illustrates the structural schema, not a runnable installed workflow. The
 operation and policy names in this sketch are illustrative placeholders; an installed
 definition must use actual registered contracts.
 `specify` is not a required registry member and the filename need not match it.
-For a complete current example, see
-[provider-request.workflow.yaml](../examples/provider-request.workflow.yaml).
+For a complete current test fixture, see
+[provider-request.workflow.yaml](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml).
 
 ## 4. Compiler-owned bounds
 
@@ -478,8 +478,9 @@ service is published.
 
 ## 7. Registered-operation graph compilation
 
-- Request-origin contracts selecting a model binding declare their typed slot and
-  explicit `response-mode`, with optional supported controls.
+- Request-origin contracts selecting a model binding declare their typed slot.
+  The selected catalogue model owns response mode through its required `json` boolean
+  (ADR 0012); workflow `response-mode` and `temperature` overrides reject.
 - Under [ADR 0011](../decisions/0011-provider-owned-request-limits.md), retired
   `input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters reject.
 - Registration and compilation require no capacity fields, local size ceilings or fit

@@ -91,7 +91,7 @@ pub const State = struct {
         const candidate = proof.candidate();
         const request = candidate.association().request();
         const accepted = Origin.fromAccepted(ledger, proof) orelse return error.InvalidCompositionBinding;
-        if (!sameOrigin(origin, accepted) or !self.epoch.eql(ledger.stageRunEpochId()) or request.response_schema != binding.schema) return error.InvalidCompositionBinding;
+        if (!sameOrigin(origin, accepted) or !self.epoch.eql(ledger.stageRunEpochId()) or !request.response_schema.isRestrictionOf(binding.schema)) return error.InvalidCompositionBinding;
         _ = identity.validateBinding(ledger, ledger.revision(), request.model_request_id, self.base.unit(), request.model_request_id.model_operation_id, self.base.purpose()) catch return error.InvalidCompositionBinding;
         if (self.getEntry(binding.part)) |existing| {
             const current_bytes = candidate.association().result().complete.content();

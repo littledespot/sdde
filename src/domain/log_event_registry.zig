@@ -60,6 +60,7 @@ pub fn eventDefinition(event_type: telemetry.EventType) EventDefinition {
         .stage_failed, .action_failed, .task_failed => definition(event_type, level(event_type), &.{ .diagnostic_code, .outcome }, &.{.duration_ms}),
         .model_requested => definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id }, &.{}),
         .model_completed => definition(event_type, level(event_type), &.{ .model_route_id, .model_profile_id, .outcome }, &.{ .input_tokens, .output_tokens, .duration_ms }),
+        .model_response_normalized => definition(event_type, .warning, &.{ .model_route_id, .model_profile_id, .diagnostic_code }, &.{}),
         .validation_completed => definition(event_type, level(event_type), &.{ .validator_id, .outcome }, &.{ .count, .duration_ms }),
         .validation_failed => definition(event_type, level(event_type), &.{ .validator_id, .diagnostic_code, .outcome }, &.{.count}),
         .repair_requested => definition(event_type, level(event_type), &.{.repair_unit_kind}, &.{}),

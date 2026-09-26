@@ -25,7 +25,7 @@ pub fn prepare(allocator: std.mem.Allocator, inputs: evidence.Inputs, text: extr
 }
 pub fn classifications(allocator: std.mem.Allocator, available: extraction.tokens.Candidates, chunk: evidence.Chunk) ![]const extraction.tokens.Classification {
     var result: std.ArrayList(extraction.tokens.Classification) = .empty;
-    for (available.entries) |candidate| if (candidate.fact.scope.chunk_id.eql(chunk.id)) try result.append(allocator, .{ .preserve = .{ .token_candidate_id = candidate.id, .kind = .business_exact_string } });
+    for (available.entries) |candidate| if (candidate.fact.scope.chunk_id.eql(chunk.id)) try result.append(allocator, .{ .preserve = .{ .token_candidate_id = candidate.id, .kind = if (candidate.id.extractor_id == .markdown_fenced_code_v1) .code_sample else .business_exact_string } });
     return result.toOwnedSlice(allocator);
 }
 /// Explicit closed wire shape: domain unions are not model protocol wrappers.

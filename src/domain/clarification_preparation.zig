@@ -33,10 +33,10 @@ pub fn prepare(allocator: std.mem.Allocator, question: []const u8, reason: []con
         defer allocator.free(line);
         try context.appendSlice(allocator, line);
     }
-    const heading = "\n\nCurrent source evidence (the review concern remains unresolved):";
+    const heading = "\n\nCurrent source evidence:";
     // Reference the complete existing view when excerpts exceed the form contract;
     // never truncate a quotation or invent a semantic summary to make it fit.
-    const fallback = "\n\nCurrent source evidence: see " ++ reference_view ++ ". The review concern is not a resolved answer.";
+    const fallback = "\n\nCurrent source evidence: see " ++ reference_view ++ ".";
     if (items.len != 0 and question.len + fallback.len > c.max_text_bytes) {
         if (reason.len + fallback.len > c.max_text_bytes) return error.InvalidClarificationInput;
         return .{ .question = try allocator.dupe(u8, question), .why_required = try std.fmt.allocPrint(allocator, "{s}{s}", .{ reason, fallback }) };

@@ -5,7 +5,7 @@ pub const literals = @import("../domain/passive_literals.zig");
 pub const normalizer: @import("../ports/unicode_normalizer.zig").Normalizer = .{ .normalize_fn = unicode.nfc };
 pub const folder: @import("../ports/unicode_normalizer.zig").CaseFolder = .{ .fold_fn = unicode.caseFold };
 pub const classifier: @import("../ports/unicode_normalizer.zig").LexicalClassifier = .{ .boundary_fn = unicode.lexicalBoundary };
-pub const validator: @import("../domain/typed_text.zig").Validator = .{ .normalizer = normalizer, .folder = folder, .classifier = classifier };
+pub const validator: @import("../domain/typed_text.zig").Validator = .{ .normalizer = normalizer, .folder = folder };
 pub const scan = @import("../actions/reference/scan_reference_passive_literals.zig").Action{ .normalizer = normalizer, .folder = folder, .classifier = classifier };
 pub const assign = @import("../actions/reference/assign_passive_literal_identities.zig").Action{};
 pub const validate = @import("../actions/reference/validate_reference_passive_literals.zig").Action{ .normalizer = normalizer, .folder = folder, .classifier = classifier };

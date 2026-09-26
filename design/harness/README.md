@@ -27,11 +27,11 @@ calibration and broader acceptance remain open. **Reviewed:** 2026-09-15 (docume
 
 - Initial case: `test/e2e/wf-001-hello-world/node-vitest`, using its sibling
   [stories.md](../../test/e2e/wf-001-hello-world/reference/stories.md).
-- Evaluator providers: OpenAI Responses or Bedrock Converse, explicitly selected through
+- Evaluator providers: OpenAI Responses or Bedrock InvokeModel, explicitly selected through
   the internal test environment.
 - The workflow's generation provider and the evaluator's provider/model are separate
   selections.
-- The supplied-spec evaluator uses Responses/Converse with native HTTPS without a new
+- The supplied-spec evaluator uses Responses/InvokeModel with native HTTPS without a new
   dependency.
 - Exact model and limits are mandatory operator selections; draft rubric scoring is
   visible in the rubric file, not a production policy or calibrated result.

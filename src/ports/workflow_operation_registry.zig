@@ -116,17 +116,22 @@ pub const Registry = struct {
     }
 
     pub fn validate(self: *const Registry) bool {
-        if (!self.validGates()) return false;
-        for (self.data_schemas, 0..) |schema, index| {
-            if (!schema.valid()) return false;
-            for (self.data_schemas[0..index]) |prior| if (schema.key == prior.key) return false;
+        // Rebuild on every call: registry backing slices and bindings can change.
+        // Indexing the closed key set avoids rescanning every schema for every
+        // operation input/output, without caching any validation authority.
+        var schemas: SchemaIndex = @splat(null);
+        for (self.data_schemas) |*schema| {
+            const slot = &schemas[@intFromEnum(schema.key)];
+            if (!schema.valid() or slot.* != null) return false;
+            slot.* = schema;
         }
+        if (!self.validGates(&schemas)) return false;
         for (self.operations, 0..) |entry, index| {
             if (entry.binding.implementation.context_required and entry.binding.context == null) return false;
             if (workflow.OperationId.parse(entry.contract.id) == null or
                 !validContract(entry.contract, entry.binding.capabilities())) return false;
             inline for (.{ entry.contract.requires, entry.contract.optional, entry.contract.produces, entry.contract.replaces, entry.contract.invalidates }) |keys| {
-                for (keys) |key| if (data.find(self.data_schemas, key) == null) return false;
+                for (keys) |key| if (schemas[@intFromEnum(key)] == null) return false;
             }
             for (self.operations[0..index]) |prior| {
                 if (std.mem.eql(u8, prior.contract.id, entry.contract.id)) return false;
@@ -147,7 +152,9 @@ pub const Registry = struct {
         return true;
     }
 
-    fn validGates(self: *const Registry) bool {
+    const SchemaIndex = [data.key_count]?*const data.Schema;
+
+    fn validGates(self: *const Registry, schemas: *const SchemaIndex) bool {
         for (self.gates, 0..) |contract, index| {
             if (workflow.RegisteredRef.parse(contract.id.bytes) == null or
                 contract.authority.len == 0 or !uniqueKeys(contract.authority) or
@@ -160,10 +167,10 @@ pub const Registry = struct {
                 (!containsKey(issuer.contract.produces, contract.evidence) and !containsKey(issuer.contract.replaces, contract.evidence))) return false;
             for (contract.authority) |key| if (!containsKey(issuer.contract.requires, key)) return false;
             for (contract.authority) |key| {
-                const authority_schema = data.find(self.data_schemas, key) orelse return false;
+                const authority_schema = schemas[@intFromEnum(key)] orelse return false;
                 if (authority_schema.retention != .current) return false;
             }
-            const schema = data.find(self.data_schemas, contract.evidence) orelse return false;
+            const schema = schemas[@intFromEnum(contract.evidence)] orelse return false;
             if (schema.version != 1 or !std.mem.eql(u8, schema.type_name, @typeName(gate.Decision))) return false;
             for (self.operations) |entry| {
                 if (std.mem.eql(u8, entry.contract.id, contract.issuer.bytes)) continue;

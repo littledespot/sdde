@@ -175,7 +175,7 @@ pub const Runner = struct {
             const expected = @import("../domain/workflow_model.zig").resolve(
                 step.parameters,
             ) orelse return .{ .rejected = .authority };
-            if (!std.meta.eql(expected, step.model orelse return .{ .rejected = .authority })) return .{ .rejected = .authority };
+            if (!expected.eql(step.model orelse return .{ .rejected = .authority })) return .{ .rejected = .authority };
         } else if (step.model != null) return .{ .rejected = .authority };
         for (step.capabilities) |capability| {
             if (std.mem.eql(u8, capability, @import("../domain/workflow_capability.zig").model_provider)) {
@@ -472,7 +472,9 @@ pub const Runner = struct {
                 .not_decoded => if (candidate.outcome == .invalid) {
                     reason = "MISSING_FINAL_TEXT";
                 } else return null,
-                .decoded => {},
+                .decoded => |value| if (value.normalization() != .none) {
+                    if (self.events().model(step.id, info, .model_response_normalized, null, @tagName(value.normalization()), null)) |failure| return failure;
+                },
             };
             if (produces_schema and reason == null) {
                 const checked = values.read(&view, schema_check.schema, schema_check.Result) catch return .LOG_SERIALIZATION_FAILURE;

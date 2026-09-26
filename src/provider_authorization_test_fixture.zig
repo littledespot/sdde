@@ -63,6 +63,7 @@ pub const Fixture = struct {
             .model = .{ .bytes = "fake-model" },
             .implementation_id = .{ .ordinal = 1 },
             .config = .empty_object,
+            .json = false,
             .capabilities = @import("model_contract_test_fixture.zig").capabilities,
             .supported_reasoning_efforts = &.{"low"},
         };
@@ -71,7 +72,6 @@ pub const Fixture = struct {
             .slot_id = .{ .bytes = "generation" },
             .registry_entry = &self.registry_entry,
             .reasoning_effort = "low",
-            .response_mode = .prompt_only,
             .controls = self.registry_entry.capabilities.inferenceControls(),
         };
         self.schema_arena = .init(allocator);

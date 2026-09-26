@@ -68,8 +68,9 @@ fn recordField(kind: @import("specification.zig").Kind, slot: Slot) bool {
 pub const Resolution = union(enum) { existing_authority: Authority, supported_candidate: CandidateId, not_applicable: Rule, exception: ExceptionId };
 /// Native, scope-checked evidence supplied by an owning validator/reviewer.
 /// Observation JSON can reference these IDs but cannot create this registry.
-pub const Finding = enum { supported, ambiguous, conflicting, unsupported, candidate_omission };
+pub const Finding = enum { supported, ambiguous, conflicting, unsupported, candidate_omission, inconclusive };
 pub const ReviewEvidence = struct {
+    loss: ?@import("source_omission.zig").Location = null,
     detail: []const u8,
     question: ?[]const u8 = null,
     provenance: @import("specification.zig").Provenance,
@@ -123,7 +124,7 @@ pub const Outcome = union(enum) {
     upstream_rework_required: struct { owner: Stage, detected_at: DetectionStage, reason: GapReason },
     administrative_block: BlockReason,
 };
-pub const CandidateDefect = struct { reason: enum { missing_content, not_preserved }, support: ?EvidenceId };
+pub const CandidateDefect = struct { reason: enum { missing_content, not_preserved, inconclusive_review }, support: ?EvidenceId };
 pub const Entry = struct { candidate_defect: ?CandidateDefect = null, requirement: Id, outcome: Outcome, evidence_ids: []const EvidenceId, input_authorities: []const Authority };
 pub const Result = struct { feature: @import("feature_identity.zig").FeatureId, entries: []const Entry, continuation: enum { all_resolved, invalid, needs_user, blocked } };
 
@@ -232,11 +233,11 @@ pub fn reconcile(allocator: std.mem.Allocator, ledger: Ledger, observations: Obs
         }.less);
         const outcome = try resolve(requirement, ledger.inputs);
         const defect = candidateDefect(requirement, ledger.inputs, outcome);
-        if (defect != null and result.continuation == .all_resolved) result.continuation = .invalid;
+        if (defect != null and result.continuation != .blocked) result.continuation = .invalid;
         entry.* = .{ .candidate_defect = defect, .requirement = requirement.seed.id, .outcome = outcome, .evidence_ids = evidence_ids, .input_authorities = requirement.seed.input_authorities };
         switch (outcome) {
             .resolved_exactly_one, .resolved_explicit_exception, .resolved_explicit_not_applicable => {},
-            .clarification_required => if (result.continuation == .all_resolved or result.continuation == .invalid) {
+            .clarification_required => if (result.continuation == .all_resolved) {
                 result.continuation = .needs_user;
             },
             .upstream_rework_required, .administrative_block => result.continuation = .blocked,
@@ -281,7 +282,7 @@ fn resolve(requirement: Requirement, inputs: Inputs) Error!Outcome {
             }
         }
         switch (evidence.finding) {
-            .supported, .candidate_omission => {},
+            .supported, .candidate_omission, .inconclusive => {},
             .ambiguous => reason = stronger(reason, .ambiguous),
             .conflicting => reason = stronger(reason, .conflicting),
             .unsupported => reason = stronger(reason, .unsupported),
@@ -419,12 +420,31 @@ fn sameSet(comptime T: type, a: []const T, b: []const T) Error!void {
 /// Candidate validity is separate from the six authority outcomes. Established
 /// source evidence cannot make absent content valid, or a source gap repairable.
 fn candidateDefect(requirement: Requirement, inputs: Inputs, outcome: Outcome) ?CandidateDefect {
+    // Contrary current judgments about the same authority and decision are an
+    // interpretation defect, not evidence that the original sources conflict.
+    for (inputs.evidence) |positive| {
+        if (!std.meta.eql(positive.requirement, requirement.seed.id) or positive.finding != .supported or positive.method != .model_assisted) continue;
+        for (inputs.evidence) |negative| {
+            if (!std.meta.eql(negative.requirement, requirement.seed.id) or negative.method != .model_assisted or !sameResolution(positive.resolution, negative.resolution)) continue;
+            if (negative.finding != .ambiguous and negative.finding != .conflicting and negative.finding != .unsupported) continue;
+            if (positive.authorities.len == 0) continue;
+            sameSet(Authority, requirement.seed.input_authorities, positive.authorities) catch continue;
+            sameSet(Authority, positive.authorities, negative.authorities) catch continue;
+            var current = true;
+            for (positive.authorities) |authority| if (!contains(Authority, inputs.authorities, authority)) {
+                current = false;
+            };
+            if (current) return .{ .reason = .inconclusive_review, .support = null };
+        }
+    }
     var result: ?CandidateDefect = null;
     for (inputs.forced_gaps) |gap| if (gap.subject == .candidate and std.meta.eql(gap.requirement, requirement.seed.id)) {
-        result = .{ .reason = .missing_content, .support = null };
+        if (!establishedConflict(requirement, inputs, gap)) result = .{ .reason = .missing_content, .support = null };
     };
     for (inputs.evidence) |evidence| {
-        if (!std.meta.eql(evidence.requirement, requirement.seed.id) or evidence.finding != .candidate_omission) continue;
+        if (!std.meta.eql(evidence.requirement, requirement.seed.id)) continue;
+        if (evidence.finding == .inconclusive) return .{ .reason = .inconclusive_review, .support = null };
+        if (evidence.finding != .candidate_omission) continue;
         if (result == null) result = .{ .reason = .not_preserved, .support = null };
         if (outcome == .resolved_exactly_one and outcome.resolved_exactly_one == .existing_authority and requirement.registered_policy != null) {
             // A single, current established source resolution supplies repair
@@ -434,6 +454,28 @@ fn candidateDefect(requirement: Requirement, inputs: Inputs, outcome: Outcome) ?
         }
     }
     return result;
+}
+
+/// A candidate conflict is discharged only by its current, exact source review.
+/// Structural joins bind the judgment; incompatibility itself is model-assisted.
+fn establishedConflict(requirement: Requirement, inputs: Inputs, gap: ForcedGap) bool {
+    if (gap.reason != .conflicting or requirement.seed.id.unit != .conflict) return false;
+    const records = inputs.references orelse return false;
+    const claims = @import("source_omission.zig").diagnosticClaims(records, .{ .reconciliation_conflict = requirement.seed.id.unit.conflict }) orelse return false;
+    if (claims.len == 0) return false;
+    var found = false;
+    for (inputs.evidence) |evidence| {
+        if (!std.meta.eql(evidence.requirement, requirement.seed.id)) continue;
+        if (evidence.finding != .conflicting or evidence.method != .model_assisted) return false;
+        const review = evidence.review orelse return false;
+        const admission = @import("specification_support_evidence.zig");
+        if (review.principle_registry != null or !admission.validDetail(evidence.finding, review.detail) or admission.questionIssue(evidence.finding, review.question) != null) return false;
+        sameSet(Authority, requirement.seed.input_authorities, evidence.authorities) catch return false;
+        for (evidence.authorities) |authority| if (!contains(Authority, inputs.authorities, authority)) return false;
+        sameSet(@import("reference_reconciliation.zig").ClaimId, claims, review.provenance.claim_ids) catch return false;
+        found = true;
+    }
+    return found;
 }
 pub fn supportedOmission(allocator: std.mem.Allocator, inputs: Inputs, observations: Observations, result: Result, requirement: Id) Error!?Evidence {
     _ = try validate(allocator, inputs, observations, result);

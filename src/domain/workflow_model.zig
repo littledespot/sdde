@@ -1,16 +1,15 @@
 const std = @import("std");
-const controls = @import("model_controls.zig");
 const compilation = @import("workflow_compilation.zig");
 const operation = @import("workflow_operation.zig");
+const identity = @import("llm_provider_identity.zig");
 
+// A projection of the originating parameters, not another selection authority.
 pub const Requirements = struct {
-    response_mode: controls.ResponseGuidanceMode,
-};
+    slot: identity.ModelSlotId,
 
-// Shared generic model parameters. No workflow name, route, or model identity
-// participates in this contract. Temperature is owned by provider capabilities.
-pub const parameters = [_]operation.ParameterDescriptor{
-    .{ .id = "response-mode", .kind = .enumeration, .required = true, .workflow_definition_safe = true, .allowed_values = &.{ "prompt-only", "native-schema" } },
+    pub fn eql(self: Requirements, other: Requirements) bool {
+        return self.slot.eql(other.slot);
+    }
 };
 
 pub fn validProjection(step: compilation.CompiledStep) bool {
@@ -18,42 +17,27 @@ pub fn validProjection(step: compilation.CompiledStep) bool {
     for (step.capabilities) |capability| {
         if (std.mem.eql(u8, capability, "model-provider")) capability_count += 1;
     }
-    var slot_count: usize = 0;
-    for (step.parameters) |parameter| {
-        if (parameter.value != .model_slot) continue;
-        if (@import("llm_provider_identity.zig").ModelSlotId.parse(parameter.value.model_slot.bytes) == null) return false;
-        slot_count += 1;
-    }
-    if (capability_count > 1 or slot_count > 1 or
-        (step.model != null) != (slot_count == 1) or
+    const has_slot = for (step.parameters) |parameter| {
+        if (parameter.value == .model_slot) break true;
+    } else false;
+    if (capability_count > 1 or
+        (step.model != null) != has_slot or
         (capability_count == 1 and step.model == null and !consumesPreparedRequest(step.requires)) or
-        (slot_count != 0 and consumesPreparedRequest(step.requires))) return false;
+        (has_slot and consumesPreparedRequest(step.requires))) return false;
     if (consumesPreparedRequest(step.requires)) {
         for (step.parameters) |parameter| {
-            if (parameter.value == .resource or parameter.value == .model_slot or requestOverride(parameter.id.bytes)) return false;
+            if (parameter.value == .resource or parameter.value == .model_slot or retiredParameter(parameter.id.bytes)) return false;
         }
     }
     const model = step.model orelse return true;
     if (assignsRequest(step.produces, step.replaces) and !validResultSelection(step.parameters)) return false;
     const expected = resolve(step.parameters) orelse return false;
-    return std.meta.eql(model, expected);
+    return model.eql(expected);
 }
 
 pub fn validDescriptors(descriptors: []const operation.ParameterDescriptor) bool {
     for (descriptors) |descriptor| {
         if (retiredParameter(descriptor.id)) return false;
-    }
-    for (parameters) |required| {
-        var found = false;
-        for (descriptors) |descriptor| {
-            if (!std.mem.eql(u8, descriptor.id, required.id)) continue;
-            if (descriptor.kind != required.kind or descriptor.required != required.required or
-                descriptor.integer_min != required.integer_min or descriptor.integer_max != required.integer_max or
-                descriptor.allowed_values.len != required.allowed_values.len) return false;
-            for (descriptor.allowed_values, required.allowed_values) |a, b| if (!std.mem.eql(u8, a, b)) return false;
-            found = true;
-        }
-        if (!found) return false;
     }
     for (descriptors) |descriptor| if (std.mem.eql(u8, descriptor.id, "composition-part")) {
         if (descriptor.kind != .string or descriptor.required or !descriptor.workflow_definition_safe) return false;
@@ -84,19 +68,16 @@ pub fn validResultSelection(values: []const compilation.CompiledParameter) bool 
 pub fn resolve(
     values: []const compilation.CompiledParameter,
 ) ?Requirements {
+    var slot: ?identity.ModelSlotId = null;
     for (values, 0..) |value, index| {
         if (retiredParameter(value.id.bytes)) return null;
         for (values[0..index]) |prior| if (std.mem.eql(u8, prior.id.bytes, value.id.bytes)) return null;
+        if (value.value == .model_slot) {
+            if (slot != null) return null;
+            slot = identity.ModelSlotId.parse(value.value.model_slot.bytes) orelse return null;
+        }
     }
-    const mode = find(values, "response-mode") orelse return null;
-    if (mode != .enumeration) return null;
-    const response_mode: controls.ResponseGuidanceMode = if (std.mem.eql(u8, mode.enumeration, "prompt-only"))
-        .prompt_only
-    else if (std.mem.eql(u8, mode.enumeration, "native-schema"))
-        .native_schema
-    else
-        return null;
-    return .{ .response_mode = response_mode };
+    return .{ .slot = slot orelse return null };
 }
 
 pub fn consumesPreparedRequest(keys: []const @import("pipeline.zig").DataKey) bool {
@@ -111,19 +92,13 @@ pub fn consumesPreparedRequest(keys: []const @import("pipeline.zig").DataKey) bo
 
 pub fn validConsumerDescriptors(descriptors: []const operation.ParameterDescriptor) bool {
     for (descriptors) |descriptor| {
-        if (descriptor.kind == .model_slot or descriptor.kind == .resource or requestOverride(descriptor.id)) return false;
+        if (descriptor.kind == .model_slot or descriptor.kind == .resource or retiredParameter(descriptor.id)) return false;
     }
     return true;
 }
 
-fn requestOverride(id: []const u8) bool {
-    if (retiredParameter(id)) return true;
-    for (parameters) |parameter| if (std.mem.eql(u8, parameter.id, id)) return true;
-    return false;
-}
-
 fn retiredParameter(id: []const u8) bool {
-    inline for (.{ "temperature", "input-bytes", "output-bytes", "input-tokens", "output-tokens" }) |retired| {
+    inline for (.{ "response-mode", "temperature", "input-bytes", "output-bytes", "input-tokens", "output-tokens" }) |retired| {
         if (std.mem.eql(u8, id, retired)) return true;
     }
     return false;

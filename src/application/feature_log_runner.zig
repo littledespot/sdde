@@ -170,15 +170,16 @@ pub const Runner = struct {
         defer scratch.deinit();
         const allocator = scratch.allocator();
         var state = self.event_state orelse self.openEventStream(allocator, reading) catch |failure| return failure;
+        var event_id_buffer: [32]u8 = undefined;
 
-        var record = (build_event.Action{}).execute(allocator, self.binding, state, reading, attributed) catch {
+        var record = (build_event.Action{}).execute(&event_id_buffer, self.binding, state, &reading, attributed) catch {
             return error.SerializationFailure;
         };
         var row = (serialize_event.Action{}).execute(allocator, record) catch {
             return error.SerializationFailure;
         };
-        const trailer = (serialize_control.Action{}).execute(
-            allocator,
+        const control = serialize_control.Action{};
+        const trailer_len = control.measure(
             .event,
             .segment_trailer,
             self.binding,
@@ -186,8 +187,7 @@ pub const Runner = struct {
             state.next_sequence - 1,
             reading.utc(),
         ) catch return error.SerializationFailure;
-        const next_header = (serialize_control.Action{}).execute(
-            allocator,
+        const next_header_len = control.measure(
             .event,
             .segment_header,
             self.binding,
@@ -198,12 +198,14 @@ pub const Runner = struct {
         switch ((rotation.Action{}).execute(
             state,
             row.len,
-            trailer.len,
-            feature_log_format.event_heading.len + next_header.len,
+            trailer_len,
+            feature_log_format.event_heading.len + next_header_len,
         )) {
             .append => {},
             .exhausted => return error.SegmentLimitExhausted,
             .rotate => {
+                const trailer = control.execute(allocator, .event, .segment_trailer, self.binding, state.segment_ordinal, state.next_sequence - 1, reading.utc()) catch return error.SerializationFailure;
+                const next_header = control.execute(allocator, .event, .segment_header, self.binding, state.segment_ordinal + 1, null, reading.utc()) catch return error.SerializationFailure;
                 state = self.actions.rotate_segment.execute(
                     self.binding,
                     .event,
@@ -212,7 +214,7 @@ pub const Runner = struct {
                     feature_log_format.event_heading,
                     next_header,
                 ) catch return error.RotateFailure;
-                record = (build_event.Action{}).execute(allocator, self.binding, state, reading, attributed) catch {
+                record = (build_event.Action{}).execute(&event_id_buffer, self.binding, state, &reading, attributed) catch {
                     return error.SerializationFailure;
                 };
                 row = (serialize_event.Action{}).execute(allocator, record) catch {
@@ -288,10 +290,11 @@ pub const Runner = struct {
         defer scratch.deinit();
         const allocator = scratch.allocator();
         var state = self.prompt_state orelse self.openPromptStream(allocator, reading) catch |failure| return failure;
-        var record = (build_prompt.Action{}).execute(allocator, self.binding, state, reading, fragment) catch return error.SerializationFailure;
+        var event_id_buffer: [32]u8 = undefined;
+        var record = (build_prompt.Action{}).execute(&event_id_buffer, self.binding, state, &reading, fragment) catch return error.SerializationFailure;
         var row = (serialize_prompt.Action{}).execute(allocator, record) catch return error.SerializationFailure;
-        const trailer = (serialize_control.Action{}).execute(
-            allocator,
+        const control = serialize_control.Action{};
+        const trailer_len = control.measure(
             .prompt,
             .segment_trailer,
             self.binding,
@@ -299,8 +302,7 @@ pub const Runner = struct {
             state.next_sequence - 1,
             reading.utc(),
         ) catch return error.SerializationFailure;
-        const next_header = (serialize_control.Action{}).execute(
-            allocator,
+        const next_header_len = control.measure(
             .prompt,
             .segment_header,
             self.binding,
@@ -308,10 +310,12 @@ pub const Runner = struct {
             null,
             reading.utc(),
         ) catch return error.SerializationFailure;
-        switch ((rotation.Action{}).execute(state, row.len, trailer.len, feature_log_format.prompt_heading.len + next_header.len)) {
+        switch ((rotation.Action{}).execute(state, row.len, trailer_len, feature_log_format.prompt_heading.len + next_header_len)) {
             .append => {},
             .exhausted => return error.SegmentLimitExhausted,
             .rotate => {
+                const trailer = control.execute(allocator, .prompt, .segment_trailer, self.binding, state.segment_ordinal, state.next_sequence - 1, reading.utc()) catch return error.SerializationFailure;
+                const next_header = control.execute(allocator, .prompt, .segment_header, self.binding, state.segment_ordinal + 1, null, reading.utc()) catch return error.SerializationFailure;
                 state = self.actions.rotate_segment.execute(
                     self.binding,
                     .prompt,
@@ -320,7 +324,7 @@ pub const Runner = struct {
                     feature_log_format.prompt_heading,
                     next_header,
                 ) catch return error.RotateFailure;
-                record = (build_prompt.Action{}).execute(allocator, self.binding, state, reading, fragment) catch return error.SerializationFailure;
+                record = (build_prompt.Action{}).execute(&event_id_buffer, self.binding, state, &reading, fragment) catch return error.SerializationFailure;
                 row = (serialize_prompt.Action{}).execute(allocator, record) catch return error.SerializationFailure;
             },
         }

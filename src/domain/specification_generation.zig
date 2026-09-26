@@ -6,22 +6,23 @@ const std = @import("std");
 pub const spec = @import("specification.zig");
 const provenance = @import("specification_provenance.zig");
 pub const Error = provenance.Error || error{InvalidSpecificationUnit};
-pub const Unit = union(enum) { brief, primary_user_story, entities, records: spec.Kind };
+pub const Unit = union(enum) { brief, primary_user_story, entities, records };
 pub const Brief = spec.Brief;
 pub fn Responses(comptime boundary: spec.Boundary) type {
     const fields = spec.Values(boundary);
     return struct {
         const Self = @This();
-        pub const Need = struct { reason: NeedReason, question: fields.AttributedValue };
+        pub const Need = struct { reason: NeedReason, question: fields.AttributedValue, record_kind: ?spec.Kind = null };
         pub const Content = union(enum) {
             brief: fields.Brief,
             primary_user_story: fields.AttributedValue,
             entities: fields.ApplicabilityProposal,
             records: []const fields.RecordProposal,
         };
-        pub const Response = union(enum) { content: Self.Content, clarification: Self.Need };
+        pub const Response = union(enum) { content: Self.Content, clarification: Self.Need, inconclusive: Inconclusive };
     };
 }
+pub const Inconclusive = struct { detail: []const u8 };
 const NeedReason = enum { missing, ambiguous, conflicting };
 pub const Need = Responses(.model).Need;
 pub const Content = Responses(.model).Content;
@@ -38,10 +39,12 @@ pub const ModelResponse = union(enum) {
     entities: spec.Model.ApplicabilityProposal,
     records: struct { records: []const spec.Model.RecordProposal },
     clarification: Need,
+    inconclusive: Inconclusive,
 
     pub fn from(response: Response) ModelResponse {
         return switch (response) {
             .clarification => |need| .{ .clarification = need },
+            .inconclusive => |failure| .{ .inconclusive = failure },
             .content => |content| switch (content) {
                 .records => |records| .{ .records = .{ .records = records } },
                 inline else => |value, tag| @unionInit(ModelResponse, @tagName(tag), value),
@@ -57,6 +60,7 @@ pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!Response {
     };
     return switch (response) {
         .clarification => |need| .{ .clarification = need },
+        .inconclusive => |failure| .{ .inconclusive = failure },
         .records => |records| .{ .content = .{ .records = records.records } },
         inline else => |value, tag| .{ .content = @unionInit(Content, @tagName(tag), value) },
     };
@@ -75,10 +79,15 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
     try provenance.bind(allocator, validator, context);
     var inspection: provenance.Inspection = .{};
     const result: CanonicalResponse = switch (proposed) {
-        .clarification => |need| .{ .clarification = .{
-            .reason = need.reason,
-            .question = provenance.inspectAttributed(boundary, allocator, validator, context, need.question, &inspection) catch |err| return rejected(unit, .clarification_question, null, inspection.text_issue, err),
-        } },
+        .inconclusive => |failure| return .{ .invalid = .{ .unit = unit, .field = .interpretation, .rule = .interpretation, .observed = null, .blocked = .inconclusive_review, .detail = failure.detail } },
+        .clarification => |need| need: {
+            if ((unit == .records) != (need.record_kind != null)) return .{ .invalid = .{ .unit = unit, .field = .clarification_question, .rule = .unit_kind, .observed = null, .blocked = .clarification_question } };
+            break :need .{ .clarification = .{
+                .reason = need.reason,
+                .record_kind = need.record_kind,
+                .question = provenance.inspectAttributed(boundary, allocator, validator, context, need.question, &inspection) catch |err| return rejected(unit, .clarification_question, null, inspection.text_issue, err),
+            } };
+        },
         .content => |content| blk: {
             if (@intFromEnum(std.meta.activeTag(unit)) != @intFromEnum(std.meta.activeTag(content))) return .{ .invalid = .{ .unit = unit, .field = .unit, .rule = .unit_kind, .observed = null, .blocked = .unit_kind } };
             break :blk .{ .content = switch (content) {
@@ -96,7 +105,6 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
                     const checked = try allocator.alloc(spec.RecordProposal, records.len);
                     for (records, checked, 0..) |record, *accepted, index| {
                         const observed: ?candidate.Replacement = if (boundary == .model) .{ .record = record } else null;
-                        if (std.meta.activeTag(record.content) != unit.records) return .{ .invalid = .{ .unit = unit, .field = .{ .target = .{ .record = index } }, .rule = .record_kind, .observed = observed } };
                         accepted.* = provenance.inspectRecord(boundary, allocator, validator, context, record, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .{ .record = index }, inspection, err);
                         for (checked[0..index]) |prior| if (try equalContent(allocator, prior.content, accepted.content)) return .{ .invalid = .{ .unit = unit, .field = .{ .target = .{ .record = index } }, .rule = .duplicate_record, .observed = observed, .blocked = if (try equalEvidence(allocator, prior.provenance, accepted.provenance)) null else .competing_records } };
                     }
@@ -119,7 +127,7 @@ pub fn equalContent(allocator: std.mem.Allocator, a: spec.Content(spec.BusinessV
 
 fn rejected(unit: Unit, field: candidate.Field, observed: ?candidate.Replacement, text_issue: ?@import("typed_text.zig").Issue, err: provenance.Error) Error!Validation {
     if (text_issue == null) switch (err) {
-        error.InvalidTypedText, error.UnboundPathReference, error.InvalidPassiveLiteral => return err,
+        error.InvalidTypedText, error.InvalidPassiveLiteral => return err,
         else => {},
     };
     const native: @FieldType(candidate.Issue, "native_error") = switch (err) {
@@ -127,13 +135,12 @@ fn rejected(unit: Unit, field: candidate.Field, observed: ?candidate.Replacement
         error.InvalidReferenceReconciliation => .InvalidReferenceReconciliation,
         error.InvalidSourceCitation => .InvalidSourceCitation,
         error.InvalidTypedText => .InvalidTypedText,
-        error.UnboundPathReference => .UnboundPathReference,
         error.InvalidPassiveLiteral => .InvalidPassiveLiteral,
         else => return err,
     };
     return .{ .invalid = .{ .unit = unit, .field = field, .observed = observed, .native_error = native, .text_issue = text_issue, .blocked = if (field == .clarification_question) .clarification_question else null, .rule = switch (native.?) {
         .InvalidSpecification, .InvalidReferenceReconciliation, .InvalidSourceCitation => .provenance,
-        .InvalidTypedText, .UnboundPathReference, .InvalidPassiveLiteral => .typed_text,
+        .InvalidTypedText, .InvalidPassiveLiteral => .typed_text,
     } } };
 }
 
@@ -149,6 +156,6 @@ fn rejectedPart(comptime boundary: spec.Boundary, unit: Unit, response: Response
     const observed = if (boundary == .model) candidate.select(response, target) catch return error.InvalidSpecificationUnit else null;
     var result = try rejected(unit, .{ .target = target }, observed, inspection.text_issue, err);
     result.invalid.value_choices = inspection.value_choices;
-    if (inspection.part == .value and result.invalid.rule == .provenance) result.invalid.rule = .exact_copy;
+    if (inspection.part == .value and (result.invalid.rule == .provenance or (inspection.text_issue != null and inspection.text_issue.?.reason == .unknown_exact))) result.invalid.rule = .exact_copy;
     return result;
 }

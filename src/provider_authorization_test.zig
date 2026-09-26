@@ -161,7 +161,6 @@ test "prepared lease cannot be reused with altered binding or controls" {
                 request.controls = selected.controls;
             },
             3 => {
-                selected.response_mode = .native_schema;
                 request.response_guidance_mode = .native_schema;
             },
             else => unreachable,

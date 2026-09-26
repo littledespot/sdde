@@ -28,6 +28,12 @@ unique defective producer and its smallest safe target from captured source and
 review evidence. Source absence, ambiguous ownership and stale evidence do not
 authorize repair. A review verdict itself is never a repair target.
 
+The [clarification-admission boundary](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
+does not relax that prohibition. An inconclusive finding without an identifiable
+user decision must reject when existing authority cannot correct it; completing
+its question text cannot grant clarification publication. Optional verdict
+reassessment remains a separate unapproved decision in FIX_002.
+
 - Reference extraction uses the shared replacement authorization for a chunk's coupled
   token-classification collection, one invalid source selection, or an empty claim-citation
   collection.
@@ -51,8 +57,9 @@ Configuration and environment errors never consume LLM repair attempts.
 
 - A missing or unreconciled authority is not a malformed candidate value and therefore is never
   repaired by generating a convenient replacement.
-- The only model-assisted transition permitted for unsupported asserted content is the existing
-  one-shot whole-operation-result replacement to `clarification_needed`.
+- The existing one-shot whole-operation-result no-invention replacement may yield
+  `clarification_needed` only when §12.8.1 admits a genuine authority gap. Candidate
+  loss or inconclusive review retains its own repair/rejection outcome.
 - If a later stage detects the gap, repair stops and the shared reconciliation router selects
   upstream rework.
 - Local repair resumes only after the owning stage has regenerated, passed reconciliation, and
@@ -88,6 +95,28 @@ Configuration and environment errors never consume LLM repair attempts.
   origin, original value or absence anchor, and complete dependency snapshot.
   Reconciliation loss cannot authorize inserting an already extracted claim.
 
+**Approved redundant-projection amendment (25 September 2026):** native
+reconciliation may delete one misbound extra summary statement or signal when
+its current, unique, nonempty claim selection is valid (and non-conflicting for a
+signal), every selected claim remains represented, the complete surviving
+collection passes its existing validation, and the removed content is canonically
+identical to a valid survivor under that survivor's actual claim scope. This
+extends identical-evidence redundancy; it grants no evidence reassignment or
+semantic inference. Bind the original diagnostic, old value, revision and complete
+dependencies; retain surviving values/origins and rerun normal full validation.
+No proof means no deletion. Existing retry and token accounting remain unchanged.
+
+**Approved conditional-membership amendment (25 September 2026, FIX_002 §31):**
+The specification session's existing entity decision may authorize replacement of
+one contradictory entity with a source-grounded non-entity record, retaining its
+exact evidence selection, or insertion of one missing required entity. It may not
+change that decision, delete unique content, reclassify siblings or infer semantics.
+Bind the current session, old value/absence, source/policy dependencies and stable
+record occurrence. Subsequent invalid fields of that record retain the same
+whole-record assignment and retry bound. Reuse the native repair owner, selected
+schema definitions, runner and accounting. Full unit validation, source/claim and
+exact-token coverage, semantic assessment and publication validation remain required.
+
 The repair algebra is closed:
 
 - `replace(pointer, expectedValue, replacement)`;
@@ -112,6 +141,49 @@ The repair guidance contains:
 - the fixed target pointer;
 - the exact replacement schema;
 - the instruction that unrelated fields must not be returned or changed.
+
+Unavailable passive/exact-copy diagnostics identify the rejected selection and
+location. Existing native evidence choices drive both schema narrowing (§12.2)
+and concise corrective guidance: state validation failed, name unavailable
+alternatives, and identify source-backed text or permitted references as
+appropriate. A value-only repair preserves its bound explicit support and
+effective evidence under [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md);
+it cannot borrow an exact choice from a sibling or enlarge its bound on retry.
+The same choice-guidance owner handles both reference kinds; when neither is
+permitted, explicitly request source-backed text strings.
+Keep the rejected value once when
+its containing field adds no other content; retain record siblings when needed for meaning.
+This does not grant new repair targets, semantic reassessment or additional retries.
+
+Specification generation and native unit repair reuse the unit's configured purpose
+prompt (§17.3); repair must not substitute a generic instruction that drops the
+field's semantic purpose. The selected replacement schema and authorization still
+limit writable content. Recover original source meaning within that scope while
+preserving correct surrounding content. Mechanical repair acceptance does not prove
+semantic recovery; full coverage and the existing semantic review remain mandatory.
+
+The 25 September FIX_002 §36 coupled-evidence authorization applies to the
+currently deployed token/citation tuple. ADR 0020 retires that tuple-specific
+trigger at its coordinated format cutover and supplies the replacement
+value-only bounds, including an invalid-handle baseline. It grants no general
+coupled evidence add/remove repair. Independently authorized membership,
+reviewed insertion and native exact reconstruction keep their own targets.
+Revalidate the full unit, affected dependencies, coverage, semantic/principle
+review and publication/readback before acceptance. The engine derives reference
+citations from permitted selections; it never chooses semantic support to make
+a repair pass.
+
+Evidence repair obtains the diagnostic and permitted references from their existing
+validator/registry, including any applicable source-line bounds. The request builder
+projects those facts; it does not revalidate citations or select supporting evidence.
+Registry/selection integrity failures remain engine failures, distinct from an
+invalid model-proposed citation. Principle citation diagnostics identify the citation
+index, rejected chunk/line field and value, using the existing selection for allowed
+IDs and the captured span for inclusive line bounds. These same facts reach repair
+and reports; they are not a second persisted authority. JSON/schema correction (§22.6) does not replace
+native evidence repair. The diagnostic and optional repeat-feedback work in
+[FIX_002 §25](../../fixes/FIX_002.md#25-principle-citation-conformance--architecture-review)
+is not authority to change retry limits, reconsider verdicts or persist new policy.
 
 Example:
 
@@ -152,6 +224,28 @@ The engine never trusts a model field such as `valid: true`.
 
 ### 22.6 Unparseable output
 
+**Approved model-response normalization (21 September 2026):** first parse the
+original complete response strictly. Only after a `SyntaxError`, if its first
+three bytes are exactly `{"{`, the shared model-envelope decoder may remove the
+first two bytes (`{"`) once and strictly parse the entire remainder. Accept the
+normalization only when that remainder is one complete JSON object. Valid input
+is never altered; no other prefix, fence, suffix, duplicate key or malformed
+remainder is salvaged. Schema and domain validation remain mandatory.
+
+The candidate retains a typed `removed_leading_brace_quote` fact and its original
+invocation evidence. The runner logs `model.response_normalized` at warning level
+with that rule, node, request and attempt; logging failure remains terminal.
+Raw provider/text captures are unchanged. The shared domain handoff supplies the
+decoder-consumed bytes; composition continues to use its validated tree. Neither
+reinterprets raw malformed text or applies a second normalization.
+Debugger inspection reuses this decoder
+and displays the alteration separately from raw text. Rejected normalization
+retains the original diagnostic/bytes for existing bounded protocol correction.
+This exception changes neither provider-wire/configuration/persistence parsing
+nor request, retry, token or publication authority. It is a workaround for the
+observed Bedrock prefix, applied consistently to complete model responses without
+a provider/model/workflow branch; it does not establish a provider-side fix.
+
 For [configured response parts](../decisions/0016-configured-json-response-composition.md),
 the response/schema below is the complete assigned part. Corrections retain its
 request identity and current prerequisites; an unrelated admitted part remains
@@ -188,6 +282,9 @@ defined response-level correction containing:
   constraint; correction does not repeat its subtrees. This focused amendment was
   explicitly approved on 19 September 2026. Syntax correction uses that same complete
   schema. Guidance never selects a semantic branch, moves fields or synthesizes values.
+  For an integer-enum rejection, the approved 26 September 2026 amendment uses
+  the exact schema locator and a short integer-type outline; it does not copy
+  the allowed-ID list from the complete selected schema into the outline.
 
 The [approved child-object amendment](#2261-child-object-requirements)
 below adds required names to immediate child-object descriptors only.
@@ -398,3 +495,14 @@ If `task-a -> task-b -> task-a`, the diagnostic includes the cycle and selects o
 #### Scope expansion
 
 A code repair requires an undeclared second file. This is not treated as a larger code repair. It is a task/plan scope defect and blocks implementation until the upstream artifact is corrected.
+
+### Typed-content repair conformance
+
+The approved [§7.1 amendment](07-domain-representations.md#71-shared-types) uses the
+same ordered segment shape for initial business values and selected value repairs.
+An invalid reference diagnostic retains its segment location and rejected IDs;
+permitted choices derive from the bound evidence under ADR 0020. Literal punctuation is not a
+repair trigger. Repair keeps siblings, exact-byte obligations, dependency freshness,
+full validation, retry identities and token accounting with their existing owners.
+Native coverage repair remains limited to its existing whole-display equality proof;
+this amendment does not authorize substring guessing or rewriting meaning.

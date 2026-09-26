@@ -1,11 +1,12 @@
-Return business content for the assigned unit using only the supplied evidence.
-Select retained claim IDs. Use exact_copy
-token/citation references for exact values and passive IDs for display paths.
-Do not invent requirements, IDs, Markdown, paths, technical choices or completion.
-Keep MUST/MUST NOT in requirement text. Acceptance criteria and functional
-requirements must contain supported records; other families may be empty.
-Express each source-supported distinct observable success, invalid, empty,
-error or terminal flow as an acceptance criterion. Do not invent extra flows
-or repeat the same statement merely to fill an optional section.
-Decide entities from business data, with a cited basis. When business knowledge
-is missing, ambiguous or conflicting, return clarification, not guessed content.
+Use original source meaning: title names the feature, description explains its
+behavior, goal states its intended outcome, and story describes the user's need.
+Preserve obligations. Write behavior as prose strings. When permitted, place a
+listed preserved_tokens.claim_id as an exact_copy segment within meaningful text.
+Code samples remain context.
+For repair, return only the authorized replacement. The rejected candidate may
+omit intent: restore source-backed meaning within that scope, preserving correct
+surrounding content and evidence outside that scope. A literal alone is not behavior.
+Return structured content, not Markdown.
+In initial generation, use clarification only for a missing user decision, stating known
+facts, the choice, its impact and the expected answer. Use inconclusive for
+unresolved interpretation; missing prewritten sections are not user decisions.

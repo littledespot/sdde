@@ -690,20 +690,20 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 
 ## `RebindExactBusinessCopyAction`
 
-- **Input:** one parsed field, current provenance, and preserved-token registry
+- **Input:** one parsed field, current canonical segment projection, provenance, and preserved-token registry
 - **Output:** typed business value
-- **Responsibility:** Reconstruct one exact-copy value only after byte-exact token/citation
-  validation; otherwise normalize or diagnose.
+- **Responsibility:** Retain existing exact-copy segment bindings only after byte-exact
+  comparison with the canonical projection; never infer a new binding from formatting.
 
 ## `BuildBusinessContentIdentityAction`
 
 - **Input:** one typed business value
 - **Output:** canonical content identity
-- **Responsibility:** Build NFC canonical identity or exact token/byte identity for one leaf.
+- **Responsibility:** Build identity from ordered prose and reference segments for one field.
 
 ## `ValidateExactBusinessCopyAction`
 
-- **Input:** one exact-copy value and current token/citation registry
+- **Input:** one exact-copy segment, fixed provenance and current token/citation registry
 - **Output:** exact-copy evidence
 - **Responsibility:** Prove token, citation, raw scalar, and record attribution agree.
 

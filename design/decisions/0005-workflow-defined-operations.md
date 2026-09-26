@@ -81,7 +81,7 @@ workflow behavior without duplicating large resources at every node.
   selected operation contract.
 
 The exact compact schema is owned by [F0005](../features/F0005-WorkflowDefinitionRegistryService.md#32-root-shape)
-and its formal schema. The [provider-request example](../examples/provider-request.workflow.yaml)
+and its formal schema. The [provider-request test fixture](../../test/packaging/fixtures/provider-request/provider-request.workflow.yaml)
 shows the implemented explicit request operations; the [Specify definition](../workflows/spec.workflow.yaml)
 shows reusable subgraphs. These sources replace the early `model.generate` sketch,
 which was not a registered compound operation.

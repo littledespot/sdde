@@ -8,33 +8,33 @@ const evidence = @import("reference_evidence.zig");
 const safety = @import("toolchain_safety.zig");
 const unicode = @import("../ports/unicode_normalizer.zig");
 pub const Error = scan.Error || evidence.Error || error{InvalidPassiveLiteral};
-pub const Id = struct { ordinal: u32 };
-pub const Kind = scan.Kind;
-pub const Origin = union(enum) {
-    reference_name: evidence.identity.SourceId,
-    reference_span: struct { source_id: evidence.identity.SourceId, block_id: evidence.identity.BlockId, start_byte: usize, end_byte: usize },
+pub const Id = struct {
+    pub const model_scalar = "ordinal";
+    ordinal: u32,
 };
+pub const Kind = scan.Kind;
+pub const Origin = struct { source_id: evidence.identity.SourceId, block_id: evidence.identity.BlockId, start_byte: usize, end_byte: usize };
 pub const Candidate = struct { kind: Kind, value: []const u8, origin: Origin };
 pub const Candidates = struct { grammar: grammar.Grammar, entries: []const Candidate };
 pub const Assigned = struct { candidates: Candidates, ids: []const Id };
 pub const Record = struct { id: Id, kind: Kind, value: []const u8 };
 pub const Occurrence = struct { id: Id, origin: Origin };
+pub const Captured = struct { records: []const Record, occurrences: []const Occurrence };
 pub const Registry = struct { grammar: grammar.Grammar, records: []const Record, occurrences: []const Occurrence };
 
-/// Caller arena owns collections. Source names precede their block occurrences;
-/// source/block/byte order is the only allocation order.
+/// Caller arena owns collections. Only source-body occurrences grant display
+/// choices; source names remain citation metadata. Allocate in source/block/byte order.
 pub fn collect(allocator: std.mem.Allocator, compiled: grammar.Grammar, current: *const safety.ValidToolchain, inputs: evidence.Inputs, normalizer: unicode.Normalizer, folder: unicode.CaseFolder, classifier: unicode.LexicalClassifier) Error!Candidates {
     try grammar.validateBinding(allocator, compiled, current, inputs, normalizer, folder);
     var entries: std.ArrayList(Candidate) = .empty;
-    for (inputs.corpus.sources, compiled.reference_names) |source, name| {
-        try entries.append(allocator, .{ .kind = .display_filename, .value = name.basename, .origin = .{ .reference_name = source.id } });
+    for (inputs.corpus.sources) |source| {
         for (source.blocks) |block| {
             const found = try scan.scan(allocator, compiled, source.bytes[block.span.start.byte..block.span.end.byte], normalizer, folder, classifier);
             defer scan.destroy(found);
             for (found.matches) |match| try entries.append(allocator, .{
                 .kind = match.kind,
                 .value = try naming.normalize(allocator, found.text[match.start_byte..match.end_byte], true, normalizer, folder),
-                .origin = .{ .reference_span = .{ .source_id = source.id, .block_id = block.id, .start_byte = block.span.start.byte + match.start_byte, .end_byte = block.span.start.byte + match.end_byte } },
+                .origin = .{ .source_id = source.id, .block_id = block.id, .start_byte = block.span.start.byte + match.start_byte, .end_byte = block.span.start.byte + match.end_byte },
             });
         }
     }
@@ -88,19 +88,23 @@ pub fn resolve(registry: Registry, inputs: evidence.Inputs, scope: evidence.Scop
 /// The caller supplies an exact provenance allowlist, never a corpus-wide scope.
 pub fn resolveIn(registry: Registry, inputs: evidence.Inputs, scopes: []const evidence.Scope, id: Id) Error!Record {
     if (!registry.grammar.reference_state_id.eql(inputs.corpus.state_id) or !std.mem.eql(u8, registry.grammar.feature_id.bytes, inputs.corpus.feature_id.bytes)) return error.InvalidPassiveLiteral;
+    return resolveCaptured(.{ .records = registry.records, .occurrences = registry.occurrences }, inputs, scopes, id);
+}
+
+/// The same occurrence join applies to captured-state validation without a live
+/// toolchain. Capture integrity and current policy remain with their existing owners.
+pub fn resolveCaptured(captured: Captured, inputs: evidence.Inputs, scopes: []const evidence.Scope, id: Id) Error!Record {
     if (scopes.len == 0) return error.InvalidPassiveLiteral;
     for (scopes) |scope| _ = try evidence.resolve(inputs, scope);
-    if (id.ordinal == 0 or id.ordinal > registry.records.len) return error.InvalidPassiveLiteral;
-    const record = registry.records[id.ordinal - 1];
+    if (id.ordinal == 0 or id.ordinal > captured.records.len) return error.InvalidPassiveLiteral;
+    const record = captured.records[id.ordinal - 1];
     if (record.id.ordinal != id.ordinal) return error.InvalidPassiveLiteral;
-    for (registry.occurrences) |occurrence| {
+    for (captured.occurrences) |occurrence| {
         if (occurrence.id.ordinal != id.ordinal) continue;
         for (scopes) |scope| {
             const unit = try evidence.resolve(inputs, scope);
-            const allowed = switch (occurrence.origin) {
-                .reference_name => |source| source.ordinal == unit.source.id.ordinal,
-                .reference_span => |span| span.source_id.ordinal == unit.source.id.ordinal and span.block_id.ordinal == unit.chunk.block_id.ordinal and span.start_byte >= unit.chunk.span.start.byte and span.end_byte <= unit.chunk.span.end.byte,
-            };
+            const span = occurrence.origin;
+            const allowed = span.source_id.ordinal == unit.source.id.ordinal and span.block_id.ordinal == unit.chunk.block_id.ordinal and span.start_byte < span.end_byte and span.start_byte >= unit.chunk.span.start.byte and span.end_byte <= unit.chunk.span.end.byte;
             if (allowed) return record;
         }
     }

@@ -44,6 +44,8 @@ Every model request states the engine's existing JSON response framing:
 - Unrelated result schemas retain their complete schema guidance and input bytes; native
   generation constraints follow ADR 0006's registered projection.
 - Inference and explicit counting project the same model-visible content.
-- Malformed JSON and schema violations still reject under existing validators.
+- Malformed JSON still rejects except for the user-approved, logged
+  [§22.6 prefix normalization](../contracts/22-repair.md#226-unparseable-output)
+  added on 21 September 2026. Schema violations still reject.
 - Live evidence retains the actual outbound instruction and returned result; neither a
   fake response nor an unpublished candidate establishes E2E success.

@@ -410,13 +410,13 @@ test "runner rejects an operation binding that differs from compiled authority" 
     try std.testing.expectEqual(@as(usize, 0), barrier.calls);
 }
 
-test "unexpected binding failure never follows a declared failed transition" {
+test "unexpected binding failure never follows a declared transition to clarification" {
     var steps = [_]compilation.CompiledStep{test_steps[0]} ** 2;
     steps[0].id = .{ .bytes = "first" };
     steps[1].id = .{ .bytes = "later" };
     const transitions = [_]workflow.Transition{
         .{ .from = steps[0].id, .outcome = .failed, .target = .{ .step = steps[1].id } },
-        .{ .from = steps[1].id, .outcome = .ok, .target = .{ .terminal = .ok } },
+        .{ .from = steps[1].id, .outcome = .ok, .target = .{ .terminal = .needs_user } },
     };
     var graph = try testGraph();
     graph.authority.steps = &steps;
@@ -429,12 +429,14 @@ test "unexpected binding failure never follows a declared failed transition" {
     var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
     defer runner.deinit();
     var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
-    try std.testing.expectEqual(.failed, engine.run(children.bindings()).executionStatus().?);
+    const result = engine.run(children.bindings());
+    try std.testing.expectEqualDeep(@as(execution.Rejection, .{ .operation_failed = error.OperationExecutionFailed }), result.execution_rejected);
+    try std.testing.expectEqual(.failed, result.executionStatus().?);
     try std.testing.expectEqual(@as(usize, 1), control.state.calls);
     try std.testing.expectEqual(@as(usize, 0), barrier.calls);
 }
 
-test "runner contract rejections cannot enter invalid or failed workflow recovery" {
+test "runner contract rejections cannot enter invalid or failed recovery leading to clarification" {
     inline for (std.meta.tags(DeltaFault)) |fault| {
         var steps = [_]compilation.CompiledStep{test_steps[0]} ** 2;
         steps[0].id = .{ .bytes = "first" };
@@ -443,7 +445,7 @@ test "runner contract rejections cannot enter invalid or failed workflow recover
         const transitions = [_]workflow.Transition{
             .{ .from = steps[0].id, .outcome = .invalid, .target = .{ .step = steps[1].id } },
             .{ .from = steps[0].id, .outcome = .failed, .target = .{ .step = steps[1].id } },
-            .{ .from = steps[1].id, .outcome = .ok, .target = .{ .terminal = .ok } },
+            .{ .from = steps[1].id, .outcome = .ok, .target = .{ .terminal = .needs_user } },
         };
         var graph = try testGraph();
         graph.authority.steps = &steps;
@@ -593,10 +595,13 @@ const TestEngineBindings = struct {
     }
 };
 
-test "workflow outcomes preserve exact runner rejections at invocation and step boundaries" {
+test "runner rejections bypass clarification transitions and preserve exact failure at invocation and step boundaries" {
     for ([_]execution.Rejection{ .authority, .{ .operation_failed = error.OperationExecutionFailed }, .{ .operation_failed = error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE }, .cancelled, .deadline_exhausted, .{ .gate = .missing_evidence }, .{ .logging = .LOG_SINK_FAILURE }, .{ .token_budget = error.WorkflowTokenBudgetExceeded }, .{ .token_budget = error.ProviderTokenUsageUnavailable }, .{ .retry_limit = @import("domain/workflow_retry.zig").Exhaustion.init(.{ .bytes = "account" }, .{ .value = 1 }, 2).? } }) |reason| {
         for ([_]bool{ false, true }) |invocation| {
             var graph = try testGraph();
+            var transitions = test_transitions;
+            for (&transitions) |*transition| transition.target = .{ .terminal = .needs_user };
+            graph.authority.transitions = &transitions;
             var control: OperationControl = .{ .state = .{ .outcome = .ok } };
             var barrier: FakeBarrier = .{};
             var registry = testRegistry(&control);
@@ -610,6 +615,10 @@ test "workflow outcomes preserve exact runner rejections at invocation and step 
             try std.testing.expectEqual(@as(usize, 0), control.state.calls);
             try std.testing.expectEqual(@as(usize, 1), finalizer.calls);
             try std.testing.expectEqualDeep(outcome, finalizer.last.?);
+            try std.testing.expect(outcome.executionStatus() != .needs_user);
+            for ([_]pipeline.DataKey{ .clarification_needs, .prepared_workflow_output, .published_workflow_output }) |key| {
+                try std.testing.expect(runner.envelope.slots[@intFromEnum(key)] == null);
+            }
         }
     }
 }

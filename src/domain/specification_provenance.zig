@@ -38,6 +38,16 @@ pub fn eligibleClaim(disposition: ?r.Disposition) bool {
     return disposition != null and disposition.? == .retained;
 }
 
+/// A draft needs at least one possible positive evidence selection. This is
+/// structural readiness, not a judgment that the source supports every field.
+pub fn generationReady(references: r.Accounted) bool {
+    if (references.outcome != .complete) return false;
+    for (references.records.assignments.checked.prior.prior.dispositions) |disposition| {
+        if (eligibleClaim(disposition.disposition)) return true;
+    }
+    return false;
+}
+
 /// Check trusted evidence and text authority before classifying candidate errors.
 pub fn bind(allocator: std.mem.Allocator, validator: text.Validator, context: Context) Error!void {
     const all = try items(context);
@@ -49,37 +59,76 @@ pub fn bind(allocator: std.mem.Allocator, validator: text.Validator, context: Co
 
 /// Initial reference-grounded generation. Applicable user-response support is
 /// supplied by the clarification lifecycle, not inferred from loaded form IDs.
-const Resolved = @import("reference_support.zig").Resolved;
+pub const Resolved = struct { provenance: spec.Provenance, effective_claim_ids: []const r.ClaimId, scopes: []const evidence.Scope };
 
 fn resolve(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, context: Context, provenance: spec.Values(boundary).Evidence) Error!Resolved {
     return resolveRecords(boundary, allocator, context.inputs, @import("reference_support.zig").records(context.references), provenance);
 }
 
 pub fn resolveRecords(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, inputs: evidence.Inputs, references: @import("reference_support.zig").Records, provenance: spec.Values(boundary).Evidence) Error!Resolved {
+    return resolveUnitRecords(boundary, allocator, inputs, references, provenance, &.{});
+}
+pub fn lineageForRepair(allocator: std.mem.Allocator, context: Context, selection: spec.Selection, values: []const spec.BusinessValue) Error!Resolved {
+    return resolveUnitRecords(.model, allocator, context.inputs, @import("reference_support.zig").records(context.references), selection, values);
+}
+pub fn checkValueInUnit(allocator: std.mem.Allocator, validator: text.Validator, context: Context, selection: spec.Selection, values: []const spec.BusinessValue, value: spec.BusinessValue) Error!spec.BusinessValue {
+    const resolved = try lineageForRepair(allocator, context, selection, values);
+    var inspection: Inspection = .{};
+    return valueIn(allocator, validator, context, resolved, value, &inspection);
+}
+
+fn dispositionFor(references: @import("reference_support.zig").Records, id: r.ClaimId) ?r.Disposition {
+    for (references.dispositions) |entry| if (entry.claim_id.ordinal == id.ordinal) return entry.disposition;
+    return null;
+}
+
+/// The owning field/record supplies its declared values. Invalid model handles
+/// remain candidate defects and cannot contribute authority to the lineage.
+fn resolveUnitRecords(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, inputs: evidence.Inputs, references: @import("reference_support.zig").Records, provenance: spec.Values(boundary).Evidence, values: []const spec.BusinessValue) Error!Resolved {
     const claims = references.items;
-    if (provenance.claim_ids.len == 0 or provenance.clarification_response_ids.len != 0) return error.InvalidSpecification;
-    try r.unique(r.ClaimId, provenance.claim_ids);
+    if (provenance.clarification_response_ids.len != 0) return error.InvalidSpecification;
     if (boundary == .canonical) try r.unique(r.CitationId, provenance.citation_ids);
-    const resolved = try @import("reference_support.zig").select(allocator, claims, inputs, .{ .claim_ids = provenance.claim_ids, .clarification_response_ids = provenance.clarification_response_ids });
-    const dispositions = references.dispositions;
-    for (provenance.claim_ids) |id| {
-        const disposition: ?r.Disposition = found: {
-            for (dispositions) |entry| if (entry.claim_id.ordinal == id.ordinal) break :found entry.disposition;
-            break :found null;
+    var exact: std.ArrayList(r.ClaimId) = .empty;
+    defer exact.deinit(allocator);
+    for (values) |value| for (value.segments) |segment| {
+        if (segment != .exact_copy) continue;
+        const id = segment.exact_copy.claim_id;
+        const token = @import("reference_support.zig").exact(claims, id) catch {
+            if (boundary == .canonical) return error.InvalidTypedText;
+            continue;
         };
-        if (!eligibleClaim(disposition)) return error.InvalidSpecification;
-    }
+        if (!permitsExactKind(token.value.kind) or !eligibleClaim(dispositionFor(references, id))) {
+            if (boundary == .canonical) return error.InvalidTypedText;
+            continue;
+        }
+        try exact.append(allocator, id);
+    };
+    const effective = try @import("reference_support.zig").lineage(allocator, provenance.claim_ids, exact.items);
+    if (effective.len == 0) return error.InvalidSpecification;
+    const selected = @import("reference_support.zig").select(allocator, claims, inputs, effective) catch |err| switch (err) {
+        error.InvalidReferenceState => return error.InvalidSpecification,
+        else => |other| return other,
+    };
+    for (provenance.claim_ids) |id| if (!eligibleClaim(dispositionFor(references, id))) return error.InvalidSpecification;
     // Stable unique union in selected-claim order, not an arbitrary superset.
-    const citations = resolved.provenance.citation_ids;
+    const citations = selected.citation_ids;
     if (boundary == .canonical) {
         if (citations.len != provenance.citation_ids.len) return error.InvalidSpecification;
         for (citations, provenance.citation_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecification;
     }
-    return resolved;
+    return .{ .provenance = .{ .claim_ids = provenance.claim_ids, .citation_ids = citations, .clarification_response_ids = provenance.clarification_response_ids }, .effective_claim_ids = selected.claim_ids, .scopes = selected.scopes };
 }
 
 pub fn scopes(allocator: std.mem.Allocator, context: Context, provenance: spec.Provenance) Error![]const evidence.Scope {
     return (try resolve(.canonical, allocator, context, provenance)).scopes;
+}
+pub fn scopesFor(allocator: std.mem.Allocator, context: Context, attributed: spec.AttributedValue) Error![]const evidence.Scope {
+    const resolved = resolveUnitRecords(.canonical, allocator, context.inputs, @import("reference_support.zig").records(context.references), attributed.provenance, &.{attributed.value}) catch |err| return if (err == error.InvalidTypedText) error.InvalidSpecification else err;
+    return resolved.scopes;
+}
+pub fn scopesForRecord(allocator: std.mem.Allocator, context: Context, record: spec.RecordProposal) Error![]const evidence.Scope {
+    const resolved = resolveUnitRecords(.canonical, allocator, context.inputs, @import("reference_support.zig").records(context.references), record.provenance, try recordValues(allocator, record.content)) catch |err| return if (err == error.InvalidTypedText) error.InvalidSpecification else err;
+    return resolved.scopes;
 }
 
 /// Construct complete provenance from meaningful, currently eligible selections.
@@ -87,79 +136,151 @@ pub fn select(allocator: std.mem.Allocator, context: Context, selection: spec.Se
     return (try resolve(.model, allocator, context, selection)).provenance;
 }
 
-pub const ValueChoices = struct {
-    normalized: bool = true,
-    exact_copy: []const @FieldType(spec.BusinessValue, "exact_copy"),
+pub fn effectiveClaims(a: std.mem.Allocator, selected: []const r.ClaimId, values: []const spec.BusinessValue) Error![]const r.ClaimId {
+    var exact: std.ArrayList(r.ClaimId) = .empty;
+    defer exact.deinit(a);
+    for (values) |value| for (value.segments) |segment| {
+        if (segment == .exact_copy) try exact.append(a, segment.exact_copy.claim_id);
+    };
+    return @import("reference_support.zig").lineage(a, selected, exact.items);
+}
 
-    pub fn permits(self: ValueChoices, selected: @FieldType(spec.BusinessValue, "exact_copy")) bool {
-        for (self.exact_copy) |choice| if (std.meta.eql(choice, selected)) return true;
-        return false;
+pub fn recordValues(a: std.mem.Allocator, content: spec.Content(spec.BusinessValue)) Error![]const spec.BusinessValue {
+    var values: std.ArrayList(spec.BusinessValue) = .empty;
+    switch (content) {
+        inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+            const value = @field(fields, field.name);
+            if (comptime field.type == spec.BusinessValue) {
+                try values.append(a, value);
+            } else for (value) |relationship| try values.append(a, relationship);
+        },
+    }
+    return values.toOwnedSlice(a);
+}
+
+pub const ValueChoices = struct {
+    exact_copy: []const text.ExactCopy,
+    passive: []const @import("passive_literals.zig").Id = &.{},
+
+    pub fn permits(self: ValueChoices, selected: text.ExactCopy) bool {
+        return text.permitsExact(self.exact_copy, selected);
+    }
+
+    pub fn correction(self: ValueChoices, a: std.mem.Allocator, issue: text.Issue) std.mem.Allocator.Error![]const u8 {
+        const rejected = switch (issue.reason) {
+            .unknown_passive => if (issue.rejected_passive) |id|
+                try std.fmt.allocPrint(a, "passive reference ID {d}", .{id.ordinal})
+            else
+                return issue.description(),
+            .unknown_exact => if (issue.rejected_exact) |handle|
+                try std.fmt.allocPrint(a, "exact-copy claim {d}", .{handle.claim_id.ordinal})
+            else
+                return issue.description(),
+            else => return issue.description(),
+        };
+        defer a.free(rejected);
+        const permitted = if (self.passive.len == 0)
+            (if (self.exact_copy.len == 0)
+                "No passive references or exact-copy values are permitted; return source-backed text strings."
+            else
+                "No passive references are permitted; use source-backed text strings or a listed exact-copy claim.")
+        else if (self.exact_copy.len == 0)
+            "No exact-copy values are permitted; use source-backed text strings or listed passive IDs."
+        else
+            "Use source-backed text strings, listed passive IDs or a listed exact-copy claim.";
+        return std.fmt.allocPrint(a, "Validation failed: {s} is unavailable for this field's authorized evidence. {s} Preserve the fixed evidence and source meaning.", .{ rejected, permitted });
     }
 };
-fn valueChoices(a: std.mem.Allocator, all: r.Items, provenance: spec.Provenance) Error!ValueChoices {
-    var choices: std.ArrayList(@FieldType(spec.BusinessValue, "exact_copy")) = .empty;
-    for (provenance.claim_ids) |id| {
+
+/// Code examples remain reference context under the business-specification contract.
+pub fn permitsExactKind(kind: r.extraction.tokens.Kind) bool {
+    return kind != .code_sample;
+}
+fn valueChoices(a: std.mem.Allocator, all: r.Items, claim_ids: []const r.ClaimId) Error!ValueChoices {
+    var choices: std.ArrayList(text.ExactCopy) = .empty;
+    for (claim_ids) |id| {
         const claim = (try r.item(all, id)).claim;
         if (claim.content == .preserved_token) {
             const token = claim.content.preserved_token;
-            try choices.append(a, .{ .token_id = token.value.id, .citation_id = token.citation_id });
+            if (!permitsExactKind(token.value.kind)) continue;
+            try choices.append(a, .{ .claim_id = id });
         }
     }
     return .{ .exact_copy = try choices.toOwnedSlice(a) };
 }
 pub const Inspection = struct { value_choices: ?ValueChoices = null, part: @import("specification_candidate.zig").Part = .provenance, text_issue: ?text.Issue = null };
 
+pub fn choicesFor(a: std.mem.Allocator, context: Context, selection: spec.Selection) Error!ValueChoices {
+    return resolvedChoices(a, context, try resolve(.model, a, context, selection));
+}
+
+fn resolvedChoices(a: std.mem.Allocator, context: Context, resolved: Resolved) Error!ValueChoices {
+    var choices = try valueChoices(a, try items(context), resolved.effective_claim_ids);
+    const passive = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, resolved.scopes);
+    defer a.free(passive);
+    const ids = try a.alloc(@import("passive_literals.zig").Id, passive.len);
+    for (passive, ids) |record, *id| id.* = record.id;
+    choices.passive = ids;
+    return choices;
+}
+
 fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Context, resolved: Resolved, candidate: spec.BusinessValue, inspection: *Inspection) Error!spec.BusinessValue {
-    inspection.value_choices = try valueChoices(allocator, try items(context), resolved.provenance);
-    return switch (candidate) {
-        .normalized => |proposed| .{ .normalized = switch (try validator.checkBusinessIn(allocator, .{ .registry = context.registry, .current = context.current, .inputs = context.inputs, .scopes = resolved.scopes }, proposed)) {
-            .valid => |checked| checked.value,
-            .invalid => |issue| {
-                inspection.text_issue = issue;
-                return issue.failure();
-            },
-        } },
-        .exact_copy => |selected| result: {
-            if (inspection.value_choices.?.permits(selected)) break :result candidate;
-            return error.InvalidSpecification;
+    inspection.value_choices = try resolvedChoices(allocator, context, resolved);
+    return .{ .segments = switch (try validator.checkBusinessIn(allocator, .{
+        .registry = context.registry,
+        .current = context.current,
+        .inputs = context.inputs,
+        .scopes = resolved.scopes,
+        .exact_copies = inspection.value_choices.?.exact_copy,
+    }, .{ .segments = candidate.segments })) {
+        .valid => |checked| checked.value.segments,
+        .invalid => |issue| {
+            inspection.text_issue = issue;
+            return issue.failure();
         },
-    };
+    } };
 }
 
 /// Intrinsic stored support joins. Current text/path policy is checked by the
 /// live validators with its real toolchain, never reconstructed by a reader.
-pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, references: @import("reference_support.zig").Records, brief: spec.Brief, candidate: spec.IdentifiedContent) Error!void {
+pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @import("passive_literals.zig").Captured, references: @import("reference_support.zig").Records, brief: spec.Brief, candidate: spec.IdentifiedContent) Error!void {
     for ([_]spec.AttributedValue{ brief.title, brief.description, brief.primary_goal, candidate.display_name, candidate.primary_user_story, candidate.entities.basis }) |attributed| {
-        _ = try resolveRecords(.canonical, a, inputs, references, attributed.provenance);
-        try storedValue(a, references.items, attributed.provenance, attributed.value);
+        const resolved = try resolveUnitRecords(.canonical, a, inputs, references, attributed.provenance, &.{attributed.value});
+        try storedValue(inputs, passive, resolved, attributed.value);
     }
     for (candidate.records) |record| {
-        _ = try resolveRecords(.canonical, a, inputs, references, record.proposal.provenance);
+        const values = try recordValues(a, record.proposal.content);
+        const resolved = try resolveUnitRecords(.canonical, a, inputs, references, record.proposal.provenance, values);
         switch (record.proposal.content) {
             inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
                 const value = @field(fields, field.name);
                 if (comptime field.type == spec.BusinessValue) {
-                    try storedValue(a, references.items, record.proposal.provenance, value);
-                } else for (value) |relationship| try storedValue(a, references.items, record.proposal.provenance, relationship);
+                    try storedValue(inputs, passive, resolved, value);
+                } else for (value) |relationship| try storedValue(inputs, passive, resolved, relationship);
             },
         }
     }
 }
 
-fn storedValue(a: std.mem.Allocator, all: r.Items, provenance: spec.Provenance, value: spec.BusinessValue) Error!void {
-    if (value == .exact_copy and !(try valueChoices(a, all, provenance)).permits(value.exact_copy)) return error.InvalidSpecification;
+fn storedValue(inputs: evidence.Inputs, passive: @import("passive_literals.zig").Captured, resolved: Resolved, value: spec.BusinessValue) Error!void {
+    for (value.segments) |segment| switch (segment) {
+        .passive => |reference| {
+            _ = try @import("passive_literals.zig").resolveCaptured(passive, inputs, resolved.scopes, reference.passive_literal_id);
+        },
+        .literal, .exact_copy => {},
+    };
 }
 
 pub fn inspectAttributed(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, inspection: *Inspection) Error!spec.AttributedValue {
     inspection.* = .{};
-    const resolved = try resolve(boundary, allocator, context, candidate.provenance);
+    const resolved = try resolveUnitRecords(boundary, allocator, context.inputs, @import("reference_support.zig").records(context.references), candidate.provenance, &.{candidate.value});
     inspection.part = .{ .value = .value };
     return .{ .value = try valueIn(allocator, validator, context, resolved, candidate.value, inspection), .provenance = resolved.provenance };
 }
 
 pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).RecordProposal, inspection: *Inspection) Error!spec.RecordProposal {
     inspection.* = .{};
-    const resolved = try resolve(boundary, allocator, context, candidate.provenance);
+    const resolved = try resolveUnitRecords(boundary, allocator, context.inputs, @import("reference_support.zig").records(context.references), candidate.provenance, try recordValues(allocator, candidate.content));
     var result: spec.RecordProposal = .{ .content = candidate.content, .provenance = resolved.provenance };
     switch (candidate.content) {
         inline else => |fields, kind| {

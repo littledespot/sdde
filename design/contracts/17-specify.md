@@ -81,10 +81,11 @@ The LLM performs these semantic activities:
 
 1. reference claim extraction and bounded hierarchical reconciliation;
 2. one reference-grounded feature brief containing the human title, description, and primary goal;
-3. specification content generation from the validated brief and complete reconciled claims.
+3. specification content generation from original sources, the validated brief and
+   currently retained claim selections.
 4. focused requirement–principle consistency assessment under §17.3.1.
 
-Calls are split into typed units:
+Typed content covers these concerns; each concern does not require a separate call:
 
 - display title;
 - primary story;
@@ -100,34 +101,87 @@ Calls are split into typed units:
 
 - The LLM does not assign the feature ID, IDs, headings, paths, dates, status, checklist state,
   passive-literal values, clarification lifecycle, or execution status.
-- Every initial brief/spec record selects real claim IDs, one or more exact resolved
+- Every initial brief/spec record has eligible effective reference claims from
+  explicit selections or exact segments, one or more current resolved
   clarification-response IDs, or an allowed combination.
-- Meaningful exact-copy and source selections remain explicit.
-- The engine assigns canonical IDs, validates current authority and selection joins, and
-  constructs reference citation lists as the stable unique union of the selected claims'
-  canonical citations.
+- Meaningful exact-copy and source selections remain explicit. At the coordinated
+  [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md) cutover, each
+  exact segment selects one eligible preserved-token claim occurrence; the
+  model does not repeat its citation or that claim in explicit support merely
+  to satisfy a join. Generation guidance embeds exact values in meaningful
+  business content; a reference alone does not describe behavior or a goal.
+- The engine assigns canonical IDs, validates current authority and selection
+  joins, and derives effective claims and their citation union from explicit
+  support plus exact segments through the shared reference owner.
 - The model does not reproduce that determined union; user answers never receive fabricated
   reference citations.
 - Semantic entailment of arbitrary prose is model-assisted and ultimately user-reviewed; it is
   never misrepresented as deterministic proof.
-- For path/filename/URI display text the model may select only a unit-allowlisted passive ID
-  from the exact registry.
+- For explicit path/filename/URI references the model selects a unit-allowlisted
+  passive ID or an admitted exact occurrence as defined by ADR 0020. Ordinary
+  prose punctuation is not a reference.
+- A valid display reference proves neither business meaning nor source preservation.
+  Existing source review must distinguish a path-valued requirement from a filename
+  substituted for the behavior described in that file; confirmed candidate loss
+  follows existing repair/failure routing, never missing-user-information routing.
 - There is no unreferenced command description to use as provenance.
 - The model returns typed business content rather than Markdown.
 - Each acceptance-criterion proposal contains exactly one nonempty typed `given`, `when`, and
   `then` value; the model does not supply Markdown labels or combine the three values into
   free-form prose.
 
-For each feature-brief or specification unit, the declared model operation returns either content or a clarification need. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
+For each feature-brief or specification unit, the declared model operation returns content, an identifiable clarification need, or an inconclusive interpretation. Inconclusive interpretation fails; it is not missing user information. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
-- Before each declared specification model operation and again over the assembled specification
-  candidate, `AuthorityReconciliationOrchestrator` builds the complete specification-owned
-  requirement set from the reconciled reference claims, required specification fields,
-  preservation descriptors, and conflict/open-question rules.
-- Feature intent or reference meaning that has zero current support, multiple non-equivalent
-  interpretations, missing required detail, unresolved conflict, or uncertain semantic support
-  produces an `SNN`; it cannot be downgraded to an assumption, non-goal, context-only signal,
-  generic prose, or technical-stage decision merely to complete the specification.
+- **Consolidated generation (user-directed simplification, 25 September 2026):**
+  the shipped workflow requests the brief, primary story, entity applicability and
+  complete record collection in four sequential assignments through one shared
+  generation subgraph. Narrative, applicability and record drafting receive their
+  purpose-specific configured prompts. The same purpose prompt accompanies native
+  repairs and their protocol corrections.
+  Functional requirements express behavior and obligation; acceptance criteria
+  express precondition, triggering action and observable outcome. A rejected
+  candidate may omit intent: repair preserves source meaning and correct surrounding
+  content within its authorized scope, not the rejected value's omissions. Literal
+  values alone do not replace the behavior involving them. This guidance is not a
+  deterministic semantic validator or authority to widen a repair target.
+  Record kinds remain closed schema variants; an optional family has no dedicated
+  call or required filler. Assumptions must be
+  supported premises, non-goals supported exclusions, and prohibited behaviors
+  forbidden actions. Positive requirements cannot satisfy those meanings merely
+  by having valid citations. Semantic assessment remains with the existing review.
+  Per-field validation, atomic repair, request identities and total-token accounting
+  retain their existing owners. Request grouping grants no semantic repair authority.
+  Original candidate indices/origins survive canonical section-order projection;
+  reviewed omission repairs resolve canonical IDs back to those original indices.
+  Record insertion kind comes from the authorized requirement, not its request slot.
+  A record clarification must name its closed `record_kind`; other generation
+  units prohibit that field. The existing clarification builder uses that family
+  as its subject, preserving identities across reruns instead of merging all record
+  questions into a new generic subject. This changes no clarification admission rule.
+
+- **Draft-first sequencing (user-approved simplification, 24 September 2026):**
+  complete validated references with at least one selectable retained claim admit
+  execution-local section generation without a
+  model review of specification fields that do not yet exist. The existing source
+  review/repair route still handles blocked references or absence of selectable
+  positive evidence before generation. The native readiness check reuses the
+  provenance owner's eligibility rule; it cannot certify source meaning or create
+  a clarification.
+  Generation and its selected repairs receive original sources through the shared
+  evidence projection, retained claims/citations and exact tokens; a second signal
+  rendering is unnecessary in those requests. Original text is context, not a new
+  provenance selection or permission to cite a discarded claim.
+- Assemble and validate the generated sections, then build the complete
+  specification-owned requirement ledger and perform source-preservation and
+  principle assessment through the existing review owners. The shared authority
+  gate remains mandatory for rendering, state construction and publication.
+  Regeneration retires the prior review projection; changed references still require
+  dependent rebuilding. Drafts confer no completion or downstream authority.
+- A current required business choice genuinely missing or ambiguous in the source
+  produces an `SNN` only after shared [§12.8.1 admission](12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence).
+  Uncertain interpretation, missing extraction or an unverified conflict label does
+  not establish a user decision. Neither a gap nor a candidate defect may be hidden
+  in assumptions, non-goals, context or technical-stage decisions to complete Spec.
 - Entries owned by later technical stages are carried as cited context/obligations without
   asking principles to invent business intent.
 
@@ -153,6 +207,17 @@ evidence before publication. Reuse the existing semantic-assessment request, adm
 owners with a distinct typed assessment purpose; do not create a second policy
 validator, source loader or summary model. YAML declares the calls and typed exits;
 actions retain one responsibility and the runner owns execution.
+
+Guidance must distinguish the business assignment being assessed from the principle
+chunk and source-line range cited as evidence. Assignment ordinals do not identify
+policy chunks. Source-preservation and principle-consistency instructions stay
+specific to their existing typed purposes; the same shared review orchestration
+and each purpose's guidance serve initial review, insertion and selected repair.
+A policy finding explains the relation between business behavior and a cited policy
+passage. A source-comparison concern alone does not establish a policy conflict,
+and a citation's existence does not prove semantic support. Implementation and
+remaining live semantic validation are tracked in
+[FIX_002 §25](../../fixes/FIX_002.md#25-principle-citation-conformance--architecture-review).
 
 - Source-preservation review remains independent: it distinguishes missing source
   authority from extraction/reconciliation loss. Principles are policy evidence,
@@ -198,7 +263,8 @@ existing policy path once its prerequisites hold; retain any cited Plan obligati
 ### 17.4 Specification clarification behavior
 
 - Both need producers follow [shared clarification preparation](12-model-boundary.md#127-workflow-defined-model-operations)
-  before the existing refresh/render/publication path; a diagnostic alone is not a question.
+  after §12.8.1 admission and before refresh/render/publication. A genuine gap beside
+  an unresolved candidate defect cannot bypass the shared precedence rule.
 - Source review assesses meaning, not whether references already contain separate
   stories, acceptance criteria or requirement headings. Known behavior must not be
   requested again merely to fill those categories. Genuine missing actors, outcomes
@@ -251,7 +317,7 @@ The engine validates:
 - duplicate or byte-identical requirements;
 - typed clarification state rather than fragile substring matching;
 - citation validity and reference-file accounting;
-- for every spec record, each authority is either a resolvable claim/citation set, a current resolved clarification response, or an allowed combination; reference citations equal the stable unique union of selected claim citations, while user answers never receive fabricated citations;
+- for every spec record, each authority is either a resolvable reference-claim/citation set, a current resolved clarification response, or an allowed combination; reference citations equal the stable unique union derived under ADR 0020 from explicit support and exact dependencies, while user answers never receive fabricated citations;
 - every retained reference claim has exactly one closed specification disposition: mapped to one or more fixed/allocated spec record keys, context-only signal IDs (including reference-context question signals), a blocking conflict, a specification clarification need bound to its `SNN` record, or an explicit non-spec reason; no claim disappears between the snapshot and specification, and no question becomes a specification content record;
 - derived-feature-brief records cite the reference claims from which they were generated; a later user-authored record requires its explicit acknowledgement provenance;
 - exact user-facing copy obligations;
@@ -259,7 +325,7 @@ The engine validates:
 - presence of separate observable flows when claims explicitly distinguish success, invalid, empty, error, or terminal outcomes;
 - absence of template placeholders and model-authored checklist state;
 - artifact boundary: `spec.md` has no `Reference Context` heading or reference metadata;
-- unbound or operational technical leakage: foreign absolute paths, fenced code, stylesheet declarations, inline known source-file paths/extensions, known framework/package identifiers, and implementation-only handles; an exact validated passive display node is inert but remains subject to semantic business-relevance review;
+- unsupported technical content: existing semantic review assesses whether code, filenames, paths, framework identifiers and implementation details belong in business requirements. Lexical shape alone is not a semantic rejection; explicit references and exact values still require native evidence validation under §7.1;
 - mandatory `reference-context.md` existence, complete section set, and exact binding to the current reference snapshot;
 - equality between the reference inventory and the sidecar's rendered file inventory;
 - unresolved specification-owned conflicts and blocking open questions;
