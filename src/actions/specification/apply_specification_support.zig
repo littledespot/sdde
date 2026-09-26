@@ -6,7 +6,7 @@ pub const Action = struct {
     pub fn execute(_: Action, reviewed: support.Collection) authority.Error!authority.Inputs {
         return switch (reviewed) {
             .accepted => |accepted| accepted.inputs,
-            .rejected => error.InvalidRequiredAuthority,
+            .pending, .rejected => error.InvalidRequiredAuthority,
         };
     }
 };

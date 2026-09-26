@@ -43,6 +43,18 @@ pub fn collection(comptime selected: purpose_contract.Purpose, current: review.P
     if (selected == .source) return if (current == .source) current.source else error.OperationExecutionFailed;
     return if (current == .principles) current.principles.result else error.OperationExecutionFailed;
 }
+pub fn prior(comptime selected: purpose_contract.Purpose, current: review.Progress) operations.Error!?purpose_contract.Contract(selected).Collection {
+    if (selected == .source) return switch (current) {
+        .initial => null,
+        .source => |result| result,
+        else => error.OperationExecutionFailed,
+    };
+    return switch (current) {
+        .pending => null,
+        .principles => |result| result.result,
+        else => error.OperationExecutionFailed,
+    };
+}
 pub fn retain(owner: *owned.Owner, current: review.Progress) void {
     owner.payload = switch (current) {
         .initial => .support_initial,
@@ -57,15 +69,19 @@ pub fn publishProgress(allocator: std.mem.Allocator, owner: *owned.Owner, outcom
     delta.data_replacements[@intFromEnum(schema.key)] = values.adopt(allocator, schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
     return .{ .outcome = outcome, .delta = delta };
 }
-pub fn publish(comptime selected: purpose_contract.Purpose, allocator: std.mem.Allocator, owner: *owned.Owner, prior: review.Progress, result: purpose_contract.Contract(selected).Collection) operations.Error!execution.Candidate {
+pub fn publish(comptime selected: purpose_contract.Purpose, allocator: std.mem.Allocator, owner: *owned.Owner, previous: review.Progress, result: purpose_contract.Contract(selected).Collection) operations.Error!execution.Candidate {
     if (selected == .source) owner.payload = .{ .support = result } else {
-        const retained = pending(prior) catch {
+        const retained = pending(previous) catch {
             owned.destroy(owner);
             return error.OperationExecutionFailed;
         };
         owner.payload = .{ .principle_support = .{ .pending = retained, .result = result } };
     }
-    return publishProgress(allocator, owner, if (result == .accepted) .ok else .invalid);
+    return publishProgress(allocator, owner, switch (result) {
+        .accepted => .ok,
+        .pending => .more,
+        .rejected => .invalid,
+    });
 }
 pub const Initialize = struct {
     pub const Action = @import("../actions/specification/initialize_specification_review.zig").Action;
@@ -90,13 +106,16 @@ pub const BuildInput = struct {
         const current = try progress(&input.step.data);
         const source = try inputs(&input.step.data, current);
         inline for (.{ purpose_contract.Purpose.source, .principles }) |selected| if (purpose(current) == selected) {
-            return requests.publishPacket(self.allocator, self.action.execute(selected, self.allocator, source, try spec.readContext(&input.step.data)) catch return error.OperationExecutionFailed);
+            var arena = std.heap.ArenaAllocator.init(self.allocator);
+            defer arena.deinit();
+            const target = purpose_contract.Contract(selected).nextSubject(arena.allocator(), source, try prior(selected, current)) catch return error.OperationExecutionFailed;
+            return requests.publishPacket(self.allocator, self.action.execute(selected, self.allocator, source, try spec.readContext(&input.step.data), target) catch return error.OperationExecutionFailed);
         };
         unreachable;
     }
 };
 pub const Collect = struct {
-    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };
     pub const Action = @import("../actions/specification/collect_specification_support.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -109,7 +128,7 @@ pub const Collect = struct {
         const source_context = try spec.readContext(&input.step.data);
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         inline for (.{ purpose_contract.Purpose.source, .principles }) |selected| if (purpose(current) == selected) {
-            const result = self.action.execute(selected, owner.arena.allocator(), source, source_context, packet, handoff.body, handoff.origin) catch {
+            const result = self.action.execute(selected, owner.arena.allocator(), source, source_context, try prior(selected, current), packet, handoff.body, handoff.origin) catch {
                 owned.destroy(owner);
                 return error.OperationExecutionFailed;
             };

@@ -638,10 +638,13 @@ subgraphs:
         on: {ok: collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect:
         use: collect-specification-support
-        on: {ok: release, invalid: authorize, failed: end.failed}
+        on: {ok: release, more: release-more, invalid: authorize, failed: end.failed}
       release:
         call: release-request
         on: {ok: end.ok, failed: end.failed}
+      release-more:
+        call: release-request
+        on: {ok: input, failed: end.failed}
       authorize:
         use: authorize-specification-support-repair
         on: {ok: retire, more: merge, blocked: end.blocked, failed: end.failed}
@@ -666,7 +669,7 @@ subgraphs:
         use: merge-specification-support-repair
         with:
           retry-limit: 2
-        on: {ok: release, invalid: authorize, failed: end.failed}
+        on: {ok: release, more: release-more, invalid: authorize, failed: end.failed}
   generate-specification:
     start: initialize-specification
     steps:

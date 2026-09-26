@@ -56,8 +56,10 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             const Scope = struct { owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, purpose: @import("specification_support.zig").Purpose, origin: ?Origin };
             permit.key.scope = (try shared.snapshot(Scope, a, .{ .owner = authorization.owner, .purpose = purpose, .origin = candidate.origin })).bytes;
             if (candidate.last_repair) |last| if (last.retry) |prior| {
-                if (!std.mem.eql(u8, &prior.key.scope, &permit.key.scope)) return error.InvalidAtomicRepair;
-                permit.maximum_targets = prior.maximum_targets;
+                if (std.mem.eql(u8, &prior.key.target, &permit.key.target)) {
+                    if (!std.mem.eql(u8, &prior.key.scope, &permit.key.scope)) return error.InvalidAtomicRepair;
+                    permit.maximum_targets = prior.maximum_targets;
+                }
             };
             result.retry = permit;
             return result;
@@ -66,7 +68,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
         /// Full collection validation has already run; inspect the selected native
         /// family across all diagnostics, never just the next selected diagnostic.
         pub fn progress(authorization: Authorization, result: review.Collection) retry.Validation {
-            if (result == .accepted or authorization.operation == .delete) return .resolved;
+            if (result == .accepted or result == .pending or authorization.operation == .delete) return .resolved;
             for (result.rejected.rejection.diagnostics) |issue| {
                 if (issue.requirement == null or !std.meta.eql(issue.requirement.?, authorization.target.requirement)) continue;
                 const unresolved = switch (authorization.operation) {
@@ -85,14 +87,14 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
 
         pub fn authorize(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, rejected: @FieldType(review.Collection, "rejected")) Error!Authorization {
             const candidate = rejected.candidate orelse return error.UnsafeSupportRepair;
-            const current = try review.validate(a, inputs, context.inputs, candidate);
+            const current = if (candidate.working) try review.validateWorking(a, inputs, context.inputs, candidate) else try review.validate(a, inputs, context.inputs, candidate);
             if (current != .rejected or !std.meta.eql(try shared.snapshot(review.Rejection, a, current.rejected.rejection), try shared.snapshot(review.Rejection, a, rejected.rejection))) return error.InvalidAtomicRepair;
             const rejection = rejected.rejection.selected() orelse return error.InvalidAtomicRepair;
             if (purpose == .source) if (rejection.evidence) |invalid| if (invalid.issue == .invalid_loss) return error.UnsafeSupportRepair;
             const id = rejection.requirement orelse return error.UnsafeSupportRepair;
             if (authority.policy(id) == null) return error.UnsafeSupportRepair;
             const ordinal = rejection.ordinal orelse return error.UnsafeSupportRepair;
-            const base = try review.packet(a, inputs, context);
+            const base = try review.packetFor(a, inputs, context, .{ .finding = id });
             defer packets.release(base);
             const facts: Facts = .{ .inputs = inputs, .sources = context.inputs, .candidate = candidate };
             if (rejection.issue == .missing_finding) return bindRetry(a, try atomic.authorizeInsert(a, base.unit(), candidate.revision, .{ .requirement = id, .ordinal = ordinal, .index = candidate.review.entries.len }, .finding, facts, .{ .rejection = rejection, .finding = null }));
@@ -140,7 +142,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
         pub const parse = atomic.parse;
         pub fn merge(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, candidate: review.Candidate, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!review.Collection {
             const target = authorization.target;
-            const base = try review.packet(a, inputs, context);
+            const base = try review.packetFor(a, inputs, context, .{ .finding = target.requirement });
             defer packets.release(base);
             const expected: ?Replacement = if (authorization.operation == .insert) null else valueAt(candidate, target.index, std.meta.activeTag(if (authorization.operation == .replace) authorization.operation.replace else authorization.operation.delete));
             const facts: Facts = .{ .inputs = inputs, .sources = context.inputs, .candidate = candidate };
@@ -176,7 +178,8 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 .insert => try candidate.occurrences.inserting(a, target.index, candidate.review.entries.len),
                 .delete => try candidate.occurrences.deleting(a, target.index, candidate.review.entries.len),
             };
-            return review.validate(a, inputs, context.inputs, .{ .omission_conflict_claims = candidate.omission_conflict_claims, .review = .{ .entries = try entries.toOwnedSlice(a) }, .revision = merged.revision_after, .origin = candidate.origin, .origins = try origins.toOwnedSlice(a), .last_repair = merged, .occurrences = occurrences });
+            const next: review.Candidate = .{ .omission_conflict_claims = candidate.omission_conflict_claims, .review = .{ .entries = try entries.toOwnedSlice(a) }, .revision = merged.revision_after, .working = candidate.working, .origin = candidate.origin, .origins = try origins.toOwnedSlice(a), .last_repair = merged, .occurrences = occurrences };
+            return if (candidate.working) review.validateWorking(a, inputs, context.inputs, next) else review.validate(a, inputs, context.inputs, next);
         }
         fn valueAt(candidate: review.Candidate, index: usize, kind: std.meta.Tag(Replacement)) ?Replacement {
             if (index >= candidate.review.entries.len) return null;

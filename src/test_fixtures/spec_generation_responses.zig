@@ -8,7 +8,7 @@ const native = @import("../application/reference_extraction_workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
 pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text, occupied_summary, occupied_signals, occupied_conflict, permuted_disposition, permuted_conflict_disposition, misbound_summary, misbound_signals };
-pub const SupportFault = enum { inconclusive, missing_detail, foreign_provenance, missing_finding, duplicate_finding, partial_findings, two_missing_findings, foreign_sources, question_recover, question_exhaust, question_native_exhaust, question_mixed_exhaust, question_evidence_recover, question_evidence_exhaust, question_evidence_alternating, one_finding };
+pub const SupportFault = enum { inconclusive, missing_detail, foreign_provenance, foreign_sources, question_recover, question_exhaust, question_native_exhaust, question_mixed_exhaust, question_evidence_recover, question_evidence_exhaust, question_evidence_alternating };
 // Semantic outcomes remain scripted candidates, not native semantic proof.
 pub const Applicability = enum {
     unjustified,
@@ -34,7 +34,7 @@ fn falseConflict(mode: ?SourceLoss) bool {
     return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions;
 }
 
-pub const PrincipleFault = enum { recover, repeated, alternating, missing_finding };
+pub const PrincipleFault = enum { recover, repeated, alternating };
 pub const Options = struct {
     global_sequence: ?@import("global_protocol_sequence.zig").Mode = null,
     summary_sequence: ?@import("summary_protocol_sequence.zig").Mode = null,
@@ -440,6 +440,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             if (workflow.purpose(progress) == .principles) {
                 const policy_inputs = try workflow.inputs(&view, progress);
                 const policy = @import("../domain/specification_support.zig").Contract(.principles);
+                const selected_index = if (request.id().purpose == .atomic_repair) 0 else try reviewIndex(allocator, policy_inputs, try policy.nextSubject(allocator, policy_inputs, try workflow.prior(.principles, progress)));
                 const findings = try allocator.alloc(policy.Finding, policy_inputs.seeds.len);
                 const id = policy_inputs.principle_context.?.selection.chunks[0];
                 for (findings, 0..) |*finding, index| finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .decision = if (options.principle_conflict and index == 0) .conflicting else .compatible, .citations = if (options.principle_conflict and index == 0) &.{.{ .chunk = .{ .ordinal = 999 }, .first_line = 1, .last_line = 1 }} else &.{}, .detail = if (options.principle_conflict and index == 0) (if (options.applicability != null) "The output-only policy conflicts with the additional source-required output; Plan must resolve it." else "The business retention requirement conflicts with policy; Plan must resolve it.") else "" } };
@@ -456,22 +457,23 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                             return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, .{ .finding = value });
                         }
                         const citations: []const @import("../domain/principle_registry.zig").Citation = switch (fault) {
-                            .recover, .missing_finding => good,
+                            .recover => good,
                             .repeated => state.authorization.operation.replace.selection.citations,
                             .alternating => if (options.principle_repair_calls % 2 == 0) &.{.{ .chunk = id, .first_line = 1, .last_line = 2 }} else &.{.{ .chunk = .{ .ordinal = state.authorization.target.ordinal }, .first_line = 1, .last_line = 1 }},
                         };
                         return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, .{ .selection = .{ .citations = citations } });
                     }
-                    return @import("../domain/model_candidate_json.zig").encode(policy.Review, allocator, .{ .entries = if (fault == .missing_finding) findings[0 .. findings.len - 1] else findings });
+                    return @import("../domain/model_candidate_json.zig").encode(policy.Value, allocator, findings[selected_index].value);
                 }
                 if (request.id().purpose == .atomic_repair) {
                     if (options.attempt == 1) return "{}";
                     return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_support_repair.zig").Contract(.principles).Replacement, allocator, .{ .selection = .{ .citations = &.{.{ .chunk = id, .first_line = 1, .last_line = 1 }} } });
                 }
-                return @import("../domain/model_candidate_json.zig").encode(policy.Review, allocator, .{ .entries = findings });
+                return @import("../domain/model_candidate_json.zig").encode(policy.Value, allocator, findings[selected_index].value);
             }
             const inputs = try @import("../application/required_authority_values.zig").read(&view, @import("../application/required_authority_workflow.zig").inputs_schema, .inputs);
             const ledger = try a.build(allocator, inputs);
+            const selected_index = if (request.id().purpose == .atomic_repair) 0 else try reviewIndex(allocator, inputs, try @import("../domain/specification_support.zig").Source.nextSubject(allocator, inputs, try workflow.prior(.source, progress)));
             const context = try @import("../application/specification_workflow.zig").readContext(&view);
             const all = try @import("../domain/specification_provenance.zig").items(context);
             const findings = try allocator.alloc(@import("../domain/specification_support.zig").Source.Finding, ledger.requirements.len);
@@ -624,10 +626,6 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 if (options.support_fault == .foreign_sources and options.support_merges == 0) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, authorized.operation.replace);
                 var value = findings[authorized.target.ordinal - 1].value;
                 if (options.support_fault == .foreign_sources) value.source_ids = &.{context.inputs.corpus.sources[0].id};
-                if (options.support_fault == .partial_findings) {
-                    if (authorized.operation == .replace) return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, authorized.operation.replace);
-                    value.provenance.claim_ids = &.{.{ .ordinal = @intCast(all.entries.len + 1) }};
-                }
                 const kind = switch (authorized.operation) {
                     .replace => |replacement| std.meta.activeTag(replacement),
                     .insert => |kind| kind,
@@ -640,7 +638,6 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 };
                 return @import("../domain/model_candidate_json.zig").encodeSelected(repair.Replacement, allocator, replacement);
             }
-            var entries: []const @import("../domain/specification_support.zig").Source.Finding = findings;
             if (options.evidence_fault != null) for (ledger.requirements, findings) |requirement, *finding| {
                 if (requirement.seed.id.kind == .entity_applicability) {
                     if (inputs.specification == null) finding.value.kind = .not_applicable;
@@ -686,16 +683,11 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         findings[0].value.detail = "";
                     },
                     .foreign_provenance => findings[0].value.provenance.claim_ids = &.{.{ .ordinal = 999999 }},
-                    .missing_finding => entries = findings[1..],
-                    .one_finding => entries = findings[0..1],
-                    .partial_findings => entries = findings[0..2],
-                    .two_missing_findings => entries = findings[2..],
                     .foreign_sources => {
                         // R29's seven findings confuse the source namespace with
                         // claim ordinals. The first repair repeats that mistake.
                         for ([_]usize{ 1, 4, 5, 6, 7, 8, 10 }) |index| findings[index].value.source_ids = &.{.{ .ordinal = 2 }};
                     },
-                    .duplicate_finding => entries = try std.mem.concat(allocator, @import("../domain/specification_support.zig").Source.Finding, &.{ findings, findings[0..1] }),
                 }
             }
             if (options.applicability) |mode| for (ledger.requirements, findings) |requirement, *finding| {
@@ -725,10 +717,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     },
                 }
             };
-            return @import("../domain/model_candidate_json.zig").encode(@import("../domain/specification_support.zig").Source.Review, allocator, .{ .entries = entries });
+            return @import("../domain/model_candidate_json.zig").encode(@import("../domain/specification_support.zig").Source.Value, allocator, findings[selected_index].value);
         },
         else => return error.InvalidFixture,
     }
+}
+fn reviewIndex(allocator: std.mem.Allocator, inputs: a.Inputs, selected: a.Id) !usize {
+    const ledger = try a.build(allocator, inputs);
+    for (ledger.requirements, 0..) |requirement, index| if (std.meta.eql(requirement.seed.id, selected)) return index;
+    return error.InvalidFixture;
 }
 fn businessValue(allocator: std.mem.Allocator, claim: r.extraction.Claim) !?g.spec.BusinessValue {
     return switch (claim.content) {

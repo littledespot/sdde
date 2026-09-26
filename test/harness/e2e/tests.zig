@@ -1050,7 +1050,12 @@ test "reports preserve native extraction reconciliation specification and comple
         var omission_inputs = review_inputs;
         omission_inputs.review_origin = origin;
         retained[4] = try (Diagnostic{ .support_findings = .from(.source, omission_inputs, .unlocalized_omission) }).copy(a);
-        const missing = (try @import("../../../src/domain/specification_support.zig").Source.collect(scratch, review_inputs, context, "{\"entries\":[]}", origin)).rejected;
+        const missing = (try @import("../../../src/domain/specification_support.zig").Source.validate(scratch, review_inputs, context.inputs, .{
+            .review = .{ .entries = &.{} },
+            .origin = origin,
+            .origins = &.{},
+            .omission_conflict_claims = context.references.records.assignments.checked.prior.prior.source.omission_conflict_claims,
+        })).rejected;
         try std.testing.expect(missing.rejection.diagnostics.len > 1);
         retained[3] = try (Diagnostic{ .support = missing.rejection }).copy(a);
         const registry = @import("../../../src/domain/principle_registry.zig");

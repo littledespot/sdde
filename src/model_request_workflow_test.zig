@@ -3752,7 +3752,7 @@ test "protocol retries retain only latest repeated or alternating decoder reject
     }
 }
 
-test "R31 syntax nesting and sibling loss retain correction scope through recovery or exhaustion" {
+test "selected review nesting and sibling loss retain correction scope through recovery or exhaustion" {
     for ([_]bool{ false, true }) |consolidated| {
         for ([_]bool{ false, true }) |recover| {
             var fixture: Fixture = undefined;
@@ -3760,9 +3760,9 @@ test "R31 syntax nesting and sibling loss retain correction scope through recove
             defer fixture.deinit();
             const a = fixture.arena.allocator();
             const support_schema = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited);
-            const misplaced = try protocolReview(a, 11, true);
+            const misplaced = try protocolReview(a, true);
             const cases = [_]struct { schema: []const u8, invalid: []const u8, dropped: []const u8, corrected: []const u8, path: []const u8, reason: payload_validation.Rejection }{
-                .{ .schema = support_schema, .invalid = misplaced, .dropped = try protocolReview(a, 1, true), .corrected = try protocolReview(a, 11, false), .path = "/entries/0/source_ids", .reason = .unknown_property },
+                .{ .schema = support_schema, .invalid = misplaced, .dropped = misplaced, .corrected = try protocolReview(a, false), .path = "/kind", .reason = .missing_required_property },
                 .{
                     .schema = "{\"type\":\"object\",\"properties\":{\"groups\":{\"type\":\"array\",\"maxItems\":3,\"items\":{\"type\":\"object\",\"properties\":{\"items\":{\"type\":\"array\",\"maxItems\":3,\"items\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"text\"},\"value\":{\"type\":\"string\",\"maxLength\":40}},\"required\":[\"kind\",\"value\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"flag\"},\"value\":{\"type\":\"boolean\"}},\"required\":[\"kind\",\"value\"],\"additionalProperties\":false}]}}},\"required\":[\"items\"],\"additionalProperties\":false}}},\"required\":[\"groups\"],\"additionalProperties\":false}",
                     .invalid = "{\"groups\":[{\"items\":[{\"value\":\"Keep this text.\"},{\"kind\":\"flag\",\"value\":true}]}]}",
@@ -3920,21 +3920,13 @@ fn correctionAllocation(allocator: std.mem.Allocator, fixture: *Fixture, graph: 
     try std.testing.expectEqual(@as(u128, 14), runner.tokenLedger().committed());
 }
 
-// Independently authored wire data: preserve all eleven distinct findings while
-// moving only the fields that R31 incorrectly placed beside `value`.
-fn protocolReview(a: std.mem.Allocator, count: usize, misplaced: bool) ![]const u8 {
-    const rows = try a.alloc([]const u8, count);
-    for (rows, 1..) |*row, ordinal| {
-        const provenance = .{ .claim_ids = [1]u32{1}, .clarification_response_ids = [0]u32{} };
-        const sources = [1]u32{1};
-        const detail = try std.fmt.allocPrint(a, "Evidence for requirement {d}.", .{ordinal});
-        const loss = .{ .kind = "unlocalized" };
-        row.* = if (misplaced)
-            try std.json.Stringify.valueAlloc(a, .{ .requirement_ordinal = ordinal, .value = .{ .kind = "supported", .provenance = provenance }, .source_ids = sources, .detail = detail, .loss = loss }, .{})
-        else
-            try std.json.Stringify.valueAlloc(a, .{ .requirement_ordinal = ordinal, .value = .{ .kind = "supported", .provenance = provenance, .source_ids = sources, .detail = detail, .loss = loss } }, .{});
-    }
-    return std.mem.concat(a, u8, &.{ "{\"entries\":[", try std.mem.join(a, ",", rows), "]}" });
+// A selected review returns one finding value; an extra `value` wrapper is invalid.
+fn protocolReview(a: std.mem.Allocator, misplaced: bool) ![]const u8 {
+    const provenance = .{ .claim_ids = [1]u32{1}, .clarification_response_ids = [0]u32{} };
+    const sources = [1]u32{1};
+    const loss = .{ .kind = "unlocalized" };
+    const value = .{ .kind = "supported", .provenance = provenance, .source_ids = sources, .detail = "Evidence for this requirement.", .loss = loss };
+    return if (misplaced) try std.json.Stringify.valueAlloc(a, .{ .value = value }, .{}) else try std.json.Stringify.valueAlloc(a, value, .{});
 }
 
 test "metadata and diagnostic echoes exhaust protocol retries without acceptance or extra accounting" {

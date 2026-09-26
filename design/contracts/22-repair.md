@@ -142,6 +142,21 @@ The repair guidance contains:
 - the exact replacement schema;
 - the instruction that unrelated fields must not be returned or changed.
 
+**Focused-review repair (approved 26 September 2026).** A produced finding is
+validated before the next native subject is requested. A mechanically invalid
+finding may use the existing selected-value/field atomic repair while other
+subjects remain pending; pending subjects do not produce missing-finding defects.
+Authorization binds the current diagnostic, typed subject, original value,
+revision and dependencies. An admitted negative or inconclusive finding remains
+review data; repair cannot change its verdict. Protocol correction stays on the
+same request assignment and selected schema. The collection's first admitted
+native-candidate origin stays fixed through later findings and repairs, while each
+finding retains its own origin. Complete membership, evidence and relationship
+validation run before reconciliation, publication or clarification. The existing
+runner owns request retirement, per-assignment and native-defect retry allowances,
+and global actual-token accounting; successful independent work does not reset an
+unresolved target or replenish the finite budget.
+
 Unavailable passive/exact-copy diagnostics identify the rejected selection and
 location. Existing native evidence choices drive both schema narrowing (§12.2)
 and concise corrective guidance: state validation failed, name unavailable

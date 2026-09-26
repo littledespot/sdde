@@ -1,67 +1,5 @@
 {
   "$defs": {
-    "review": {
-      "type": "object",
-      "properties": {
-        "entries": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "requirement_ordinal": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 4294967295
-              },
-              "value": {
-                "$ref": "#/$defs/finding"
-              }
-            },
-            "required": [
-              "requirement_ordinal",
-              "value"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
-        }
-      },
-      "required": [
-        "entries"
-      ],
-      "additionalProperties": false
-    },
-    "review_applicability": {
-      "type": "object",
-      "properties": {
-        "entries": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "requirement_ordinal": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 4294967295
-              },
-              "value": {
-                "$ref": "#/$defs/applicability_finding"
-              }
-            },
-            "required": [
-              "requirement_ordinal",
-              "value"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
-        }
-      },
-      "required": [
-        "entries"
-      ],
-      "additionalProperties": false
-    },
     "finding": {
       "oneOf": [
         {
@@ -361,37 +299,6 @@
       ],
       "additionalProperties": false
     },
-    "principle_review": {
-      "type": "object",
-      "properties": {
-        "entries": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "requirement_ordinal": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 4294967295
-              },
-              "value": {
-                "$ref": "#/$defs/principle_finding"
-              }
-            },
-            "required": [
-              "requirement_ordinal",
-              "value"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
-        }
-      },
-      "required": [
-        "entries"
-      ],
-      "additionalProperties": false
-    },
     "question_value": {
       "type": "string",
       "minLength": 1,
@@ -666,5 +573,5 @@
       "additionalProperties": false
     }
   },
-  "$ref": "#/$defs/review"
+  "$ref": "#/$defs/finding"
 }

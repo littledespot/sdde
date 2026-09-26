@@ -271,6 +271,21 @@ control. OpenAI rubric evaluation remains outside this amendment.
 - The internal `model-request/v1` content contract is not a YAML resource; the workflow supplies
   prompt content and its closed result-schema resource.
 
+**Focused semantic reviews (approved 26 September 2026).** For a review whose
+required subjects are known natively, the review owner selects one subject from
+its ordered ledger and binds its typed ID, purpose, parent and current dependencies
+to the request. The response is one semantic value under the selected canonical
+finding schema; it does not return the assigned ID, ordinal, expected count or
+collection-completion flag. Source-preservation, candidate-support and principle
+reviews use this shared contract. The review packet owner derives a bounded slot
+from the purpose prefix and SHA-256 of the existing canonical typed-subject
+snapshot, and binds that same slot as unit owner and semantic-review purpose.
+Request identity excludes attempt, mutable text and revision; the exact dependency
+binding rejects stale responses. The runner retires each completed request before
+another subject is selected. Native review progress retains admitted findings and
+their origins; pending subjects are work, not missing findings. Only complete
+native collection validation permits authority advancement.
+
 - The workflow-selected slot must resolve through `.sddtoolkit.json` `models.slots`,
   `ValidatedRepositoryModelAllowlist`, the validated `.sddproviders.json` catalogue entry, and
   one compiled provider/model contract.
