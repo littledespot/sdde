@@ -1110,7 +1110,7 @@ ownership refactor; ADR 0020's exact-handle runtime behavior begins in Phase 2.
 
 **2.2 — Requests and configured schemas — done.** Depends on 2.1.
 
-- **Closed scope:** the latest run in §2 exposed an unconditional exact-copy
+- **Closed scope:** the earlier post-cutover run in §2 exposed an unconditional exact-copy
   instruction in a string-only repair. Replace it consistently in the existing
   purpose prompts. Also restrict offered exact/passive replacements from the same
   authorized owning-unit facts used by native validation, preserving broad source
@@ -1399,8 +1399,8 @@ independently of this first contract.
 conformance, including packaged behavior. The latest retained run used corrected
 guidance and accepted a valid derived reference, but still produced poor interim
 content and exhausted missing-answer recovery before publication or grading.
-This assessment launched no provider calls or E2E. Phase 3 supplies independent offline integration and
-measurements; Phase 4 requires separately approved live effectiveness and a
+This assessment launched no provider calls or E2E. Phase 3 supplies independent
+offline integration and measurements; Phase 4 requires separately approved live effectiveness and a
 published, scored output. ADR 0020's explicitly excluded extensions remain
 unapproved.
 Existing regression owners include [specification generation tests](../src/specification_generation_test.zig),
