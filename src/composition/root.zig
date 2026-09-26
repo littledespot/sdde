@@ -2272,7 +2272,8 @@ test "configured specification generation YAML executes native references models
                 inline for (.{ "title", "description", "primary_goal" }) |field| {
                     const attributed = @field(brief, field);
                     try std.testing.expect(attributed.value.segments[0] == .literal);
-                    try std.testing.expectEqual(@as(usize, 2), attributed.provenance.claim_ids.len);
+                    try std.testing.expectEqual(@as(usize, 1), attributed.provenance.claim_ids.len);
+                    try std.testing.expectEqualDeep(brief.title.provenance.claim_ids, attributed.provenance.claim_ids);
                 }
             }
         }

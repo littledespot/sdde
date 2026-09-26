@@ -91,7 +91,10 @@ fn matching(a: std.mem.Allocator, context: p.Context, checked: g.Checked, target
     if (!r.contains(r.ClaimId, value.provenance.claim_ids, rejection.claim_id)) return null;
     // Reuse the canonical text projector, including passive references and any
     // literal segmentation. Equality proves no business bytes are discarded.
-    const scalar = try @import("specification_projection.zig").scalar(a, context, value);
+    const scalar = if (target.subject == .record)
+        try @import("specification_projection.zig").recordScalar(a, context, checked.response.content.records[target.subject.record], value.value)
+    else
+        try @import("specification_projection.zig").scalar(a, context, value);
     return if (std.mem.eql(u8, scalar.bytes, rejection.issue.missing_exact_copy.value.raw_value.bytes)) target else null;
 }
 fn authorizeTarget(a: std.mem.Allocator, facts: Facts, target: ValueTarget, rejection: coverage.Rejection) Error!Decision {
@@ -106,8 +109,7 @@ pub fn merge(a: std.mem.Allocator, validator: @import("typed_text.zig").Validato
     const target = authorization.target;
     if (target.part != .value or authorization.rule != .coverage) return error.InvalidSpecificationCoverageRepair;
     if (authorization.rule.coverage.issue != .missing_exact_copy) return error.InvalidSpecificationCoverageRepair;
-    const token = authorization.rule.coverage.issue.missing_exact_copy;
-    return mergeChecked(a, validator, context, facts, authorization, .{ .value = .{ .segments = &.{.{ .exact_copy = .{ .token_id = token.value.id, .citation_id = token.citation_id } }} } }, null);
+    return mergeChecked(a, validator, context, facts, authorization, .{ .value = .{ .segments = &.{.{ .exact_copy = .{ .claim_id = authorization.rule.coverage.claim_id } }} } }, null);
 }
 
 fn reviewedFacts(a: std.mem.Allocator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, support: Support) Error!Facts {
@@ -136,7 +138,8 @@ pub fn authorizeOmission(a: std.mem.Allocator, validator: @import("typed_text.zi
         const selected = target.part.value;
         const value = try candidates.attributedValue(.canonical, current.units[target.unit].?.response, selected.subject, selected.field);
         const provenance = evidence.review.?.provenance;
-        r.sameSet(r.ClaimId, provenance.claim_ids, value.provenance.claim_ids) catch |err| switch (err) {
+        const effective = try effectiveTarget(a, current.units[target.unit].?, selected.subject, selected.field);
+        r.sameSet(r.ClaimId, provenance.claim_ids, effective) catch |err| switch (err) {
             error.InvalidReferenceReconciliation => continue,
             else => return err,
         };
@@ -195,7 +198,11 @@ pub fn omissionPacket(a: std.mem.Allocator, current: sessions.Session, context: 
     const facts = try reviewedFacts(arena.allocator(), current, context, candidate, support);
     try atomic.checkDependencies(a, authorization, facts);
     const packets = @import("model_input_packet.zig");
-    const base = try sessions.packetFor(a, current, context, authorization.target.unit);
+    const allowed: ?[]const r.ClaimId = if (authorization.target.part == .value) allowed: {
+        const selected = authorization.target.part.value;
+        break :allowed try effectiveTarget(a, current.units[authorization.target.unit].?, selected.subject, selected.field);
+    } else null;
+    const base = try sessions.packetForChoices(a, current, context, authorization.target.unit, allowed);
     defer packets.release(base);
     const contextual = try packets.withContext(g.spec.IdentifiedContent, a, base, "candidate", candidate);
     defer packets.release(contextual);
@@ -204,7 +211,7 @@ pub fn omissionPacket(a: std.mem.Allocator, current: sessions.Session, context: 
     const narrowed = if (authorization.target.part == .value) narrow: {
         const target = authorization.target.part.value;
         const value = try candidates.attributedValue(.canonical, current.units[authorization.target.unit].?.response, target.subject, target.field);
-        break :narrow try sessions.withSelectionChoices(a, contextual, context, .{ .claim_ids = value.provenance.claim_ids, .clarification_response_ids = value.provenance.clarification_response_ids });
+        break :narrow try sessions.withSelectionChoices(a, contextual, context, .{ .claim_ids = allowed.?, .clarification_response_ids = value.provenance.clarification_response_ids });
     } else try packets.withExcludedVariants(a, contextual, contextual.excludedVariants());
     defer packets.release(narrowed);
     return atomic.packet(a, authorization, narrowed, .{ .bytes = definition }, current.units[authorization.target.unit].?.origins.at(switch (authorization.target.part) {
@@ -236,6 +243,16 @@ fn mergeChecked(a: std.mem.Allocator, validator: @import("typed_text.zig").Valid
         .value => |field| target_value: {
             if (replacement != .value) return error.InvalidSpecificationCoverageRepair;
             response = try candidates.replaceCanonicalValue(a, response, field.subject, field.field, replacement.value);
+            const prior = try candidates.attributedValue(.canonical, checked.response, field.subject, field.field);
+            const updated = try candidates.attributedValue(.canonical, response, field.subject, field.field);
+            const values = if (field.subject == .record)
+                try p.recordValues(a, response.content.records[field.subject.record].content)
+            else
+                &.{updated.value};
+            const resolved = try p.lineageForRepair(a, context, .{ .claim_ids = updated.provenance.claim_ids, .clarification_response_ids = updated.provenance.clarification_response_ids }, values);
+            try r.sameSet(r.ClaimId, try effectiveTarget(a, checked, field.subject, field.field), resolved.effective_claim_ids);
+            try r.sameSet(r.CitationId, prior.provenance.citation_ids, resolved.provenance.citation_ids);
+            response = try candidates.replaceCanonicalProvenance(a, response, field.subject, resolved.provenance);
             break :target_value .{ .value = .{ .subject = field.subject, .field = field.field } };
         },
         .record => |index| record: {
@@ -261,9 +278,18 @@ fn mergeChecked(a: std.mem.Allocator, validator: @import("typed_text.zig").Valid
     return next;
 }
 
+fn effectiveTarget(a: std.mem.Allocator, checked: g.Checked, subject: candidates.Subject, field: candidates.ValueField) Error![]const r.ClaimId {
+    const value = try candidates.attributedValue(.canonical, checked.response, subject, field);
+    const values = if (subject == .record)
+        try p.recordValues(a, checked.response.content.records[subject.record].content)
+    else
+        &.{value.value};
+    return p.effectiveClaims(a, value.provenance.claim_ids, values);
+}
+
 fn repairSubject(rule: Rule) Error!RepairSubject {
     return switch (rule) {
-        .coverage => |rejection| if (rejection.issue == .missing_exact_copy) .{ .token = .{ .token_id = rejection.issue.missing_exact_copy.value.id, .citation_id = rejection.issue.missing_exact_copy.citation_id } } else error.InvalidSpecificationCoverageRepair,
+        .coverage => |rejection| if (rejection.issue == .missing_exact_copy) .{ .token = rejection.claim_id } else error.InvalidSpecificationCoverageRepair,
         .omission => |evidence| .{ .requirement = evidence.requirement },
     };
 }
@@ -292,13 +318,9 @@ pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!ret
 pub fn coverageValidation(a: std.mem.Allocator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent) Error!?retry.Transition {
     const receipt = current.pending_coverage_repair orelse return null;
     if (current.revision != std.math.add(u64, receipt.permit.revision, 1) catch return error.InvalidSpecificationCoverageRepair) return error.InvalidSpecificationCoverageRepair;
-    const selected = receipt.target;
-    const token = for ((try p.items(context)).entries) |item| {
-        if (item.claim.content != .preserved_token) continue;
-        const value = item.claim.content.preserved_token;
-        if (std.meta.eql(value.value.id, selected.token_id) and std.meta.eql(value.citation_id, selected.citation_id)) break value;
-    } else return error.InvalidSpecificationCoverageRepair;
-    const targets = try coverage.exactTargets(a, current.units[0].?.response.content.brief, candidate, token);
+    const claim = (try r.item(try p.items(context), receipt.target)).claim;
+    if (claim.content != .preserved_token) return error.InvalidSpecificationCoverageRepair;
+    const targets = try coverage.exactTargets(a, current.units[0].?.response.content.brief, candidate, receipt.target);
     defer a.free(targets);
     return .{ .validated = .{ .permit = receipt.permit, .revision = current.revision, .result = if (targets.len != 0) .resolved else .recurring } };
 }

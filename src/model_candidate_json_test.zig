@@ -74,7 +74,7 @@ const response_wire = struct {
     const segments = "[\"Display the status\",{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "}]";
     const nodes = "[\"Source meaning\",{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "},{\"kind\":\"source\",\"source_id\":" ++ id ++ "}]";
     const normalized = segments;
-    const exact = "[{\"kind\":\"exact_copy\",\"token_id\":" ++ id ++ ",\"citation_id\":" ++ id ++ "}]";
+    const exact = "[{\"kind\":\"exact_copy\",\"claim_id\":" ++ id ++ "}]";
     const attributed = "{\"value\":" ++ normalized ++ ",\"provenance\":" ++ provenance ++ "}";
     const selection = "{\"first\":7,\"last\":9}";
     const classifications = "[{\"kind\":\"preserve\",\"preserve\":{\"token_candidate_id\":{\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":7},\"kind\":\"business_exact_string\"}},{\"kind\":\"irrelevant\",\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}]";
@@ -212,10 +212,11 @@ test "selected source and reconciliation repairs conform to their native respons
 }
 
 test "business values use one segment shape for prose and exact references" {
-    const value = "[\"Display \",{\"kind\":\"exact_copy\",\"token_id\":7,\"citation_id\":9},\" with UTC date/time.\"]";
+    const value = "[\"Display \",{\"kind\":\"exact_copy\",\"claim_id\":7},\" with UTC date/time.\"]";
     try checkCandidate("generation", "value", "{\"value\":" ++ value ++ "}");
     try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ value ++ ",\"provenance\":" ++ response_wire.provenance ++ "}");
-    try candidateCase("generation", "value", "{\"value\":{\"kind\":\"exact_copy\",\"token_id\":7,\"citation_id\":9}}", .type_mismatch, "/value");
+    try candidateCase("generation", "value", "{\"value\":{\"kind\":\"exact_copy\",\"claim_id\":7}}", .type_mismatch, "/value");
+    try candidateCase("generation", "value", "{\"value\":[{\"kind\":\"exact_copy\",\"token_id\":7,\"citation_id\":9}]}", .unknown_property, "/value/0/token_id");
 }
 
 test "review and insertion evidence shapes follow native minima without excluding source-only diagnoses" {

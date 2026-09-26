@@ -51,17 +51,13 @@
             "kind": {
               "const": "exact_copy"
             },
-            "token_id": {
-              "$ref": "#/$defs/ordinal"
-            },
-            "citation_id": {
+            "claim_id": {
               "$ref": "#/$defs/ordinal"
             }
           },
           "required": [
             "kind",
-            "token_id",
-            "citation_id"
+            "claim_id"
           ],
           "additionalProperties": false
         }

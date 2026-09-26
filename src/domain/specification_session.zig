@@ -53,6 +53,12 @@ pub fn packet(allocator: std.mem.Allocator, current: Session, context: p.Context
     return packetFor(allocator, current, context, current.completed);
 }
 pub fn packetFor(allocator: std.mem.Allocator, current: Session, context: p.Context, index: usize) Error!*packets.Packet {
+    return packetForChoices(allocator, current, context, index, null);
+}
+
+/// Repair retains all source claims but offers exact-copy choices only from the
+/// bound owning unit. Initial generation passes null and offers current claims.
+pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context: p.Context, index: usize, allowed: ?[]const @import("reference_reconciliation.zig").ClaimId) Error!*packets.Packet {
     if (!current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
     const all = try p.items(context);
     var arena: std.heap.ArenaAllocator = .init(allocator);
@@ -67,15 +73,27 @@ pub fn packetFor(allocator: std.mem.Allocator, current: Session, context: p.Cont
         try scopes.append(a, .{ .state_id = all.state_id, .chunk_id = item.claim.chunk_id });
     }
     const projected = try @import("model_evidence.zig").project(a, claims.items);
+    var exact_choices: std.ArrayList(@import("model_evidence.zig").Token) = .empty;
+    for (projected.preserved_tokens) |token| {
+        if (!p.permitsExactKind(token.kind)) continue;
+        if (allowed == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, allowed.?, token.claim_id)) try exact_choices.append(a, token);
+    }
+    const offered_scopes = if (allowed) |ids|
+        (@import("reference_support.zig").select(a, all, context.inputs, ids) catch |err| switch (err) {
+            error.InvalidReferenceState => return error.InvalidSpecificationUnit,
+            else => |other| return other,
+        }).scopes
+    else
+        scopes.items;
     const payload = .{
         .unit = try unit(index),
         .brief = if (current.units[0]) |checked| checked.response.content.brief else null,
         .entities = if (current.units[2]) |checked| checked.response.content.entities else null,
         .claims = projected.claims,
         .citations = projected.citations,
-        .preserved_tokens = projected.preserved_tokens,
+        .preserved_tokens = exact_choices.items,
         .sources = try @import("model_evidence.zig").sources(a, context.inputs),
-        .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, scopes.items),
+        .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, offered_scopes),
     };
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), a, payload);
     const selected = try unit(index);
@@ -86,12 +104,7 @@ pub fn packetFor(allocator: std.mem.Allocator, current: Session, context: p.Cont
         .records => "records",
     } });
     defer packets.release(result);
-    var exact_available = false;
-    for (projected.preserved_tokens) |token| if (p.permitsExactKind(token.kind)) {
-        exact_available = true;
-        break;
-    };
-    return @import("reference_model_input.zig").withTextChoices(allocator, result, payload.passive_literals.len != 0, exact_available);
+    return @import("reference_model_input.zig").withTextChoices(allocator, result, payload.passive_literals.len != 0, exact_choices.items.len != 0);
 }
 
 /// A value-only repair cannot borrow choices from unchanged sibling evidence.

@@ -763,9 +763,9 @@ Source-only evidence is valid only for loss locations that permit it. A selected
 signal/conflict requires its exact producer claims; disposition loss may use its
 claim or source-only evidence. An unlocalized finding retains ordinary eligibility.
 Native source-review evidence retains `loss`, so readback repeats those same joins;
-principle evidence has no loss location. The deployed `specification-state/v5`
-rejects previous snapshot contracts rather than silently supplying the missing
-diagnostic binding; ADR 0020 specifies the coordinated `v6` cutover.
+principle evidence has no loss location. `specification-state/v6` rejects earlier
+snapshot contracts rather than silently supplying a missing binding. ADR 0020
+governs the derived exact-reference lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
 A reconciliation conflict starts as an unresolved candidate assertion. Only current

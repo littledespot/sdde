@@ -87,10 +87,15 @@ pub const Origins = struct {
 };
 pub const GroupPolicy = union(enum) {
     membership: struct { disposition: g.spec.Applicability, fixed_provenance: ?g.spec.Selection },
-    evidence: struct { record_kind: ?g.spec.Kind },
 };
 pub const GroupRepair = struct { target: StableTarget, policy: GroupPolicy };
-pub const Candidate = struct { group_repair: ?GroupRepair = null, revision: u64 = 1, last_repair: ?@import("atomic_repair.zig").Merge = null, response: g.Response, origins: Origins = .{}, pending_repair: ?@import("atomic_repair.zig").Pending(StableTarget) = null };
+pub const ValueEvidenceBound = struct {
+    target: StableTarget,
+    explicit: []const @import("reference_identity.zig").ClaimId,
+    effective: []const @import("reference_identity.zig").ClaimId,
+    citations: []const @import("reference_identity.zig").CitationId,
+};
+pub const Candidate = struct { group_repair: ?GroupRepair = null, value_bound: ?ValueEvidenceBound = null, revision: u64 = 1, last_repair: ?@import("atomic_repair.zig").Merge = null, response: g.Response, origins: Origins = .{}, pending_repair: ?@import("atomic_repair.zig").Pending(StableTarget) = null };
 pub const Raw = struct { body: []const u8, origin: ?Origin };
 pub const Result = union(enum) { valid: g.Checked, invalid: Rejection };
 pub const Error = error{InvalidSpecificationRepair} || occurrences.Error;
@@ -245,5 +250,16 @@ pub fn replaceCanonicalValue(a: std.mem.Allocator, response: g.CanonicalResponse
             records[subject.record].content.entity.relationships = relationships;
         } else _ = try valueAccess(&records[subject.record].content, field, value);
     }
+    return result;
+}
+
+pub fn replaceCanonicalProvenance(a: std.mem.Allocator, response: g.CanonicalResponse, subject: Subject, provenance: g.spec.Provenance) Error!g.CanonicalResponse {
+    var result = response;
+    if (subject == .record) {
+        if (result != .content or result.content != .records or subject.record >= result.content.records.len) return error.InvalidSpecificationRepair;
+        const records = try a.dupe(g.spec.RecordProposal, result.content.records);
+        records[subject.record].provenance = provenance;
+        result.content.records = records;
+    } else (try attributed(.canonical, &result.content, subject)).provenance = provenance;
     return result;
 }

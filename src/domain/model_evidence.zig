@@ -8,7 +8,7 @@ pub const Claim = struct {
     content: r.ContentProposal,
     citation_ids: []const r.CitationId,
 };
-pub const Token = struct { source_form: tokens.ExtractorId, id: tokens.Id, kind: tokens.Kind, value: []const u8, citation_id: r.CitationId };
+pub const Token = struct { claim_id: r.ClaimId, source_form: tokens.ExtractorId, id: tokens.Id, kind: tokens.Kind, value: []const u8, citation_id: r.CitationId };
 pub const Projection = struct { claims: []const Claim, citations: []const r.extraction.Citation, preserved_tokens: []const Token };
 pub const Source = struct { id: r.extraction.identity.SourceId, text: []const u8 };
 
@@ -89,9 +89,7 @@ pub fn project(allocator: std.mem.Allocator, items: []const r.Item) std.mem.Allo
         };
         if (item.claim.content == .preserved_token) {
             const token = item.claim.content.preserved_token;
-            for (preserved.items) |prior| {
-                if (prior.id.ordinal == token.value.id.ordinal) break;
-            } else try preserved.append(allocator, .{ .source_form = token.value.candidate_id.extractor_id, .id = token.value.id, .kind = token.value.kind, .value = token.value.raw_value.bytes, .citation_id = token.citation_id });
+            try preserved.append(allocator, .{ .claim_id = item.claim.id, .source_form = token.value.candidate_id.extractor_id, .id = token.value.id, .kind = token.value.kind, .value = token.value.raw_value.bytes, .citation_id = token.citation_id });
         }
         for (item.citations) |citation| {
             for (citations.items) |prior| {

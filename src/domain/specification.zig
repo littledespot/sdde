@@ -4,7 +4,7 @@ const std = @import("std");
 const text = @import("typed_text.zig");
 const reference = @import("reference_extraction.zig");
 
-pub const version = "specification/v1";
+pub const version = "specification/v2";
 pub const Error = error{InvalidSpecification};
 pub const Kind = enum {
     acceptance_criterion,

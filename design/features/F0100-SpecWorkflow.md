@@ -905,7 +905,7 @@ validators:
   remain mandatory Plan-owned obligations, rendered in `reference-context.md`; Specify
   creates no Plan form and cannot use policy findings as business provenance. Plan must
   reassess current principles and resolve those obligations under its own input authority.
-- The native closed `specification-state/v5` contract distinguishes `specified` and
+- The native closed `specification-state/v6` contract distinguishes `specified` and
   `spec_clarification_pending`. The pending variant holds the current reference snapshot,
   clarification binding/open IDs and prior ID ledger; it cannot supply completed content.
   The specified variant contains the feature key,
@@ -1271,18 +1271,15 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   the model returns only the authorized value, provenance or record shape.
 - Provenance repairs receive the unchanged attributed value or entire shared-provenance
   record; value repairs receive that unchanged provenance.
-- The approved FIX_002 §36 coupled-evidence exception permits one attributed value
-  or one same-kind shared-provenance record to change content and claim selection
-  together when a native `unknown_exact` diagnostic identifies an existing eligible
-  pair missing its supporting claim. §22.4 owns its narrow eligibility, stable
-  repair identity, dependency binding and full-validation requirements.
-- The value validator retains allowed normalized/exact-copy alternatives, including only
-  token/citation pairs supported by the fixed provenance.
+- Under ADR 0020, an exact-copy segment selects one eligible preserved-token
+  claim. Native lineage combines explicit claims with valid handles in the
+  owning field or shared record; the old tuple-specific coupled repair is retired.
+- Value repair fixes the explicit selection and effective claim/citation sets
+  from its original authorized unit. It cannot gain evidence on retry.
 - It never reconstructs business meaning or automatically converts an exact copy to
   prose.
-- Coupled singleton repairs select the existing canonical `attributed_value` schema;
-  same-kind repairs select canonical `record`, narrowed through existing variant
-  selection to the authorized kind. There is no parallel repair schema resource.
+- Existing membership and reviewed insertion repairs retain their separate
+  authority and selected schemas. There is no parallel repair schema resource.
 - Merge preserves siblings, increments revision and repeats unit validation.
 - Session-owned conditional entity membership is checked during unit admission,
   completed-unit replacement and assembly. Candidate diagnostics retain the fixed
@@ -1317,7 +1314,7 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   full-candidate validation.
 
 - Text repair retains the shared validator's reason, inclusive node range and rejected
-  passive ID or exact token/citation pair. Ordinary prose punctuation is not a path defect.
+  passive ID or exact claim handle. Ordinary prose punctuation is not a path defect.
 - Reconciliation and specification retain this issue as extraction already did; the same
   issue and description reach the authorized packet and provider request.
 - The selected rejected value and permitted source/passive choices remain in that

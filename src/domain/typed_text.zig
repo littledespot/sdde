@@ -9,7 +9,7 @@ pub const Error = literals.Error || error{InvalidTypedText};
 pub const Literal = struct { value: []const u8 };
 pub const PassiveReference = struct { passive_literal_id: literals.Id };
 pub const SourceReference = struct { source_id: evidence.identity.SourceId };
-pub const ExactCopy = struct { token_id: @import("structured_tokens.zig").Id, citation_id: evidence.identity.CitationId };
+pub const ExactCopy = struct { claim_id: @import("reference_identity.zig").ClaimId };
 pub const BusinessSegment = union(enum) {
     pub const model_inline = .{ .literal = "value" };
     literal: Literal,
@@ -74,7 +74,7 @@ pub const Issue = struct {
         return switch (self.reason) {
             .empty, .blank => "Supply nonblank content using the supplied typed text choices.",
             .invalid_scalar => "Literal text must be nonempty valid Unicode without forbidden control characters.",
-            .unknown_exact => "Select an exact-copy token/citation pair supplied for this evidence scope; do not invent or rewrite an exact value.",
+            .unknown_exact => "Select an eligible preserved-token claim supplied for this evidence scope; do not invent or rewrite an exact value.",
             .unknown_passive => "Use only passive reference IDs supplied for this source scope.",
             .unknown_source => "Use only source IDs supplied for this source scope.",
         };

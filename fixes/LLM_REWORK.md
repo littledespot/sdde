@@ -1,9 +1,12 @@
 # LLM_REWORK — Derive mechanical facts; ask models for semantic choices
 
-**Reviewed:** 26 September 2026. **Status:** Phases 0–1 done; runtime cutover pending.
-**Scope:** Phase 0 baseline tests, approved [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md)
-and Phase 1's reference-owner refactor. No new live calls were made. The production
-schema and workflow have not undergone the planned cutover.
+**Reviewed:** 26 September 2026. **Status:** Phases 0–2 complete; Phases 3–4 remain.
+**Scope:** Phase 0 baseline tests, approved [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md),
+Phase 1's reference-owner refactor and Phase 2's coordinated format cutover.
+The retained runs and the conformance review are recorded below.
+Phase 2 closes the identified owning-unit, request-choice and allocation gaps;
+§10 records the checks. The latest retained run still failed; this assessment
+launched no model calls or E2E rerun.
 
 ## 1. Finding and recommendation
 
@@ -13,7 +16,7 @@ then validating and repairing disagreements, introduces avoidable failure paths.
 This already follows [design §4](../design/design.md#4-deterministic-and-llm-responsibility-boundary).
 
 The strongest immediate opportunity is **reference bookkeeping**, not arithmetic.
-The current exact-copy response repeats a token ID, its citation ID and its
+The pre-cutover exact-copy response repeated a token ID, its citation ID and its
 supporting claim in separate places. Native code already knows that relationship.
 The model should select the intended source occurrence once; existing native
 owners should derive its fixed dependencies. Business meaning and selection of
@@ -33,8 +36,10 @@ schema or replacement for all evidence IDs. Workflows without such content need 
 reference ledger; arbitrary JSON does not acquire reference semantics automatically.
 The concrete reuse boundary and proof required are in §6.1–§6.4.
 
-Lookup feasibility is high; implementation readiness is not established. The
-code audit found substantive gaps in the earlier proposal:
+The one-handle format is active and its Phase 2 native conformance checks pass;
+live effectiveness is not established. The initial proposal review identified
+the following design requirements, now governed by ADR 0020. Offline checks do
+not establish that every future workflow consumer or model call satisfies them:
 
 | Finding | Required correction |
 | --- | --- |
@@ -114,7 +119,7 @@ were recovered by the existing decoder; no JSON/schema correction exhausted.
 Authentication succeeded; missing answers and the global token limit were not the stop.
 
 **Rollout impact:** Phase 1.1 subsequently removed the reference owner's Spec-type
-coupling; the coordinated Phase 2 cutover is next. This run confirms the existing
+coupling and Phase 2 implemented the coordinated format change. This run confirms the existing
 rationale; it does not justify a new repair owner, more retries or a separate
 prompt-only detour. Under
 ADR 0020, selecting eligible exact claim 2 with explicit support `S=[1]` derives
@@ -128,7 +133,7 @@ Preserve the existing retry identity and accounting: the owning target's validat
 not changed bytes, decides whether repair succeeded. Phase 3.1 must carry that
 distinction through the runner and no-publication boundary.
 
-### Latest run — earlier repairs recover, record repair exhausts
+### Pre-cutover run — earlier repairs recover, record repair exhausts
 
 Execution
 [`2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377`](../zig-out/e2e-spec/2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377/report.md)
@@ -158,8 +163,8 @@ claims together. Calls 16–17 sent identical 6,786-byte requests and received t
 same invalid record. Earlier successful work continued; missing-answer recovery
 and global token enforcement were not the final failure.
 
-**Required rollout update:** retain Phases 0–1 as complete and implement Phase 2
-next. Extend its existing checks across brief, story, entity basis and records,
+**Rollout consequence at that time:** implement the Phase 2 cutover, now present.
+Its regression scope spans brief, story, entity basis and records,
 including a shared-provenance acceptance criterion. Phase 3.1 must combine earlier
 successful repairs, a recovered missing answer and later native exhaustion with
 separate retry identities and exact accounting. Phase 2.4 and live Phase 4 must
@@ -168,6 +173,138 @@ redundant join, but cannot turn a greeting alone into a requirement, an applicab
 explanation or a test scenario. Reaching a later failure does not establish improved
 specification quality. No new retry or repair authority is justified by this run.
 
+### Earlier post-cutover run — wrong-kind exact selection, then missing-answer exhaustion
+
+Execution
+[`2026-09-26T00-13-51Z-8c9c22b2f48057252273f4bf6d7dfd73`](../zig-out/e2e-spec/2026-09-26T00-13-51Z-8c9c22b2f48057252273f4bf6d7dfd73/report.md)
+recorded modified revision `a71afaa`, source fingerprint
+`2acaaf88cc0af1a406f9e2506d88c7adc775c44ff66680311b402a8b9e64f981`.
+The captured requests use the initial Phase 2 `exact_copy.claim_id` contract,
+before the subsequent purpose-guidance conformance correction.
+
+| Boundary | Observed evidence |
+| --- | --- |
+| Extraction/reconciliation, calls 1–7 | All three source obligations reached generation. Claim 1 contains business prose; claim 2 is the preserved greeting. Both were retained, with no conflict. |
+| Brief, call 8 | Title, description and goal each returned only `{"kind":"exact_copy","claim_id":1}` with explicit support `[1]`. Claim 1 exists but is not a preserved-token occurrence; `preserved_tokens` offered claim 2. The integer passed the structural schema, then native validation rejected the title with `unknown_exact`. |
+| Title repair, calls 9–10 | The first response contained only a reasoning block. Protocol correction added `missing_final_text` and the explanation “Final-answer admission failed: no final answer was received.” Call 10 returned a string containing the source bullet list. It was merged and the next native check advanced to the description defect. This is mechanical recovery, not evidence of a useful title. |
+| Description repair, calls 11–12 | Both HTTP 200 responses ended after `</reasoning>`, with `finish_reason:"stop"` and no final text. They are attempts 1 and 2 of request 10. The shared protocol allowance exhausted at `generate-brief-repair-request-account`: `RetryLimitExhausted`, limit 1, two executions. No description replacement was merged. |
+| Terminal result | 12 calls, 15,690/100,000 tokens, complete usage accounting. Story/records, coverage, semantic/principle review, publication/readback and grading were not reached. No specification or clarification was published. |
+
+Eight leading-prefix normalizations were logged for calls 1–8. No JSON/schema
+validation rejection was recorded after admission. The final stop was missing
+answer exhaustion, not authentication, budget exhaustion or a repeated native
+merge. [Raw call 12](../zig-out/e2e-spec/2026-09-26T00-13-51Z-8c9c22b2f48057252273f4bf6d7dfd73/evidence/generation/call-000012/response.json)
+and the [existing decoder](../src/adapters/provider/bedrock_response.zig)
+agree: no final answer follows the reasoning block. Reasoning must remain excluded
+from candidate data. The requests included native `response_format.type="json_schema"`.
+
+**Confirmed request defect:** the common purpose instruction says
+“Embed exact_copy claim IDs within prose,” including in
+[call 11's repair request](../zig-out/e2e-spec/2026-09-26T00-13-51Z-8c9c22b2f48057252273f4bf6d7dfd73/evidence/generation/call-000011/request.json).
+That request correctly has `preserved_tokens:[]`, a string-only selected schema,
+and a diagnostic expressly prohibiting exact-copy values. The unconditional
+instruction conflicts with those permitted choices and does not distinguish
+structured reference objects from IDs written into prose. The returned reasoning
+discusses inserting claim/citation numbers into strings, which is consistent with
+that ambiguity; it does not establish why the provider omitted its final answer.
+
+The empty repair choices are correct under ADR 0020: invalid claim 1 supplies no
+exact lineage, so the original bound is `B=[1]`. Substituting claim 2 during this
+value-only repair would add evidence outside that authority. Initial generation
+may select the eligible claim 2 and derive `L=[1,2]`; the engine must not choose it
+automatically or expand the repair bound to compensate for a poor response.
+
+**Retained-run follow-up — Phase 2.2:** replace the ambiguous reference instruction
+across brief/story, entity and record guidance, including their reused repair
+prompts. State that prose uses strings; an exact-copy object, when permitted,
+selects a listed `preserved_tokens.claim_id`, not a general claim, token ID or
+citation ID. General retained claims remain available for semantic provenance;
+they are not automatically exact-copy choices. IDs stay in structured fields.
+Empty exact choices exclude exact objects; a string-only schema requires prose.
+Keep field-purpose guidance, one evidence projection and the
+existing schema/repair owners; replace wording rather than adding another prompt,
+choice catalogue, dynamic-enum mechanism or retry path. The schema remains a
+structural contract and native validation retains eligibility authority.
+
+**Regression and live follow-up:** Phase 3.1 must cover wrong-kind selection →
+title missing answer → protocol recovery → a different field's repeated missing
+answers → exhaustion, plus successful completion and unrelated sources. Assert
+that each emitted prompt agrees with its selected schema/choices, valid exact
+handles still derive lineage, earlier repairs/siblings persist, retry identities
+and tokens remain exact, and neither unresolved failure nor poor model
+interpretation becomes a clarification. Phase 4 must separately measure final
+answer availability and meaningful title/story/FR/AC content with approved calls.
+This run does not justify changing the provider adapter or retry limits.
+
+| Captured assignment | Request bytes | Prompt schema bytes | Actual input / total tokens |
+| --- | ---: | ---: | ---: |
+| Brief initial, call 8 | 9,693 | 3,607 | 1,502 / 1,667 |
+| Title repair / correction, calls 9 / 10 | 3,592 / 3,937 | 178 each | 748 / 1,022; 797 / 944 |
+| Description repair / correction, calls 11 / 12 | 3,604 / 3,949 | 178 each | 748 / 1,148; 797 / 959 |
+
+The earlier coupled repairs and current value-only repairs have different scope;
+their byte counts are not an equivalent-assignment benchmark. Smaller requests
+are not proof of improved output quality. The old redundant
+join was removed, but this run never selected the valid exact handle and produced
+no graded specification. The subsequent Phase 2 conformance work closes the
+request-guidance and code findings in §6.5, but does not change this live result.
+
+### Latest run — corrected guidance, eight recovered targets, then no final answer
+
+Execution
+[`2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8`](../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8/report.md)
+recorded modified revision `a71afaa`, source fingerprint
+`b6688a68a8b7ffa65b0abba4112874218592accfec3dc5aa81f335d0216b2b23`.
+Captured brief/story, entity and record guidance matches the current corrected
+prompts, including their reuse in repair. The earlier unconditional exact-copy
+instruction is absent. Native `response_format.type="json_schema"` is present;
+the route remains Bedrock `openai.gpt-oss-20b-1:0`, temperature 0, low reasoning.
+
+| Boundary | Observed evidence |
+| --- | --- |
+| Extraction/reconciliation, calls 1–7 | All three source obligations remain available. Business claim 1 and preserved greeting claim 2 are retained, with no conflict. |
+| Brief, calls 8–14 | All three fields incorrectly select exact claim 1, although only claim 2 is offered as a preserved token. Each field recovers after one missing answer and one protocol correction. Each replacement copies the whole requirements paragraph; native acceptance does not establish a useful title or goal. |
+| Story, call 15 | Exact claim 2 with explicit support `S=[1]` is accepted without provenance repair, exercising the intended derived-lineage contract. The story is still only the greeting literal, so this is not semantic success. |
+| Entity basis, calls 16–18 | Wrong-kind exact claim 1 is replaced after missing-answer recovery. The replacement copies source bullets rather than explaining the `not_applicable` decision. |
+| Records, calls 19–27 | Initial FR, Given, When, Then and user-visible outcome all select exact claim 1. FR and Given/When/Then each recover after a missing answer. Replacements mostly repeat source requirements rather than fulfilling their individual purposes; semantic review has not assessed them. |
+| Outcome repair, calls 28–29 | Both responses contain only a reasoning block, ending at `</reasoning>` with `finish_reason:"stop"`. Request 20 exhausts its two allowed attempts at `generate-records-repair-request-account`: `RetryLimitExhausted`, provider diagnostic `missing_final_text`. No replacement is merged for `records[2].text`. |
+| Terminal boundary | 29 calls, 37,596/100,000 tokens, complete usage accounting. Coverage completion, source/principle review, publication/readback and grading are not reached. No specification or clarification is published; publication and grading are `not_run`. |
+
+The [last repair request](../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8/evidence/generation/call-000028/request.json)
+explicitly rejects exact claim 1, states that no exact/passive choices are permitted,
+and requires source-backed strings while preserving fixed evidence. Its native
+schema is only an object containing a string array. The correction adds
+`missing_final_text`, “Final-answer admission failed: no final answer was received,”
+and the complete-corrected-response instruction. It is not an identical retry.
+[Raw call 29](../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8/evidence/generation/call-000029/response.json)
+contains no final text for the adapter to admit. The evidence establishes the
+missing answer, not why the provider/model omitted it. Do not substitute reasoning,
+increase retries, infer an adapter defect or widen the repair's `B=[1]`.
+
+Ten calls lack final answers: 9, 11, 13, 17, 20, 22, 24, 26, 28 and 29.
+Eight native targets recover and execution continues; the ninth target exhausts
+protocol recovery before a native merge. The 18 repair/correction calls consume
+20,204 tokens. All calls return HTTP 200; budget, authentication and JSON/schema
+correction exhaustion are not the terminal cause.
+
+| Captured assignment | Request bytes | Actual input / total tokens |
+| --- | ---: | ---: |
+| Brief initial, call 8 | 9,740 | 1,510 / 1,628 |
+| Story initial, call 15 | 7,426 | 1,266 / 1,328 |
+| Records initial, call 19 | 18,803 | 2,804 / 3,046 |
+| Outcome repair / correction, calls 28 / 29 | 5,353 / 5,698 | 1,098 / 1,238; 1,147 / 1,255 |
+
+**Rollout impact:** this run does not demonstrate a Phase 2 contract regression;
+it does demonstrate that corrected guidance and valid lineage are insufficient
+for useful model output. Keep Phase 2 complete and Phases 3–4 open. Extend the
+existing Phase 3.1 sequence with these successful repairs followed by late protocol
+exhaustion, and keep meaningful recovery distinct from mere field acceptance.
+Phase 4.1 must test both the captured prose-only repair's final-answer availability
+and fresh generation's reference selection/field meaning. The correct exact handle
+already works; choosing its business use remains semantic. Existing schema-choice
+narrowing proposals (§6.6) remain separate decisions, not an implicit extension of
+this run review. No new evidence, retry or semantic-review authority is justified.
+
 ## 3. Ownership inventory
 
 | Information/work | Current owner/status | Assessment |
@@ -175,7 +312,7 @@ specification quality. No new retry or repair authority is justified by this run
 | Source inventory, lines, coordinates and verbatim spans | [source_selections](../src/domain/source_selections.zig), native readers | Already deterministic. Models select offered ranges; they do not compute coordinates or reproduce quotations. |
 | Exact-token candidate identity and raw bytes | [structured_tokens](../src/domain/structured_tokens.zig), extraction identity actions | Already deterministic. Relevance and classification remain semantic where not fixed by policy. |
 | Canonical claim/citation/token identities | [reference_extraction](../src/domain/reference_extraction.zig), [reference_claim_items](../src/domain/reference_claim_items.zig) | Already native, assigned after validation. Do not add another identity system. |
-| Exact-copy choice | [typed_text.ExactCopy](../src/domain/typed_text.zig), [generation schema](../design/workflows/spec/generation.schema.json) | Model repeats token/citation and supporting-claim selection. Highest-priority simplification. |
+| Exact-copy choice | [typed_text.ExactCopy](../src/domain/typed_text.zig), [generation schema](../design/workflows/spec/generation.schema.json) | Phase 2 uses one preserved-token claim handle and derives lineage. Purpose guidance distinguishes eligible exact choices from general evidence claims and respects narrowed repair schemas. |
 | Citation union | [reference_support.select](../src/domain/reference_support.zig), [specification_provenance](../src/domain/specification_provenance.zig) | Already derived. Phase 1 removed the shared owner's Spec-type dependency; Spec eligibility remains in its own consumer (§6.1). |
 | Summary statement `local_key` | [reconciliation validation](../src/domain/reference_reconciliation_validation.zig), schema and key repair | Model-generated uniqueness/order bookkeeping remains. Separate candidate for removal after defining ordering semantics. |
 | Preserved-token reconciliation content | [reconciliation validation](../src/domain/reference_reconciliation_validation.zig), [repair](../src/domain/reference_reconciliation_repair.zig) | The sole selected preserved-token claim determines its token. Audit/removal of the repeated token field is feasible separately. |
@@ -188,9 +325,10 @@ specification quality. No new retry or repair authority is justified by this run
 | Retry limits, usage, freshness and publication status | Existing runner, lifecycle, accounting and publication owners | Already engine authority. No change justified by this proposal. |
 
 An important distinction: deterministic validation is not always deterministic
-construction. Today native code rejects a misbound exact copy after the model has
-chosen three related numbers. Removing the redundant choices prevents that specific
-inconsistency before it needs a repair.
+construction. Before Phase 2, native code rejected a misbound exact copy after the
+model chose three related numbers. The active handle contract removes that join;
+it does not prevent a wrong-kind selection or inconsistent use of its derived
+evidence by downstream consumers.
 
 ## 4. What should remain semantic
 
@@ -212,7 +350,7 @@ finding to success. Existing semantic review remains explicitly model-assisted.
 
 ### 5.1 Use an existing identity once
 
-Illustrative **approved target segment**, not the deployed schema:
+The **active model and canonical segment**, approved by ADR 0020:
 
 ```json
 {"kind":"exact_copy","claim_id":2}
@@ -226,19 +364,17 @@ captured source occurrence → token 1 → citation 2 → exact bytes
 
 [reference_claim_items.build](../src/domain/reference_claim_items.zig) already
 checks a preserved-token claim's one citation, source occurrence and raw bytes.
-[eligibleExactClaim](../src/domain/specification_provenance.zig) currently performs
-the reverse lookup while authorizing §36 repair. Resolve the selected claim directly
-through existing reference/provenance ownership. Remove reverse lookup only where
-its callers disappear; native token/citation identities remain valid elsewhere.
+[reference_support.exact](../src/domain/reference_support.zig) now resolves the
+selected claim directly. The tuple-specific reverse lookup and §36 repair trigger
+were removed; native token/citation identities remain valid elsewhere.
 
-**The request must also remove the join.** Today's
-[model_evidence.Token/project](../src/domain/model_evidence.zig) offers a token ID,
-value and citation separately from the owning claim. Changing only the response
-schema would still ask the model to join these lists. Refactor this existing
-projection to offer a claim-addressable exact choice with its trusted value and
-source context. Do not add a second lookup table or strip evidence needed to choose
-meaningfully. Request choices, schema exclusions and native eligibility must use
-the same owning facts; an arbitrary integer still does not become a valid handle.
+**The request must also remove the join.**
+[model_evidence.Token/project](../src/domain/model_evidence.zig) now includes the
+owning `claim_id`, trusted value and source context. Do not add a second lookup
+table or strip evidence needed to choose meaningfully. Request choices, schema
+exclusions and native eligibility must use the same owning facts; an arbitrary
+integer still does not become a valid handle. Phase 2.2 aligned the prompt and
+fixed-repair choice projections with that rule.
 
 This projection also supplies reconciliation and source review. Reconciliation
 still requires token IDs; its simplification is deferred in §7A. Preserve that
@@ -255,9 +391,10 @@ different occurrences. Never resolve by literal text or by the first matching va
 
 ### 5.2 Preserve explicit selection; derive effective provenance
 
-The current canonical representation **cannot reconstruct the required roles**.
-[specification.Provenance](../src/domain/specification.zig) has one claim list and
-its citation union. Under the proposed automatic derivation, these cases collapse:
+The pre-cutover canonical representation could not distinguish the required roles
+if automatic derivation overwrote the explicit claim list. These two cases explain
+why [specification.Provenance](../src/domain/specification.zig) now stores explicit
+selection separately from the derived view:
 
 | Explicit support `S` | Exact dependencies `E` | Effective claims `L` | After removing the exact reference |
 | --- | --- | --- | --- |
@@ -268,7 +405,7 @@ Subtracting exact dependencies loses intentional support in the second case;
 keeping the old union leaves obsolete derived support in the first. This is a
 demonstrated information loss, not an implementation detail to defer.
 
-**Preferred contract:** retain explicit reference-claim selection `S` once with
+**Approved contract:** retain explicit reference-claim selection `S` once with
 canonical content. Derive `E` from that content's exact handles, then
 `L = stableUnique(S + E)` through the refactored reference owner. Do not persist
 independently writable `S`, `E` and `L` lists. Distinguish stored selection from
@@ -276,9 +413,9 @@ the effective reference view with types, not caller-specific meanings of `claim_
 Spec composes this view into its evidence contract; other domains preserve their
 own accepted support types. `L` describes reference claims, not all workflow evidence.
 
-This requires a focused canonical-contract amendment. Retaining the old canonical
-format is not compatible with all the proposed add/remove guarantees. Any retained
-materialized citations or coverage remain checked projections, not selection authority.
+ADR 0020 approved this amendment; Phase 2 activated its version changes. Retaining
+the old canonical interpretation is incompatible with the add/remove guarantees.
+Materialized citations and coverage remain checked projections, not selection authority.
 
 Deriving a literal dependency never selects a business assertion on the model's
 behalf. Explicit support may itself include a preserved-token claim; forbidding
@@ -312,7 +449,7 @@ old exact copy already includes its token claim in that selection. Compare new
 behavior with that **equivalent valid candidate**, not the failed tuple missing
 its required claim.
 
-**Preferred Spec scope rule:** derive passive choices from effective lineage `L`, as
+**Approved Spec scope rule:** derive passive choices from effective lineage `L`, as
 the equivalent valid old candidate does. Explicit-only scopes would narrow existing
 valid behavior and are not a neutral safety measure. Newly selected occurrences
 must still be eligible for the current assignment, and fixed repairs must not gain
@@ -321,7 +458,7 @@ claim; operational capabilities remain entirely separate.
 
 ### 5.4 This is construction under a new contract, not silent repair
 
-The current malformed tuple must not be accepted and silently patched. The new
+The superseded malformed tuple must not be accepted and silently patched. The active
 model contract removes redundant fields, validates one selection, then constructs
 canonical data according to an explicit rule. Reject superseded model formats;
 do not add compatibility readers, guessing, or an optional fallback to old tuples.
@@ -340,8 +477,9 @@ separate presentation/conversion contract. That alternative is feasible in princ
 but has more surface and no demonstrated benefit here. Never use a lossy model
 projection as the native expected value or move lookup into generic JSON decoding.
 
-The shared-handle option still needs schema/type, canonical-version, evidence and
-consumer changes. It avoids text conversion machinery, not all contract work.
+The shared-handle schema/type, version changes and §6.5 consumer corrections are
+implemented. Avoiding conversion machinery alone did not establish end-to-end
+conformance; the owning-unit tests in §10 provide the additional evidence.
 
 ### 5.5 Specify fixed repair and review semantics before coding
 
@@ -358,9 +496,9 @@ with authorized evidence.
 Retain exact expected-value/revision checks and the governing claim/citation
 equality rules; equal source scopes alone do not establish equal evidence.
 Reference addition, replacement or removal that changes that evidence requires an
-explicitly authorized coupled target, or remains a typed block. The amendment must
-name any newly supported coupled case; existing §36 authority does not automatically
-authorize every such change. Do not silently add an explicit citation to compensate
+explicitly authorized coupled target, or remains a typed block. ADR 0020 retired
+§36's tuple-specific authority; it does not authorize broader evidence changes.
+Do not silently add an explicit citation to compensate
 for a removed derived dependency. Fixed membership and reviewed-omission repairs
 must apply the same decision through their existing owners.
 
@@ -399,10 +537,11 @@ existing retry families and accounting. A replacement must not enlarge its own
 allowance by introducing a new handle and then treating that rejected response as
 fresh eligibility on the next attempt. Bind permitted choices through the existing
 authorization facts; changed upstream authority invalidates that authorization.
-Today `specification_repair.authorize` recaptures candidate facts on each attempt;
-`pending_repair` retains the permit/target, not a fixed choice baseline. Retain the
-original `B` in the existing domain repair context while expected value/revision
-advance through the existing atomic owner. Do not add a parallel permission store.
+`specification_repair.authorize` recaptures candidate facts on each attempt;
+the new `Candidate.value_bound` retains original `B` for that stable target while
+expected value/revision advance through the existing atomic owner. Do not add a
+parallel permission store. Keep this implemented protection when correcting the
+remaining full-unit checks in §6.5.
 Coupled, membership, reviewed insertion and native coverage repairs retain their
 own approved policies; `B` must not silently replace those policies.
 
@@ -423,8 +562,9 @@ contract, not a universal rule for every workflow's findings.
 
 There is a residual bookkeeping cost: supported review responses still repeat
 evidence that admission requires to equal the candidate's effective provenance.
-Project that native expected view through the existing review-guidance owner;
-do not make the reviewer calculate `S + E`. Removing the repeated response fields
+The existing review-guidance owner already projects it as `supported_provenance`;
+test that emitted initial/repair packets agree with native admission instead of
+adding another projection or asking the reviewer to calculate `S + E`. Removing the repeated response fields
 and attaching fixed positive evidence natively would require a separate review
 contract amendment. It is not part of this first patch, and success here must not
 be described as eliminating all model-side evidence bookkeeping.
@@ -462,9 +602,10 @@ retain protocol correction; well-shaped unavailable handles use native validatio
 coverage and review associations. [Pending state](../src/domain/incomplete_specification.zig)
 stores references and clarification identities; generation questions are flattened
 to text by [the existing question builder](../src/actions/clarification/build_specification_clarification_need.zig).
-These are different contracts. The recommended canonical content change requires
-an explicit version amendment and old-version rejection, including conformance of
-any shared version tag; no migration, dual reader or new pending evidence store.
+These are different contracts. ADR 0020's `specification/v2` and
+`specification-state/v6` cutover is active, including old-version rejection.
+Remaining readback tests must cover the owning-unit discrepancies below without
+adding a migration, dual reader or new pending evidence store.
 
 ### 6.1 Shared mechanics and consuming-domain policy
 
@@ -473,12 +614,12 @@ Tasks. Phase 1 moved selection mechanics to reference-owned inputs and results i
 [reference_support](../src/domain/reference_support.zig). Spec still requires
 completed reconciliation, retained claims and business-appropriate token kinds,
 and rejects clarification-response support. Those are not universal reference
-rules. Phase 2 extends the same owner to exact-handle lineage.
+rules. Phase 2 extended the same owner to exact-handle lineage.
 
-| Responsibility | Owner for the planned Phase 2 cutover |
+| Responsibility | Owner for the Phase 2 cutover |
 | --- | --- |
 | Handle identity and text syntax | Existing `reference_identity.ClaimId` and `typed_text`; syntax/membership validation receives native permitted choices. |
-| Occurrence lookup and reference lineage | Existing reference owner resolves one bound ledger and derives stable claim/citation unions. Phase 1 moved its result types below Spec; Phase 2 adds exact-handle lookup there, rather than a parallel resolver. |
+| Occurrence lookup and reference lineage | Existing reference owner resolves one bound ledger and derives stable claim/citation unions. Phase 1 moved its result types below Spec; Phase 2 added exact-handle lookup there. |
 | Applicable claims, token kinds and other support | Consuming domain's existing validator/policy. For example, Spec's exclusion of `code_sample` is not a global exact-reference prohibition. Model output or unregistered YAML rules cannot grant eligibility. |
 | Attributed-unit boundaries and traversal | Registered typed content contract identifies the owning value/record and collects handles in declared order. Each domain preserves its other evidence types and full validation. |
 | Repair scope, approval and semantic review | Existing consuming-domain authority, coordinated through shared repair/runner mechanisms. Reference expansion grants no new target or verdict authority. |
@@ -591,7 +732,159 @@ domain admission, and disclose offline tests versus live workflow evidence. Use
 test-owned bindings for this proof; do not ship a production node, policy registry
 or workflow solely to satisfy the test.
 
+### 6.5 Final implementation review — findings closed in Phase 2
+
+**Evidence level:** the following were code-path findings against the first Phase 2
+implementation. The retained run stopped before these downstream paths, so they
+were not causes of its missing answers. The added regressions and current checks
+are recorded in §10. The text below retains each causal finding and required
+boundary so a future change does not recreate it.
+
+**High — full-record admission and per-field rendering disagree (2.4).**
+[inspectRecord/validateStored](../src/domain/specification_provenance.zig) collect
+all record fields before deriving `L`. In contrast,
+[project](../src/domain/specification_projection.zig) passes each field with the
+record's complete provenance to `scalar`; `scopesFor` derives lineage from that
+field alone and compares its citations with the record-wide union.
+
+A concrete accepted shape is `S=[business claim 1]`, prose-only Given/When and an
+exact claim `2` in Then, with distinct citations for the two claims. Record admission
+derives `L=[1,2]`; rendering Given derives `[1]` and rejects the stored citation
+union. The new shared-record test ends after `checkRecord`; the older projection
+test uses uniform prose fields. Neither proves this path works. Resolve the owning
+record once through the existing provenance owner and project its individual values
+under that validated context. Do not add exact claim `2` to Given or overwrite `S`
+to accommodate the renderer. Test admission → projection → rendering → completed
+readback, with exact references in just one field, repeated references, relationship
+arrays and unrelated source examples. Tampered persisted citations must still reject.
+
+**High — repair paths do not consistently use the same owning unit (2.3).**
+
+- [Omission authorization](../src/domain/specification_coverage_repair.zig)
+  computes effective claims from only the selected record field, whereas
+  [source-review evidence](../src/domain/specification_support_evidence.zig)
+  computes record-wide support. It can refuse an otherwise eligible field repair
+  whose sibling contains the exact dependency. `omissionPacket` also restricts
+  schema alternatives using `S` instead of the effective bound: an exact-only
+  field with `S=[]` can authorize but fail packet construction, and `S=[1]` with
+  exact claim `2` can receive a prose-only schema despite needing to preserve `2`.
+- [Native retry progress](../src/domain/specification_repair.zig) validates a
+  provenance target through explicit-only `p.select`, and a record value through
+  single-field `checkAttributed`. Accepted `S=[]` with valid exact support, or
+  support contributed by a sibling, can therefore be classified as unresolved.
+  Resolve record evidence once, then validate the selected target under it. Simply
+  checking the whole record would also be wrong: an unrelated sibling failure must
+  not keep a successfully repaired target's retry counter recurring.
+- Completed-value replacement changes text while retaining old materialized
+  citations, then [replaceCompleted](../src/domain/specification_session.zig)
+  performs canonical revalidation. Reordering exact references can preserve the
+  authorized claim/citation sets but change their required canonical order and
+  reject. Recompute the affected unit's projection **after an authorized merge**,
+  compare its effective sets against the authorization, then validate completely.
+  Persisted readback must continue comparing and rejecting corrupt stored values;
+  it must not use that construction path to silently repair them.
+
+Use the same declared owning-unit traversal and resolved view for these consumers.
+Sibling-derived support here means fields in the same shared-provenance record,
+never evidence borrowed from a different attributed unit;
+keep atomic authorization, domain-specific insertion/membership rules, runner
+renewal and retry accounting with their current owners. Test repair of a prose
+field whose exact support is in a sibling, exact-only `S=[]`, reordered references,
+later sibling failure, scope expansion rejection and successful dependent rebuilding.
+These are conformance repairs under ADR 0020, not permission for new evidence.
+
+**High — request text and permitted choices still diverge (2.2).**
+§2 records the unconditional exact-copy instruction in a string-only repair.
+The provenance-repair rule also still demands nonempty explicit claims even though
+ADR 0020 permits `S=[]` when eligible exact segments supply nonempty effective
+support. Align the instruction and progress check with that same native rule.
+There is also a shared packet issue: `packetForChoices` filters `preserved_tokens`
+by the repair bound but builds `passive_literals` from every retained claim's scope.
+`withSelectionChoices` narrows schema variants, not that list. With allowed passive
+ID A and unrelated ID B, a fixed repair can still see both as choices even though
+native validation admits only A. This is a code finding, not an observed passive-ID
+failure in the latest run.
+
+Preserve broad source evidence as context, but derive **offered replacements** from
+the authorized unit through the existing provenance/session projection owners.
+Keep one exact-choice list and one passive-choice list; do not add a second allowed-ID
+catalogue or remove unrelated semantic source context. Verify emitted initial,
+native-repair, omission and protocol-correction requests with zero, one and several
+eligible choices and out-of-scope choices. A schema allowing arbitrary integers
+still needs native membership validation; correct prompt wording is no guarantee
+against a model selecting an unavailable integer.
+
+**Medium — new shared lineage allocation cleanup is incomplete (2.1).**
+`reference_support.lineage` owns an `ArrayList` without error cleanup. If an initial
+append succeeds and later growth fails, a general allocator loses that buffer.
+The Phase 1 allocation-failure test exercises `select`, not this new function.
+Current arena callers release storage at teardown, so this is not evidence of a
+live-run leak. Add ordinary owned-buffer cleanup and a growth-triggering allocation
+failure test; preserve the already tested `select` implementation. Do not make the
+shared API arena-only merely to avoid testing ownership.
+
+**Medium — resource and reuse claims need direct evidence (3.1–3.2).**
+[Coverage](../src/domain/specification_coverage.zig) currently allocates effective
+lineage for each candidate unit inside the retained-claim loop. The same unit is
+thus traversed/allocated repeatedly. Measure this independently of provider tokens,
+including repeated validation and larger ledgers. If material, derive each unit's
+view once per validation pass using the existing owner; no persistent cache, second
+coverage index or process-wide authority store is justified.
+
+Independent reuse is feasible through the existing
+[operation registry](../src/ports/workflow_operation_registry.zig) and test-owned
+schemas/bindings already demonstrated by [runner tests](../src/workflow_execution_test.zig).
+Use an isolated test registry and declared typed input/output; no production data
+key, capability or demonstration workflow is needed. Prove different native
+eligibility with a second typed consumer, and test structural composition separately.
+Mixed-support tests may retain domain-owned non-reference evidence; they must not
+pretend the current source-scoped text validator accepts answer-only typed text.
+
+**What already agrees:** source-review `supported_provenance` is derived and
+projected by its existing owner, completed intrinsic validation traverses whole
+records, old wire/state versions reject, and native value repair retains original
+`B`. Preserve these paths and extend their consumer tests. The primary problem is
+inconsistent use of one authority's derived view, not a missing central repository
+or a justification for another resolver.
+
+### 6.6 Research check and feasibility limits
+
+Rechecked official documentation on 26 September 2026. AWS documents
+`response_format` for open-weight InvokeModel structured output, numeric enums,
+internal schema references and a limited JSON Schema subset. New schemas may
+incur grammar compilation and cached schemas are reused. These are provider
+constraints to account for when measuring requests, not grounds to relax native
+validation. [AWS structured outputs](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
+
+An enum can restrict an ID to a nonempty finite set; it cannot decide which
+eligible occurrence preserves the intended meaning.
+[JSON Schema enum](https://json-schema.org/understanding-json-schema/reference/enum)
+Here, dynamic numeric enums are **a deferred option**, not a configuration-only fix:
+SDDE's `model_result_schema.Node.enumeration` accepts strings, and current native
+restriction only removes unavailable tagged variants. Extending numeric enums and
+binding dynamic choices through schema selection, identity, correction and assembly
+needs a focused contract decision and conformance tests. Do not create an
+adapter-only schema or a parallel list. Empty choices should remove the variant,
+not create an invalid empty enum. Consider this only after measuring the bounded
+conformance patches; it would not repair missing final text or meaningless prose.
+
+The retained run already used native structured output. The reviewed sources do
+not establish why its raw final answer was absent. Preserve the current missing-answer
+classification, bounded correction and actual token accounting; do not use reasoning
+as content or promise that prompt cleanup will fix the provider response. Phase 4
+must separate final-answer availability, contract validity and semantic usefulness.
+
 ## 7. Other deterministic opportunities, ranked separately
+
+These are deferred assessments, not additional Phase 2 work. Keep their response
+and persistence contracts unchanged while closing §6.5. Their feasibility differs:
+
+| Item | Disposition and minimum evidence before implementation |
+| --- | --- |
+| A — reconciliation token metadata | Feasible because one preserved-token claim determines the token. Separate approval/cutover must cover summaries, global signals, replacement, persistence and unchanged source review; measure whether this remains a material failure source. |
+| B — summary keys | Feasible only after an ordering decision. Test shuffled arrays, insertion/deletion, stable retry identity and byte-stable state before removing keys/sort/repair together. No guessed semantic ordering. |
+| C — review association | Single-target repair already binds identity; reuse it. Batch association is still a real choice. Keep current IDs unless an approved named-slot contract demonstrates lower cost and exact membership under missing/reordered output. |
+| D — diagnostic guidance | Existing `ValueChoices.correction` already names unavailable exact/passive selections. Correct its inputs/consumers in Phase 2; do not create another guidance owner. Extend other diagnostics only for demonstrated missing native facts. |
 
 ### A. Reconciliation token metadata
 
@@ -650,7 +943,7 @@ redundant metadata can reduce useful context if requests are over-trimmed.
 | Better diagnostics only | Smallest operational change; can name the missing claim precisely. Retains the model bookkeeping failure class. |
 | One claim handle, still repeat it in provenance | Removes token/citation disagreement but preserves the reported missing-supporting-claim failure. Insufficient for this objective. |
 | One handle, permanently flatten explicit and derived claims | Avoids the initial mismatch but cannot meet the stated removal/readback guarantees. Reject this shortcut. |
-| One handle in model/canonical text; retain explicit selection and derive effective provenance | Preferred: meets the stated guarantees with one selection authority and no pair conversion. Requires the focused cross-cutting amendment. |
+| One handle in model/canonical text; retain explicit selection and derive effective provenance | Approved and active under ADR 0020. Meets the intended model with one selection authority; §6.5 conformance was closed in Phase 2. |
 
 The model can still select the wrong or nonexistent occurrence, omit an exact
 value, misunderstand a requirement, or return malformed JSON/no answer. This
@@ -680,8 +973,8 @@ The user approved the focused contract on 26 September 2026. [ADR 0020](../desig
 is the governing authority for the exact claim handle, explicit versus derived
 lineage, bounded value-only repair, version cutover, readback and failure
 precedence. §§5–8 record the analysis behind that decision; they are not a
-second implementation policy. The current runtime still uses its old format
-until Phase 2 activates the coordinated replacement.
+second implementation policy. The current runtime uses the new format; Phase 2
+conformance did not restore or authorize the old one.
 
 Approval does not grant broader coupled evidence changes, verdict reassessment,
 multiple-ledger attribution, zero-scope typed text, reconciliation-token or
@@ -691,20 +984,24 @@ cannot acquire a fresh claim from the whole assignment catalogue on retry.
 
 ## 10. Phased rollout with testable checkpoints
 
-**Phases 0–1 are done; the remaining chunks are planned.** The approved contract
-activates only at the coordinated Phase 2 cutover. There are five phases and eleven
+**Phases 0–2 are done; Phases 3–4 remain.** The approved contract
+activated at the coordinated Phase 2 format cutover. There are five phases and eleven
 chunks. Each chunk produces a reviewable diff, named regression evidence and a
 recorded proceed/revise decision. §11 supplies the common acceptance matrix;
 passing a safe-block test must never be reported as successful recovery.
 
-The smallest change that can land independently is the behavior-preserving owner
-refactor in Phase 1. Phase 2 changes a closed format and must activate as **one
-coherent change**: model/canonical types, schemas, repair and readback cannot run in
-mixed versions. Develop its chunks in an isolated working change, test each owning
-boundary, and integrate them before activation. They are review checkpoints, not
-independent releases. Coalesce inseparable edits if necessary to keep their owning
-tests executable; do not introduce temporary runtime flags, dual readers, skipped
-tests or conversion adapters to manufacture smaller deployable patches.
+Phase 1's independent owner refactor and Phase 2's coordinated format activation
+and conformance checks are complete. Do not
+reintroduce temporary runtime flags, dual readers, skipped tests or pair/handle
+conversion adapters to make individual fixes appear smaller.
+
+**Next implementation order:** run independent reuse/failure integration and
+measurements (3.1–3.2), then separately approved controlled calls and a complete
+scored E2E (4.1–4.2).
+
+Every follow-up has a failing regression at its owner, an unrelated accepted case
+and a reject case. The repairs above implement existing ADR 0020 authority. Broader
+evidence expansion, numeric-enum schemas and §7 changes remain separate decisions.
 
 ### Phase 0 — Establish evidence and settle authority
 
@@ -795,8 +1092,11 @@ ownership refactor; ADR 0020's exact-handle runtime behavior begins in Phase 2.
 
 ### Phase 2 — Implement one coordinated format change
 
-**2.1 — Native handle resolution and lineage construction.** Depends on 1.1.
+**2.1 — Native handle resolution and lineage construction — done.** Depends on 1.1.
 
+- **Closed scope:** fix owned-buffer cleanup in `reference_support.lineage` and
+  test failure after successful allocation and during growth. Existing `select`
+  cleanup and the active handle contract remain intact; no new lookup owner.
 - **Outcome/owners:** change typed exact segments and canonical selection according
   to the approved contract. Reuse reference lookup/union and typed-text validation;
   consuming domains enumerate only their declared fields and owning evidence units.
@@ -808,8 +1108,14 @@ ownership refactor; ADR 0020's exact-handle runtime behavior begins in Phase 2.
   Ordinary JSON remains structural; no reflective search for `claim_id` keys and no
   literal-text guessing. Stop if the implementation loses explicit/derived roles.
 
-**2.2 — Requests and configured schemas.** Depends on 2.1.
+**2.2 — Requests and configured schemas — done.** Depends on 2.1.
 
+- **Closed scope:** the latest run in §2 exposed an unconditional exact-copy
+  instruction in a string-only repair. Replace it consistently in the existing
+  purpose prompts. Also restrict offered exact/passive replacements from the same
+  authorized owning-unit facts used by native validation, preserving broad source
+  context. Verify emitted initial/repair/omission/correction requests with available,
+  empty and foreign choices. No new repair or schema authority is needed.
 - **Outcome/owners:** update `model_evidence`, session/repair packets and configured
   complete schemas. Derive selected/part schemas through existing owners. Initial
   generation, embedded prior content, repair `current_value` and correction use the
@@ -822,8 +1128,13 @@ ownership refactor; ADR 0020's exact-handle runtime behavior begins in Phase 2.
   repairs and omitted-record context. Any need for a whole-candidate conversion API
   or duplicated schema authority sends this chunk back to the ownership review.
 
-**2.3 — Repair, coverage and dependency renewal.** Depends on 2.1–2.2.
+**2.3 — Repair, coverage and dependency renewal — done.** Depends on 2.1–2.2.
 
+- **Closed scope:** the three repair discrepancies in §6.5. Use complete owning
+  evidence for omission authorization and choices; validate the selected retry
+  target under that context; reconstruct derived order after an authorized merge
+  while preserving effective sets. Keep unrelated sibling failures independent.
+  Cover shared records and `S=[]`, not only attributed fields with explicit support.
 - **Outcome/owners:** adapt native and coverage repair through their existing atomic
   authorizations. Retain the original approved invalid-handle baseline across attempts
   while updating expected value/revision. Compare effective evidence where required;
@@ -842,8 +1153,13 @@ ownership refactor; ADR 0020's exact-handle runtime behavior begins in Phase 2.
   bindings terminate without another model call. If recovery needs new authority,
   return to 0.2 rather than weakening equality or increasing retries.
 
-**2.4 — Review, rendering and persisted readback.** Depends on 2.1–2.3.
+**2.4 — Review, rendering and persisted readback — done.** Depends on 2.1–2.3.
 
+- **Closed scope:** carry the full owning record's resolved evidence through
+  per-field rendering. Add a mixed-field regression that reaches projection,
+  complete-state encoding/readback and rendering comparison. Preserve strict
+  intrinsic readback and already projected positive-review evidence. The projection
+  patch can be developed first; closing this checkpoint requires repaired-flow tests.
 - **Outcome/owners:** coverage, source/principle evidence, projection and completed
   state consume the same derived lineage. Preserve negative diagnostic eligibility.
   Update affected version contracts and pending-state handling together; pending
@@ -858,8 +1174,34 @@ ownership refactor; ADR 0020's exact-handle runtime behavior begins in Phase 2.
   membership, alongside meaningful successful output.
 - **Exit/revise:** every producer/consumer in §6 agrees; superseded formats, readers,
   tuple-only repair branches and fixtures are removed. Keep negative tests that reject
-  old shapes. Any readback discrepancy blocks the whole Phase 2 change. No activation
-  until Phase 3's integration gate passes.
+  old shapes. Any readback discrepancy blocks the whole Phase 2 change. No live
+  readiness claim until Phase 3's integration gate passes.
+
+**Phase 2 complete (26 September 2026):** Spec exact segments select one
+preserved-token claim; the reference owner resolves its bytes and the provenance
+owner derives effective claim and citation lineage from the complete field or
+shared record. Generation and repair use the same handle in their configured
+schema and request choices. Value repair retains its original evidence bound
+across retries; coverage, positive review evidence, rendering and completed
+readback consume derived lineage. The tuple-specific coupled repair and old
+accepted wire/state versions were removed. The §6.5 follow-up resolves record
+evidence once for field projection, omission authorization and selected retry
+validation. Authorized completed-value edits reconstruct derived citation order
+and compare evidence sets before full validation; readback rejects corrupt stored
+projections. Fixed repair packets restrict exact and passive choices to their
+bound, and purpose guidance no longer instructs string-only repairs to insert
+reference IDs. Shared lineage frees its buffer on allocation failure.
+
+Regressions cover mixed prose/exact scalar and relationship-array fields through
+rendering and completed-state readback, tampered citations, sibling-derived and
+empty-explicit evidence, omission packets and repairs, reordered citations,
+unauthorized scope expansion, selected
+retry progress despite a bad sibling, and allocation failure during lineage growth.
+`zig build test-specification-generation test-reference-reconciliation --summary failures`,
+`zig build verify --summary failures` (including native packaging smoke) and
+`git diff --check` pass. These offline checks establish contract conformance, not
+live semantic quality. Phase 3 still owns independent cross-workflow integration
+and comparative request/resource measurements; Phase 4 owns approved live tests.
 
 ### Phase 3 — Prove reuse and integration offline
 
@@ -868,6 +1210,10 @@ ownership refactor; ADR 0020's exact-handle runtime behavior begins in Phase 2.
 - **Outcome/owners:** prove the §6.4 contract through a test-owned registered non-Spec
   consumer with different fields and eligibility, using the same reference mechanism
   and existing runner/composition. Add no production demonstration workflow/framework.
+- **Testable parts:** first compile/run that independent typed consumer with an
+  isolated registry; then compose it with retained-part freshness and failure
+  propagation tests. Extend the existing request-workflow tests for the retained
+  Spec failure sequence instead of inventing a second provider/retry test harness.
 - **Checks:** nested/array/optional typed fields, no-reference workflows and mixed
   domain evidence retain their boundaries. Sliced results, renewed dependencies,
   stale reads and operational IDs behave correctly. Combine successful assignments
@@ -876,8 +1222,20 @@ ownership refactor; ADR 0020's exact-handle runtime behavior begins in Phase 2.
   exhaustion must prevent both specification and clarification publication.
   Include §2's combined sequence: earlier native repairs succeed, a missing answer
   recovers within its request, then a different native assignment exhausts.
-- **Exit/revise:** independent integration and negative tests pass without Spec/session
-  imports or workflow-name branches. This proves a reusable contract, not completed
+  Also cover the post-cutover sequence: wrong-kind exact selection, a repaired
+  title after missing-answer recovery, then description protocol exhaustion before
+  any native replacement. Keep those two exhaustion boundaries distinguishable.
+  Extend it with the latest run's eight successful native targets, each requiring
+  missing-answer correction, then a ninth target's protocol exhaustion. Preserve
+  completed siblings, per-assignment retry identities, fixed evidence and exact
+  accounting. Include a correct exact handle with `S=[1]` that needs no provenance
+  repair but supplies only a literal: native acceptance must not stand in for
+  semantic review or convert an interpretation defect into a user clarification.
+  Alongside containment, require meaningful recovery through FR/AC generation,
+  coverage, source/principle assessment, publication and readback. A fake semantic
+  review demonstrates routing only; it does not prove the model's judgment.
+- **Exit/revise:** the independent consumer's integration and negative tests pass
+  without Spec/session imports or workflow-name branches. This proves a reusable contract, not completed
   Plan/Tasks/Implement workflows. A helper test or renamed Spec workflow is insufficient.
 
 **3.2 — Measurements and complete verification.** Depends on 3.1.
@@ -891,6 +1249,16 @@ ownership refactor; ADR 0020's exact-handle runtime behavior begins in Phase 2.
   `git diff --check`. Full verify already includes clean-directory native packaging
   smoke; repeat it only when later changes invalidate that evidence. Review packaged
   workflow/schema resources and the full diff for duplicate policy and dead paths.
+- **Measurement method:** use equivalent assignments with the same source ledger,
+  explicit evidence and repair scope. Record complete request/schema/output bytes,
+  graph operations, native elapsed time and allocator counts/peak bytes for small
+  and larger ledgers. Include the repeated lineage work identified in §6.5 and
+  distinguish cumulative arena allocation from retained output. Historical coupled
+  repair versus current value-only repair is not an equivalent before/after pair;
+  keep those figures descriptive. Use retained baseline artifacts, not a legacy
+  runtime path. Report initial generation and repair/correction costs separately,
+  including missing answers; §2 records the latest observed costs. Do not infer
+  tokens or semantic quality from byte reductions.
 - **Exit/revise:** all applicable tests pass; no unexplained request/resource growth
   or additional orchestration/model call is accepted as automatic simplification.
   Bytes are not token counts. Offline usage fixtures prove accounting only; record
@@ -906,7 +1274,19 @@ ownership refactor; ADR 0020's exact-handle runtime behavior begins in Phase 2.
   call count and budget. Keep the old response as evidence, not a second runtime path.
 - **Checks:** record final-answer presence, JSON/schema/native validity, literal and
   meaning preservation, repair outcomes, actual tokens and latency for every attempt.
+  Start with the latest run's captured calls 28–29 from §2, whose guidance already
+  conforms; preserve their fixed evidence/schema and measure final-answer availability.
   A failed earlier baseline alone does not establish a statistical improvement rate.
+- **Two separate questions:** fixed-bound replay tests whether the corrected repair
+  assignment returns usable, purpose-appropriate prose; fresh initial generation
+  tests whether it selects the right occurrence and preserves behavior in story,
+  requirements and Given/When/Then. Do not widen a replay's evidence to
+  manufacture recovery, or treat prose-only repair as restored exact-token coverage.
+  Retain every attempt, including missing answers; declare the case set, call count,
+  budgets and success criteria before asking approval. Provider settings stay fixed
+  for the prompt comparison; any later provider-setting comparison is a separate
+  measured proposal. Report observations rather than claiming reliability from a
+  handful of calls or reusing a prior approval.
 - **Exit/revise:** report whether the redundant join failure was removed and whether
   new failures appeared. Do not proceed on shape success alone. If poor semantic
   content remains, identify its owner separately; do not add guessed evidence or
@@ -936,7 +1316,7 @@ the complete suite; do not use standalone `zig test` as a parallel build path.
 
 | Boundary/chunks | Targeted commands |
 | --- | --- |
-| Reference mechanics, 1.1/2.1 | `zig build test-reference-evidence test-reference-model-input test-typed-text test-architecture` |
+| Reference mechanics, 1.1/2.1 | `zig build test-reference-evidence test-reference-model-input test-reference-reconciliation test-typed-text test-architecture` |
 | Closed shapes/requests, 2.1–2.2 | `zig build test-specification-contract test-model-candidate-json test-model-result-schema test-model-request-preparation` |
 | Native generation/repair/readback, 0.1/2.3–2.4 | `zig build test-specification-generation test-workflow-repair-retry` |
 | Protocol/accounting/integration, 2.3/3.1 | `zig build test-model-request-workflow test-model-attempt-accounting test-pipeline-envelope test-atomic-execution test-workflow-graph` |
@@ -963,13 +1343,15 @@ and user clarification records rather than adding migrations or fallback readers
 | Explicit/derived overlap | The two §5.2 examples remain distinguishable after round-trip. Removing a reference under an authorized group drops only derived support; intentional explicit token evidence survives. |
 | Empty explicit selection | In source-backed Spec, `S=[]` is permitted when eligible exact segments supply nonempty effective evidence; empty effective evidence rejects. Other domains retain their accepted non-reference support. No semantic-quality pass is implied. |
 | Reference added, replaced or removed | Correct dependency recomputation for the whole authorized unit; unrelated sibling data and producer origins unchanged. |
-| Shared-provenance acceptance record | All fields contribute exact dependencies; Given/When/Then retain separate meaning and unaffected content. |
+| Shared-provenance acceptance record | All fields contribute exact dependencies; Given/When/Then retain separate meaning and unaffected content. A prose-only sibling must render when another field alone supplies exact evidence. Carry that case through publication and completed readback. |
 | Fixed-evidence repair | Pin explicit `S` exactly and compare effective claim/citation sets. Harmless segment reordering recomputes stable canonical order; it does not fail merely because the derived list order changed. Reference removal/addition cannot shrink/expand evidence without its authorized coupled target; include unchanged siblings in the full-record check. |
 | Invalid candidate without complete provenance | Cover valid explicit support/siblings plus an unknown handle recovering within approved `B`, and empty/insufficient `B` blocking. Unknown handles grant no scope. A field-only success followed by exact-coverage failure must not publish. Do not demand equality with old `L` that never existed. |
 | Invalid explicit support and invalid handle | Existing evidence repair or an authorized group handles invalid `S`; it is never pinned as trusted scope. Cover staged recovery and exhaustion with unchanged retry families, sibling data and accounting. |
 | Repair cannot expand its own scope | Retain original `B` while expected values/revisions advance. A later rejected response containing a newly eligible handle cannot enlarge the next request's permitted set. Upstream changes invalidate existing authorization through its normal dependency checks. |
+| Omission/progress conformance | Resolve effective evidence over the entire owning unit, including `S=[]` and sibling-only exact support. The selected repair's success remains independent of another sibling defect; no false recurrence or allowance reset. |
+| Authorized construction versus readback | An authorized replacement reorders/materializes derived citations under the same effective sets before canonical validation. A persisted mismatch rejects rather than passing through repair construction. |
 | Bad selection versus broken binding | Unknown model choices under valid authority may repair. Invalid/missing trusted ledger or choice binding follows existing terminal rejection, with no extra model call, clarification or publication. |
-| Passive references and source scope | Equivalent valid candidates retain their available choices; removed dependencies force sibling revalidation. Operational path capabilities remain unchanged. |
+| Passive references and source scope | Equivalent valid candidates retain their available choices; fixed repair packets offer only current authorized replacements, even when broad source context contains others. Removed dependencies force sibling revalidation. Operational path capabilities remain unchanged. |
 | Native expected value / model presentation | Existing atomic checks still bind exact native expected values and dependencies. Shared handle syntax must not conceal differences in evidence shape or authorize lossy comparisons. |
 | Diagnostic localization | A rejected handle names its field/segment and permitted choices; it targets value repair, not unrelated provenance. Changed invalid IDs do not restart the same assignment's allowance. |
 | Supported and negative review evidence | Supported findings compare with effective provenance. Loss/negative findings retain their existing distinct eligibility; validate both live in-memory and on completed-state readback. |
@@ -986,16 +1368,20 @@ and user clarification records rather than adding migrations or fallback readers
 | Namespace isolation and reuse | Swapped bindings reject across different states and after changed ledger production under the same corpus ID/ordinal. A bare ordinal cannot reveal unstated model intent. Valid predecessor identity survives a fresh execution; stale producer/contract changes invalidate dependents. |
 | Operational and stage boundaries | Display references grant no file/copy/command capability; source-like strings inside code remain raw payload. Existing clarification and approval gates remain independent. |
 | Shared dependency direction | Architecture checks reject shared reference/syntax modules importing Spec generation, sessions or policy; no second resolver/schema/policy registry. |
+| Allocation and scale | Inject failure after initial allocation and during lineage growth; no leaks with a general allocator. Measure repeated full-unit derivation separately from model tokens and avoid persistent caches for per-pass work. |
 
 ## 12. Feasibility conclusion
 
 **Viable for reuse across workflows through a shared typed contract, with Spec as
-the first integration.** The engine already has occurrence identities, structural
-composition and registered-operation boundaries. The remaining work is the shared
-reference refactor, canonical selection representation and repair/readback conformance.
-The decisions in §9 are prerequisites to contract implementation. Phase 3 supplies
-the offline integration/reuse evidence; Phase 4 separately assesses live outcomes.
-Neither the approved contract nor successful helper tests establish those outcomes.
+the first integration. Phase 2 is complete.** The reference-owner refactor,
+handle representation, explicit selection, version cutover and §6.5 conformance
+work are implemented. They require no new message layer, reference registry,
+retry mechanism or general-purpose fixer.
+
+**Implement next:** Phase 3's independent consumer, cross-boundary failure and
+recovery tests, and comparative request/resource measurements. Phase 2's offline
+success is not evidence that the provider's missing final answers or semantic
+quality in the retained run improved.
 
 This does not promise automatic support for every JSON Schema, authority namespace
 or future workflow. New domains reuse the mechanism by supplying their declared
@@ -1003,15 +1389,20 @@ typed fields, validated reference binding and native policy; they do not duplica
 the resolver or inherit Spec's semantic rules. Workflows without reference content
 continue using their existing deterministic owners.
 
-The first implementation should remove one avoidable failure class end to end.
-It must not claim deterministic proof of specification quality, silently infer
-business evidence, or hide unresolved model errors behind mechanically complete
+The cutover removes one redundant model-side join. Completion must demonstrate
+that its replacement works at every consumer. It must not claim deterministic
+proof of specification quality, silently infer business evidence, or hide unresolved model errors behind mechanically complete
 coverage. Broader bookkeeping simplifications should follow measured evidence,
 independently of this first contract.
 
-**Evidence limit:** Phase 0 exercises current behavior through offline regression
-tests. The approved target types/schemas have not been compiled or exercised, and no live
-effectiveness claim follows from this review.
+**Evidence limit:** Phase 2's tests and full verification establish offline
+conformance, including packaged behavior. The latest retained run used corrected
+guidance and accepted a valid derived reference, but still produced poor interim
+content and exhausted missing-answer recovery before publication or grading.
+This assessment launched no provider calls or E2E. Phase 3 supplies independent offline integration and
+measurements; Phase 4 requires separately approved live effectiveness and a
+published, scored output. ADR 0020's explicitly excluded extensions remain
+unapproved.
 Existing regression owners include [specification generation tests](../src/specification_generation_test.zig),
 [typed-text tests](../src/typed_text_test.zig), [request workflow tests](../src/model_request_workflow_test.zig)
 and [native packaging smoke](../test/packaging/smoke.zig); implementation must extend

@@ -511,6 +511,17 @@ test "shared reference support resolves ordered claims without Spec policy" {
 
 test "shared reference support releases allocations on every failure" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, supportAllocationCase, .{});
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, lineageAllocationCase, .{});
+}
+
+fn lineageAllocationCase(allocator: std.mem.Allocator) !void {
+    const support = @import("domain/reference_support.zig");
+    const explicit = [_]r.ClaimId{.{ .ordinal = 1 }};
+    const extra = [_]r.ClaimId{ .{ .ordinal = 2 }, .{ .ordinal = 3 }, .{ .ordinal = 2 }, .{ .ordinal = 4 }, .{ .ordinal = 5 }, .{ .ordinal = 6 }, .{ .ordinal = 7 }, .{ .ordinal = 8 }, .{ .ordinal = 9 }, .{ .ordinal = 10 } };
+    const selected = try support.lineage(allocator, &explicit, &extra);
+    defer allocator.free(selected);
+    try std.testing.expectEqual(@as(usize, 10), selected.len);
+    try std.testing.expectEqualDeep(explicit[0], selected[0]);
 }
 
 fn supportAllocationCase(backing: std.mem.Allocator) !void {

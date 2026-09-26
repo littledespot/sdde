@@ -353,29 +353,19 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 if (view.contains(.specification_repair_authorization)) {
                     const state = try @import("../application/specification_values.zig").storage.read(&view, @import("../application/specification_repair_workflow.zig").authorization_schema, .repair_authorization);
                     const auth = state.authorization;
-                    if (auth.operation == .replace and auth.operation.replace == .attributed) {
-                        const token_claim = for (all.entries) |item| {
-                            if (item.claim.content == .preserved_token) break item.claim.id;
-                        } else return error.InvalidFixture;
-                        var fixed = try attributed(allocator, all, &.{ first, token_claim });
-                        if (options.failed_repair) fixed.provenance.claim_ids = &.{.{ .ordinal = 999999 }};
-                        return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_repair.zig").Replacement, allocator, .{ .attributed = fixed });
-                    }
-                    if (auth.rule.group != null and auth.rule.group.? == .evidence and auth.target == .record) {
-                        const claim = for (all.entries) |item| {
-                            if (item.claim.content == .preserved_token) break item.claim;
-                        } else return error.InvalidFixture;
-                        var fixed = auth.operation.replace.record;
-                        const exact = (try businessValue(allocator, claim)).?;
-                        const segments = try allocator.alloc(r.text.BusinessSegment, value.value.segments.len + 1);
-                        @memcpy(segments[0..value.value.segments.len], value.value.segments);
-                        segments[segments.len - 1] = exact.segments[0];
-                        fixed.content = withRecordText(fixed.content, .{ .segments = segments });
-                        fixed.provenance = .{ .claim_ids = try allocator.dupe(r.ClaimId, &.{ first, claim.id }), .clarification_response_ids = &.{} };
-                        return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_repair.zig").Replacement, allocator, .{ .record = fixed });
-                    }
                     if (auth.operation == .replace and auth.operation.replace == .value) {
-                        return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_repair.zig").Replacement, allocator, .{ .value = value.value });
+                        var corrected = value.value;
+                        if (options.misbound_exact and auth.target.value.subject == .record) {
+                            const record = auth.dependencies.candidate.response.content.records[auth.target.value.subject.record];
+                            for (record.provenance.claim_ids) |id| {
+                                const claim = (try r.item(all, id)).claim;
+                                if (claim.content == .preserved_token) {
+                                    corrected = .{ .segments = &.{.{ .exact_copy = .{ .claim_id = id } }} };
+                                    break;
+                                }
+                            }
+                        }
+                        return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_repair.zig").Replacement, allocator, .{ .value = corrected });
                     }
                     if (auth.rule.group != null and auth.rule.group.? == .membership) {
                         const membership = auth.rule.group.?.membership;
@@ -423,7 +413,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                                 const exact: g.spec.BusinessValue = if (options.normalize_exact)
                                     .{ .segments = try allocator.dupe(@import("../domain/typed_text.zig").BusinessSegment, &.{.{ .literal = .{ .value = token.value.raw_value.bytes } }}) }
                                 else
-                                    .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .exact_copy = .{ .token_id = token.value.id, .citation_id = token.citation_id } }}) };
+                                    .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .exact_copy = .{ .claim_id = item.claim.id } }}) };
                                 try records.append(allocator, .{ .content = .{ .user_visible_outcome = .{ .text = exact } }, .provenance = selected.provenance });
                             }
                         }
@@ -438,10 +428,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             };
             if (options.repair and unit == .brief) proposed.content.brief.description.provenance.claim_ids = &.{.{ .ordinal = 999999 }};
             if (options.misbound_exact) {
-                const token = for (all.entries) |item| {
-                    if (item.claim.content == .preserved_token) break item.claim.content.preserved_token;
-                } else return error.InvalidFixture;
-                const invalid_value: g.spec.BusinessValue = .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .exact_copy = .{ .token_id = token.value.id, .citation_id = token.citation_id } }}) };
+                const invalid_value: g.spec.BusinessValue = .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .exact_copy = .{ .claim_id = .{ .ordinal = 999999 } } }}) };
                 switch (unit) {
                     .brief => {
                         inline for (.{ "title", "description", "primary_goal" }) |field| @field(proposed.content.brief, field).value = invalid_value;
@@ -456,7 +443,6 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                             if (selected.contains(kind)) continue;
                             selected.insert(kind);
                             record.content = withRecordText(record.content, invalid_value);
-                            record.provenance = value.provenance;
                         }
                         proposed.content.records = broken;
                     },
@@ -775,7 +761,7 @@ fn businessValue(allocator: std.mem.Allocator, claim: r.extraction.Claim) !?g.sp
             .business, .scope_guard => |value| .{ .segments = value.value.segments },
             else => null,
         },
-        .preserved_token => |token| .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .exact_copy = .{ .token_id = token.value.id, .citation_id = token.citation_id } }}) },
+        .preserved_token => .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .exact_copy = .{ .claim_id = claim.id } }}) },
     };
 }
 fn attributed(allocator: std.mem.Allocator, all: r.Items, ids: []const r.ClaimId) !g.spec.Model.AttributedValue {
@@ -827,7 +813,7 @@ fn scriptedValue(allocator: std.mem.Allocator, all: r.Items, scalar: g.spec.Scal
         for (all.entries) |item| {
             if (item.claim.content == .preserved_token) {
                 const token = item.claim.content.preserved_token;
-                if (std.mem.eql(u8, token.value.raw_value.bytes, scalar.bytes)) return .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .exact_copy = .{ .token_id = token.value.id, .citation_id = token.citation_id } }}) };
+                if (std.mem.eql(u8, token.value.raw_value.bytes, scalar.bytes)) return .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .exact_copy = .{ .claim_id = item.claim.id } }}) };
             }
         }
         return error.InvalidSpecificationScript;

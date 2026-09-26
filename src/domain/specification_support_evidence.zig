@@ -94,7 +94,7 @@ pub fn requirements(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.e
             .signal, .conflict, .token => .exact_set,
             else => .eligible_subset,
         },
-        .supported_provenance = expectedProvenance(inputs, id),
+        .supported_provenance = try expectedProvenance(allocator, inputs, id),
     };
 }
 pub const Issue = enum { invalid_loss, stale_authority, invalid_sources, ineligible_claim, invalid_selection, missing_claims, missing_evidence, wrong_claim_set, wrong_candidate_provenance };
@@ -133,13 +133,20 @@ fn reject(issue: Issue, rule: Rule) Admission {
 fn selection(value: spec.Provenance) spec.Selection {
     return .{ .claim_ids = value.claim_ids, .clarification_response_ids = value.clarification_response_ids };
 }
-fn expectedProvenance(inputs: a.Inputs, id: a.Id) ?spec.Provenance {
+fn expectedProvenance(allocator: std.mem.Allocator, inputs: a.Inputs, id: a.Id) Error!?spec.Provenance {
     if (inputs.brief) |brief| if (id.unit == .feature) switch (id.slot) {
-        .description => return brief.description.provenance,
-        .primary_goal => return brief.primary_goal.provenance,
+        .description => return try effectiveAttributed(allocator, brief.description),
+        .primary_goal => return try effectiveAttributed(allocator, brief.primary_goal),
         else => {},
     };
-    return if (inputs.specification) |content| candidateProvenance(content, id) else null;
+    return if (inputs.specification) |content| try candidateProvenance(allocator, content, id) else null;
+}
+
+fn withEffective(value: spec.Provenance, claims: []const r.ClaimId) spec.Provenance {
+    return .{ .claim_ids = claims, .citation_ids = value.citation_ids, .clarification_response_ids = value.clarification_response_ids };
+}
+fn effectiveAttributed(allocator: std.mem.Allocator, value: spec.AttributedValue) Error!spec.Provenance {
+    return withEffective(value.provenance, try @import("specification_provenance.zig").effectiveClaims(allocator, value.provenance.claim_ids, &.{value.value}));
 }
 
 pub const DetailRule = struct {
@@ -198,16 +205,19 @@ fn sameProvenance(expected: spec.Provenance, actual: spec.Provenance) Error!void
     try r.sameSet(spec.ResponseId, expected.clarification_response_ids, actual.clarification_response_ids);
 }
 
-fn candidateProvenance(content: spec.IdentifiedContent, id: a.Id) ?spec.Provenance {
+fn candidateProvenance(allocator: std.mem.Allocator, content: spec.IdentifiedContent, id: a.Id) Error!?spec.Provenance {
     switch (id.unit) {
         .feature => return switch (id.slot) {
-            .display_name => content.display_name.provenance,
-            .primary_user_story => content.primary_user_story.provenance,
-            .entities => content.entities.basis.provenance,
+            .display_name => try effectiveAttributed(allocator, content.display_name),
+            .primary_user_story => try effectiveAttributed(allocator, content.primary_user_story),
+            .entities => try effectiveAttributed(allocator, content.entities.basis),
             else => null,
         },
         .record => |selected| for (content.records) |record| {
-            if (std.meta.eql(record.id, selected)) return record.proposal.provenance;
+            if (std.meta.eql(record.id, selected)) {
+                const values = try @import("specification_provenance.zig").recordValues(allocator, record.proposal.content);
+                return withEffective(record.proposal.provenance, try @import("specification_provenance.zig").effectiveClaims(allocator, record.proposal.provenance.claim_ids, values));
+            }
         },
         else => {},
     }

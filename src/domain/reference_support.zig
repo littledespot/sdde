@@ -19,6 +19,26 @@ pub const Resolved = struct {
     citation_ids: []const r.CitationId,
     scopes: []const r.evidence.Scope,
 };
+/// One preserved occurrence, addressed by its canonical claim rather than a
+/// model-assembled token/citation tuple.
+pub fn exact(items: r.Items, id: r.ClaimId) r.Error!r.extraction.tokens.Token {
+    const claim = (try r.item(items, id)).claim;
+    if (claim.content != .preserved_token) return error.InvalidReferenceReconciliation;
+    return claim.content.preserved_token;
+}
+
+/// Stable evidence order: explicit selections first, then exact occurrences
+/// in the caller's declared field order. Explicit duplicates remain invalid.
+pub fn lineage(a: std.mem.Allocator, explicit: []const r.ClaimId, exact_claims: []const r.ClaimId) (std.mem.Allocator.Error || r.Error)![]const r.ClaimId {
+    try r.unique(r.ClaimId, explicit);
+    var result: std.ArrayList(r.ClaimId) = .empty;
+    errdefer result.deinit(a);
+    try result.appendSlice(a, explicit);
+    for (exact_claims) |id| {
+        if (!r.contains(r.ClaimId, result.items, id)) try result.append(a, id);
+    }
+    return result.toOwnedSlice(a);
+}
 /// Resolve reference mechanics; consumers retain their eligibility and other support policy.
 pub fn select(a: std.mem.Allocator, items: r.Items, inputs: r.evidence.Inputs, claim_ids: []const r.ClaimId) (r.Error || error{InvalidReferenceState})!Resolved {
     if (!items.state_id.eql(inputs.corpus.state_id)) return error.InvalidReferenceState;
