@@ -224,8 +224,9 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         bound_result.content = .{ .result_schema = result.content.result_schema.select(definition_id) orelse return error.ModelRequestAssociationInvalid };
     }
     const excluded = if (input != null and input.? == .packet) input.?.packet.excludedVariants() else &.{};
-    const restriction = if (excluded.len != 0)
-        @import("model_result_schema.zig").restrict(allocator, if (part_binding) |part| part.schema else bound_result.content.result_schema, excluded) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidModelRequestSource
+    const integer_choices = if (input != null and input.? == .packet) input.?.packet.integerChoices() else &.{};
+    const restriction = if (excluded.len != 0 or integer_choices.len != 0)
+        @import("model_result_schema.zig").restrict(allocator, if (part_binding) |part| part.schema else bound_result.content.result_schema, excluded, integer_choices) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidModelRequestSource
     else
         null;
     defer if (restriction) |owned| owned.release();

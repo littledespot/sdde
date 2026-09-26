@@ -1,13 +1,19 @@
 # LLM_REWORK — Derive mechanical facts; ask models for semantic choices
 
-**Reviewed:** 26 September 2026. **Status:** Phases 0–3 complete; Phase 4 remains.
+**Reviewed:** 26 September 2026. **Status:** Phases 0–3 and the Phase 4.1 diagnostic batch complete; Phase 4.2 failed its live gate.
 **Scope:** Phase 0 baseline tests, approved [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md),
 Phase 1's reference-owner refactor, Phase 2's coordinated format cutover and
-Phase 3's offline integration/measurements.
+Phase 3's offline integration/measurements, and Phase 4's approved live measurements.
 The retained runs and the conformance review are recorded below.
 Phase 2 closes the identified owning-unit, request-choice and allocation gaps;
-§10 records the checks. The latest retained run still failed; this assessment
-launched no model calls or E2E rerun.
+§10 records the checks. The latest retained workflow run still failed. Phase 4.1's
+eight approved diagnostic calls and Phase 4.2's one approved E2E run are recorded
+in §10. Publication/readback and rubric grading remain unproven; Phase 4 is not complete.
+**Current follow-up:** option 2's shared eligible-ID restriction is implemented
+offline under this phase-4 implementation request (§6.7). Live effectiveness,
+useful publication, persisted readback and rubric scoring remain unproven.
+The open-item review in §6.8 records current priorities and decision gaps; historical
+Phase 2 findings remain closed unless new conformance evidence reopens them.
 
 ## 1. Finding and recommendation
 
@@ -306,7 +312,7 @@ already works; choosing its business use remains semantic. Existing schema-choic
 narrowing proposals (§6.6) remain separate decisions, not an implicit extension of
 this run review. No new evidence, retry or semantic-review authority is justified.
 
-### Latest run — identical requests, first repair receives no final answer
+### Pre-Phase-4 run — identical requests, first repair receives no final answer
 
 Execution
 [`2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793`](../zig-out/e2e-spec/2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793/report.md)
@@ -657,8 +663,9 @@ stores references and clarification identities; generation questions are flatten
 to text by [the existing question builder](../src/actions/clarification/build_specification_clarification_need.zig).
 These are different contracts. ADR 0020's `specification/v2` and
 `specification-state/v6` cutover is active, including old-version rejection.
-Remaining readback tests must cover the owning-unit discrepancies below without
-adding a migration, dual reader or new pending evidence store.
+Phase 2 closed the owning-unit readback discrepancies recorded in §6.5. Preserve
+that coverage when adding §6.7 restrictions; no migration, dual reader or new pending
+evidence store is justified. Live completed readback remains unproven in Phase 4.
 
 ### 6.1 Shared mechanics and consuming-domain policy
 
@@ -912,14 +919,21 @@ validation. [AWS structured outputs](https://docs.aws.amazon.com/bedrock/latest/
 An enum can restrict an ID to a nonempty finite set; it cannot decide which
 eligible occurrence preserves the intended meaning.
 [JSON Schema enum](https://json-schema.org/understanding-json-schema/reference/enum)
-Here, dynamic numeric enums are **a deferred option**, not a configuration-only fix:
-SDDE's `model_result_schema.Node.enumeration` accepts strings, and current native
-restriction only removes unavailable tagged variants. Extending numeric enums and
-binding dynamic choices through schema selection, identity, correction and assembly
-needs a focused contract decision and conformance tests. Do not create an
-adapter-only schema or a parallel list. Empty choices should remove the variant,
-not create an invalid empty enum. Consider this only after measuring the bounded
-conformance patches; it would not repair missing final text or meaningless prose.
+Numeric enums and native eligible-ID restrictions now use the shared schema and
+packet owners (§6.7). The same selected shape reaches provider guidance and local
+validation. This is an offline conformance change, not a claim that the live model
+will return final text or meaningful prose. Empty choices remove the unavailable
+variant rather than producing an invalid empty enum.
+
+JSON Schema treats integral number representations such as `2` and `2.0` as the
+same integer. Extend SDDE's existing `exactInteger` checks rather than comparing
+number spellings or introducing floating-point ID conversion.
+[JSON Schema numeric types](https://json-schema.org/understanding-json-schema/reference/numeric)
+
+AWS documents leading reasoning tags for this InvokeModel response. That explains
+the framing, not the absence of a final answer in calls 17–18; their raw bodies
+contain no text after the closing tag.
+[AWS model response contract](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-openai.html)
 
 The retained run already used native structured output. The reviewed sources do
 not establish why its raw final answer was absent. Preserve the current missing-answer
@@ -927,17 +941,156 @@ classification, bounded correction and actual token accounting; do not use reaso
 as content or promise that prompt cleanup will fix the provider response. Phase 4
 must separate final-answer availability, contract validity and semantic usefulness.
 
+### 6.7 Option 2 — Restrict response choices using existing native authority
+
+**Status: implemented and offline verified. Live effectiveness remains open.** The focused contract and 1,024-value limit were authorized in the
+26 September 2026 implementation requests. Its outcome is precise:
+an unavailable reference must fail the selected response schema, before native
+candidate merge. Provider constraints may reduce invalid output; local schema and
+native validation must still enforce the rule if the provider returns it anyway.
+
+**Focused decision implemented:** extend design §12.2's existing tagged-alternative
+restriction contract to narrow declared integer selectors to native eligible sets.
+Preserve §12.9 / ADR 0016's composition binding, §22.4–§22.6's authorized replacement
+and correction boundaries, and ADR 0020's reference/repair authority. Integer-enum
+correction outlines now use the existing exact schema locator and type without
+repeating the allowed list. The user separately approved increasing the existing shared enum limit to **1,024**; both
+workflow-resource compilation and captured selected-schema reconstruction use it.
+Larger sets reject without truncation or unrestricted fallback. This settles the
+cardinality and bound-selector decisions. No live calls are authorized by this change.
+
+**Limit-change verification:** `zig build test-model-result-schema
+test-model-payload-schema --summary all` passed 83/83 tests; `zig build verify
+--summary all` passed 126/126 build steps and 1,256/1,256 tests, including native
+packaging smoke checks. `git diff --check` passed. No live calls were made.
+
+In captured call 8, the exact-copy selector would have the following derived shape:
+
+```json
+"claim_id": { "enum": [2] }
+```
+
+The existing reference owner supplies `2`; it is not a configured constant or a
+greeting-specific branch. Claim `1` remains eligible **business support** in
+`provenance.claim_ids`. Restricting every field named `claim_id` to the same list
+would corrupt the contract. Eligibility belongs to the declared selector and its
+evidence scope, not its property name or numeric value.
+This is an enum-only **schema fragment**. The current closed compiler permits
+`enum` alone and rejects the previously illustrated `type` plus `enum` combination.
+Prefer homogeneous string or integer enums through the existing node contract;
+mixed-type enums and general JSON Schema keyword combinations are unnecessary.
+
+**Shared ownership and scope:**
+
+- Extend the existing [schema owner](../src/domain/model_result_schema.zig) and
+  compiler/validator/serializer for integer enums and restrictions. Reuse its
+  canonical-to-selected schema relationship; derive a view of the one configured
+  schema, never another provider-only schema or eligibility registry.
+- Existing reference/passive and domain-policy owners supply allowed choices for
+  their declared typed selectors. Bind those facts to the current ledger, source
+  scope and assignment. Do not infer reference semantics in arbitrary JSON or branch
+  on workflow names. General provenance, operational IDs and unrelated fields keep
+  their own rules. Reuse the same mechanism across initial generation and existing
+  insertion, replacement and omission requests that expose these choices.
+- Initial choices can only express the availability known **before** the response.
+  The model's later provenance selection can narrow passive/source eligibility;
+  schema membership alone cannot prove that relationship. Native scope and semantic
+  checks remain necessary. Fixed repairs can restrict to their already-known bound.
+- Intersect restrictions with the canonical shape: zero choices remove the optional
+  tagged alternative, one or more produce a stable unique allowed set. Never emit an
+  empty enum, broaden a schema, silently truncate choices or select a default. A
+  required selector with no valid alternative follows the existing typed rejection.
+- Bind the selected schema once during request preparation. Prompt schema, native
+  provider schema, local decoding/validation, diagnostics and protocol correction
+  use that same restriction. Preserve it through cloning, request identity and
+  configured part selection/assembly; validate the full assembled candidate too.
+- Fixed-evidence repairs retain the original authorized choices; rejected responses
+  cannot enlarge them. Changed dependencies invalidate the binding through the
+  existing runner. Keep native eligibility, full validation, persisted readback,
+  retries and token accounting with their current owners. Do not persist another
+  allowed-ID authority or alter the canonical content format for request restrictions.
+
+**End-to-end implementation findings (26 September review):**
+
+| Boundary / evidence | Required treatment before claiming conformance |
+| --- | --- |
+| Integer enums — `model_result_schema.Compiler.node`, `jsonType`, `model_payload_schema.validateValue` | Implemented as a homogeneous integer-enum node alongside string enums. Cloning, complete/provider projection and exact numeric membership share existing owners. Regressions cover `2`, `2.0`, `2e0`, string `"2"`, fractions, range boundaries and duplicates. No broader scalar-enum support was added. |
+| Selector binding — `model_result_schema.restrictNode` | Implemented using a packet-declared tagged variant and integer field. The selected canonical schema checks matching pairs and bounds before deriving restrictions; unrelated integer fields remain untouched. A provenance-only repair has no text selector, so retained text-choice facts do not change its selected schema. Duplicate declarations, empty/oversized sets and a mistyped matching target reject at preparation. A future request needing different sets for two occurrences of the same tag and field requires an exact-location declaration, not global inference. |
+| Choice transport — `reference_model_input.withTextChoices`, `specification_session.packetForChoices/withSelectionChoices` | Native owners now carry exact ID sets out of band in the existing packet. `withContext`, `withJsonContext` and `atomic_repair.packet` retain them. Spec repair narrows presented display catalogues from typed facts, not by recovering authority from JSON. Reference extraction/reconciliation restrict passive IDs and still exclude exact-copy text. |
+| Runtime ownership — `model_request_handoff.assign/prepared`, `model_request_preparation.Source.resultSchema` | Existing handoff retains a reference-counted `Restricted` schema and correction checks pointer identity. Reuse that lifetime and association. `Schema.clone` clones canonical content but does not retain `restriction_of`; it is not a safe replacement for retaining a live restricted binding. Bind after graph/schema cloning; do not add new request IDs or schema hashes to reset an assignment. |
+| Composition — `json_composition_runtime.retain` | Retained proof must still be a restriction of the exact selected part, with current epoch/prerequisites. Byte-equal schemas from foreign requests are insufficient. Prove restriction retention through part capture and full assembly, sibling retention, and invalidation after reference renewal. |
+| Scale and replay — `model_result_schema.max_choices`, `compileSelected` | **Approved shared limit: 1,024 enum values.** Current string enums use it in both workflow compilation and selected-schema readback. Regressions accept 256, 257 and 1,024 values through cloning, complete/provider projection, readback and membership validation; both compiler entrypoints reject 1,025. Claim/token/passive IDs remain `u32`; this is a per-enum cardinality limit, not an ID-value or whole-workflow reference limit. O2.1's future native restrictions must enforce this same bound before request preparation and measure their resource use. Do not truncate, split into arbitrary extra calls or fall back to unrestricted integers. Existing provider-owned request limits remain unchanged. |
+| Correction size — `model_schema_projection.outline`, `model_protocol_retry.build` | Integer-enum rejection retains the candidate path, reason and exact schema locator. The outline now says `integer` without repeating the complete allowed list, which remains in the selected schema. Measure the emitted request in approved live testing. |
+| Capture/readback — request description, debugger and canonical state | `compileSelected` reads the numeric projection for diagnostic inspection; offline tests round-trip the selected schema. This diagnostic schema grants no execution authority. Canonical specification readback continues recomputing reference eligibility from its captured ledger; no persisted allowed-ID registry, state migration or compatibility reader. Live completed readback remains unproven. |
+
+**Retry scope changes even though the retry owners do not.** Today call 8 passes
+shape validation and receives separate native field repairs. Under option 2 it
+would fail schema admission and enter complete-response protocol correction for
+the brief assignment. Current `generate-unit` config permits an initial call plus
+two corrections; a native repair request permits an initial call plus one correction.
+Therefore identical call counts and byte preservation of fields in a rejected
+initial response cannot be promised. Preserve already admitted units/parts and
+authorized atomic-repair siblings; revalidate the complete corrected response and
+its meaning. Test both successful multi-field correction and earlier exhaustion,
+including alternating enum/JSON/missing-answer errors under one assignment budget.
+Do not add another repair pass or raise limits to conceal this trade-off.
+
+**Option 2 rollout and remaining evidence:**
+
+| Chunk | Change and required evidence |
+| --- | --- |
+| O2.1 — Shared schema support | Implemented: homogeneous integer enums, bound tagged-field selectors, complete/provider projection and exact local validation. String enums and the 1,024-value bound remain shared. Focused schema tests pass; live provider effectiveness is unmeasured. |
+| O2.2 — Bind native choices | Implemented: existing extraction, reconciliation, Spec generation and repair packets carry typed eligible IDs through request preparation. Spec repair packets narrow the visible display catalogue while retaining other source facts. Native provenance and full-candidate validation remain authoritative. Focused tests pass; complete live recovery and persisted publication readback remain unmeasured. |
+| O2.3 — Recovery and measurement | Existing correction/retry owners and budgets are unchanged. Full verification and packaging pass; actual provider tokens and first-use/repeated-schema latency require approved live measurement. A successful Phase 4.2 publication/readback/rubric run remains necessary. |
+
+In the same deterministic brief request, four bound integer selectors render a
+3,451-byte selected schema; replacing only those four enums with the canonical
+integer bounds yields 3,607 bytes (156 fewer bytes with O2). This measures schema
+projection size, not provider tokens or semantic quality. Live request size and
+token/latency measurements remain open.
+
+**Limits:** an eligible selection does not prove semantic support or useful writing.
+Do not automatically substitute an allowed ID, attach all available evidence, infer
+citations from prose, or increase retries. Option 1's metadata cleanup and option 3's
+omitted fixed selectors are separate changes; neither is required for this patch.
+Phase 4 remains open until its published/scored acceptance gate passes.
+
+### 6.8 Open-item disposition after the end-to-end review
+
+**Assessment:** option 2 is implemented through existing owners; live effectiveness
+and full publication remain open. No evidence justifies a new registry,
+retry mechanism, fixer agent or workflow-specific ID mapping. This review does not
+reopen the completed Phase 2 conformance work merely because live generation failed.
+
+| Open item | Disposition / next evidence |
+| --- | --- |
+| Option 2 (O2.1–O2.3) | Integer schema, selector binding, packet transport and concise correction outline are implemented. The 1,024-value shared limit remains. Offline conformance passes; live request/quality evidence is outstanding. The restriction remains a projection of native authority. |
+| Missing final answers | Independent blocker. Reinspection of the latest calls 17–18 confirms `finish_reason:stop` and no final text after reasoning; no discarded answer or local output cap is established. Preserve accounting and no-publication behavior. Retain the exact request and obtain a declared, separately approved comparison; do not guess a new model setting. |
+| Provider-setting comparison feasibility | Current `request_debugger.Edit` permits only content/schema edits, and `composition/request_debugger` rejects changed provider/model/reasoning/controls. ADR 0019 likewise fixes those settings. Current tooling can compare schemas/prompts at fixed settings; a controlled settings comparison of this captured request needs a separate focused diagnostic-contract amendment. Alternatively, approved isolated E2E cases can vary configuration, but their regenerated upstream requests are not a fixed-assignment experiment. No raw-client bypass or automatic route switching. |
+| Field-purpose quality | Still open independently of valid IDs. Existing prompts already request meaningful title/story/Given–When–Then. Inspect content against original obligations and the existing source/principle review; test purpose-appropriate recovery and reject unresolved candidate errors without turning them into user questions. No repeated generic instruction, literal blacklist or deterministic semantic-quality claim. The unrelated loan replay used a generic scripted upstream claim; use source-backed production context before drawing broader live conclusions. |
+| Phase 4.2 publication/readback/rubric | Remains open. The latest run reaches neither full coverage nor semantic/principle review. A complete run must exercise all of them, publication, persisted readback and grading. With the current null threshold, `not_configured` is not a quality pass: report criterion scores and an explicit evidence-based assessment against the existing Phase 4.2 content checks. A new numerical threshold is a separate rubric decision. |
+| Deferred §7A–C and alternatives 1/3 | Retain as independent opportunities, not prerequisites to O2 or remedies for missing final text. Do not bundle token/key/association format changes or automatic fixed-evidence attachment into numeric restrictions. |
+| §7D diagnostics | The known unavailable-choice correction is already implemented. O2 must reuse its native facts and the existing schema diagnostic owner; there is no open general-purpose diagnostic redesign. |
+
+**Verification status:** inspected producers, packet projections, compiled schemas,
+provider projection/admission, corrections, native repair, composition, readback
+ownership, debugger authority and rubric handling. Rechecked the official sources
+in §6.6. Focused schema, Spec generation and model request checks passed **632/632
+tests**. Final `zig build verify --summary all` passed **126/126 steps and
+1,259/1,259 tests**, including native packaging smoke checks; `git diff --check`
+passed. No new provider or E2E call has been made.
+
 ## 7. Other deterministic opportunities, ranked separately
 
-These are deferred assessments, not additional Phase 2 work. Keep their response
-and persistence contracts unchanged while closing §6.5. Their feasibility differs:
+These are deferred assessments, not additional Phase 2 or option 2 work. §6.5 is
+closed; preserve its contracts while evaluating these separate opportunities:
 
 | Item | Disposition and minimum evidence before implementation |
 | --- | --- |
 | A — reconciliation token metadata | Feasible because one preserved-token claim determines the token. Separate approval/cutover must cover summaries, global signals, replacement, persistence and unchanged source review; measure whether this remains a material failure source. |
 | B — summary keys | Feasible only after an ordering decision. Test shuffled arrays, insertion/deletion, stable retry identity and byte-stable state before removing keys/sort/repair together. No guessed semantic ordering. |
 | C — review association | Single-target repair already binds identity; reuse it. Batch association is still a real choice. Keep current IDs unless an approved named-slot contract demonstrates lower cost and exact membership under missing/reordered output. |
-| D — diagnostic guidance | Existing `ValueChoices.correction` already names unavailable exact/passive selections. Correct its inputs/consumers in Phase 2; do not create another guidance owner. Extend other diagnostics only for demonstrated missing native facts. |
+| D — diagnostic guidance | Known exact/passive guidance is complete in `ValueChoices.correction`; reuse it. O2's enum rejection uses the existing schema diagnostic/locator owner (§6.7). Further changes need a demonstrated missing native fact. |
 
 ### A. Reconciliation token metadata
 
@@ -947,6 +1100,10 @@ existing repair can correct that metadata. Removing the redundant model field is
 feasible through the same principle: one semantic selection, native expansion.
 Do not remove semantic retained/duplicate/superseded/conflicting decisions under
 the pretext that their IDs are mechanically checkable.
+The existing reconciliation repair already reconstructs a uniquely selected token
+natively. Removing the redundant model field is a format simplification, not a
+reason to add another resolver; cover statement/signal repair and snapshot readback
+together if this later amendment is approved.
 
 ### B. Summary keys and ordering
 
@@ -1037,9 +1194,9 @@ cannot acquire a fresh claim from the whole assignment catalogue on retry.
 
 ## 10. Phased rollout with testable checkpoints
 
-**Phases 0–3 are done; Phase 4 remains.** The approved contract
-activated at the coordinated Phase 2 format cutover. There are five phases and eleven
-chunks. Each chunk produces a reviewable diff, named regression evidence and a
+**Phases 0–3 and the Phase 4.1 diagnostic batch are done; Phase 4.2 remains open after a failed run.** The approved contract
+activated at the coordinated Phase 2 format cutover. The original rollout has five
+phases and eleven chunks; §6.7 records the implemented O2 follow-up and its open live gate. Each chunk produces a reviewable diff, named regression evidence and a
 recorded proceed/revise decision. §11 supplies the common acceptance matrix;
 passing a safe-block test must never be reported as successful recovery.
 
@@ -1048,12 +1205,17 @@ and conformance checks are complete. Do not
 reintroduce temporary runtime flags, dual readers, skipped tests or pair/handle
 conversion adapters to make individual fixes appear smaller.
 
-**Next implementation order:** separately approved controlled calls and a complete
-scored E2E (4.1–4.2).
+**Next evidence order:** run a separately approved scored E2E to measure the new
+selector binding and field-purpose quality.
+If missing final answers still block it, retain the captured request and seek a
+separate controlled provider-setting comparison under the §6.8 decision. §6.8 inventories
+every remaining gate and deferred item. The eight
+4.1 calls and first 4.2 execution are already consumed; do not replay them automatically.
 
 Every follow-up has a failing regression at its owner, an unrelated accepted case
 and a reject case. The repairs above implement existing ADR 0020 authority. Broader
-evidence expansion, numeric-enum schemas and §7 changes remain separate decisions.
+evidence expansion and §7 changes remain separate decisions; the approved numeric
+restriction contract is recorded in §6.7 and design §§12.2/22.6.
 
 ### Phase 0 — Establish evidence and settle authority
 
@@ -1364,7 +1526,33 @@ test-reference-reconciliation --summary failures`, full `zig build verify
 
 ### Phase 4 — Measure live effectiveness with separate approvals
 
-**4.1 — Controlled assignments.** Depends on 3.2 and explicit call approval.
+**4.1 — Controlled assignments: done, adverse results.** Depends on 3.2 and explicit call approval.
+
+**Approved diagnostic batch completed (26 September 2026):** all eight calls in
+the [proposal](../zig-out/llm-rework-phase4/diagnostics-2026-09-26/proposal.md)
+were dispatched once, consuming **12,034/100,000 tokens**. Six exact replays matched
+the captured wire bytes; two loan-brief observations reused the existing offline
+request projection with unchanged prompt/schema/model settings.
+The [results and raw-evidence links](../zig-out/llm-rework-phase4/diagnostics-2026-09-26/report.md)
+retain all attempts, token counts and exchange timings.
+
+- Title repair, title correction and outcome repair returned no final answer.
+- Five final answers passed schema checks, four after existing prefix normalization.
+  The brief still selected wrong-kind handle 1. Records contained meaningful
+  functional requirements but invalid exact references and incoherent Given/When/Then.
+- Outcome correction returned source-backed prose; no native merge or full-candidate
+  validation was executed. The loan replies selected offered handle 2 but used a
+  literal-only title and copied the fixture's generic upstream description. That
+  scripted context limits conclusions about model quality on unrelated sources.
+
+The live assessment is adverse: removing redundant reference joins has not proved
+useful complete generation or reliable final answers. Initial semantic selection
+and field purpose remain with generation/semantic review; missing final answers
+remain with provider admission and bounded correction. No new retry owner or
+reference authority is justified. Native workflow checks remain `not_run` for
+debugger replays; Phase 4 is **not complete**. Phase 4.2 must provide the actual
+publication, readback and rubric evidence. One sandbox loopback failure occurred
+before dispatch and consumed no provider call; it is recorded separately.
 
 - **Outcome:** prepare comparable captured assignments from the reported and unrelated
   cases. Use the current approved contract/projection as the baseline. Hold sources,
@@ -1393,7 +1581,53 @@ test-reference-reconciliation --summary failures`, full `zig build verify
   content remains, identify its owner separately; do not add guessed evidence or
   tuning for the greeting. No automatic rerun or workflow publication in this chunk.
 
-**4.2 — Whole-workflow publication and rubric.** Depends on 4.1 and a separate E2E approval.
+**4.2 — Whole-workflow publication and rubric: attempted, gate failed.** Depends on 4.1 and a separate E2E approval.
+
+The separately approved execution
+[`2026-09-26T03-01-57Z-a456e351f0bfbb82dc123b4f18f97860`](../zig-out/e2e-spec/2026-09-26T03-01-57Z-a456e351f0bfbb82dc123b4f18f97860/report.md)
+failed after **18 calls and 21,985/100,000 tokens**, with complete usage accounting.
+It used the configured Bedrock `openai.gpt-oss-20b-1:0` route in `ap-southeast-2`,
+a fresh isolated target and unchanged production sources (`0911cb7`, captured
+source fingerprint `f970b687ca8f2c1db92368788c94e02647983d8ce9d2aafb400d80fa7abdbca4`).
+No automatic rerun occurred. The first ten wire requests match the preceding
+`02-40-05Z` run; their different returned final answers do not demonstrate a code improvement.
+
+| Boundary | Observed result |
+| --- | --- |
+| Source and reconciliation, calls 1–7 | All three obligations and the exact greeting reached generation. Both claims were retained; no conflict or missing user decision was established. |
+| Brief, calls 8–14 | Initial title, description and goal selected business claim 1 as an exact-copy handle. Each native defect received an independent repair. Calls 9/11/13 had no final answer; corrections 10/12/14 returned prose, merged and passed unit validation. The title and goal copied the requirements instead of serving their field purpose. |
+| Story, call 15 | Exact-copy claim 2 with explicit support `[1]` passed native validation. This exercises derived reference lineage in production, but the literal-only story is not useful semantic recovery. |
+| Entities, call 16 | `not_applicable` used wrong-kind exact claim 1 as its explanation. Native validation correctly reported `unknown_exact`; entity applicability itself was not rejected. |
+| Repair/correction, calls 17–18 | The schema allowed only prose strings and the diagnostic explicitly prohibited the unavailable handle. The correction added `missing_final_text`. Both raw HTTP 200 responses contained only reasoning, ended with `finish_reason:stop`, and provided no final candidate. Request 14 exhausted its two executions: `RetryLimitExhausted`. |
+| Later gates | Records/acceptance criteria, full coverage, source/principle assessment, publication, persisted readback and grading were not reached. Principles were present in the isolated project; their presence is not assessment. No specification or clarification Markdown was published. |
+
+The [events](../zig-out/e2e-spec/2026-09-26T03-01-57Z-a456e351f0bfbb82dc123b4f18f97860/events.jsonl)
+contain 366 recorded step outcomes. No JSON/schema rejection exhausted; existing
+logged prefix normalization handled affected final texts. The stop was missing
+final answers during native-defect repair, not malformed JSON, lost source input,
+missing credentials or the global token budget. Three other corrections recovered
+in this same run, so the evidence supports inconsistent final-answer availability,
+not a claim that all repairs fail. Neither reasoning nor a structurally accepted
+paragraph may substitute for a validated, useful specification.
+
+**Remaining work:** verify option 2's implemented bounded schema change (§6.7) for wrong-kind
+selections in a fresh approved execution. Independently, retain the failing entity-basis request for the next
+approved controlled comparison. The current debugger fixes provider settings;
+§6.8 records the separate authority decision needed to compare settings on that
+captured assignment. Do not guess a route change from this run. Treat
+initial wrong-kind selection and poor field-purpose expression as separate
+generation/semantic-review issues through their existing owners; the one-handle
+cutover does not solve them. Preserve current validation, bounded retries and
+no-publication behavior. Another approved E2E must still produce a useful published
+specification, complete persisted readback and record the actual rubric assessment.
+The configured rubric has `pass_threshold_percent:null`; report criterion scores
+and `not_configured` rather than inventing a numerical pass threshold.
+
+**Validation for this measurement-only change:** `zig build --summary failures`
+passed; the exact E2E command below exited 1 with the retained failure above;
+`git diff --check` passed. No production code, workflow, prompt, model setting or
+judge was changed. The prior full verification remains offline conformance evidence,
+not a substitute for this failed live gate.
 
 - **Outcome:** use `./scripts/e2e-spec.sh --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json` with an explicitly
   approved fresh target under this project's `zig-out` and the case's configured
@@ -1417,6 +1651,7 @@ the complete suite; do not use standalone `zig test` as a parallel build path.
 
 | Boundary/chunks | Targeted commands |
 | --- | --- |
+| Integer restrictions and bound requests, O2.1–O2.2 | `zig build test-model-result-schema test-model-payload-schema test-model-request-preparation`; extend debugger/composition regressions in their existing full-suite registrations |
 | Reference mechanics, 1.1/2.1 | `zig build test-reference-evidence test-reference-model-input test-reference-reconciliation test-typed-text test-architecture` |
 | Closed shapes/requests, 2.1–2.2 | `zig build test-specification-contract test-model-candidate-json test-model-result-schema test-model-request-preparation` |
 | Native generation/repair/readback, 0.1/2.3–2.4 | `zig build test-specification-generation test-workflow-repair-retry` |
@@ -1437,6 +1672,9 @@ and user clarification records rather than adding migrations or fallback readers
 | Reported greeting and unrelated business requirements | One selected exact claim resolves the correct literal/citation without model-supplied duplicate IDs; meaningful successful candidates proceed through the existing gates. |
 | Old tuple shape/version | New response and canonical contracts reject superseded segment fields and old state versions. No compatibility path. |
 | Request choices | Offered exact choices identify their claim directly. Initial requests, fixed repairs, canonical brief/entity context and omission context use coherent handle syntax and eligibility. |
+| Implemented option 2 (§6.7) | Selected schemas admit only native eligible IDs for each declared tagged integer selector; business-support IDs keep distinct eligibility. Offline tests cover scalar membership, request selection, excluded alternatives and repair packet scope. Live complete-response recovery, full validation of a published result and quality remain to be shown. |
+| Option 2 scale and replay | Exercise 256/257/1,024 eligible choices and reject 1,025 under the approved shared limit; no silent truncation or unrestricted fallback. String-enum compiler/projection/readback boundaries are covered; derived integer sets and resource measurements remain O2 work. Captured selected schemas recompile, diagnostics locate the correct enum, and corrections avoid another full allowed-ID list. |
+| Option 2 correction scope | A schema-invalid initial unit receives complete-response correction under its existing assignment budget. Already admitted units/parts and atomic siblings remain unchanged; rejected initial fields do not acquire new immutability authority. Alternate enum, JSON and missing-answer failures without counter reset; prove successful recovery and failure without publication. |
 | Shared projection consumers | Spec exact-choice projection changes without dropping token IDs required by reconciliation or source review. Each request has the facts its declared contract requires, without duplicate choice lists. |
 | Unknown/wrong-kind/ineligible claim or stale/foreign state binding | Typed rejection; no default, citation insertion, publication or clarification conversion. Reused ordinals do not bypass state/dependency checks. |
 | Same literal in different sources | Exact selected occurrence retained; no first-match selection. |
@@ -1479,9 +1717,10 @@ handle representation, explicit selection, version cutover and §6.5 conformance
 work are implemented. They require no new message layer, reference registry,
 retry mechanism or general-purpose fixer.
 
-**Implement next:** Phase 4's separately approved controlled assignments and
-scored live E2E. Offline integration does not establish that the provider's
-missing final answers or semantic quality in the retained run improved.
+**Next:** verify option 2 in a controlled live assignment, then address final-answer
+availability and field-purpose issues separately through the existing provider/request
+and generation/review owners. Repeat Phase 4.2 with separate approval. The completed diagnostic batch and failed E2E
+do not establish useful publication or rubric quality.
 
 This does not promise automatic support for every JSON Schema, authority namespace
 or future workflow. New domains reuse the mechanism by supplying their declared
@@ -1497,13 +1736,17 @@ independently of this first contract.
 
 **Evidence limit:** Phases 2–3 establish offline conformance and reuse, including
 packaged behavior. The earlier retained run accepted a valid derived reference
-but produced poor interim content and exhausted missing-answer recovery. The latest
-run stopped at the first title repair: its first ten requests match that earlier
+but produced poor interim content and exhausted missing-answer recovery. The
+pre-Phase-4 `02-40-05Z` run stopped at the first title repair: its first ten requests match that earlier
 run byte-for-byte, but the correction no longer returned final text. Neither run
 reached publication or grading; this comparison does not establish a Phase 3
 contract regression or a live quality improvement.
-This assessment launched no provider calls or E2E. Phase 4 requires separately approved live effectiveness and a
-published, scored output. ADR 0020's explicitly excluded extensions remain
+Phase 4.1's eight approved diagnostic calls also retained reference-selection,
+field-meaning and missing-final-answer failures. They did not execute native merge
+or publication. Phase 4.2's approved run recovered three brief fields and accepted
+derived story lineage, but its entity-basis repair exhausted missing-answer
+recovery. Publication/readback and scoring remain `not_run`. Phase 4 cannot be
+marked complete. ADR 0020's explicitly excluded extensions remain
 unapproved.
 Existing regression owners include [specification generation tests](../src/specification_generation_test.zig),
 [typed-text tests](../src/typed_text_test.zig), [request workflow tests](../src/model_request_workflow_test.zig)

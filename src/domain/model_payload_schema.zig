@@ -76,6 +76,15 @@ pub fn validateValue(value: envelope.Value, node: *const schema.Node) ?Diagnosti
             }
             return reject(.enum_mismatch, node);
         },
+        .integer_enumeration => |choices| {
+            if (value != .number) return reject(.type_mismatch, node);
+            const number = exactInteger(value.number) catch |err| return switch (err) {
+                error.NotInteger => reject(.type_mismatch, node),
+                error.IntegerOutOfRange => reject(.integer_range, node),
+            };
+            for (choices) |choice| if (choice == number) return null;
+            return reject(.enum_mismatch, node);
+        },
         .array => |contract| {
             if (value != .array) return reject(.type_mismatch, node);
             const count = value.array.count();

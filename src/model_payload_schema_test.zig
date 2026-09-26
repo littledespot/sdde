@@ -516,6 +516,11 @@ test "boolean null constants and enumerations reject wrong values and types with
         .{ .bytes = "\"yes\"" },                                   .{ .bytes = "\"\\u00e9\"" },                       .{ .bytes = "\"YES\"", .rejection = .enum_mismatch },
         .{ .bytes = "\"e\\u0301\"", .rejection = .enum_mismatch }, .{ .bytes = "true", .rejection = .type_mismatch },
     });
+    try checkField("{\"enum\":[-9223372036854775808,2,9223372036854775807]}", &.{
+        .{ .bytes = "2" },                                  .{ .bytes = "2.0" },                              .{ .bytes = "2e0" },
+        .{ .bytes = "-9223372036854775808" },               .{ .bytes = "9223372036854775807" },              .{ .bytes = "1", .rejection = .enum_mismatch },
+        .{ .bytes = "\"2\"", .rejection = .type_mismatch }, .{ .bytes = "2.5", .rejection = .type_mismatch }, .{ .bytes = "9223372036854775808", .rejection = .integer_range },
+    });
 }
 
 test "arrays validate all elements and exact item bounds including empty arrays" {

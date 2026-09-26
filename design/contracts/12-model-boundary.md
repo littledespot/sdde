@@ -124,6 +124,15 @@ Each generation request contains only what the current unit needs:
   is available; fixed-evidence repairs use their bound choices, not unrelated
   sibling evidence. Nonempty sets still require native ID, scope and occurrence
   validation through the same reference owner that projects request choices.
+- The integer-choice amendment approved on 26 September 2026 narrows declared
+  tagged integer selectors to the eligible IDs supplied by their native evidence
+  owner. The packet retains those IDs out of band; request preparation checks
+  the tag, field and canonical integer bounds, then derives one selected schema
+  for provider and local validation. Empty required choices and sets above
+  ADR 0006's bound reject before invocation. Spec repairs narrow their visible
+  display catalogues to the same evidence scope. A selected repair schema with
+  no matching text selector leaves carried text-choice facts unused. Native
+  validation still checks provenance, source scope and semantics.
 - Packet context/repair projections retain these facts out of band. Request preparation binds
   the derived schema once; provider serialization, payload validation and protocol corrections
   use that same view. Composition accepts only its exact part schema or a restriction derived
@@ -155,6 +164,8 @@ Raw whole-repository listings, principle categories not selected by the configur
   schema association.
 - Workflow result-schema resources compile under ADR 0006's closed `model-result-schema/v1`
   profile.
+- ADR 0006's enum cardinality guard applies to both workflow resources and captured
+  selected schemas through the shared compiler.
 - Its opaque typed authority replaces the raw schema-only compiled resource; the registry
   retains the exact capture and owns the schema through execution.
 - Unsupported or unbounded schemas reject before provider preparation.

@@ -28,6 +28,9 @@ pub const Packet = opaque {
     pub fn excludedVariants(self: *const Packet) []const schema.ExcludedVariant {
         return storage(self).excluded_variants;
     }
+    pub fn integerChoices(self: *const Packet) []const schema.IntegerChoice {
+        return storage(self).integer_choices;
+    }
 };
 const Storage = struct {
     allocator: std.mem.Allocator,
@@ -40,6 +43,7 @@ const Storage = struct {
     repair: ?retry.Permit = null,
     repair_origin: ?Origin = null,
     excluded_variants: []const schema.ExcludedVariant = &.{},
+    integer_choices: []const schema.IntegerChoice = &.{},
     handle: Handle,
 };
 const Handle = struct { owner: *Storage };
@@ -101,12 +105,25 @@ pub fn view(packet: *const Packet) *const Packet {
 /// Copy native availability facts across packet projections. No model bytes
 /// can create or change these restrictions.
 pub fn withExcludedVariants(allocator: std.mem.Allocator, base: *const Packet, excluded: []const schema.ExcludedVariant) Error!*Packet {
+    return withRestrictions(allocator, base, excluded, base.integerChoices());
+}
+
+pub fn withRestrictions(allocator: std.mem.Allocator, base: *const Packet, excluded: []const schema.ExcludedVariant, choices: []const schema.IntegerChoice) Error!*Packet {
     const result = try createBound(allocator, base.body(), base.unit(), base.purpose(), base.resultDefinition(), base.repairPermit(), base.repairOrigin());
     errdefer release(result);
     const a = storage(result).arena.allocator();
     const copy = try a.alloc(schema.ExcludedVariant, excluded.len);
     for (excluded, copy) |entry, *destination| destination.* = .{ .kind = try a.dupe(u8, entry.kind) };
     storage(result).excluded_variants = copy;
+    const selected = try a.alloc(schema.IntegerChoice, choices.len);
+    for (choices, selected) |entry, *destination| {
+        destination.* = .{
+            .kind = try a.dupe(u8, entry.kind),
+            .field = try a.dupe(u8, entry.field),
+            .allowed = try a.dupe(i64, entry.allowed),
+        };
+    }
+    storage(result).integer_choices = selected;
     return result;
 }
 /// Add one typed read-context projection without changing request ownership.
@@ -136,7 +153,7 @@ pub fn withJsonContext(allocator: std.mem.Allocator, base: *const Packet, compti
     const body = try std.json.Stringify.valueAlloc(scratch, input.value, .{});
     const result = if (base.repairPermit()) |permit| try createRepair(allocator, body, base.unit(), base.purpose(), base.resultDefinition(), permit, base.repairOrigin()) else try create(allocator, body, base.unit(), base.purpose(), base.resultDefinition());
     defer release(result);
-    return withExcludedVariants(allocator, result, base.excludedVariants());
+    return withRestrictions(allocator, result, base.excludedVariants(), base.integerChoices());
 }
 fn storage(packet: *const Packet) *Storage {
     const handle: *const Handle = @ptrCast(@alignCast(packet));

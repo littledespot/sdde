@@ -30,7 +30,7 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
     const packet = try packets.create(allocator, body, .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = scope.state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } } }, .initial_generation, null);
     defer packets.release(packet);
-    return withTextChoices(allocator, packet, payload.passive_literals.len != 0, false);
+    return withTextChoices(allocator, packet, try passiveIds(scratch, payload.passive_literals), &.{});
 }
 
 pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, guidance_scope: Constraint.Scope) Error!*packets.Packet {
@@ -57,23 +57,39 @@ pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.
     const slot = try std.fmt.allocPrint(scratch, "reconciliation-{d}", .{input.partition.id.ordinal});
     const packet = try packets.create(allocator, body, .{ .reference_global = .{ .reference_state_id = .{ .bytes = inputs.corpus.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, .{ .bytes = @tagName(input.purpose) });
     defer packets.release(packet);
-    return withTextChoices(allocator, packet, payload.passive_literals.len != 0, false);
+    return withTextChoices(allocator, packet, try passiveIds(scratch, payload.passive_literals), &.{});
 }
 
 /// Availability projects existing evidence, not semantics or a second registry.
 /// Reference text has no exact-copy variant; its owner leaves that choice alone.
-pub fn withTextChoices(a: std.mem.Allocator, packet: *const packets.Packet, passive_available: bool, exact_copy_available: bool) packets.Error!*packets.Packet {
+pub fn withTextChoices(a: std.mem.Allocator, packet: *const packets.Packet, passive: []const i64, exact_copy: []const i64) packets.Error!*packets.Packet {
     var excluded: [2]@import("model_result_schema.zig").ExcludedVariant = undefined;
     var count: usize = 0;
-    if (!passive_available) {
+    if (passive.len == 0) {
         excluded[count] = .{ .kind = "passive" };
         count += 1;
     }
-    if (!exact_copy_available) {
+    if (exact_copy.len == 0) {
         excluded[count] = .{ .kind = "exact_copy" };
         count += 1;
     }
-    return packets.withExcludedVariants(a, packet, excluded[0..count]);
+    var choices: [2]@import("model_result_schema.zig").IntegerChoice = undefined;
+    var selected: usize = 0;
+    if (passive.len != 0) {
+        choices[selected] = .{ .kind = "passive", .field = "passive_literal_id", .allowed = passive };
+        selected += 1;
+    }
+    if (exact_copy.len != 0) {
+        choices[selected] = .{ .kind = "exact_copy", .field = "claim_id", .allowed = exact_copy };
+        selected += 1;
+    }
+    return packets.withRestrictions(a, packet, excluded[0..count], choices[0..selected]);
+}
+
+pub fn passiveIds(a: std.mem.Allocator, records: []const literals.Record) std.mem.Allocator.Error![]const i64 {
+    const ids = try a.alloc(i64, records.len);
+    for (records, ids) |record, *id| id.* = record.id.ordinal;
+    return ids;
 }
 
 /// Use the same exact-scope resolver as typed-text validation. Display choices

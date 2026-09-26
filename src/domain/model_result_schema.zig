@@ -7,7 +7,7 @@ pub const max_json_depth = 64;
 pub const max_depth = 16;
 pub const max_nodes = 4096;
 pub const max_properties = 256;
-pub const max_choices = 256;
+pub const max_choices = 1024;
 pub const max_variants = 32;
 
 pub const DefinitionId = struct {
@@ -43,6 +43,7 @@ pub const Node = union(enum) {
     null_value,
     constant: Scalar,
     enumeration: []const []const u8,
+    integer_enumeration: []const i64,
     array: struct { minimum: u32, maximum: u32, items: *const Node },
     one_of: []const *const Node,
 };
@@ -50,6 +51,13 @@ pub const Node = union(enum) {
 /// Native evidence can exclude unavailable tagged alternatives, never add a
 /// shape or select content. Tags have the compiler's existing `kind` meaning.
 pub const ExcludedVariant = struct { kind: []const u8 };
+/// A packet declares the tagged object's integer field; evidence supplies the
+/// complete permitted set. The selected schema validates that declaration.
+pub const IntegerChoice = struct {
+    kind: []const u8,
+    field: []const u8,
+    allowed: []const i64,
+};
 
 pub const Restricted = opaque {
     pub fn canonical(self: *const Restricted) *const Schema {
@@ -83,18 +91,25 @@ fn restrictedStorage(value: *const Restricted) *RestrictedStorage {
     return handle.owner;
 }
 
-pub fn restrict(allocator: std.mem.Allocator, canonical: *const Schema, excluded: []const ExcludedVariant) Error!*Restricted {
+pub fn restrict(allocator: std.mem.Allocator, canonical: *const Schema, excluded: []const ExcludedVariant, integer_choices: []const IntegerChoice) Error!*Restricted {
     const owned = try allocator.create(RestrictedStorage);
     errdefer allocator.destroy(owned);
     var arena: std.heap.ArenaAllocator = .init(allocator);
     errdefer arena.deinit();
-    const root = try restrictNode(arena.allocator(), canonical.root(), excluded);
+    for (integer_choices, 0..) |entry, index| {
+        if (entry.kind.len == 0 or entry.field.len == 0 or entry.allowed.len == 0 or entry.allowed.len > max_choices) return invalid();
+        for (integer_choices[0..index]) |prior| if (std.mem.eql(u8, prior.kind, entry.kind) and std.mem.eql(u8, prior.field, entry.field)) return invalid();
+        for (entry.allowed, 0..) |choice, choice_index| for (entry.allowed[0..choice_index]) |prior| {
+            if (choice == prior) return invalid();
+        };
+    }
+    const root = try restrictNode(arena.allocator(), canonical.root(), excluded, integer_choices);
     const selected = try createSchema(arena.allocator(), root, canonical.bytes(), &.{}, canonical);
     owned.* = .{ .allocator = allocator, .arena = arena, .canonical = canonical, .selected = selected, .handle = .{ .owner = owned } };
     return @ptrCast(&owned.handle);
 }
 
-fn restrictNode(a: std.mem.Allocator, node: *const Node, excluded: []const ExcludedVariant) Error!*const Node {
+fn restrictNode(a: std.mem.Allocator, node: *const Node, excluded: []const ExcludedVariant, integer_choices: []const IntegerChoice) Error!*const Node {
     const result = try a.create(Node);
     result.* = node.*;
     switch (node.*) {
@@ -102,7 +117,7 @@ fn restrictNode(a: std.mem.Allocator, node: *const Node, excluded: []const Exclu
             var remaining: std.ArrayList(*const Node) = .empty;
             for (choices) |choice| {
                 if (excludedVariant(choice, excluded)) continue;
-                try remaining.append(a, try restrictNode(a, choice, excluded));
+                try remaining.append(a, try restrictNode(a, choice, excluded, integer_choices));
             }
             if (remaining.items.len == 0) return error.InvalidModelResultSchema;
             result.* = if (remaining.items.len == 1) remaining.items[0].* else .{ .one_of = try remaining.toOwnedSlice(a) };
@@ -111,10 +126,29 @@ fn restrictNode(a: std.mem.Allocator, node: *const Node, excluded: []const Exclu
             // A required standalone object cannot be removed safely.
             if (excludedVariant(node, excluded)) return error.InvalidModelResultSchema;
             const copy = try a.dupe(Property, properties);
-            for (copy) |*property| property.schema = try restrictNode(a, property.schema, excluded);
+            const kind = findProperty(properties, "kind");
+            if (kind) |tag| if (tag.schema.* == .constant and tag.schema.constant == .string) {
+                for (integer_choices) |entry| if (std.mem.eql(u8, tag.schema.constant.string, entry.kind)) {
+                    const target = findProperty(properties, entry.field) orelse return invalid();
+                    if (target.schema.* != .integer) return invalid();
+                };
+            };
+            for (copy) |*property| {
+                property.schema = try restrictNode(a, property.schema, excluded, integer_choices);
+                if (kind) |tag| if (tag.schema.* == .constant and tag.schema.constant == .string) {
+                    for (integer_choices) |entry| if (std.mem.eql(u8, tag.schema.constant.string, entry.kind) and std.mem.eql(u8, property.name, entry.field)) {
+                        if (property.schema.* != .integer) return invalid();
+                        const bounds = property.schema.integer;
+                        for (entry.allowed) |choice| if (choice < bounds.minimum or choice > bounds.maximum) return invalid();
+                        const selected = try a.create(Node);
+                        selected.* = .{ .integer_enumeration = try a.dupe(i64, entry.allowed) };
+                        property.schema = selected;
+                    };
+                };
+            }
             result.* = .{ .object = copy };
         },
-        .array => |items| result.array.items = try restrictNode(a, items.items, excluded),
+        .array => |items| result.array.items = try restrictNode(a, items.items, excluded, integer_choices),
         else => {},
     }
     return result;
@@ -232,6 +266,7 @@ fn isResult(root: *const Node) bool {
             if (findProperty(properties, "kind")) |property| switch (property.schema.*) {
                 .constant => return false,
                 .enumeration => |values| if (values.len == 1) return false,
+                .integer_enumeration => |values| if (values.len == 1) return false,
                 else => {},
             };
             return true;
@@ -305,13 +340,28 @@ const Compiler = struct {
         } else if (object.get("enum")) |values| {
             try fields(object, &.{"enum"});
             if (values != .array or values.array.items.len == 0 or values.array.items.len > max_choices) return invalid();
-            const choices = try self.allocator.alloc([]const u8, values.array.items.len);
-            for (values.array.items, choices, 0..) |value, *choice, index| {
-                if (value != .string) return invalid();
-                for (choices[0..index]) |prior| if (std.mem.eql(u8, prior, value.string)) return invalid();
-                choice.* = try self.copyString(value.string);
+            const first = values.array.items[0];
+            switch (first) {
+                .string => {
+                    const choices = try self.allocator.alloc([]const u8, values.array.items.len);
+                    for (values.array.items, choices, 0..) |value, *choice, index| {
+                        if (value != .string) return invalid();
+                        for (choices[0..index]) |prior| if (std.mem.eql(u8, prior, value.string)) return invalid();
+                        choice.* = try self.copyString(value.string);
+                    }
+                    result.* = .{ .enumeration = choices };
+                },
+                .integer => {
+                    const choices = try self.allocator.alloc(i64, values.array.items.len);
+                    for (values.array.items, choices, 0..) |value, *choice, index| {
+                        if (value != .integer) return invalid();
+                        for (choices[0..index]) |prior| if (prior == value.integer) return invalid();
+                        choice.* = value.integer;
+                    }
+                    result.* = .{ .integer_enumeration = choices };
+                },
+                else => return invalid(),
             }
-            result.* = .{ .enumeration = choices };
         } else {
             const kind = object.get("type") orelse return invalid();
             if (kind != .string) return invalid();
@@ -418,7 +468,7 @@ pub fn jsonType(node: *const Node) ?JsonType {
         .object => .object,
         .array => .array,
         .string, .enumeration => .string,
-        .integer => .number,
+        .integer, .integer_enumeration => .number,
         .boolean => .boolean,
         .null_value => .null_value,
         .constant => |value| switch (value) {
@@ -464,6 +514,7 @@ fn cloneNode(allocator: std.mem.Allocator, source: Node) std.mem.Allocator.Error
             for (copy, choices) |*destination, choice| destination.* = try allocator.dupe(u8, choice);
             break :blk .{ .enumeration = copy };
         },
+        .integer_enumeration => |choices| .{ .integer_enumeration = try allocator.dupe(i64, choices) },
         .array => |array| .{ .array = .{ .minimum = array.minimum, .maximum = array.maximum, .items = try cloneChild(allocator, array.items) } },
         .one_of => |choices| blk: {
             const copy = try allocator.alloc(*const Node, choices.len);

@@ -112,7 +112,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             const body = try std.json.Stringify.valueAlloc(scratch, .{ .input = input, .repair = repair }, .{});
             const result = try packets.createRepair(a, body, base.unit(), .{ .atomic_repair = authorization.id }, definition, authorization.retry orelse return error.InvalidAtomicRepair, origin);
             defer packets.release(result);
-            return packets.withExcludedVariants(a, result, base.excludedVariants());
+            return packets.withRestrictions(a, result, base.excludedVariants(), base.integerChoices());
         }
 
         pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {

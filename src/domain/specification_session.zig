@@ -104,7 +104,10 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
         .records => "records",
     } });
     defer packets.release(result);
-    return @import("reference_model_input.zig").withTextChoices(allocator, result, payload.passive_literals.len != 0, exact_choices.items.len != 0);
+    const exact_ids = try a.alloc(i64, exact_choices.items.len);
+    for (exact_choices.items, exact_ids) |choice, *id| id.* = choice.claim_id.ordinal;
+    const input = @import("reference_model_input.zig");
+    return input.withTextChoices(allocator, result, try input.passiveIds(a, payload.passive_literals), exact_ids);
 }
 
 /// A value-only repair cannot borrow choices from unchanged sibling evidence.
@@ -112,7 +115,51 @@ pub fn withSelectionChoices(a: std.mem.Allocator, base: *const packets.Packet, c
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
     const choices = try p.choicesFor(arena.allocator(), context, selection);
-    return @import("reference_model_input.zig").withTextChoices(a, base, choices.passive.len != 0, choices.exact_copy.len != 0);
+    const scratch = arena.allocator();
+    const passive_ids = try scratch.alloc(i64, choices.passive.len);
+    for (choices.passive, passive_ids) |choice, *id| id.* = choice.ordinal;
+    const exact_ids = try scratch.alloc(i64, choices.exact_copy.len);
+    for (choices.exact_copy, exact_ids) |choice, *id| id.* = choice.claim_id.ordinal;
+    const visible = try narrowDisplayCatalogues(a, base, passive_ids, exact_ids);
+    defer packets.release(visible);
+    return @import("reference_model_input.zig").withTextChoices(a, visible, passive_ids, exact_ids);
+}
+
+/// Keep Spec's presented display choices aligned with the bound native scope.
+/// Other source facts in the packet remain available for semantic judgment.
+fn narrowDisplayCatalogues(a: std.mem.Allocator, base: *const packets.Packet, passive: []const i64, exact: []const i64) Error!*packets.Packet {
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    var parsed = try @import("strict_json.zig").parse(scratch, base.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }, false, null);
+    defer parsed.deinit();
+    if (parsed.value != .object) return error.InvalidModelInputPacket;
+    for ([_]struct { name: []const u8, id: []const u8, allowed: []const i64 }{
+        .{ .name = "passive_literals", .id = "id", .allowed = passive },
+        .{ .name = "preserved_tokens", .id = "claim_id", .allowed = exact },
+    }) |catalogue| {
+        const list = parsed.value.object.getPtr(catalogue.name) orelse return error.InvalidModelInputPacket;
+        if (list.* != .array) return error.InvalidModelInputPacket;
+        var index: usize = 0;
+        while (index < list.array.items.len) {
+            const entry = list.array.items[index];
+            if (entry != .object) return error.InvalidModelInputPacket;
+            const id = entry.object.get(catalogue.id) orelse return error.InvalidModelInputPacket;
+            if (id != .number_string) return error.InvalidModelInputPacket;
+            const number = std.fmt.parseInt(i64, id.number_string, 10) catch return error.InvalidModelInputPacket;
+            var permitted = false;
+            for (catalogue.allowed) |allowed| if (number == allowed) {
+                permitted = true;
+                break;
+            };
+            if (permitted) index += 1 else _ = list.array.orderedRemove(index);
+        }
+    }
+    const body = try std.json.Stringify.valueAlloc(scratch, parsed.value, .{});
+    return if (base.repairPermit()) |permit|
+        packets.createRepair(a, body, base.unit(), base.purpose(), base.resultDefinition(), permit, base.repairOrigin())
+    else
+        packets.create(a, body, base.unit(), base.purpose(), base.resultDefinition());
 }
 
 pub fn append(current: Session, checked: g.Checked) Error!Session {

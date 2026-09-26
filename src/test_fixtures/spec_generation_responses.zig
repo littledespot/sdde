@@ -60,7 +60,7 @@ pub const Options = struct {
     brief_uncertain: bool = false,
     brief_text: ?[3][]const u8 = null,
     repair: bool = false,
-    misbound_exact: bool = false,
+    repeated_provenance_fault: bool = false,
     failed_repair: bool = false,
     omit_exact: bool = false,
     normalize_exact: bool = false,
@@ -354,18 +354,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     const state = try @import("../application/specification_values.zig").storage.read(&view, @import("../application/specification_repair_workflow.zig").authorization_schema, .repair_authorization);
                     const auth = state.authorization;
                     if (auth.operation == .replace and auth.operation.replace == .value) {
-                        var corrected = value.value;
-                        if (options.misbound_exact and auth.target.value.subject == .record) {
-                            const record = auth.dependencies.candidate.response.content.records[auth.target.value.subject.record];
-                            for (record.provenance.claim_ids) |id| {
-                                const claim = (try r.item(all, id)).claim;
-                                if (claim.content == .preserved_token) {
-                                    corrected = .{ .segments = &.{.{ .exact_copy = .{ .claim_id = id } }} };
-                                    break;
-                                }
-                            }
-                        }
-                        return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_repair.zig").Replacement, allocator, .{ .value = corrected });
+                        return @import("../domain/model_candidate_json.zig").encodeSelected(@import("../domain/specification_repair.zig").Replacement, allocator, .{ .value = value.value });
                     }
                     if (auth.rule.group != null and auth.rule.group.? == .membership) {
                         const membership = auth.rule.group.?.membership;
@@ -426,27 +415,22 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     @field(proposed.content.brief, field).value = try scriptedValue(allocator, all, .{ .bytes = texts[index] });
                 }
             };
-            if (options.repair and unit == .brief) proposed.content.brief.description.provenance.claim_ids = &.{.{ .ordinal = 999999 }};
-            if (options.misbound_exact) {
-                const invalid_value: g.spec.BusinessValue = .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .exact_copy = .{ .claim_id = .{ .ordinal = 999999 } } }}) };
+            if (options.repeated_provenance_fault) {
+                const invalid = &[_]r.ClaimId{.{ .ordinal = 999999 }};
                 switch (unit) {
-                    .brief => {
-                        inline for (.{ "title", "description", "primary_goal" }) |field| @field(proposed.content.brief, field).value = invalid_value;
+                    .brief => inline for (.{ "title", "description", "primary_goal" }) |field| {
+                        @field(proposed.content.brief, field).provenance.claim_ids = invalid;
                     },
-                    .primary_user_story => proposed.content.primary_user_story.value = invalid_value,
-                    .entities => proposed.content.entities.basis.value = invalid_value,
-                    .records => {
+                    .primary_user_story => proposed.content.primary_user_story.provenance.claim_ids = invalid,
+                    .entities => proposed.content.entities.basis.provenance.claim_ids = invalid,
+                    .records => if (proposed.content.records.len != 0) {
                         const broken = try allocator.dupe(g.spec.Model.RecordProposal, proposed.content.records);
-                        var selected = std.EnumSet(g.spec.Kind).initEmpty();
-                        for (broken) |*record| {
-                            const kind = std.meta.activeTag(record.content);
-                            if (selected.contains(kind)) continue;
-                            selected.insert(kind);
-                            record.content = withRecordText(record.content, invalid_value);
-                        }
+                        broken[0].provenance.claim_ids = invalid;
                         proposed.content.records = broken;
                     },
                 }
+            } else if (options.repair and unit == .brief) {
+                proposed.content.brief.description.provenance.claim_ids = &.{.{ .ordinal = 999999 }};
             }
             return @import("../domain/model_candidate_json.zig").encode(g.ModelResponse, allocator, g.ModelResponse.from(proposed));
         },
@@ -745,15 +729,6 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
         },
         else => return error.InvalidFixture,
     }
-}
-fn withRecordText(content: g.spec.Content(g.spec.BusinessValue), value: g.spec.BusinessValue) g.spec.Content(g.spec.BusinessValue) {
-    var result = content;
-    switch (result) {
-        inline else => |*fields| inline for (@typeInfo(@TypeOf(fields.*)).@"struct".fields) |field| {
-            if (comptime field.type == g.spec.BusinessValue) @field(fields, field.name) = value;
-        },
-    }
-    return result;
 }
 fn businessValue(allocator: std.mem.Allocator, claim: r.extraction.Claim) !?g.spec.BusinessValue {
     return switch (claim.content) {

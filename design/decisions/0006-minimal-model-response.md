@@ -191,7 +191,7 @@ For example, a single-target replacement response is simply:
 | Integer | `type: "integer"`, required `minimum` and `maximum`, both signed 64-bit JSON integer literals. |
 | Boolean / null | Only `type: "boolean"` or `type: "null"`. |
 | Constant | Only `const`, containing a string, signed 64-bit integer, boolean or null. |
-| Enumeration | Only `enum`, containing a nonempty list of distinct strings. Constants/enumerations are already finite and need no redundant type or length declaration. |
+| Enumeration | Only `enum`, containing a nonempty homogeneous list of distinct strings or signed 64-bit integer literals. Constants/enumerations are already finite and need no redundant type or length declaration. Integer enum support was approved for native choice restriction on 26 September 2026. |
 | Array | `type: "array"`, one `items` schema and required `maxItems`; optional `minItems` means zero when absent. |
 | Alternatives | Only `oneOf`, containing 2–32 alternatives. Nested alternatives may have distinct JSON types; alternatives sharing object type require distinct nonempty string `kind` constants. Repeated primitive types, nested alternative groups and overlapping branches reject. Complete response roots remain closed objects or tagged-object alternatives. |
 
@@ -236,7 +236,9 @@ For example, a single-target replacement response is simply:
 - The compiler reuses the existing 1,048,576-byte workflow-resource ceiling and adds
   structural guards: at most 64 JSON container levels, 16 schema-node levels (root is
   level 1), 4,096 schema nodes including alternative objects and their fields, 256
-  properties per object, and 256 enum values.
+  properties per object, and 1,024 enum values (enum limit increased by user approval
+  on 26 September 2026). The same enum bound applies to captured selected-schema
+  reconstruction.
 - These are compiler safety bounds for compiling the schema resource, not model-call
   size limits, workflow token budgets or retry limits.
 - They cannot be repurposed as request or response byte ceilings.

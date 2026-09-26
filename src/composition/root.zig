@@ -1375,7 +1375,7 @@ test "configured specification generation YAML executes native references models
         .{ .stage = .generation, .shape = .missing_answer },
         .{ .stage = .repair, .shape = .missing_answer },
         .{ .stage = .repair, .shape = .missing_answer, .repetition = .persistent },
-        .{ .stage = .repair, .shape = .missing_answer, .repetition = .{ .recover_then_exhaust = 8 } },
+        .{ .stage = .repair, .shape = .missing_answer, .repetition = .{ .recover_then_exhaust = 5 } },
         .{ .stage = .support, .shape = .missing_answer },
         .{ .stage = .extraction, .shape = .empty },
         .{ .stage = .reconciliation, .shape = .empty },
@@ -1567,9 +1567,8 @@ test "configured specification generation YAML executes native references models
             driver.fault = selected_fault;
             driver.repair = selected_fault.stage == .repair;
             if (selected_fault.stage == .repair and selected_fault.shape == .missing_answer) {
-                driver.repair = false;
-                driver.misbound_exact = true;
-                driver.measurement_prefix = if (selected_fault.repetition == .persistent) ".zig-cache/exact-copy-exhaustion" else ".zig-cache/exact-copy-recovery";
+                driver.repeated_provenance_fault = true;
+                driver.measurement_prefix = if (selected_fault.repetition == .persistent) ".zig-cache/provenance-answer-exhaustion" else ".zig-cache/provenance-answer-recovery";
             }
             if (selected_fault.shape == .alternating_missing) driver.measurement_prefix = ".zig-cache/r37-recovery";
         }
@@ -2251,7 +2250,7 @@ test "configured specification generation YAML executes native references models
                 try std.testing.expect(diagnostic.?.token_classifications.issues.missing.len != 0);
             } else try std.testing.expect(diagnostic == null);
         }
-        if (driver.misbound_exact) {
+        if (driver.repeated_provenance_fault) {
             const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             const ledger = runner.tokenLedger();
             try std.testing.expectEqual(driver.calls, ledger.accounted_operations.items.len);
@@ -2264,8 +2263,8 @@ test "configured specification generation YAML executes native references models
             try std.testing.expectEqual(@as(u32, 2), attempts);
             if (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust) {
                 const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&view)).?.specification;
-                try std.testing.expectEqual(.unknown_exact, diagnostic.issue.text_issue.?.reason);
-                try std.testing.expect((diagnostic.last_repair == null) == (fault.?.repetition == .persistent));
+                try std.testing.expectEqual(.provenance, diagnostic.issue.rule);
+                try std.testing.expect(diagnostic.last_repair == null);
                 try std.testing.expect(!view.contains(.specification_publication_state));
             } else {
                 const session = try @import("../application/specification_workflow.zig").readSession(&view);

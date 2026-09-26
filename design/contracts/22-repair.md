@@ -282,6 +282,9 @@ defined response-level correction containing:
   constraint; correction does not repeat its subtrees. This focused amendment was
   explicitly approved on 19 September 2026. Syntax correction uses that same complete
   schema. Guidance never selects a semantic branch, moves fields or synthesizes values.
+  For an integer-enum rejection, the approved 26 September 2026 amendment uses
+  the exact schema locator and a short integer-type outline; it does not copy
+  the allowed-ID list from the complete selected schema into the outline.
 
 The [approved child-object amendment](#2261-child-object-requirements)
 below adds required names to immediate child-object descriptors only.

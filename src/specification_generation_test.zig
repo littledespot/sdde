@@ -3980,10 +3980,10 @@ test "empty display choices reject invented and misbound references and permit b
         const candidate: candidates.Candidate = .{ .response = .{ .content = .{ .brief = .{ .title = bad, .description = good, .primary_goal = good } } } };
         const initial = try sessions.packet(std.testing.allocator, current, fixture.context);
         defer packets.release(initial);
-        const generation_schema = try schema.restrict(std.testing.allocator, canonical.select(initial.resultDefinition().?).?, initial.excludedVariants());
+        const generation_schema = try schema.restrict(std.testing.allocator, canonical.select(initial.resultDefinition().?).?, initial.excludedVariants(), initial.integerChoices());
         defer generation_schema.release();
         const invalid_body = try std.json.parseFromSlice(std.json.Value, a, try json.encode(g.ModelResponse, a, g.ModelResponse.from(candidate.response)), .{ .parse_numbers = false });
-        try std.testing.expectEqual(!exact, @import("domain/model_payload_schema.zig").validateValue(@import("domain/model_envelope.zig").value(&invalid_body.value), generation_schema.selected().root()) != null);
+        try std.testing.expect(@import("domain/model_payload_schema.zig").validateValue(@import("domain/model_envelope.zig").value(&invalid_body.value), generation_schema.selected().root()) != null);
         try std.testing.expect(std.mem.indexOf(u8, generation_schema.selected().modelBytes(), "exact_copy") != null);
         const rejected = (try validate_unit.execute(a, current, fixture.context, candidate)).invalid;
         try std.testing.expectEqual(@as(@FieldType(@import("domain/typed_text.zig").Issue, "reason"), if (exact) .unknown_exact else .unknown_passive), rejected.issue.text_issue.?.reason);
@@ -3991,7 +3991,7 @@ test "empty display choices reject invented and misbound references and permit b
         const auth = try repair.authorize(a, current, fixture.context, candidate, rejected);
         const packet = try repair.packet(std.testing.allocator, current, fixture.context, auth);
         defer packets.release(packet);
-        const selected = try schema.restrict(std.testing.allocator, canonical.select(packet.resultDefinition().?).?, packet.excludedVariants());
+        const selected = try schema.restrict(std.testing.allocator, canonical.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
         defer selected.release();
         {
             try std.testing.expectEqual(.value, std.meta.activeTag(auth.target));
@@ -4190,7 +4190,7 @@ test "reviewed record omission uses sibling exact support for authorization and 
         defer @import("domain/model_input_packet.zig").release(packet);
         var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
         const complete = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .unlimited));
-        const selected_schema = try schema.restrict(a, complete.select(packet.resultDefinition().?).?, packet.excludedVariants());
+        const selected_schema = try schema.restrict(a, complete.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
         defer selected_schema.release();
         try std.testing.expect(std.mem.indexOf(u8, selected_schema.selected().modelBytes(), "exact_copy") != null);
         if (all.entries.len > 2) try std.testing.expectError(error.InvalidReferenceReconciliation, repair.mergeOmission(a, text.validator, current, fixture.context, content, decision, authorization, .{ .value = .{ .segments = &.{.{ .exact_copy = .{ .claim_id = all.entries[if (all.entries.len > 3) 2 else 1].claim.id } }} } }, null));
@@ -4336,5 +4336,32 @@ test "fixed repair packet offers only passive choices from its bound claims" {
         try std.testing.expect(initial_body.get("passive_literals").?.array.items.len > 0);
         try std.testing.expectEqual(initial_body.get("sources").?.array.items.len, bound_body.get("sources").?.array.items.len);
         try std.testing.expectEqual(@as(usize, 0), bound_body.get("passive_literals").?.array.items.len);
+    }
+}
+
+test "fixed Spec choices narrow the visible token catalogue with the selected schema" {
+    const sessions = @import("domain/specification_session.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        "Display `Hello, World!` on startup.",
+        "Export `report.csv` when requested.",
+    }) |source| {
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+        const current = try sessions.initialize(fixture.context.inputs.corpus.feature_id, fixture.context);
+        const initial = try sessions.packetFor(a, current, fixture.context, 0);
+        defer packets.release(initial);
+        const before = (try std.json.parseFromSlice(std.json.Value, a, initial.body(), .{})).value;
+        try std.testing.expect(before.object.get("preserved_tokens").?.array.items.len > 0);
+        const business = fixture.context.references.records.assignments.checked.prior.prior.input.items[0].claim.id;
+        const narrowed = try sessions.withSelectionChoices(a, initial, fixture.context, .{ .claim_ids = &.{business}, .clarification_response_ids = &.{} });
+        defer packets.release(narrowed);
+        const after = (try std.json.parseFromSlice(std.json.Value, a, narrowed.body(), .{})).value;
+        try std.testing.expectEqual(@as(usize, 0), after.object.get("preserved_tokens").?.array.items.len);
+        try std.testing.expectEqual(before.object.get("claims").?.array.items.len, after.object.get("claims").?.array.items.len);
+        for (narrowed.integerChoices()) |choice| try std.testing.expect(!std.mem.eql(u8, choice.kind, "exact_copy"));
     }
 }
