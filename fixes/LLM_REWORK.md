@@ -1,8 +1,9 @@
 # LLM_REWORK — Derive mechanical facts; ask models for semantic choices
 
-**Reviewed:** 26 September 2026. **Status:** Phases 0–2 complete; Phases 3–4 remain.
+**Reviewed:** 26 September 2026. **Status:** Phases 0–3 complete; Phase 4 remains.
 **Scope:** Phase 0 baseline tests, approved [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md),
-Phase 1's reference-owner refactor and Phase 2's coordinated format cutover.
+Phase 1's reference-owner refactor, Phase 2's coordinated format cutover and
+Phase 3's offline integration/measurements.
 The retained runs and the conformance review are recorded below.
 Phase 2 closes the identified owning-unit, request-choice and allocation gaps;
 §10 records the checks. The latest retained run still failed; this assessment
@@ -249,7 +250,7 @@ join was removed, but this run never selected the valid exact handle and produce
 no graded specification. The subsequent Phase 2 conformance work closes the
 request-guidance and code findings in §6.5, but does not change this live result.
 
-### Latest run — corrected guidance, eight recovered targets, then no final answer
+### Earlier corrected-guidance run — eight recovered targets, then no final answer
 
 Execution
 [`2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8`](../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8/report.md)
@@ -296,14 +297,66 @@ correction exhaustion are not the terminal cause.
 
 **Rollout impact:** this run does not demonstrate a Phase 2 contract regression;
 it does demonstrate that corrected guidance and valid lineage are insufficient
-for useful model output. Keep Phase 2 complete and Phases 3–4 open. Extend the
-existing Phase 3.1 sequence with these successful repairs followed by late protocol
-exhaustion, and keep meaningful recovery distinct from mere field acceptance.
+for useful model output. Phase 3's offline sequence now covers those successful
+repairs followed by late protocol exhaustion; meaningful recovery remains distinct
+from mere field acceptance.
 Phase 4.1 must test both the captured prose-only repair's final-answer availability
 and fresh generation's reference selection/field meaning. The correct exact handle
 already works; choosing its business use remains semantic. Existing schema-choice
 narrowing proposals (§6.6) remain separate decisions, not an implicit extension of
 this run review. No new evidence, retry or semantic-review authority is justified.
+
+### Latest run — identical requests, first repair receives no final answer
+
+Execution
+[`2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793`](../zig-out/e2e-spec/2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793/report.md)
+recorded modified revision `1c56234`, source fingerprint
+`f970b687ca8f2c1db92368788c94e02647983d8ce9d2aafb400d80fa7abdbca4`.
+
+| Boundary | Observed evidence |
+| --- | --- |
+| Extraction/reconciliation, calls 1–7 | All three source obligations reached generation. Business claim 1 and preserved greeting claim 2 were retained; no conflict was reported. |
+| Brief, call 8 | Title, description and goal again contain only `exact_copy.claim_id:1`, with explicit support `[1]`. The request lists preserved-token claim **2**. Claim 1 is business prose, so native title validation rejects `unknown_exact`. The initial structural schema permits integer handles; native eligibility remains necessary. |
+| Title repair, call 9 | The authorized replacement is `{"value":["..."]}` under fixed evidence `[1]`. The request explicitly names rejected claim 1, prohibits unavailable exact/passive choices and requires source-backed strings. The raw HTTP 200 response ends at `</reasoning>` with `finish_reason:"stop"`; no final answer follows. |
+| Protocol correction, call 10 | Request **9**, attempt **2**, retains the original assignment, selected schema and evidence. It adds `missing_final_text`, “Final-answer admission failed: no final answer was received.” and the complete-corrected-response instruction. The raw response again contains only reasoning. No replacement reaches JSON/schema/native validation or a merge. |
+| Terminal boundary | `RetryLimitExhausted` at `generate-brief-repair-request-account`: limit 1, two executions. All **10 calls / 13,375 tokens** are accounted against 100,000. No specification, clarification or completed state was published. Story/records, source/principle assessment, publication/readback and rubric grading were not reached. |
+
+The [repair request](../zig-out/e2e-spec/2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793/evidence/generation/call-000009/request.json),
+[correction request](../zig-out/e2e-spec/2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793/evidence/generation/call-000010/request.json)
+and their raw responses establish two separate problems: incorrect semantic
+selection starts repair; missing final text prevents that repair from producing
+a candidate. This is not missing user information. Earlier malformed prefixes
+were admitted through the existing normalization path; JSON/schema exhaustion
+was not the terminal cause. The [adapter](../src/adapters/provider/bedrock_response.zig)
+correctly rejects an empty final portion rather than using reasoning as the answer.
+The captures do not establish why the provider/model omitted that answer.
+
+**Comparison:** all ten serialized request bodies are byte-identical to the
+corresponding calls in the preceding `01-21-50Z` run, including native
+`response_format.type:"json_schema"`, temperature 0 and low reasoning. Call 8's
+raw message content is also identical. The same call-10 correction previously
+returned a string containing the requirements; here it returns no final answer.
+That earlier field acceptance was not evidence of a useful title. The changed
+build fingerprint and earlier stop do not establish a Phase 3 regression: the
+observed request remained the same and the provider response changed.
+
+| Captured assignment | Request bytes | Actual input / total tokens |
+| --- | ---: | ---: |
+| Brief initial, call 8 | 9,740 | 1,510 / 1,628 |
+| Title repair, call 9 | 3,639 | 756 / 868 |
+| Title protocol correction, call 10 | 3,984 | 805 / 953 |
+
+**Rollout impact:** keep Phases 0–3 complete as offline contract/integration work;
+Phase 4 remains open. The existing [Spec runner regression](../src/composition/root.zig)
+already covers a misbound exact reference followed by two missing-answer attempts,
+exact accounting and no publication. Prioritize this first-title assignment in
+Phase 4.1, retaining the previous identical request's final answer as comparison
+evidence and the earlier record-repair failure as a second captured assignment.
+Measure final-answer availability separately from title usefulness and initial
+reference selection. An increased retry limit, guessed citation, reasoning-as-answer
+fallback or broader repair authority is not justified. Numeric-enum schema
+selection remains the separate decision in §6.6; it could constrain the initial
+wrong-kind choice but cannot itself repair an absent final answer.
 
 ## 3. Ownership inventory
 
@@ -984,7 +1037,7 @@ cannot acquire a fresh claim from the whole assignment catalogue on retry.
 
 ## 10. Phased rollout with testable checkpoints
 
-**Phases 0–2 are done; Phases 3–4 remain.** The approved contract
+**Phases 0–3 are done; Phase 4 remains.** The approved contract
 activated at the coordinated Phase 2 format cutover. There are five phases and eleven
 chunks. Each chunk produces a reviewable diff, named regression evidence and a
 recorded proceed/revise decision. §11 supplies the common acceptance matrix;
@@ -995,8 +1048,7 @@ and conformance checks are complete. Do not
 reintroduce temporary runtime flags, dual readers, skipped tests or pair/handle
 conversion adapters to make individual fixes appear smaller.
 
-**Next implementation order:** run independent reuse/failure integration and
-measurements (3.1–3.2), then separately approved controlled calls and a complete
+**Next implementation order:** separately approved controlled calls and a complete
 scored E2E (4.1–4.2).
 
 Every follow-up has a failing regression at its owner, an unrelated accepted case
@@ -1200,8 +1252,9 @@ retry progress despite a bad sibling, and allocation failure during lineage grow
 `zig build test-specification-generation test-reference-reconciliation --summary failures`,
 `zig build verify --summary failures` (including native packaging smoke) and
 `git diff --check` pass. These offline checks establish contract conformance, not
-live semantic quality. Phase 3 still owns independent cross-workflow integration
-and comparative request/resource measurements; Phase 4 owns approved live tests.
+live semantic quality. Phase 3's independent cross-workflow integration and
+comparative request/resource measurements are recorded below; Phase 4 owns
+approved live tests.
 
 ### Phase 3 — Prove reuse and integration offline
 
@@ -1225,7 +1278,7 @@ and comparative request/resource measurements; Phase 4 owns approved live tests.
   Also cover the post-cutover sequence: wrong-kind exact selection, a repaired
   title after missing-answer recovery, then description protocol exhaustion before
   any native replacement. Keep those two exhaustion boundaries distinguishable.
-  Extend it with the latest run's eight successful native targets, each requiring
+  Extend it with the `01-21-50Z` run's eight successful native targets, each requiring
   missing-answer correction, then a ninth target's protocol exhaustion. Preserve
   completed siblings, per-assignment retry identities, fixed evidence and exact
   accounting. Include a correct exact handle with `S=[1]` that needs no provenance
@@ -1264,18 +1317,66 @@ and comparative request/resource measurements; Phase 4 owns approved live tests.
   Bytes are not token counts. Offline usage fixtures prove accounting only; record
   actual model tokens in Phase 4. Failed checks reopen the owning chunk, not the judge.
 
+**Phase 3 complete (26 September 2026):** A test-owned registered audit consumer
+uses the normal compiler, sliced JSON runner and `reference_support` with its own
+typed memo/check schema and eligibility rule. Its nested optional and array fields
+accept valid lineage, reject a valid handle in a forbidden field and reject stale
+ledger identity. It checks part producer IDs and accounted tokens. No Spec session,
+workflow-name branch or second resolver was added. Existing no-reference composition,
+retained-part freshness, protocol retry and operational-ID tests still pass.
+The Spec runner now includes eight distinct repaired targets that each encounter
+one missing final answer, followed by a ninth target that exhausts its own retry
+allowance. Earlier successful work remains accounted; the terminal run publishes
+neither specification nor clarification. Existing positive Spec scenarios exercise
+requirements, acceptance criteria, source/principle review, publication and
+completed readback. A correct exact handle with inadequate business text remains
+a semantic concern, not proof of quality from native validation.
+
+Retained [Phase 0 baseline](../zig-out/e2e-spec/2026-09-25T08-21-44Z-b16638b5493910a4b1d29436213dcde9/)
+and [post-cutover run](../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8/)
+were measured from their generation evidence. Schema bytes below are the compact
+UTF-8 serialization of `response_format.json_schema.schema`; output bytes are
+the retained final-text file, or zero when no final text was returned.
+
+| Assignment | Baseline request / schema / output bytes | Current request / schema / output bytes | Interpretation |
+| --- | ---: | ---: | --- |
+| Brief initial | 10,242 / 3,012 / 571 | 9,740 / 2,824 / 386 | Same case and purpose; changed response contract and model output. |
+| Story initial | 7,529 / 1,642 / 156 | 7,426 / 1,548 / 140 | Same case and purpose; changed response contract and model output. |
+| Brief repair versus current correction | 5,107 / 616 / 181 | 3,984 / 133 / 171 | Different authorized scopes; descriptive, not a reduction claim. |
+| Records initial | No comparable baseline call | 18,803 / 5,914 / 578 | New work reached after the baseline stopped. |
+| Records correction | No comparable baseline call | 5,700 / 133 / 171 (call 21); 5,698 / 133 / 0 (call 29) | Missing final answer is counted, not treated as JSON. |
+
+The compiled Spec graph remains **717 operations**. Over 100 repeated complete
+lineage/select derivations with valid one- and 16-claim ledgers, the reference-owner
+test measured respectively **500/500 allocator calls**, **40/640 bytes retained
+after derivation**, **240/1,762 bytes of peak arena capacity** and **41.0/41.7 ms**
+on this development machine. Arena capacity includes allocation overhead and
+intermediate work; it is not the retained output size. The retained bytes scale
+with selected claims; these timings are not a cross-machine latency promise. The
+test frees every measured allocation and retains allocation-failure coverage. The historical
+runtime has no equivalent ledger benchmark, so these figures are current-resource
+evidence, not a before/after performance claim. The initial requests did not grow;
+the repair shapes are not equivalent and cannot establish cost or quality gains.
+Phase 4 must measure actual provider tokens and semantic outcomes. No live provider
+call or E2E run was made for Phase 3. `zig build test-model-request-workflow
+test-reference-reconciliation --summary failures`, full `zig build verify
+--summary failures` (including packaged smoke), and `git diff --check` passed.
+
 ### Phase 4 — Measure live effectiveness with separate approvals
 
 **4.1 — Controlled assignments.** Depends on 3.2 and explicit call approval.
 
 - **Outcome:** prepare comparable captured assignments from the reported and unrelated
-  cases. Hold sources, semantic task and provider settings fixed; change the approved
-  contract/projection together. Use the existing debugger and capture, with a declared
+  cases. Use the current approved contract/projection as the baseline. Hold sources,
+  semantic task and provider settings fixed for a prompt comparison. Use the existing debugger and capture, with a declared
   call count and budget. Keep the old response as evidence, not a second runtime path.
 - **Checks:** record final-answer presence, JSON/schema/native validity, literal and
   meaning preservation, repair outcomes, actual tokens and latency for every attempt.
-  Start with the latest run's captured calls 28–29 from §2, whose guidance already
-  conforms; preserve their fixed evidence/schema and measure final-answer availability.
+  Start with the latest `02-40-05Z` run's title repair/correction (calls 9–10), whose
+  guidance already conforms. The preceding run sent identical request bodies and
+  call 10 returned final text; retain that comparison without treating it as a useful
+  title. Include the prior `01-21-50Z` run's record repair/correction (calls 28–29).
+  Preserve each assignment's fixed evidence/schema and measure final-answer availability.
   A failed earlier baseline alone does not establish a statistical improvement rate.
 - **Two separate questions:** fixed-bound replay tests whether the corrected repair
   assignment returns usable, purpose-appropriate prose; fresh initial generation
@@ -1373,15 +1474,14 @@ and user clarification records rather than adding migrations or fallback readers
 ## 12. Feasibility conclusion
 
 **Viable for reuse across workflows through a shared typed contract, with Spec as
-the first integration. Phase 2 is complete.** The reference-owner refactor,
+the first integration. Phases 2–3 are complete.** The reference-owner refactor,
 handle representation, explicit selection, version cutover and §6.5 conformance
 work are implemented. They require no new message layer, reference registry,
 retry mechanism or general-purpose fixer.
 
-**Implement next:** Phase 3's independent consumer, cross-boundary failure and
-recovery tests, and comparative request/resource measurements. Phase 2's offline
-success is not evidence that the provider's missing final answers or semantic
-quality in the retained run improved.
+**Implement next:** Phase 4's separately approved controlled assignments and
+scored live E2E. Offline integration does not establish that the provider's
+missing final answers or semantic quality in the retained run improved.
 
 This does not promise automatic support for every JSON Schema, authority namespace
 or future workflow. New domains reuse the mechanism by supplying their declared
@@ -1395,12 +1495,14 @@ proof of specification quality, silently infer business evidence, or hide unreso
 coverage. Broader bookkeeping simplifications should follow measured evidence,
 independently of this first contract.
 
-**Evidence limit:** Phase 2's tests and full verification establish offline
-conformance, including packaged behavior. The latest retained run used corrected
-guidance and accepted a valid derived reference, but still produced poor interim
-content and exhausted missing-answer recovery before publication or grading.
-This assessment launched no provider calls or E2E. Phase 3 supplies independent
-offline integration and measurements; Phase 4 requires separately approved live effectiveness and a
+**Evidence limit:** Phases 2–3 establish offline conformance and reuse, including
+packaged behavior. The earlier retained run accepted a valid derived reference
+but produced poor interim content and exhausted missing-answer recovery. The latest
+run stopped at the first title repair: its first ten requests match that earlier
+run byte-for-byte, but the correction no longer returned final text. Neither run
+reached publication or grading; this comparison does not establish a Phase 3
+contract regression or a live quality improvement.
+This assessment launched no provider calls or E2E. Phase 4 requires separately approved live effectiveness and a
 published, scored output. ADR 0020's explicitly excluded extensions remain
 unapproved.
 Existing regression owners include [specification generation tests](../src/specification_generation_test.zig),

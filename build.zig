@@ -278,7 +278,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/model_request_workflow_test.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{.{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module }},
+        .imports = &.{ .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module }, .{ .name = "unicode_normalization", .module = unicode_module } },
     }) });
     b.step("test-model-request-workflow", "Test native YAML model requests, inference, response handling and accounting").dependOn(&b.addRunArtifact(request_workflow_tests).step);
 

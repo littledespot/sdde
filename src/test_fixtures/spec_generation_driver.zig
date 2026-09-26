@@ -7,7 +7,7 @@ const requests = @import("../application/model_request_workflow.zig");
 pub const Fault = struct {
     stage: enum { extraction, reconciliation, generation, repair, support, candidate_review },
     shape: enum { empty, nested_empty, mixed_variant, alternating_protocol, missing_answer, alternating_missing, misplaced_provenance, inconclusive, review_empty_claims, review_empty_applicability, review_missing, review_forbidden, review_moving, review_dropped, review_changed },
-    repetition: union(enum) { once, first_request: u32, every_request: u32, persistent } = .once,
+    repetition: union(enum) { once, first_request: u32, every_request: u32, recover_then_exhaust: u32, persistent } = .once,
     pub fn reviewShape(self: Fault) bool {
         return switch (self.shape) {
             .review_missing, .review_forbidden, .review_moving, .review_dropped, .review_changed => true,
@@ -309,6 +309,7 @@ pub const Driver = struct {
                     .once => self.fault_calls == 0,
                     .first_request => |count| (self.fault_request == null or self.fault_request == request.id()) and attempt <= count,
                     .every_request => |count| attempt <= count,
+                    .recover_then_exhaust => |recovered| attempt == 1 or self.fault_requests + @as(usize, @intFromBool(self.fault_request != request.id())) > recovered,
                     .persistent => true,
                 };
                 if (matches_stage and reject) {
@@ -318,7 +319,7 @@ pub const Driver = struct {
                         std.testing.expectEqual(@as(u32, @intCast(if (self.fault_request == request.id()) self.fault_calls + 1 else 1)), attempt) catch unreachable;
                     }
                     if (self.fault_request != request.id()) {
-                        std.debug.assert(self.fault_request == null or fault.repetition == .every_request);
+                        std.debug.assert(self.fault_request == null or fault.repetition == .every_request or fault.repetition == .recover_then_exhaust);
                         self.fault_request = request.id();
                         self.fault_requests += 1;
                     }

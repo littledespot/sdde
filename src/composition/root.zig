@@ -1375,6 +1375,7 @@ test "configured specification generation YAML executes native references models
         .{ .stage = .generation, .shape = .missing_answer },
         .{ .stage = .repair, .shape = .missing_answer },
         .{ .stage = .repair, .shape = .missing_answer, .repetition = .persistent },
+        .{ .stage = .repair, .shape = .missing_answer, .repetition = .{ .recover_then_exhaust = 8 } },
         .{ .stage = .support, .shape = .missing_answer },
         .{ .stage = .extraction, .shape = .empty },
         .{ .stage = .reconciliation, .shape = .empty },
@@ -1678,7 +1679,7 @@ test "configured specification generation YAML executes native references models
             .no_entities, .entities => .ok,
             .unjustified, .missing_decision, .missing_text => .needs_user,
             .inconclusive => .invalid,
-        } else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .partial_findings or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_replacement or driver.reconciliation_protocol_fault == .token_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and fault.?.repetition == .persistent)) .failed else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
+        } else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .partial_findings or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_replacement or driver.reconciliation_protocol_fault == .token_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}; candidate: {any}\n", .{ scenario, result, try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (membership_scenario) {
@@ -2261,10 +2262,10 @@ test "configured specification generation YAML executes native references models
                 try std.testing.expectEqual(attempts, entry.id.model_attempt_ordinal.value);
             };
             try std.testing.expectEqual(@as(u32, 2), attempts);
-            if (fault.?.repetition == .persistent) {
+            if (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust) {
                 const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&view)).?.specification;
                 try std.testing.expectEqual(.unknown_exact, diagnostic.issue.text_issue.?.reason);
-                try std.testing.expect(diagnostic.last_repair == null);
+                try std.testing.expect((diagnostic.last_repair == null) == (fault.?.repetition == .persistent));
                 try std.testing.expect(!view.contains(.specification_publication_state));
             } else {
                 const session = try @import("../application/specification_workflow.zig").readSession(&view);
@@ -2287,6 +2288,15 @@ test "configured specification generation YAML executes native references models
                 // Distinct logical requests traverse the same correction step.
                 try std.testing.expect(driver.fault_requests >= 2);
                 try std.testing.expectEqual(driver.fault_requests * count, driver.fault_calls);
+            },
+            .recover_then_exhaust => |recovered| {
+                try std.testing.expectEqual(@as(usize, recovered) + 1, driver.fault_requests);
+                try std.testing.expectEqual(@as(usize, recovered) + 2, driver.fault_calls);
+                try std.testing.expect(driver.generation_calls >= 4);
+                try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
+                const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+                try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
+                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
             },
             .persistent => {
                 const exhausted = result.execution_rejected.retry_limit;

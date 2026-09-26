@@ -3407,13 +3407,14 @@ test "bounded protocol assignments continue many valid units and stop repeated o
 
 const ProtocolUnits = struct {
     next: u32 = 0,
+    input: []const u8 = "{}",
     exclusions: []const @import("domain/model_result_schema.zig").ExcludedVariant = &.{},
     fn select(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         self.next += 1;
         var name: [32]u8 = undefined;
         const unit: identity.ImmutableUnitOwnerId = .{ .reference_global = .{ .reference_state_id = .{ .bytes = "source" }, .unit_slot_id = .{ .bytes = std.fmt.bufPrint(&name, "partition-{d}", .{self.next}) catch return error.OperationExecutionFailed } } };
-        const packet = @import("domain/model_input_packet.zig").create(std.testing.allocator, "{}", unit, .initial_generation, null) catch return error.OperationExecutionFailed;
+        const packet = @import("domain/model_input_packet.zig").create(std.testing.allocator, self.input, unit, .initial_generation, null) catch return error.OperationExecutionFailed;
         defer @import("domain/model_input_packet.zig").release(packet);
         const narrowed = @import("domain/model_input_packet.zig").withExcludedVariants(std.testing.allocator, packet, self.exclusions) catch return error.OperationExecutionFailed;
         return requests.publishPacket(std.testing.allocator, narrowed);
@@ -6594,6 +6595,165 @@ const CompositionCalls = struct {
         return .{ .outcome = .ok, .delta = .{} };
     }
 };
+
+// A second, test-owned typed consumer. Its evidence policy differs from Spec:
+// exact display occurrences are allowed in the memo but not in check descriptions.
+const AuditValue = struct {
+    segments: []const @import("domain/typed_text.zig").BusinessSegment,
+    evidence: []const @import("domain/reference_identity.zig").ClaimId,
+};
+const AuditCandidate = struct {
+    memo: struct { title: AuditValue, supplement: ?AuditValue = null },
+    checks: []const AuditValue,
+};
+const audit_schema =
+    \\{"$defs":{"segment":{"oneOf":[{"type":"string","maxLength":256},{"type":"object","properties":{"kind":{"const":"exact_copy"},"claim_id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","claim_id"],"additionalProperties":false}]},"value":{"type":"object","properties":{"segments":{"type":"array","maxItems":8,"items":{"$ref":"#/$defs/segment"}},"evidence":{"type":"array","maxItems":8,"items":{"type":"integer","minimum":1,"maximum":100}}},"required":["segments","evidence"],"additionalProperties":false}},"type":"object","properties":{"memo":{"type":"object","properties":{"title":{"$ref":"#/$defs/value"},"supplement":{"$ref":"#/$defs/value"}},"required":["title"],"additionalProperties":false},"checks":{"type":"array","maxItems":4,"items":{"$ref":"#/$defs/value"}}},"required":["memo","checks"],"additionalProperties":false}
+;
+const audit_composition =
+    \\{"schema":"json-composition/v1","result":"result","parts":{"memo":{"paths":["/memo"]},"checks":{"paths":["/checks"],"requires":["memo"]}}}
+;
+
+const AuditObserver = struct {
+    allocator: std.mem.Allocator,
+    inputs: @import("domain/reference_evidence.zig").Inputs,
+    items: @import("domain/reference_reconciliation.zig").Items,
+    calls: usize = 0,
+    memo_claims: []const @import("domain/reference_identity.zig").ClaimId = &.{},
+
+    fn check(self: *@This(), value: AuditValue, allow_exact: bool) operations.Error!bool {
+        const support = @import("domain/reference_support.zig");
+        const r = @import("domain/reference_reconciliation.zig");
+        var exact: std.ArrayList(r.ClaimId) = .empty;
+        if (value.segments.len == 0) return false;
+        for (value.evidence) |id| {
+            const item = r.item(self.items, id) catch return false;
+            if (item.claim.content != .model) return false;
+        }
+        for (value.segments) |segment| switch (segment) {
+            .exact_copy => |selected| {
+                if (!allow_exact) return false;
+                _ = support.exact(self.items, selected.claim_id) catch return false;
+                exact.append(self.allocator, selected.claim_id) catch return error.OperationExecutionFailed;
+            },
+            else => {},
+        };
+        const claims = support.lineage(self.allocator, value.evidence, exact.items) catch |err| switch (err) {
+            error.OutOfMemory => return error.OperationExecutionFailed,
+            else => return false,
+        };
+        const resolved = support.select(self.allocator, self.items, self.inputs, claims) catch |err| switch (err) {
+            error.OutOfMemory => return error.OperationExecutionFailed,
+            else => return false,
+        };
+        if (resolved.scopes.len == 0 or resolved.citation_ids.len == 0) return false;
+        if (allow_exact and self.memo_claims.len == 0) self.memo_claims = resolved.claim_ids;
+        return true;
+    }
+
+    fn observe(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const assembled = @import("application/json_composition_workflow.zig").readValidated(&input.step.data) catch return error.OperationExecutionFailed;
+        const parsed = @import("domain/model_candidate_json.zig").decode(AuditCandidate, self.allocator, assembled.body) catch |err| switch (err) {
+            error.OutOfMemory => return error.OperationExecutionFailed,
+            else => return .{ .outcome = .invalid, .delta = .{} },
+        };
+        self.calls += 1;
+        if (!try self.check(parsed.memo.title, true)) return .{ .outcome = .invalid, .delta = .{} };
+        if (parsed.memo.supplement) |extra| if (!try self.check(extra, true)) return .{ .outcome = .invalid, .delta = .{} };
+        for (parsed.checks) |entry| if (!try self.check(entry, false)) return .{ .outcome = .invalid, .delta = .{} };
+        return .{ .outcome = .ok, .delta = .{} };
+    }
+};
+
+const AuditCalls = struct {
+    fake: fake_provider.FakeLLMProvider,
+    allocator: std.mem.Allocator,
+    business: @import("domain/reference_identity.zig").ClaimId,
+    exact: @import("domain/reference_identity.zig").ClaimId,
+    ineligible: bool,
+    supplement: bool,
+    fn interface(self: *@This()) @import("ports/llm_provider_interface.zig").LLMProviderInterface {
+        return .{ .context = @ptrCast(self), .vtable = &.{ .invoke = invoke, .count_input_tokens = count } };
+    }
+    fn invoke(context: *@import("ports/llm_provider_interface.zig").Context, selected: *const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding, request: *const provider.IdentifiedProviderNeutralModelRequest, reference: *const provider.ValidatedProviderAuthorizationLeaseRef, invoked: *const provider.InvokedProviderOperation) @import("ports/llm_provider_interface.zig").Error!provider.ProviderInvocationObservation {
+        const self: *@This() = @ptrCast(@alignCast(context));
+        const supplement = if (self.supplement)
+            std.fmt.allocPrint(self.allocator, ",\"supplement\":{{\"segments\":[\"Supplemental context.\"],\"evidence\":[{d}]}}", .{self.business.ordinal}) catch return error.OutOfMemory
+        else
+            "";
+        self.fake.invocation_plan.complete.content = if (std.mem.eql(u8, request.response_schema.root().object[0].name, "memo"))
+            std.fmt.allocPrint(self.allocator, "{{\"memo\":{{\"title\":{{\"segments\":[\"Inspect \",{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}],\"evidence\":[{d}]}}{s}}}}}", .{ self.exact.ordinal, self.business.ordinal, supplement }) catch return error.OutOfMemory
+        else if (self.ineligible)
+            std.fmt.allocPrint(self.allocator, "{{\"checks\":[{{\"segments\":[{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}],\"evidence\":[{d}]}}]}}", .{ self.exact.ordinal, self.business.ordinal }) catch return error.OutOfMemory
+        else
+            std.fmt.allocPrint(self.allocator, "{{\"checks\":[{{\"segments\":[\"Verify the recorded outcome.\"],\"evidence\":[{d}]}}]}}", .{self.business.ordinal}) catch return error.OutOfMemory;
+        return self.fake.interface().invoke(selected, request, reference, invoked);
+    }
+    fn count(context: *@import("ports/llm_provider_interface.zig").Context, selected: *const @import("domain/llm_provider_binding.zig").ValidatedProviderModelBinding, request: *const provider.IdentifiedProviderNeutralModelRequest, reference: *const provider.ValidatedProviderAuthorizationLeaseRef, invoked: *const provider.InvokedProviderOperation) @import("ports/llm_provider_interface.zig").Error!provider.ProviderTokenCountObservation {
+        const self: *@This() = @ptrCast(@alignCast(context));
+        return self.fake.interface().countInputTokens(selected, request, reference, invoked);
+    }
+};
+
+test "registered non-Spec typed consumer composes references and enforces its own eligibility" {
+    const r = @import("domain/reference_reconciliation.zig");
+    for ([_]enum { valid, optional, ineligible, stale }{ .valid, .optional, .ineligible, .stale }) |mode| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const a = fixture.arena.allocator();
+        const references = try @import("reference_reconciliation_test.zig").prepare(a, &.{"Record `Hello, World!` and verify the result.\n"});
+        defer references.deinit();
+        const progress = try @import("test_fixtures/reference_reconciliation.zig").initialize(a, references.inputs, references.extracted, 2);
+        var items = progress.plan.layout.items;
+        var business: ?r.ClaimId = null;
+        var exact: ?r.ClaimId = null;
+        for (items.entries) |entry| switch (entry.claim.content) {
+            .model => business = entry.claim.id,
+            .preserved_token => exact = entry.claim.id,
+        };
+        try std.testing.expect(business != null and exact != null);
+        var observer: AuditObserver = .{
+            .allocator = a,
+            .inputs = references.inputs,
+            .items = items,
+        };
+        if (mode == .stale) {
+            items.state_id.bytes = "stale-reference-state";
+            observer.items = items;
+        }
+        var units: ProtocolUnits = .{ .input = try std.fmt.allocPrint(a, "{{\"claims\":[{d},{d}],\"preserved_tokens\":[{d}]}}", .{ business.?.ordinal, exact.?.ordinal, exact.?.ordinal }) };
+        fixture.entries[fixture.entries.len - 1] = .{
+            .contract = .{ .id = "test.observe-request", .kind = .step, .requires = &.{ .assembled_json, .validated_assembled_json }, .outcomes = &.{ .ok, .invalid }, .side_effect = .none },
+            .binding = bindings.bind(AuditObserver, &observer, AuditObserver.observe),
+        };
+        var entries = fixture.entries ++ [_]operations.Entry{.{
+            .contract = .{ .id = "test.select-unit", .kind = .step, .produces = &.{.model_input_packet}, .outcomes = &.{ .ok, .failed }, .side_effect = .none },
+            .binding = bindings.bind(ProtocolUnits, &units, ProtocolUnits.select),
+        }};
+        fixture.registry.operations = &entries;
+        const source = try std.mem.replaceOwned(u8, a, composition_yaml, "on: {ok: end.ok}}", "on: {ok: end.ok, invalid: end.invalid}}");
+        const source_two = try std.mem.replaceOwned(u8, a, source, "  zip: {call: part, with: {part: zip}, on: {ok: assemble, failed: end.failed, invalid: end.invalid, cancelled: end.cancelled}}\n", "");
+        const source_three = try std.mem.replaceOwned(u8, a, source_two, "{ok: zip, failed:", "{ok: assemble, failed:");
+        const source_four = try std.mem.replaceOwned(u8, a, source_three, "part: street", "part: memo");
+        const source_five = try std.mem.replaceOwned(u8, a, source_four, "part: flags", "part: checks");
+        const audit_workflow = try std.mem.replaceOwned(u8, a, source_five, "id: compose-address", "id: audit-record");
+        const graph = try fixture.compileResources(audit_workflow, audit_schema, false, audit_composition);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var calls: AuditCalls = .{ .fake = invocationProvider(&runner, std.testing.allocator), .allocator = a, .business = business.?, .exact = exact.?, .ineligible = mode == .ineligible, .supplement = mode == .optional };
+        fixture.native.invoke_model.action = .{ .provider = calls.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(@as(workflow.OutcomeTag, if (mode == .valid or mode == .optional) .ok else .invalid), harness.run());
+        try std.testing.expectEqual(@as(usize, 2), calls.fake.effect_count);
+        try std.testing.expectEqual(@as(usize, 1), observer.calls);
+        const assembled = try @import("application/json_composition_workflow.zig").readValidated(&.{ .slots = runner.envelope.slots });
+        try std.testing.expectEqual(@as(usize, 1), assembled.producer(&.{"memo"}).?.request.value);
+        try std.testing.expectEqual(@as(usize, 2), assembled.producer(&.{"checks"}).?.request.value);
+        if (mode == .valid or mode == .optional) try std.testing.expectEqualDeep(&[_]r.ClaimId{ business.?, exact.? }, observer.memo_claims);
+        try std.testing.expectEqual(@as(u128, 14), runner.tokenLedger().committed());
+    }
+}
 
 test "composition application handoffs release retained parts and requests at every allocation failure" {
     var fixture: Fixture = undefined;
