@@ -4,6 +4,7 @@
 - **Date:** 2026-09-26
 - **Decision authority:** Explicit user approval of Phase 0.2 in [LLM_REWORK](../../fixes/LLM_REWORK.md).
 - **27 September 2026 amendment authority:** Explicit user approval of provenance-free, source-bound per-unit assignments in this session.
+- **28 September 2026 amendment authority:** Explicit user instruction to clarify generation-role assignment and require nonempty role lists when supplied.
 - **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1. The overall design remains Proposed.
 
 ## Boundary and representation
@@ -49,6 +50,8 @@ capability.
 The model chooses source meaning during reconciliation; the engine retains the
 validated claim group on each reconciliation signal. Reconciliation also records
 the semantic generation roles of those groups for feature-level fields. The
+model omits `generation_roles` for a context-only signal; a supplied role list is
+nonempty. The validated signal records the omitted case as an empty list. The
 engine validates group membership and role coverage, then binds each attributed
 field or record-generation task to its current source obligation before
 dispatch. It resolves that bound group through the existing reference ledger

@@ -106,7 +106,8 @@ pub fn checkSignal(a: std.mem.Allocator, validator: r.text.Validator, context: T
     if (index >= prior.proposal.signals.len) return error.InvalidReferenceReconciliation;
     const proposed = prior.proposal.signals[index];
     const items = prior.input.progress.plan.layout.items;
-    for (proposed.generation_roles, 0..) |role, role_index| for (proposed.generation_roles[0..role_index]) |prior_role| {
+    const roles = proposed.generation_roles orelse &.{};
+    for (roles, 0..) |role, role_index| for (roles[0..role_index]) |prior_role| {
         if (role == prior_role) return .{ .invalid = .{ .rule = .duplicate_signal, .observed = .{ .claims = proposed.claim_ids }, .expected = .{ .constraint = .unique_members } } };
     };
     if (try signalClaims(items, prior.dispositions, proposed.claim_ids, prior.input.partition.group.claim_ids)) |issue| return .{ .invalid = issue };
@@ -115,7 +116,7 @@ pub fn checkSignal(a: std.mem.Allocator, validator: r.text.Validator, context: T
         .invalid => |issue| return .{ .invalid = issue },
     };
     if (!signalSelectionAvailable(prior.proposal.signals[0..index], index, proposed.claim_ids)) return .{ .invalid = .{ .rule = .duplicate_signal, .observed = .{ .claims = proposed.claim_ids }, .expected = .{ .constraint = .unique_members } } };
-    return .{ .valid = .{ .claim_ids = proposed.claim_ids, .citation_ids = try r.citationUnion(a, items, proposed.claim_ids), .content = accepted, .generation_roles = proposed.generation_roles } };
+    return .{ .valid = .{ .claim_ids = proposed.claim_ids, .citation_ids = try r.citationUnion(a, items, proposed.claim_ids), .content = accepted, .generation_roles = roles } };
 }
 
 pub fn checkConflict(a: std.mem.Allocator, validator: r.text.Validator, context: TextContext, prior: r.CheckedDispositions, index: usize) r.Error!d.Check(r.ValidatedConflict) {

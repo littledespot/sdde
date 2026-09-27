@@ -24,6 +24,27 @@ test "reconciliation rejects the observed native union response and accepts the 
     }) |content| try check(schema, .{ .bytes = try std.mem.concat(a, u8, &.{ prefix, content, "}]}" }) });
 }
 
+test "reconciliation roles are nonempty when present and omitted for context" {
+    const prefix = "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[1],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"Start successfully.\"]}}";
+    const suffix = "],\"conflicts\":[]}";
+    try checkCandidate("reconciliation", "global", prefix ++ ",\"generation_roles\":[\"title\",\"records\"]}" ++ suffix);
+    try checkCandidate("reconciliation", "global", prefix ++ "}" ++ suffix);
+    try candidateSchemaCase("reconciliation", "global", prefix ++ ",\"generation_roles\":[]}" ++ suffix, .array_length, "/signals/0/generation_roles");
+    try candidateSchemaCase("reconciliation", "global", prefix ++ ",\"generation_roles\":null}" ++ suffix, .type_mismatch, "/signals/0/generation_roles");
+    try candidateSchemaCase("reconciliation", "global", prefix ++ ",\"generation_roles\":[\"unknown\"]}" ++ suffix, .enum_mismatch, "/signals/0/generation_roles/0");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const source = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .limited(@import("domain/model_result_schema.zig").max_bytes));
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const selected = (try parser.compiler().compile(a, source)).select(.{ .bytes = "global" }).?;
+    const bedrock = try @import("domain/model_schema_projection.zig").render(a, selected, .bedrock);
+    const projected = (try std.json.parseFromSlice(std.json.Value, a, bedrock, .{})).value.object;
+    const signal = projected.get("properties").?.object.get("signals").?.object.get("items").?.object;
+    try std.testing.expectEqual(@as(i64, 1), signal.get("properties").?.object.get("generation_roles").?.object.get("minItems").?.integer);
+    for (signal.get("required").?.array.items) |name| try std.testing.expect(!std.mem.eql(u8, name.string, "generation_roles"));
+}
+
 test "compact model JSON keeps sibling objects intact and round trips native unions" {
     try roundTrip(std.testing.allocator);
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -97,14 +118,14 @@ test "independent wire cases cover every selected specification result and neste
         const content = "{\"kind\":\"" ++ kind ++ "\"," ++ (if (comptime std.mem.eql(u8, kind, "business") or std.mem.eql(u8, kind, "scope_guard")) "\"segments\":" ++ response_wire.segments else "\"nodes\":" ++ response_wire.nodes) ++ "}";
         try checkCandidate("extraction", null, "{\"kind\":\"claims\",\"claims\":[{\"content\":" ++ content ++ ",\"citations\":[" ++ response_wire.selection ++ "]}],\"token_classifications\":" ++ response_wire.classifications ++ "}");
         try checkCandidate("reconciliation", "summary", "{\"statements\":[{\"local_key\":7,\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"model\",\"model\":" ++ content ++ "}}]}");
-        try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[{\"claim_id\":" ++ response_wire.id ++ ",\"disposition\":{\"kind\":\"retained\"}}],\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"model\",\"model\":" ++ content ++ "},\"generation_roles\":[]}],\"conflicts\":[]}");
+        try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[{\"claim_id\":" ++ response_wire.id ++ ",\"disposition\":{\"kind\":\"retained\"}}],\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"model\",\"model\":" ++ content ++ "}}],\"conflicts\":[]}");
     }
     try checkCandidate("extraction", null, "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":" ++ response_wire.nodes ++ "},\"token_classifications\":[]}");
     try checkCandidate("extraction", "classification_replacement", "{\"token_classifications\":" ++ response_wire.classifications ++ "}");
     try checkCandidate("extraction", "citation_replacement", "{\"citations\":[" ++ response_wire.selection ++ "]}");
     try checkCandidate("extraction", "source_selection_replacement", response_wire.selection);
     try checkCandidate("reconciliation", "summary", "{\"statements\":[{\"local_key\":7,\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"preserved_token\",\"token_id\":" ++ response_wire.id ++ "}}]}");
-    try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"preserved_token\",\"token_id\":" ++ response_wire.id ++ "},\"generation_roles\":[]}],\"conflicts\":[{\"claim_ids\":[" ++ response_wire.id ++ ",9],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "}}]}");
+    try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"preserved_token\",\"token_id\":" ++ response_wire.id ++ "}}],\"conflicts\":[{\"claim_ids\":[" ++ response_wire.id ++ ",9],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "}}]}");
     // Structural conformance is not a claim that these independently shaped
     // records satisfy the graph, source-join or semantic validators.
     try checkCandidate("generation", "brief", "{\"kind\":\"brief\",\"title\":" ++ response_wire.attributed ++ ",\"description\":" ++ response_wire.attributed ++ ",\"primary_goal\":" ++ response_wire.attributed ++ "}");

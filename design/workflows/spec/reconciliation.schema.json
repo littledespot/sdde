@@ -165,13 +165,13 @@
                     "records"
                   ]
                 },
+                "minItems": 1,
                 "maxItems": 6
               }
             },
             "required": [
               "claim_ids",
-              "content",
-              "generation_roles"
+              "content"
             ],
             "additionalProperties": false
           },

@@ -57,7 +57,7 @@ pub fn global(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
         else if (business)
             &.{.records}
         else
-            &.{} };
+            null };
         if (business) assigned_feature = true;
     }
     return .{ .claim_dispositions = dispositions, .signals = signals, .conflicts = &.{} };

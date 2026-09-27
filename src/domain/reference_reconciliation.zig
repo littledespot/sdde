@@ -96,7 +96,7 @@ pub const ClaimDispositionProposal = struct {
 /// Semantic uses of an already selected source-obligation group. These are
 /// assignments for Spec authoring, not additional reference identities.
 pub const GenerationRole = enum { title, description, primary_goal, primary_user_story, entity_basis, records };
-pub const SignalProposal = struct { claim_ids: []const ClaimId, content: ContentProposal, generation_roles: []const GenerationRole = &.{} };
+pub const SignalProposal = struct { claim_ids: []const ClaimId, content: ContentProposal, generation_roles: ?[]const GenerationRole = null };
 pub const ValidatedSignal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: Content, generation_roles: []const GenerationRole };
 pub const ConflictKind = enum { mutually_exclusive, precedence_missing, value_mismatch, scope_mismatch };
 pub const ConflictProposal = struct {
