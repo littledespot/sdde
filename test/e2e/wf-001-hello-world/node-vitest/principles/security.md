@@ -45,7 +45,6 @@ Project: Hello World
 | **Encryption in Transit** | Not applicable; no network is used.   | MUST     |
 | **PII Handling**          | Do not collect personal information.  | MUST     |
 | Data Minimization         | Retain no application data.           | MUST     |
-| **Data Classification**   | The fixed greeting is non-sensitive.  | MUST     |
 | Data Retention            | Do not retain application data.       | MUST     |
 | Secure Deletion           | Not applicable.                       | MUST     |
 | **Key Management**        | Do not introduce encryption keys.     | MUST     |
@@ -60,10 +59,8 @@ Project: Hello World
 | Injection Prevention | Do not evaluate dynamic code or construct commands. | MUST     |
 | XSS Prevention       | Not applicable; no web content is produced.         | MUST     |
 | Command Injection    | Do not invoke a shell or build commands from data.  | MUST     |
-| **Output Encoding**  | Output only the fixed greeting.                      | MUST     |
 | CSP Headers          | Not applicable.                                     | MUST     |
 | Path Traversal       | Do not accept or construct application paths.       | MUST     |
-| **Type Validation**  | Keep the greeting a string.                          | MUST     |
 
 ---
 
