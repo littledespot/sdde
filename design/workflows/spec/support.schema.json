@@ -67,37 +67,22 @@
     "selection": {
       "type": "object",
       "properties": {
-        "provenance": {
-          "$ref": "#/$defs/provenance"
-        },
         "source_ids": {
           "$ref": "#/$defs/ordinal_list"
         }
       },
       "required": [
-        "provenance",
         "source_ids"
-      ],
-      "additionalProperties": false
-    },
-    "provenance": {
-      "type": "object",
-      "properties": {
-        "claim_ids": {
-          "$ref": "#/$defs/ordinal_list"
-        },
-        "clarification_response_ids": {
-          "$ref": "#/$defs/ordinal_list"
-        }
-      },
-      "required": [
-        "claim_ids",
-        "clarification_response_ids"
       ],
       "additionalProperties": false
     },
     "detail_value": {
       "type": "string",
+      "maxLength": 2000
+    },
+    "required_detail_value": {
+      "type": "string",
+      "minLength": 1,
       "maxLength": 2000
     },
     "loss": {
@@ -308,7 +293,7 @@
       "type": "object",
       "properties": {
         "detail": {
-          "$ref": "#/$defs/detail_value"
+          "$ref": "#/$defs/required_detail_value"
         },
         "question": {
           "$ref": "#/$defs/question_value"
@@ -327,47 +312,23 @@
       },
       "maxItems": 4294967295
     },
-    "claim_selection": {
-      "type": "object",
-      "properties": {
-        "provenance": {
-          "$ref": "#/$defs/claim_provenance"
-        },
-        "source_ids": {
-          "$ref": "#/$defs/ordinal_list"
-        }
-      },
-      "required": [
-        "provenance",
-        "source_ids"
-      ],
-      "additionalProperties": false
-    },
     "supported": {
       "type": "object",
       "properties": {
         "kind": {
           "const": "supported"
         },
-        "provenance": {
-          "$ref": "#/$defs/claim_provenance"
-        },
         "source_ids": {
           "$ref": "#/$defs/ordinal_list"
         },
         "detail": {
           "$ref": "#/$defs/detail_value"
-        },
-        "loss": {
-          "$ref": "#/$defs/loss"
         }
       },
       "required": [
         "kind",
-        "provenance",
         "source_ids",
-        "detail",
-        "loss"
+        "detail"
       ],
       "additionalProperties": false
     },
@@ -377,17 +338,11 @@
         "kind": {
           "const": "ambiguous"
         },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
-        },
         "source_ids": {
           "$ref": "#/$defs/ordinal_list"
         },
         "detail": {
-          "$ref": "#/$defs/detail_value"
-        },
-        "loss": {
-          "$ref": "#/$defs/loss"
+          "$ref": "#/$defs/required_detail_value"
         },
         "question": {
           "$ref": "#/$defs/question_value"
@@ -395,10 +350,8 @@
       },
       "required": [
         "kind",
-        "provenance",
         "source_ids",
         "detail",
-        "loss",
         "question"
       ],
       "additionalProperties": false
@@ -409,17 +362,11 @@
         "kind": {
           "const": "conflicting"
         },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
-        },
         "source_ids": {
           "$ref": "#/$defs/ordinal_list"
         },
         "detail": {
-          "$ref": "#/$defs/detail_value"
-        },
-        "loss": {
-          "$ref": "#/$defs/loss"
+          "$ref": "#/$defs/required_detail_value"
         },
         "question": {
           "$ref": "#/$defs/question_value"
@@ -427,10 +374,8 @@
       },
       "required": [
         "kind",
-        "provenance",
         "source_ids",
         "detail",
-        "loss",
         "question"
       ],
       "additionalProperties": false
@@ -441,17 +386,11 @@
         "kind": {
           "const": "unsupported"
         },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
-        },
         "source_ids": {
           "$ref": "#/$defs/ordinal_list"
         },
         "detail": {
-          "$ref": "#/$defs/detail_value"
-        },
-        "loss": {
-          "$ref": "#/$defs/loss"
+          "$ref": "#/$defs/required_detail_value"
         },
         "question": {
           "$ref": "#/$defs/question_value"
@@ -459,10 +398,8 @@
       },
       "required": [
         "kind",
-        "provenance",
         "source_ids",
         "detail",
-        "loss",
         "question"
       ],
       "additionalProperties": false
@@ -473,14 +410,11 @@
         "kind": {
           "const": "candidate_omission"
         },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
-        },
         "source_ids": {
           "$ref": "#/$defs/ordinal_list"
         },
         "detail": {
-          "$ref": "#/$defs/detail_value"
+          "$ref": "#/$defs/required_detail_value"
         },
         "loss": {
           "$ref": "#/$defs/loss"
@@ -488,7 +422,6 @@
       },
       "required": [
         "kind",
-        "provenance",
         "source_ids",
         "detail",
         "loss"
@@ -501,25 +434,17 @@
         "kind": {
           "const": "inconclusive"
         },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
-        },
         "source_ids": {
           "$ref": "#/$defs/ordinal_list"
         },
         "detail": {
-          "$ref": "#/$defs/detail_value"
-        },
-        "loss": {
-          "$ref": "#/$defs/loss"
+          "$ref": "#/$defs/required_detail_value"
         }
       },
       "required": [
         "kind",
-        "provenance",
         "source_ids",
-        "detail",
-        "loss"
+        "detail"
       ],
       "additionalProperties": false
     },
@@ -529,46 +454,17 @@
         "kind": {
           "const": "not_applicable"
         },
-        "provenance": {
-          "$ref": "#/$defs/claim_provenance"
-        },
         "source_ids": {
           "$ref": "#/$defs/ordinal_list"
         },
         "detail": {
           "$ref": "#/$defs/detail_value"
-        },
-        "loss": {
-          "$ref": "#/$defs/loss"
         }
       },
       "required": [
         "kind",
-        "provenance",
         "source_ids",
-        "detail",
-        "loss"
-      ],
-      "additionalProperties": false
-    },
-    "claim_provenance": {
-      "type": "object",
-      "properties": {
-        "claim_ids": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ordinal"
-          },
-          "maxItems": 4294967295,
-          "minItems": 1
-        },
-        "clarification_response_ids": {
-          "$ref": "#/$defs/ordinal_list"
-        }
-      },
-      "required": [
-        "claim_ids",
-        "clarification_response_ids"
+        "detail"
       ],
       "additionalProperties": false
     }

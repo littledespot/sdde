@@ -464,7 +464,10 @@ native collection validation permits authority advancement.
   statements select supporting claims, and validators require complete partition coverage.
 - The final global partition returns one `ReferenceReconciliationProposal`: total
   claim-disposition proposals plus bounded signal and conflict proposals over the complete
-  represented claim set.
+  represented claim set. Signal `generation_roles` are semantic assignments; the engine
+  validates their allowed uses and resolves selected claims through the reference ledger.
+  Conflict resolution is `unresolved` until a separate authorized decision exists, so
+  model conflict proposals omit that fixed status and the engine constructs it.
 - Neither variant can redefine claim/token content or mint canonical
   summary/statement/signal/conflict/decision IDs.
 - Dedicated coverage, join, ID, and build operations materialize summaries, the final claim
@@ -789,10 +792,30 @@ Source-only evidence is valid only for loss locations that permit it. A selected
 signal/conflict requires its exact producer claims; disposition loss may use its
 claim or source-only evidence. An unlocalized finding retains ordinary eligibility.
 Native source-review evidence retains `loss`, so readback repeats those same joins;
-principle evidence has no loss location. `specification-state/v6` rejects earlier
+principle evidence has no loss location. `specification-state/v7` rejects earlier
 snapshot contracts rather than silently supplying a missing binding. ADR 0020
 governs the derived exact-reference lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
+
+**Source-review response contract (27 September 2026):** the model chooses a
+semantic finding, detail, and any genuinely selectable source or loss location;
+every selected generation, source-review and repair schema rejects `provenance`.
+The engine constructs the canonical claim selection from the current bound
+source group, candidate evidence or selected diagnostic producer. A selected
+extraction or token loss has an empty diagnostic claim set; signal or conflict
+loss uses the named producer's exact set. Source-only negative findings may
+carry empty canonical support where the rule permits it. An eligible catalogue,
+including a singleton, cannot establish positive support. Source IDs remain
+model-selected where the rule permits them; invariant empty clarification IDs
+and an unlocalized default loss are constructed by code. Readback validates
+stored evidence against its bound authority before accepting any projection.
+
+Reconciliation supplies validated source-obligation groups and feature-field
+roles. The engine binds each record authoring task to one active group before
+dispatch and resolves its claims through the existing ledger. A task may author
+several records; overlapping or multi-claim groups preserve many-to-many links.
+Unbound or stale units block as engine defects. Semantic verdicts and ADR 0020's
+generation evidence bounds remain independently enforced.
 
 A reconciliation conflict starts as an unresolved candidate assertion. Only current
 review evidence for that exact subject establishing incompatible original meanings

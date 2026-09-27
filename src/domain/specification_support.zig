@@ -19,6 +19,7 @@ pub fn Contract(comptime purpose: Purpose) type {
         const packets = @import("model_input_packet.zig");
         const r = @import("reference_reconciliation.zig");
         const admission = @import("specification_support_evidence.zig");
+        const source_model = @import("specification_support_model.zig");
         const principles = @import("principle_assessment.zig");
         const evidence_admission = if (purpose == .source) admission else principles;
         const Origin = @import("model_candidate_origin.zig").Origin;
@@ -27,35 +28,8 @@ pub fn Contract(comptime purpose: Purpose) type {
         pub const Finding = struct { requirement_ordinal: u32, value: Value };
         /// A review judges support or an explicitly permitted applicability exception.
         /// Native authority evidence keeps the finding and resolution separate.
-        pub const Decision = if (purpose == .principles) principles.Decision else enum {
-            supported,
-            ambiguous,
-            conflicting,
-            unsupported,
-            candidate_omission,
-            inconclusive,
-            not_applicable,
-
-            pub fn finding(self: Decision) a.Finding {
-                return switch (self) {
-                    .not_applicable => .supported,
-                    inline else => |value| @field(a.Finding, @tagName(value)),
-                };
-            }
-            fn fromFinding(value: a.Finding) Error!Decision {
-                return switch (value) {
-                    inline else => |tag| @field(Decision, @tagName(tag)),
-                };
-            }
-        };
-        pub const Value = if (purpose == .principles) principles.Value else struct {
-            loss: @import("source_omission.zig").Location = .{ .unlocalized = .{} },
-            kind: Decision,
-            provenance: spec.Selection,
-            source_ids: []const @import("reference_identity.zig").SourceId,
-            detail: []const u8,
-            question: ?[]const u8 = null,
-        };
+        pub const Decision = if (purpose == .principles) principles.Decision else source_model.Decision;
+        pub const Value = if (purpose == .principles) principles.Value else source_model.Canonical;
         /// Source responses use the schema discriminator; policy reviews retain
         /// their independent closed decision vocabulary.
         pub fn decisionOf(value: Value) Decision {
@@ -151,7 +125,8 @@ pub fn Contract(comptime purpose: Purpose) type {
                 const id = requirement.seed.id;
                 const required = try applicability(inputs, id);
                 review_applicability = review_applicability or required == .review;
-                try slots.append(scratch, .{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, id), .permitted_not_applicable = if (required == .review) required.review else null, .evidence = (try admission.requirements(scratch, inputs, context.inputs, id)).guidance() });
+                const evidence_rule = try admission.requirements(scratch, inputs, context.inputs, id);
+                try slots.append(scratch, .{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, id), .permitted_not_applicable = if (required == .review) required.review else null, .evidence = evidence_rule.guidance() });
             }
             if (slots.items.len != 1) return error.InvalidRequiredAuthority;
             const projected = try @import("model_evidence.zig").project(scratch, all.entries);
@@ -193,7 +168,7 @@ pub fn Contract(comptime purpose: Purpose) type {
         pub fn collectFocused(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: ?Collection, selected: a.Id, bytes: []const u8, origin: ?Origin) Error!Collection {
             const id = try nextSubject(allocator, inputs, prior);
             if (!std.meta.eql(id, selected)) return error.InvalidRequiredAuthority;
-            const value = @import("model_candidate_json.zig").decode(Value, allocator, bytes) catch |err| return switch (err) {
+            const value = (if (purpose == .source) source_model.decode(allocator, bytes, try admission.requirements(allocator, inputs, context.inputs, id)) else @import("model_candidate_json.zig").decode(Value, allocator, bytes)) catch |err| return switch (err) {
                 error.OutOfMemory => error.OutOfMemory,
                 error.InvalidJsonDocument => .{ .rejected = .{ .candidate = null, .rejection = .{ .diagnostics = try allocator.dupe(Diagnostic, &.{.{ .issue = .invalid_json, .requirement = id, .ordinal = null, .revision = 1, .origin = origin }}) } } },
             };

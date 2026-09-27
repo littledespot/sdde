@@ -157,6 +157,19 @@ runner owns request retirement, per-assignment and native-defect retry allowance
 and global actual-token accounting; successful independent work does not reset an
 unresolved target or replenish the finite budget.
 
+Selected source-review and generation repair responses reject `provenance`,
+including record insertion and coupled record repair. The engine reconstructs
+canonical `provenance.claim_ids` from the bound source group or selected
+diagnostic producer before old-value/revision and full-candidate checks.
+Source-ID or detail corrections remain in their existing selected repair
+families; detail repair cannot change the verdict. The original source-bound
+assignment, explicit `S`, effective evidence bound and siblings stay pinned by
+the existing atomic authorization. A value-only replacement cannot expand them;
+changing the source obligation requires upstream reconciliation and
+regeneration. Malformed or corrupt stored evidence is rejected before
+model-response reconstruction. Unbound authority is an engine block, not a
+model repair or user clarification.
+
 Unavailable passive/exact-copy diagnostics identify the rejected selection and
 location. Existing native evidence choices drive both schema narrowing (§12.2)
 and concise corrective guidance: state validation failed, name unavailable

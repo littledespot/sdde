@@ -3922,10 +3922,8 @@ fn correctionAllocation(allocator: std.mem.Allocator, fixture: *Fixture, graph: 
 
 // A selected review returns one finding value; an extra `value` wrapper is invalid.
 fn protocolReview(a: std.mem.Allocator, misplaced: bool) ![]const u8 {
-    const provenance = .{ .claim_ids = [1]u32{1}, .clarification_response_ids = [0]u32{} };
     const sources = [1]u32{1};
-    const loss = .{ .kind = "unlocalized" };
-    const value = .{ .kind = "supported", .provenance = provenance, .source_ids = sources, .detail = "Evidence for this requirement.", .loss = loss };
+    const value = .{ .kind = "supported", .source_ids = sources, .detail = "Evidence for this requirement." };
     return if (misplaced) try std.json.Stringify.valueAlloc(a, .{ .value = value }, .{}) else try std.json.Stringify.valueAlloc(a, value, .{});
 }
 

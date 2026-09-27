@@ -124,11 +124,35 @@ Typed content covers these concerns; each concern does not require a separate ca
   Existing source review must distinguish a path-valued requirement from a filename
   substituted for the behavior described in that file; confirmed candidate loss
   follows existing repair/failure routing, never missing-user-information routing.
+- Focused source review sends one bound requirement at a time. Its closed response
+  contains the semantic finding, explanation, required question and genuinely
+  selectable evidence. For a positive finding with a fixed claim set, the engine
+  supplies that set from the current requirement rule; the response omits
+  `provenance` and is rejected if it echoes it. The engine constructs invariant
+  empty clarification-response IDs and unlocalized loss. Selectable claim and
+  source choices remain explicit. For candidate omission, the selected loss
+  location determines whether its diagnostic claims are constructed or selected;
+  the closed decoder enforces that conditional rule before admission. The full
+  canonical review is validated before it contributes to clarification, repair
+  or publication.
 - There is no unreferenced command description to use as provenance.
 - The model returns typed business content rather than Markdown.
 - Each acceptance-criterion proposal contains exactly one nonempty typed `given`, `when`, and
   `then` value; the model does not supply Markdown labels or combine the three values into
   free-form prose.
+
+The approved ADR 0020 successor binds source-obligation groups from validated
+reconciliation signals before model authoring. Feature-level fields have
+explicit group-role assignments; record authoring runs per bound group and may
+return several requirements. The engine constructs canonical `S` and derives
+exact dependencies and citations. Generation, source-review and repair
+responses contain no `provenance`; unbound or stale assignments block or return
+to source reconciliation, never to a user missing-information form. Completed
+`reference-context.md` displays each generated record ID with its effective
+claim-to-citation occurrence edges and captured source spans. This read-only
+view adds no selection or stored authority; pending output has no generated
+record links. Original requirement IDs appear only when captured as validated
+source associations, never inferred from headings or claim ordinals.
 
 For each feature-brief or specification unit, the declared model operation returns content, an identifiable clarification need, or an inconclusive interpretation. Inconclusive interpretation fails; it is not missing user information. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
@@ -342,7 +366,7 @@ After validation:
 
 1. assign requirement IDs;
 2. render `spec.md` from `SpecificationIR` and the canonical template contract;
-3. render the mandatory `reference-context.md`;
+3. render the mandatory `reference-context.md`, including completed requirement-to-source occurrence links;
 4. serialize the immutable reference-derived feature-request state, exact passive-literal registry revision, specification ID ledger, initial/next specification-acknowledgement and clarification-registry states, clarification views, specification-provenance state revision, canonical reference snapshot, and §17.3.1 evidence/obligations within their existing canonical owners;
 5. reparse `spec.md` and compare its normalized IR to the validated source IR;
 6. compare the read-only reference-context view with deterministic rendering from its canonical IR;

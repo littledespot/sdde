@@ -100,9 +100,14 @@ test "child requirements stay inside selected definitions parts and repair schem
         const expected = guidance.value.object.get("expected").?.object;
         try std.testing.expectEqualStrings("", expected.get("schema_pointer").?.string);
         const fields = expected.get("shape").?.object.get("fields").?.object;
-        const child = fields.get(if (schema == repair_schema) "provenance" else "optional").?.object;
-        try std.testing.expectEqual(@as(usize, 2), child.count());
-        try std.testing.expectEqualStrings(if (schema == repair_schema) "[\"claim_ids\",\"clarification_response_ids\"]" else "[\"a~/b\",\"deep\"]", try std.json.Stringify.valueAlloc(a, child.get("required").?, .{}));
+        if (schema == repair_schema) {
+            try std.testing.expect(fields.contains("value"));
+            try std.testing.expect(!fields.contains("provenance"));
+        } else {
+            const child = fields.get("optional").?.object;
+            try std.testing.expectEqual(@as(usize, 2), child.count());
+            try std.testing.expectEqualStrings("[\"a~/b\",\"deep\"]", try std.json.Stringify.valueAlloc(a, child.get("required").?, .{}));
+        }
         if (schema != selected) try std.testing.expect(!fields.contains("items") and !fields.contains("loose"));
         for (std.enums.values(@import("domain/model_controls.zig").ResponseGuidanceMode)) |mode| {
             var request = retry.request.*;

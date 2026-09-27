@@ -46,11 +46,19 @@ pub fn summary(allocator: std.mem.Allocator, input: r.Input) !r.SummaryProposal 
 pub fn global(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
     const dispositions = try allocator.alloc(r.ClaimDispositionProposal, input.items.len);
     const signals = try allocator.alloc(r.SignalProposal, input.items.len);
+    var assigned_feature = false;
     for (input.items, dispositions, signals) |item, *disposition, *signal| {
         const ids = try allocator.alloc(r.ClaimId, 1);
         ids[0] = item.claim.id;
         disposition.* = .{ .claim_id = item.claim.id, .disposition = .{ .retained = .{} } };
-        signal.* = .{ .claim_ids = ids, .content = content(item.claim) };
+        const business = item.claim.content == .model and item.claim.content.model == .business;
+        signal.* = .{ .claim_ids = ids, .content = content(item.claim), .generation_roles = if (business and !assigned_feature)
+            &.{ .title, .description, .primary_goal, .primary_user_story, .entity_basis, .records }
+        else if (business)
+            &.{.records}
+        else
+            &.{} };
+        if (business) assigned_feature = true;
     }
     return .{ .claim_dispositions = dispositions, .signals = signals, .conflicts = &.{} };
 }

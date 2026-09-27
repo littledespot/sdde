@@ -27,7 +27,7 @@ pub const Action = struct {
         if (!std.mem.eql(u8, rendered, restored_view)) return error.InvalidWorkflowOutput;
         const files = try a.alloc(output.File, prepared.files.len + 3);
         files[0] = .{ .target = .{ .artifact = .specification }, .bytes = rendered };
-        files[1] = .{ .target = .{ .artifact = .reference_context }, .bytes = try @import("../../domain/reference_context.zig").render(a, value.reference, null) };
+        files[1] = .{ .target = .{ .artifact = .reference_context }, .bytes = try @import("../../domain/reference_context.zig").render(a, value.reference, null, null) };
         @memcpy(files[2..][0..prepared.files.len], prepared.files);
         files[files.len - 1] = .{ .target = .{ .artifact = .workflow_state }, .bytes = bytes };
         prepared.files = files;

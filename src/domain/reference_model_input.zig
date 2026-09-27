@@ -63,15 +63,20 @@ pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.
 /// Availability projects existing evidence, not semantics or a second registry.
 /// Reference text has no exact-copy variant; its owner leaves that choice alone.
 pub fn withTextChoices(a: std.mem.Allocator, packet: *const packets.Packet, passive: []const i64, exact_copy: []const i64) packets.Error!*packets.Packet {
-    var excluded: [2]@import("model_result_schema.zig").ExcludedVariant = undefined;
-    var count: usize = 0;
+    const schema = @import("model_result_schema.zig");
+    var excluded: std.ArrayList(schema.ExcludedVariant) = .empty;
+    defer excluded.deinit(a);
+    // Narrow text availability without discarding unrelated decisions already
+    // bound to this packet (for example, Spec's fixed entity disposition).
+    for (packet.excludedVariants()) |entry| {
+        if (std.mem.eql(u8, entry.kind, "passive") or std.mem.eql(u8, entry.kind, "exact_copy")) continue;
+        try excluded.append(a, entry);
+    }
     if (passive.len == 0) {
-        excluded[count] = .{ .kind = "passive" };
-        count += 1;
+        try excluded.append(a, .{ .kind = "passive" });
     }
     if (exact_copy.len == 0) {
-        excluded[count] = .{ .kind = "exact_copy" };
-        count += 1;
+        try excluded.append(a, .{ .kind = "exact_copy" });
     }
     var choices: [2]@import("model_result_schema.zig").IntegerChoice = undefined;
     var selected: usize = 0;
@@ -83,7 +88,7 @@ pub fn withTextChoices(a: std.mem.Allocator, packet: *const packets.Packet, pass
         choices[selected] = .{ .kind = "exact_copy", .field = "claim_id", .allowed = exact_copy };
         selected += 1;
     }
-    return packets.withRestrictions(a, packet, excluded[0..count], choices[0..selected]);
+    return packets.withRestrictions(a, packet, excluded.items, choices[0..selected]);
 }
 
 pub fn passiveIds(a: std.mem.Allocator, records: []const literals.Record) std.mem.Allocator.Error![]const i64 {

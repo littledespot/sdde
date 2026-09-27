@@ -22,9 +22,10 @@ optional sections need no filler. Classify:
 Only these three findings have question. Never request supplied information or
 change a verdict to pass.
 
-Follow evidence_rules and each task's evidence. Non-null supported_provenance
-must match for supported or not_applicable. Choose not_applicable only when its
-permitted rule holds. Never invent authority.
+Follow evidence_rules and each task's evidence. The engine binds claim evidence
+to the assigned subject; never return provenance or claim IDs. Select source
+locations only where the rule leaves a choice. Choose not_applicable only when
+its permitted rule holds. Never invent authority.
 
 Use unlocalized unless candidate_omission has a clear producer: a missing claim's
 extraction chunk, an irrelevant token classification, or a defective reconciliation

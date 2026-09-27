@@ -117,7 +117,10 @@ fn validateRecords(allocator: std.mem.Allocator, value: Snapshot) !void {
     const v = @import("reference_reconciliation_validation.zig");
     const signals = try a.alloc(r.SignalProposal, records.signals.len);
     for (records.signals, signals, 0..) |signal, *proposal, index| {
-        proposal.* = .{ .claim_ids = signal.value.claim_ids, .content = @import("model_evidence.zig").content(signal.value.content) };
+        proposal.* = .{ .claim_ids = signal.value.claim_ids, .content = @import("model_evidence.zig").content(signal.value.content), .generation_roles = signal.value.generation_roles };
+        for (proposal.generation_roles, 0..) |role, role_index| for (proposal.generation_roles[0..role_index]) |prior_role| {
+            if (role == prior_role) return error.InvalidReferenceSnapshot;
+        };
         if (signal.id.ordinal != index + 1 or try v.signalClaims(items, records.dispositions, proposal.claim_ids, allowed) != null or
             try v.contentIssue(items, proposal.claim_ids, proposal.content) != null or
             !v.signalSelectionAvailable(signals[0..index], index, proposal.claim_ids)) return error.InvalidReferenceSnapshot;
@@ -126,9 +129,7 @@ fn validateRecords(allocator: std.mem.Allocator, value: Snapshot) !void {
     if (try v.signalCoverage(a, items, records.dispositions, signals) != null) return error.InvalidReferenceSnapshot;
     const conflicts = try a.alloc(r.ConflictProposal, records.conflicts.len);
     for (records.conflicts, conflicts, 0..) |conflict, *proposal, index| {
-        proposal.* = .{ .claim_ids = conflict.value.claim_ids, .kind = conflict.value.kind, .summary = conflict.value.summary.value, .resolution = switch (conflict.value.resolution) {
-            .unresolved => .unresolved,
-        } };
+        proposal.* = .{ .claim_ids = conflict.value.claim_ids, .kind = conflict.value.kind, .summary = conflict.value.summary.value };
         if (conflict.id.ordinal != index + 1 or try v.conflictClaims(items, records.dispositions, proposal.claim_ids, allowed) != null or
             !v.conflictSelectionAvailable(conflicts[0..index], index, proposal.kind, proposal.claim_ids)) return error.InvalidReferenceSnapshot;
         try citationUnion(a, items, proposal.claim_ids, conflict.value.citation_ids);

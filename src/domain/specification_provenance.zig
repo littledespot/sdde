@@ -130,6 +130,9 @@ pub fn scopesForRecord(allocator: std.mem.Allocator, context: Context, record: s
     const resolved = resolveUnitRecords(.canonical, allocator, context.inputs, @import("reference_support.zig").records(context.references), record.provenance, try recordValues(allocator, record.content)) catch |err| return if (err == error.InvalidTypedText) error.InvalidSpecification else err;
     return resolved.scopes;
 }
+pub fn storedRecordLineage(allocator: std.mem.Allocator, inputs: evidence.Inputs, references: @import("reference_support.zig").Records, record: spec.RecordProposal) Error!Resolved {
+    return resolveUnitRecords(.canonical, allocator, inputs, references, record.provenance, try recordValues(allocator, record.content));
+}
 
 /// Construct complete provenance from meaningful, currently eligible selections.
 pub fn select(allocator: std.mem.Allocator, context: Context, selection: spec.Selection) Error!spec.Provenance {

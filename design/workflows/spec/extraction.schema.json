@@ -4,6 +4,7 @@
       "oneOf": [
         {
           "type": "string",
+          "minLength": 1,
           "maxLength": 4294967295
         },
         {
@@ -53,6 +54,7 @@
       "oneOf": [
         {
           "type": "string",
+          "minLength": 1,
           "maxLength": 4294967295
         },
         {
@@ -139,6 +141,7 @@
       "items": {
         "$ref": "#/$defs/source_selection_replacement"
       },
+      "minItems": 1,
       "maxItems": 4294967295
     },
     "citation_replacement": {
@@ -219,6 +222,7 @@
                   "items": {
                     "$ref": "#/$defs/business_segment"
                   },
+                  "minItems": 1,
                   "maxItems": 4294967295
                 }
               },
@@ -239,6 +243,7 @@
                   "items": {
                     "$ref": "#/$defs/reference_node"
                   },
+                  "minItems": 1,
                   "maxItems": 4294967295
                 }
               },
@@ -259,6 +264,7 @@
                   "items": {
                     "$ref": "#/$defs/reference_node"
                   },
+                  "minItems": 1,
                   "maxItems": 4294967295
                 }
               },
@@ -279,6 +285,7 @@
                   "items": {
                     "$ref": "#/$defs/reference_node"
                   },
+                  "minItems": 1,
                   "maxItems": 4294967295
                 }
               },
@@ -299,6 +306,7 @@
                   "items": {
                     "$ref": "#/$defs/reference_node"
                   },
+                  "minItems": 1,
                   "maxItems": 4294967295
                 }
               },
@@ -319,6 +327,7 @@
                   "items": {
                     "$ref": "#/$defs/reference_node"
                   },
+                  "minItems": 1,
                   "maxItems": 4294967295
                 }
               },
@@ -339,6 +348,7 @@
                   "items": {
                     "$ref": "#/$defs/business_segment"
                   },
+                  "minItems": 1,
                   "maxItems": 4294967295
                 }
               },
@@ -473,6 +483,7 @@
               "items": {
                 "$ref": "#/$defs/reference_node"
               },
+              "minItems": 1,
               "maxItems": 4294967295
             }
           },

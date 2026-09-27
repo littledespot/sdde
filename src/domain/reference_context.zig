@@ -7,7 +7,7 @@ const markdown = @import("specification_markdown.zig");
 const principles = @import("principle_assessment.zig");
 pub const Error = snapshot.Error || markdown.Error || principles.Error;
 
-pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment: ?principles.Canonical) Error![]const u8 {
+pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment: ?principles.Canonical, traces: ?[]const @import("specification_projection.zig").RequirementTrace) Error![]const u8 {
     var out: std.Io.Writer.Allocating = .init(allocator);
     errdefer out.deinit();
     const w = &out.writer;
@@ -65,12 +65,23 @@ pub fn render(allocator: std.mem.Allocator, value: snapshot.Snapshot, assessment
     try write(w, "\n## Source Citations\n\n");
     for (value.extraction.citations) |citation| {
         const source = citation.value;
-        w.print("- **CIT-{d}** — SRC-{d}, block {d}, lines {d}:{d}–{d}:{d}", .{ citation.id.ordinal, source.source_id.ordinal, source.block_id.ordinal, source.location.start.line, source.location.start.column, source.location.end.line, source.location.end.column }) catch return error.OutOfMemory;
+        w.print("- <a id=\"cit-{d}\"></a>**CIT-{d}** — SRC-{d}, block {d}, lines {d}:{d}–{d}:{d}", .{ citation.id.ordinal, citation.id.ordinal, source.source_id.ordinal, source.block_id.ordinal, source.location.start.line, source.location.start.column, source.location.end.line, source.location.end.column }) catch return error.OutOfMemory;
         if (source.verbatim) |bytes| {
             try write(w, ": ");
             try markdown.code(w, bytes);
         }
         try write(w, "\n");
+    }
+    if (traces) |entries| {
+        try write(w, "\n## Generated Requirement Sources\n\n");
+        for (entries) |trace| {
+            w.print("- **{s}-{d:0>3}**:", .{ trace.id.kind.prefix(), trace.id.ordinal }) catch return error.OutOfMemory;
+            for (trace.occurrences) |occurrence| {
+                const citation = occurrence.citation;
+                w.print(" [claim {d}, CIT-{d}](#cit-{d}) (SRC-{d}, block {d}, lines {d}:{d}–{d}:{d})", .{ occurrence.claim_id.ordinal, citation.id.ordinal, citation.id.ordinal, citation.value.source_id.ordinal, citation.value.block_id.ordinal, citation.value.location.start.line, citation.value.location.start.column, citation.value.location.end.line, citation.value.location.end.column }) catch return error.OutOfMemory;
+            }
+            try write(w, "\n");
+        }
     }
     if (assessment) |review| {
         const registry = @import("principle_registry.zig");

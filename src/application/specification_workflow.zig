@@ -84,7 +84,12 @@ pub const Parse = struct {
         const source = owned.read(&input.step.data, raw_schema, .raw) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .parsed = .{ .response = self.action.execute(owner.arena.allocator(), source.body) catch |err| return reject(self.allocator, parsed_schema, owner, err), .origins = .{ .initial = source.origin } } };
+        const current = readSession(&input.step.data) catch return error.OperationExecutionFailed;
+        const reference = readContext(&input.step.data) catch return error.OperationExecutionFailed;
+        owner.payload = .{ .parsed = .{ .response = self.action.execute(owner.arena.allocator(), source.body, current, reference) catch |err| switch (err) {
+            error.InvalidSpecificationUnit => return reject(self.allocator, parsed_schema, owner, error.InvalidSpecificationUnit),
+            else => return error.OperationExecutionFailed,
+        }, .origins = .{ .initial = source.origin } } };
         return publish(self.allocator, parsed_schema, owner, .ok);
     }
 };
@@ -120,7 +125,7 @@ pub const Advance = struct {
         const checked = owned.read(&input.step.data, checked_schema, .checked) catch return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .session = self.action.execute(try readSession(&input.step.data), checked) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .session = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), checked) catch return error.OperationExecutionFailed };
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(session_schema.key)] = values.adopt(self.allocator, session_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);

@@ -19,6 +19,25 @@ pub const Resolved = struct {
     citation_ids: []const r.CitationId,
     scopes: []const r.evidence.Scope,
 };
+pub const Occurrence = struct {
+    claim_id: r.ClaimId,
+    citation: r.extraction.Citation,
+};
+
+/// Preserve every claim-to-citation edge, including several occurrences with
+/// equal text. Eligibility belongs to the caller; this only resolves the ledger.
+pub fn occurrences(a: std.mem.Allocator, items: r.Items, inputs: r.evidence.Inputs, claim_ids: []const r.ClaimId) (r.Error || error{InvalidReferenceState})![]const Occurrence {
+    const resolved = try select(a, items, inputs, claim_ids);
+    defer a.free(resolved.scopes);
+    defer a.free(resolved.citation_ids);
+    var result: std.ArrayList(Occurrence) = .empty;
+    errdefer result.deinit(a);
+    for (claim_ids) |claim_id| {
+        const entry = try r.item(items, claim_id);
+        for (entry.citations) |citation| try result.append(a, .{ .claim_id = claim_id, .citation = citation });
+    }
+    return result.toOwnedSlice(a);
+}
 /// One preserved occurrence, addressed by its canonical claim rather than a
 /// model-assembled token/citation tuple.
 pub fn exact(items: r.Items, id: r.ClaimId) r.Error!r.extraction.tokens.Token {

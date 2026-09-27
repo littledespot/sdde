@@ -93,15 +93,16 @@ pub const ClaimDispositionProposal = struct {
         } };
     }
 };
-pub const SignalProposal = struct { claim_ids: []const ClaimId, content: ContentProposal };
-pub const ValidatedSignal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: Content };
+/// Semantic uses of an already selected source-obligation group. These are
+/// assignments for Spec authoring, not additional reference identities.
+pub const GenerationRole = enum { title, description, primary_goal, primary_user_story, entity_basis, records };
+pub const SignalProposal = struct { claim_ids: []const ClaimId, content: ContentProposal, generation_roles: []const GenerationRole = &.{} };
+pub const ValidatedSignal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: Content, generation_roles: []const GenerationRole };
 pub const ConflictKind = enum { mutually_exclusive, precedence_missing, value_mismatch, scope_mismatch };
 pub const ConflictProposal = struct {
     claim_ids: []const ClaimId,
     kind: ConflictKind,
     summary: text.ReferenceSemanticText,
-    // No registered precedence authority is available in this increment.
-    resolution: enum { unresolved },
 };
 pub const ValidatedConflict = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, kind: ConflictKind, summary: text.ValidatedReferenceSemanticText, resolution: enum { unresolved } };
 pub const Proposal = struct { claim_dispositions: []const ClaimDispositionProposal, signals: []const SignalProposal, conflicts: []const ConflictProposal };

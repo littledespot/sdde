@@ -691,13 +691,13 @@ subgraphs:
       records:
         call: generate-unit
         with: {prompt: records-prompt}
-        on: {ok: end.ok, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
-  generate-unit:
-    start: check-specification
-    steps:
-      check-specification:
+        on: {ok: records-progress, invalid: end.invalid, needs-user: end.needs-user, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+      records-progress:
         use: check-specification-generation-progress
-        on: {ok: end.ok, more: generation-input, failed: end.failed}
+        on: {ok: end.ok, more: records, failed: end.failed}
+  generate-unit:
+    start: generation-input
+    steps:
       generation-input:
         use: build-specification-model-input
         on: {ok: gen, failed: end.failed}

@@ -8,6 +8,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
         const evidence = @import("reference_evidence.zig");
         const shared = @import("atomic_repair.zig");
         const p = @import("specification_provenance.zig");
+        const source_model = @import("specification_support_model.zig");
         const packets = @import("model_input_packet.zig");
         const Origin = @import("model_candidate_origin.zig").Origin;
         const retry = @import("workflow_retry.zig");
@@ -135,11 +136,26 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             } else switch (kind) {
                 .finding => if (try review.applicability(inputs, authorization.target.requirement) == .review) "applicability_finding" else "finding",
                 .detail => if (admission.questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
-                .selection => if (authorization.rule.rejection.evidence.?.rule.minimum == .claim_required) "claim_selection" else "selection",
+                .selection => "selection",
             };
             return atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index]);
         }
-        pub const parse = atomic.parse;
+        pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
+            if (purpose == .principles) return atomic.parse(a, authorization, input, bytes);
+            const kind = try atomic.checkRequest(authorization, input);
+            return switch (kind) {
+                .finding => blk: {
+                    const required = try admission.requirements(a, authorization.dependencies.inputs, authorization.dependencies.sources, authorization.target.requirement);
+                    break :blk .{ .finding = try source_model.decode(a, bytes, required) };
+                },
+                .selection => blk: {
+                    const retained = authorization.rule.finding orelse return error.InvalidAtomicRepair;
+                    const selected = try source_model.decodeSelection(a, bytes, retained.provenance.claim_ids);
+                    break :blk .{ .selection = .{ .provenance = selected.provenance, .source_ids = selected.source_ids } };
+                },
+                .detail => try atomic.parse(a, authorization, input, bytes),
+            };
+        }
         pub fn merge(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, candidate: review.Candidate, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!review.Collection {
             const target = authorization.target;
             const base = try review.packetFor(a, inputs, context, .{ .finding = target.requirement });

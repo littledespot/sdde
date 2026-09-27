@@ -369,7 +369,7 @@ test "summary signal and conflict repair packets retain precise shared text issu
                             3 => &.{.{ .source = .{ .source_id = .{ .ordinal = 999 } } }},
                             else => &.{.{ .literal = bad_text.segments[0].literal }},
                         };
-                        proposal.conflicts = &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = nodes }, .resolution = .unresolved }};
+                        proposal.conflicts = &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = nodes } }};
                         replacement = .{ .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The supplied assertions disagree." } }} } };
                     }
                     parsed.proposal = .{ .global = proposal };
@@ -753,7 +753,7 @@ pub fn conflicting(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
     proposal.claim_dispositions = dispositions;
     proposal.signals = &.{};
     const conflicts = try allocator.alloc(r.ConflictProposal, 1);
-    conflicts[0] = .{ .claim_ids = input.partition.group.claim_ids, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The references disagree about the required behavior." } }} }, .resolution = .unresolved };
+    conflicts[0] = .{ .claim_ids = input.partition.group.claim_ids, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The references disagree about the required behavior." } }} } };
     proposal.conflicts = conflicts;
     return proposal;
 }
@@ -1110,7 +1110,7 @@ test "overlapping conflicts conserve every declared conflict relationship" {
     proposal.signals = &.{};
     const conflicts = try a.alloc(r.ConflictProposal, 2);
     for (conflicts, 1..) |*conflict, index| {
-        conflict.* = .{ .claim_ids = try a.dupe(r.ClaimId, &.{ dispositions[0].claim_id, dispositions[index].claim_id }), .kind = .scope_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The scopes disagree." } }} }, .resolution = .unresolved };
+        conflict.* = .{ .claim_ids = try a.dupe(r.ClaimId, &.{ dispositions[0].claim_id, dispositions[index].claim_id }), .kind = .scope_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The scopes disagree." } }} } };
     }
     proposal.conflicts = conflicts;
     const result = (try f.finish(a, input, proposal, fixture.context())).valid;
@@ -1374,7 +1374,7 @@ test "empty relationship choices block before model dispatch and genuine conflic
     const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
     const good = try f.global(a, input);
     var parsed: r.Parsed = .{ .input = input, .proposal = .{ .global = good } };
-    parsed.proposal.global.conflicts = &.{.{ .claim_ids = input.partition.group.claim_ids, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "Outcomes differ." } }} }, .resolution = .unresolved }};
+    parsed.proposal.global.conflicts = &.{.{ .claim_ids = input.partition.group.claim_ids, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "Outcomes differ." } }} } }};
     const retained = (try f.validate_dispositions.execute(a, parsed)).valid;
     const rejected_conflict = (try f.validate_conflicts.execute(a, (try f.validate_signals.execute(a, retained, fixture.context())).valid, fixture.context())).invalid;
     try std.testing.expectEqual(@as(usize, 0), rejected_conflict.relations.conflicting_pairs.len);
@@ -1740,7 +1740,7 @@ test "equivalent disposition permutations delete only redundant edges and preser
         original.claim_dispositions = values[0..3];
         if (has_conflict) {
             original.signals = &.{};
-            const conflict: r.ConflictProposal = .{ .claim_ids = &.{ values[0].claim_id, values[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The requested outcomes differ." } }} }, .resolution = .unresolved };
+            const conflict: r.ConflictProposal = .{ .claim_ids = &.{ values[0].claim_id, values[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The requested outcomes differ." } }} } };
             var other = conflict;
             other.claim_ids = &.{ values[0].claim_id, values[2].claim_id };
             original.conflicts = &.{ conflict, other };

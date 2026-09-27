@@ -428,7 +428,7 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
                     .conflict => |index| {
                         _ = values.orderedRemove(index);
                     },
-                    .insert_conflict => |value| try values.insert(a, value.index, .{ .claim_ids = try a.dupe(r.ClaimId, value.claims), .summary = replacement.?.conflict_detail.summary, .kind = replacement.?.conflict_detail.kind, .resolution = .unresolved }),
+                    .insert_conflict => |value| try values.insert(a, value.index, .{ .claim_ids = try a.dupe(r.ClaimId, value.claims), .summary = replacement.?.conflict_detail.summary, .kind = replacement.?.conflict_detail.kind }),
                     else => unreachable,
                 }
                 global.conflicts = try values.toOwnedSlice(a);

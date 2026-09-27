@@ -9,6 +9,7 @@
       "oneOf": [
         {
           "type": "string",
+          "minLength": 1,
           "maxLength": 4294967295
         },
         {
@@ -53,6 +54,7 @@
       "oneOf": [
         {
           "type": "string",
+          "minLength": 1,
           "maxLength": 4294967295
         },
         {
@@ -107,6 +109,7 @@
                 "items": {
                   "$ref": "#/$defs/ordinal"
                 },
+                "minItems": 1,
                 "maxItems": 4294967295
               },
               "content": {
@@ -144,15 +147,31 @@
                 "items": {
                   "$ref": "#/$defs/ordinal"
                 },
+                "minItems": 1,
                 "maxItems": 4294967295
               },
               "content": {
                 "$ref": "#/$defs/content"
+              },
+              "generation_roles": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "title",
+                    "description",
+                    "primary_goal",
+                    "primary_user_story",
+                    "entity_basis",
+                    "records"
+                  ]
+                },
+                "maxItems": 6
               }
             },
             "required": [
               "claim_ids",
-              "content"
+              "content",
+              "generation_roles"
             ],
             "additionalProperties": false
           },
@@ -418,6 +437,7 @@
           "items": {
             "$ref": "#/$defs/ordinal"
           },
+          "minItems": 1,
           "maxItems": 4294967295
         }
       },
@@ -466,6 +486,7 @@
       "items": {
         "$ref": "#/$defs/business_segment"
       },
+      "minItems": 1,
       "maxItems": 4294967295
     },
     "reference_nodes": {
@@ -473,6 +494,7 @@
       "items": {
         "$ref": "#/$defs/reference_node"
       },
+      "minItems": 1,
       "maxItems": 4294967295
     },
     "business_text": {
@@ -541,18 +563,12 @@
           },
           "summary": {
             "$ref": "#/$defs/reference_text"
-          },
-          "resolution": {
-            "enum": [
-              "unresolved"
-            ]
           }
         },
         "required": [
           "claim_ids",
           "kind",
-          "summary",
-          "resolution"
+          "summary"
         ],
         "additionalProperties": false
       },

@@ -14,6 +14,25 @@ test "reference model packets preserve exact chunk bytes and engine bound scope"
 test "reference packet and iteration allocations have deterministic cleanup" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, exercisePackets, .{});
 }
+
+test "shared text choice projection retains unrelated fixed exclusions" {
+    const base = try packets.create(std.testing.allocator, "{}", .workflow_step, .initial_generation, null);
+    defer packets.release(base);
+    const fixed = try packets.withExcludedVariants(std.testing.allocator, base, &.{.{ .kind = "source" }});
+    defer packets.release(fixed);
+    const first = try input.withTextChoices(std.testing.allocator, fixed, &.{7}, &.{});
+    defer packets.release(first);
+    try std.testing.expectEqual(@as(usize, 2), first.excludedVariants().len);
+    try std.testing.expectEqualStrings("source", first.excludedVariants()[0].kind);
+    try std.testing.expectEqualStrings("exact_copy", first.excludedVariants()[1].kind);
+    const second = try input.withTextChoices(std.testing.allocator, first, &.{}, &.{2});
+    defer packets.release(second);
+    try std.testing.expectEqual(@as(usize, 2), second.excludedVariants().len);
+    try std.testing.expectEqualStrings("source", second.excludedVariants()[0].kind);
+    try std.testing.expectEqualStrings("passive", second.excludedVariants()[1].kind);
+    try std.testing.expectEqual(@as(usize, 1), second.integerChoices().len);
+    try std.testing.expectEqualStrings("exact_copy", second.integerChoices()[0].kind);
+}
 fn exercisePackets(allocator: std.mem.Allocator) !void {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
