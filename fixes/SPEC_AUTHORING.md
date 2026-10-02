@@ -15,6 +15,12 @@ and also lost required role coverage. Those producer prompt experiments were not
 retained. Lost meaning must be repaired at its producer, without changing valid
 generation bindings or treating missing generated prose as a user decision.
 
+**3 October guidance update:** the [canonical extraction prompt](../design/workflows/spec/extraction-content.prompt.md)
+now explicitly includes identity, goals, obligations, conditions and constraints,
+while shrinking from 75 to 67 words. Citation rules, separate token classification
+and the response contract remain intact. This revision has no live comparison or
+E2E quality evidence yet; the observations below describe earlier prompt variants.
+
 ## Retained reproduction and method
 
 Source run: `2026-09-29T21-07-24Z-0ad77a3a284df670f9f51d9173e07f46` under
