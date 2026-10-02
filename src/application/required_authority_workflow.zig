@@ -19,6 +19,19 @@ pub const gate_contract: gate.Contract = .{ .id = .{ .bytes = "required-authorit
 const operation_outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .needs_user, .blocked };
 const structural_outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked };
 
+pub const SourcePreservationPolicy = struct {
+    pub const Action = @import("../actions/validation/check_source_preservation_policy.zig").Action;
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .failed };
+    action: Action = .{},
+    policy: ?*const @import("../domain/config.zig").ValidationConfig = null,
+
+    pub fn invoke(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const policy = self.policy orelse return error.OperationExecutionFailed;
+        return .{ .outcome = self.action.execute(policy), .delta = .{} };
+    }
+};
+
 pub const ProjectSpecification = struct {
     pub const Action = @import("../actions/authority/build_specification_authority_requirements.zig").Action;
     pub const outcomes = structural_outcomes;
@@ -36,6 +49,24 @@ pub const ProjectSpecification = struct {
         owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted, content, brief) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
         if (current) |value| owner.payload.inputs.revision = value.revision;
         return owned.publish(self.allocator, inputs_schema, owner, .ok) catch return error.OperationExecutionFailed;
+    }
+};
+
+pub const ProjectSourcePreservation = struct {
+    pub const Action = @import("../actions/authority/build_source_preservation_requirements.zig").Action;
+    pub const outcomes = structural_outcomes;
+    allocator: std.mem.Allocator,
+    action: Action = .{},
+
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch return error.OperationExecutionFailed;
+        const references = @import("reference_extraction_workflow.zig").read(&input.step.data, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted) catch return error.OperationExecutionFailed;
+        const sources = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        errdefer owned.destroy(owner);
+        owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted, sources.*) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
+        return owned.publish(self.allocator, inputs_schema, owner, .ok) catch error.OperationExecutionFailed;
     }
 };
 pub const BuildObservations = struct {

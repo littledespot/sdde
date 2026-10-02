@@ -140,3 +140,48 @@ The existing architecture test was also aligned with the current native conflict
 contract: model `ConflictProposal` has no `resolution` field; native
 `ValidatedConflict.resolution` retains its single admitted variant. Both
 assertions are enforced. Temporary debugger instrumentation was fully removed.
+
+## Optional source-preservation review — 3 October 2026
+
+[ADR 0021](../design/decisions/0021-optional-source-preservation-review.md)
+records the implemented opt-in `validation.sourcePreservationCheck` and shared
+`models.slots.repair` entry. The early check compares captured sources with
+extraction/reconciliation, using the existing authority, localization and bounded
+repair owners. Disabled or omitted skips the extra check; mandatory review remains.
+
+Offline verification:
+
+- `zig build test-specification-generation test-required-authority test-model-request-workflow test-architecture lint -j2 --global-cache-dir .zig-cache/global --summary all`:
+  **799/799 passed**.
+- `zig build test-specification-generation lint -j2 --global-cache-dir .zig-cache/global --summary all`:
+  **227/227 passed**, including rejection of changed source bytes.
+- `zig build verify -j2 --global-cache-dir .zig-cache/global --summary all`:
+  **1,276/1,277 passed**, with all three new workflow cases, offline integration
+  and packaged smoke checks passing. The sole failure remains the previously
+  recorded scenario 103. Log: `.zig-cache/source-preservation-verify-final.log`.
+- `git diff --check`: passed.
+- No live model-quality evaluation was run.
+
+Review cleanup keeps the same contracts and workflow behavior. The required-authority
+owner now shares seed comparison across source, specification and principle
+projections. Source review owns projection eligibility and evidence admission owns
+the permitted-verdict rule; initialization, packet generation and repair reuse
+those decisions. Each request projects one assigned requirement and computes its
+evidence rules once. Stable feature/source repair subjects share one typed variant.
+Unused fixed-positive fixture state, obsolete `*_fixed` response-schema branches
+and an unused repair-slot binding in the independent provider smoke case were removed.
+
+Cleanup checks:
+
+- `zig build test-specification-generation test-required-authority test-architecture lint -j2 --global-cache-dir .zig-cache/global --summary all`:
+  **491/491 passed**, including foreign projections, tampered seeds and forbidden
+  verdicts with malformed text that cannot authorize repair.
+- `zig build test-model-request-workflow -j2 --global-cache-dir .zig-cache/global --summary all`:
+  **308/308 passed**.
+- `zig build verify -j2 --global-cache-dir .zig-cache/global --summary all`:
+  **1276/1277 passed**, **126/129 build steps succeeded**. The sole failure is
+  the previously recorded scenario 103 (`OperationExecutionFailed`, source-support
+  revision 6). The three preservation workflow cases, offline integration tests,
+  lint and clean packaged smoke checks passed.
+  Log: `.zig-cache/source-preservation-review-verify.log`.
+- `git diff HEAD --check`: passed for the complete staged and unstaged change.

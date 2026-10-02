@@ -129,14 +129,10 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             };
             const base = try review.packetFor(a, inputs, context, if (kind == .finding) .{ .finding = authorization.target.requirement } else .{ .correction = authorization.target.requirement });
             defer packets.release(base);
-            const definition = if (purpose == .principles) switch (kind) {
-                .finding => "principle_finding",
-                .selection => "principle_selection",
-                .detail => "detail",
-            } else switch (kind) {
-                .finding => if (try review.applicability(inputs, authorization.target.requirement) == .review) "applicability_finding" else "finding",
-                .detail => if (admission.questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
-                .selection => "selection",
+            const definition = switch (kind) {
+                .finding => base.resultDefinition().?.bytes,
+                .detail => if (purpose == .source and @import("specification_support_evidence.zig").questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
+                .selection => if (purpose == .principles) "principle_selection" else "selection",
             };
             return atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index]);
         }

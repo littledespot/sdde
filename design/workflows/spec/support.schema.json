@@ -1,5 +1,12 @@
 {
   "$defs": {
+    "preservation_finding": {
+      "oneOf": [
+        { "$ref": "#/$defs/supported" },
+        { "$ref": "#/$defs/candidate_omission" },
+        { "$ref": "#/$defs/inconclusive" }
+      ]
+    },
     "finding": {
       "oneOf": [
         {

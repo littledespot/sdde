@@ -107,6 +107,12 @@ pub fn Contract(comptime purpose: Purpose) type {
         }
 
         pub const Scope = union(enum) { finding: a.Id, correction: a.Id };
+        pub fn acceptsProjection(projection: @FieldType(a.Inputs, "projection")) bool {
+            return switch (purpose) {
+                .source => projection == .specification or projection == .source_preservation,
+                .principles => projection == .principle_assessment,
+            };
+        }
         pub fn packetFor(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, scope: Scope) Error!*packets.Packet {
             if (purpose == .principles) return principles.packet(allocator, inputs, context, scope);
             var arena: std.heap.ArenaAllocator = .init(allocator);
@@ -115,25 +121,20 @@ pub fn Contract(comptime purpose: Purpose) type {
             const ledger = try a.build(scratch, inputs);
             const records = inputs.references orelse return error.InvalidRequiredAuthority;
             const all = try p.items(context);
-            if (inputs.projection != .specification or !a.contains(a.Authority, inputs.authorities, .{ .reference = all.state_id }) or !records.items.state_id.eql(all.state_id)) return error.InvalidRequiredAuthority;
-            var slots: std.ArrayList(Requirement) = .empty;
-            var review_applicability = false;
+            if (!acceptsProjection(inputs.projection) or !a.contains(a.Authority, inputs.authorities, .{ .reference = all.state_id }) or !records.items.state_id.eql(all.state_id)) return error.InvalidRequiredAuthority;
             const target: a.Id = switch (scope) {
                 .finding, .correction => |id| id,
             };
-            for (ledger.requirements, 0..) |requirement, index| {
-                if (!std.meta.eql(target, requirement.seed.id)) continue;
-                const id = requirement.seed.id;
-                const required = try applicability(inputs, id);
-                review_applicability = review_applicability or required == .review;
-                const evidence_rule = try admission.requirements(scratch, inputs, context.inputs, id);
-                try slots.append(scratch, .{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, id), .permitted_not_applicable = if (required == .review) required.review else null, .evidence = evidence_rule.guidance() });
-            }
-            if (slots.items.len != 1) return error.InvalidRequiredAuthority;
+            const index = for (ledger.requirements, 0..) |requirement, ordinal| {
+                if (std.meta.eql(target, requirement.seed.id)) break ordinal;
+            } else return error.InvalidRequiredAuthority;
+            const required = try applicability(inputs, target);
+            const evidence_rule = try admission.requirements(scratch, inputs, context.inputs, target);
+            const assigned = [_]Requirement{.{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, target), .permitted_not_applicable = if (required == .review) required.review else null, .evidence = evidence_rule.guidance() }};
             const projected = try @import("model_evidence.zig").project(scratch, all.entries);
             const sources = try @import("model_evidence.zig").sources(scratch, context.inputs);
             const subject: Subject = if (inputs.specification != null or inputs.brief != null) .{ .candidate_support = .{ .candidate = inputs.specification, .brief = inputs.brief } } else .{ .source_preservation = .{} };
-            const payload = .{ .subject = subject, .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = try admission.sourceChoices(scratch, context.inputs), .supported = admission.minimum(.supported), .not_applicable = admission.minimum(Decision.not_applicable.finding()), .candidate_omission = admission.minimum(.candidate_omission), .negative = admission.minimum(.unsupported) }, .requirements = slots.items, .sources = sources, .extraction = try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction), .dispositions = records.dispositions, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = try @import("model_evidence.zig").signals(scratch, records.signals), .conflicts = try @import("model_evidence.zig").conflicts(scratch, records.conflicts) };
+            const payload = .{ .subject = subject, .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction), .dispositions = records.dispositions, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = try @import("model_evidence.zig").signals(scratch, records.signals), .conflicts = try @import("model_evidence.zig").conflicts(scratch, records.conflicts) };
             const encoded = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
             var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
             for (projected_input.object.getPtr("requirements").?.array.items) |*requirement| {
@@ -147,9 +148,14 @@ pub fn Contract(comptime purpose: Purpose) type {
                 }
             }
             if (scope == .correction) _ = projected_input.object.orderedRemove("evidence_rules");
+            if (inputs.projection == .source_preservation and scope == .finding) {
+                const rules = &projected_input.object.getPtr("evidence_rules").?.object;
+                _ = rules.orderedRemove("not_applicable");
+                _ = rules.orderedRemove("negative");
+            }
             const body = try std.json.Stringify.valueAlloc(scratch, projected_input, .{});
             const slot = try reviewSlot(scratch, inputs, target);
-            const definition: ?@import("model_result_schema.zig").DefinitionId = .{ .bytes = if (review_applicability) "applicability_finding" else "finding" };
+            const definition: ?@import("model_result_schema.zig").DefinitionId = .{ .bytes = if (inputs.projection == .source_preservation) "preservation_finding" else if (required == .review) "applicability_finding" else "finding" };
             return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = all.state_id.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = slot } } }, .{ .semantic_review = .{ .bytes = slot } }, definition);
         }
 
@@ -294,6 +300,20 @@ pub fn Contract(comptime purpose: Purpose) type {
                     const before = diagnostics.items.len;
                     if (purpose == .source) if (decisionOf(finding.value) == .not_applicable and required != .review) try diagnostics.append(allocator, diagnostic(proposed, .invalid_decision, requirement.seed.id, ordinal, position));
                     const semantic = decisionOf(finding.value).finding();
+                    var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail, finding.value.loss);
+                    const rejection: ?Diagnostic = if (reviewed == .rejected) rejected: {
+                        var invalid = diagnostic(proposed, .invalid_evidence, requirement.seed.id, ordinal, position);
+                        if (purpose == .source) if (reviewed.rejected.issue == .invalid_finding) {
+                            invalid.issue = .invalid_decision;
+                        };
+                        invalid.evidence = reviewed.rejected;
+                        break :rejected invalid;
+                    } else null;
+                    // A forbidden verdict cannot be made safe by repairing its text.
+                    if (rejection) |invalid| if (invalid.issue == .invalid_decision) {
+                        try diagnostics.append(allocator, invalid);
+                        continue;
+                    };
                     if (!admission.validDetail(semantic, finding.value.detail)) try diagnostics.append(allocator, diagnostic(proposed, .invalid_detail, requirement.seed.id, ordinal, position));
                     if (purpose == .source) if (admission.questionIssue(semantic, finding.value.question)) |issue| {
                         const text_issue: Issue = switch (issue) {
@@ -301,15 +321,10 @@ pub fn Contract(comptime purpose: Purpose) type {
                         };
                         try diagnostics.append(allocator, diagnostic(proposed, text_issue, requirement.seed.id, ordinal, position));
                     };
-                    var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail, finding.value.loss);
                     if (purpose == .source and reviewed == .accepted) {
                         reviewed.accepted.question = finding.value.question;
                     }
-                    if (reviewed == .rejected) {
-                        var invalid = diagnostic(proposed, .invalid_evidence, requirement.seed.id, ordinal, position);
-                        invalid.evidence = reviewed.rejected;
-                        try diagnostics.append(allocator, invalid);
-                    }
+                    if (rejection) |invalid| try diagnostics.append(allocator, invalid);
                     if (diagnostics.items.len != before) continue;
                     const not_applicable: ?a.Rule = if (purpose == .principles) null else if (required == .not_applicable) required.not_applicable else if (decisionOf(finding.value) == .not_applicable) required.review else null;
                     if (inputs.specification != null) {

@@ -9,9 +9,17 @@
     "logs": { "$ref": "#/$defs/logs" },
     "models": { "$ref": "#/$defs/models" },
     "paths": { "$ref": "#/$defs/paths" },
+    "validation": { "$ref": "#/$defs/validation" },
     "principles": { "anyOf": [{ "$ref": "#/$defs/principles" }, { "type": "null" }] }
   },
   "$defs": {
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sourcePreservationCheck": { "type": "boolean", "default": false }
+      }
+    },
     "logs": {
       "type": "object",
       "$comment": "File logging is mandatory. console enables only an additional pipe-delimited mirror.",

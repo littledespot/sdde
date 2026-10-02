@@ -76,7 +76,16 @@ steps:
       failed: end.failed
   source-readiness:
     use: check-specification-source-readiness
-    on: {ok: generate, blocked: review-source, failed: end.failed}
+    on: {ok: preservation-policy, blocked: source-requirements, failed: end.failed}
+  preservation-policy:
+    use: check-source-preservation-policy
+    on: {ok: preservation-requirements, more: generate, failed: end.failed}
+  preservation-requirements:
+    use: build-source-preservation-requirements
+    on: {ok: review-source, blocked: end.blocked}
+  source-requirements:
+    use: build-specification-authority-requirements
+    on: {ok: review-source, blocked: end.blocked}
   review-source:
     call: review-source
     with: {retry-limit: 2}
@@ -353,6 +362,7 @@ subgraphs:
       text-repair:
         call: model-request
         with:
+          slot: repair
           prompt: repair-prompt
           schema: extraction-schema
           selection: input
@@ -382,6 +392,7 @@ subgraphs:
       request:
         call: model-request
         with:
+          slot: repair
           prompt: repair-prompt
           schema: extraction-schema
           selection: input
@@ -584,6 +595,7 @@ subgraphs:
       request:
         call: model-request
         with:
+          slot: repair
           prompt: repair-prompt
           schema: reconciliation-schema
           selection: input
@@ -599,11 +611,8 @@ subgraphs:
         call: merge-reconciliation-candidate
         on: {ok: end.ok, failed: end.failed}
   review-source:
-    start: project
+    start: initialize
     steps:
-      project:
-        use: build-specification-authority-requirements
-        on: {ok: initialize, blocked: end.blocked}
       initialize:
         use: initialize-specification-review
         on: {ok: review, failed: end.failed}
@@ -646,6 +655,7 @@ subgraphs:
       model:
         call: model-request
         with:
+          slot: spec_generation
           prompt: {param: prompt}
           schema: support-schema
           selection: input
@@ -666,6 +676,7 @@ subgraphs:
       loss-model:
         call: model-request
         with:
+          slot: spec_generation
           prompt: loss-prompt
           schema: support-schema
           selection: input
@@ -689,6 +700,7 @@ subgraphs:
       repair:
         call: model-request
         with:
+          slot: repair
           prompt: {param: prompt}
           schema: support-schema
           selection: input
@@ -736,6 +748,7 @@ subgraphs:
       gen:
         call: model-request
         with:
+          slot: spec_generation
           prompt: {param: prompt}
           schema: generation-schema
           selection: input
@@ -765,6 +778,7 @@ subgraphs:
       repair:
         call: model-request
         with:
+          slot: repair
           prompt: {param: prompt}
           schema: generation-schema
           selection: input
@@ -887,6 +901,7 @@ subgraphs:
       request:
         call: model-request
         with:
+          slot: repair
           prompt: repair-prompt
           schema: {param: schema}
           selection: input
@@ -913,7 +928,7 @@ subgraphs:
       prepare:
         use: prepare-model-request
         with:
-          slot: spec_generation
+          slot: {param: slot}
           protocol-prompt: protocol-prompt
           prompt: {param: prompt}
           result-schema: {param: schema}
@@ -1065,6 +1080,7 @@ subgraphs:
       model:
         call: model-request
         with:
+          slot: repair
           prompt: repair-prompt
           schema: generation-schema
           selection: input

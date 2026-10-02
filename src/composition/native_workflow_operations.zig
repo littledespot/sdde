@@ -156,6 +156,8 @@ pub const Assembly = struct {
     check_reconciliation: reference_model.CheckReconciliation,
     collect_reconciliation: reference_model.CollectReconciliation,
     specification_source_readiness: specification.SourceReadiness,
+    source_preservation_policy: authority.SourcePreservationPolicy,
+    project_source_preservation: authority.ProjectSourcePreservation,
     initialize_specification: specification.Initialize,
     check_specification: specification.Check,
     build_specification_packet: specification.BuildInput,
@@ -217,7 +219,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 162 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 164 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -324,6 +326,8 @@ pub const Assembly = struct {
             .validate_passive_literals = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } },
             .model_requests = undefined,
             .specification_source_readiness = .{},
+            .source_preservation_policy = .{},
+            .project_source_preservation = .{ .allocator = allocator },
             .initialize_specification = .{ .allocator = allocator },
             .project_specification_document = .{ .allocator = allocator },
             .build_authority_needs = .{ .allocator = allocator },
@@ -438,6 +442,8 @@ pub const Assembly = struct {
             entry(reference_model.CheckReconciliation, &self.check_reconciliation),
             entry(reference_model.CollectReconciliation, &self.collect_reconciliation),
             entry(specification.SourceReadiness, &self.specification_source_readiness),
+            entry(authority.SourcePreservationPolicy, &self.source_preservation_policy),
+            entry(authority.ProjectSourcePreservation, &self.project_source_preservation),
             entry(specification.Initialize, &self.initialize_specification),
             entry(specification.Check, &self.check_specification),
             entry(specification.BuildInput, &self.build_specification_packet),
@@ -565,6 +571,9 @@ pub const Assembly = struct {
         self.capture_principle_registry.action.source.?.capability = root;
         self.capture_principle_registry.action.config = if (config.principles) |value| @import("../domain/principle_policy.zig").Input.fromConfig(value) else null;
         self.build_principles.action.config = if (config.principles) |value| @import("../domain/principle_policy.zig").Input.fromConfig(value) else null;
+    }
+    pub fn bindConfiguration(self: *Assembly, config: *const @import("../domain/config.zig").SDDToolKitConfig) void {
+        self.source_preservation_policy.policy = &config.validation;
     }
     pub fn bindWorkflows(self: *Assembly, registry: *const @import("../domain/workflow_registry.zig").ValidatedWorkflowDefinitionRegistry) void {
         const contracts = registry.contractSource();

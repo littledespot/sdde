@@ -56,6 +56,29 @@ test "decodes the closed structure directly into the owned type" {
 
     try std.testing.expect(decoded.value().logs.console);
     try std.testing.expectEqual(@as(usize, 1), decoded.value().models.slots.map.count());
+    try std.testing.expect(!decoded.value().validation.sourcePreservationCheck);
+}
+
+fn configurationWithValidation(allocator: std.mem.Allocator, section: []const u8) ![]u8 {
+    const replacement = try std.fmt.allocPrint(allocator, "{{\"validation\":{s},\n  \"logs\"", .{section});
+    defer allocator.free(replacement);
+    return std.mem.replaceOwned(u8, allocator, valid_config, "{\n  \"logs\"", replacement);
+}
+
+test "source preservation is an optional closed boolean policy" {
+    const allocator = std.testing.allocator;
+    for ([_][]const u8{ "{}", "{\"sourcePreservationCheck\":false}", "{\"sourcePreservationCheck\":true}" }, 0..) |section, index| {
+        const bytes = try configurationWithValidation(allocator, section);
+        defer allocator.free(bytes);
+        var decoded = try (Action{}).execute(allocator, bytes);
+        defer decoded.deinit();
+        try std.testing.expectEqual(index == 2, decoded.value().validation.sourcePreservationCheck);
+    }
+    for ([_][]const u8{ "null", "true", "[]", "{\"sourcePreservationCheck\":\"true\"}", "{\"sourcePreservationCheck\":null}", "{\"sourcePreservationCheck\":true,\"extra\":false}", "{\"sourcePreservationCheck\":true,\"sourcePreservationCheck\":false}" }) |section| {
+        const bytes = try configurationWithValidation(allocator, section);
+        defer allocator.free(bytes);
+        try std.testing.expectError(error.EngineConfigParseError, (Action{}).execute(allocator, bytes));
+    }
 }
 
 test "decodes a valid document at the exact compiler byte limit" {

@@ -611,7 +611,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     {
         const directory = b.addTempFiles();
         const packaged = directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
-        const configured = std.mem.replaceOwned(u8, b.allocator, configuration, "\"slots\": {}", "\"slots\": {\"spec_generation\": {\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\"}}") catch @panic("allocate generation smoke config");
+        const configured = std.mem.replaceOwned(u8, b.allocator, configuration, "\"slots\": {}", "\"slots\": {\"spec_generation\": {\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\"},\"repair\": {\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\"}}") catch @panic("allocate generation smoke config");
         _ = directory.add(".sddtoolkit.json", configured);
         _ = directory.add(".sddproviders.json", @embedFile("../../design/examples/.sddproviders.json"));
         _ = directory.addCopyFile(b.path("design/workflows/spec.workflow.yaml"), ".sddtoolkit/workflows/spec.workflow.yaml");

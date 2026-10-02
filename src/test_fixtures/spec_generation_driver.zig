@@ -150,6 +150,7 @@ pub const Driver = struct {
             const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .principle_conflict = self.principle_conflict, .principle_fault = self.principle_fault, .principle_repair_calls = self.principle_repair_calls, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             self.fake.invocation_plan.complete.content = if (self.malformed or (self.malformed_once and self.calls == 0)) "{" else body;
             const current_request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
+            std.testing.expectEqualStrings(if (current_request.id().purpose == .atomic_repair) "repair" else "spec_generation", current_request.prepared().?.binding_id.slot_id.bytes) catch unreachable;
             if (self.measurement_prefix) |prefix| if (self.source_loss != null or self.brief_text != null or self.global_sequence != null or self.summary_sequence != null or current_request.part() != null or current_request.id().immutable_unit_owner_id == .semantic_review or current_request.id().immutable_unit_owner_id == .specification_unit) {
                 const Part = struct { kind: []const u8, text: []const u8 };
                 const parts = arena.allocator().alloc(Part, current_request.prepared().?.content.len) catch unreachable;
@@ -211,10 +212,9 @@ pub const Driver = struct {
                     std.testing.expect(properties.contains("decision") and properties.contains("citations") and properties.contains("detail")) catch unreachable;
                 } else {
                     var permits_applicability = false;
-                    var fixed_positive = false;
                     if (authorityInputs(&view).specification == null) {
                         const references = (@import("../application/specification_workflow.zig").readContext(&view) catch unreachable).references;
-                        std.testing.expect(!@import("../domain/specification_provenance.zig").generationReady(references)) catch unreachable;
+                        if (authorityInputs(&view).projection != .source_preservation) std.testing.expect(!@import("../domain/specification_provenance.zig").generationReady(references)) catch unreachable;
                         self.initial_source_review_calls += 1;
                     } else {
                         std.testing.expect(self.generation_calls != 0) catch unreachable;
@@ -223,12 +223,10 @@ pub const Driver = struct {
                     for (input.value.object.get("requirements").?.array.items) |requirement| {
                         permits_applicability = permits_applicability or requirement.object.contains("permitted_not_applicable");
                         std.testing.expect(requirement.object.contains("task") and requirement.object.contains("evidence")) catch unreachable;
-                        const facts = requirement.object.get("evidence").?.object;
-                        fixed_positive = fixed_positive or facts.contains("supported_provenance") or std.mem.eql(u8, facts.get("positive_claims").?.string, "exact_set");
                         std.testing.expect(!requirement.object.contains("kind") and !requirement.object.contains("slot") and !requirement.object.contains("unit")) catch unreachable;
                     }
                     const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable;
-                    assertReviewShape(schema.value, permits_applicability, fixed_positive) catch unreachable;
+                    assertReviewShape(schema.value, permits_applicability, authorityInputs(&view).projection == .source_preservation) catch unreachable;
                 }
             }
             if (current_request.id().purpose == .atomic_repair) {
@@ -509,9 +507,9 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
         }
     }
     if (packet.resultDefinition()) |definition| {
-        if (std.mem.eql(u8, definition.bytes, "finding") or std.mem.eql(u8, definition.bytes, "applicability_finding") or std.mem.eql(u8, definition.bytes, "finding_fixed") or std.mem.eql(u8, definition.bytes, "applicability_finding_fixed")) {
+        if (std.mem.eql(u8, definition.bytes, "preservation_finding") or std.mem.eql(u8, definition.bytes, "finding") or std.mem.eql(u8, definition.bytes, "applicability_finding")) {
             const schema = try std.json.parseFromSlice(std.json.Value, a, request.response_schema.modelBytes(), .{});
-            try assertReviewShape(schema.value, std.mem.startsWith(u8, definition.bytes, "applicability_finding"), std.mem.endsWith(u8, definition.bytes, "_fixed"));
+            try assertReviewShape(schema.value, std.mem.eql(u8, definition.bytes, "applicability_finding"), std.mem.eql(u8, definition.bytes, "preservation_finding"));
         }
         const payload: ?[]const u8 = if (std.mem.eql(u8, definition.bytes, "business_text")) "segments" else if (std.mem.eql(u8, definition.bytes, "reference_text")) "nodes" else if (std.mem.eql(u8, definition.bytes, "token_reference")) "token_id" else null;
         if (payload) |field| {
@@ -539,10 +537,9 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
     try std.testing.expect(schema_found and instruction_found);
 }
 
-fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, fixed_positive: bool) !void {
-    _ = fixed_positive;
+fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preservation: bool) !void {
     const variants = schema.object.get("oneOf").?.array.items;
-    try std.testing.expectEqual(@as(usize, if (permits_applicability) 7 else 6), variants.len);
+    try std.testing.expectEqual(@as(usize, if (preservation) 3 else if (permits_applicability) 7 else 6), variants.len);
     var has_inconclusive = false;
     var has_not_applicable = false;
     for (variants) |variant| {
@@ -550,6 +547,7 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, fixed_
         const tag = properties.get("kind").?.object.get("const").?.string;
         const decision = std.meta.stringToEnum(@import("../domain/specification_support.zig").Source.Decision, tag).?;
         const gap = @import("../domain/specification_support_evidence.zig").questionRequired(decision.finding());
+        if (preservation) try std.testing.expect(@import("../domain/source_preservation.zig").permits(decision.finding()) and decision != .not_applicable);
         try std.testing.expect(!properties.contains("provenance"));
         try std.testing.expectEqual(@as(usize, if (gap) 4 else 3), properties.count());
         try std.testing.expect(!properties.contains("decision"));

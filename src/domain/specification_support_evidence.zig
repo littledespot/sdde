@@ -13,6 +13,9 @@ pub fn eligible(records: refs.Records, id: a.Id, claim: r.ClaimId) bool {
         if (std.meta.eql(value.claim_id, claim)) break value.disposition;
     } else return false;
     return switch (id.unit) {
+        .source => |selected| for (records.items.entries) |item| {
+            if (std.meta.eql(item.claim.id, claim)) break std.meta.eql(item.source_id, selected);
+        } else false,
         .signal => |selected| for (records.signals) |signal| {
             if (std.meta.eql(signal.id, selected)) break disposition != .conflicting and r.contains(r.ClaimId, signal.value.claim_ids, claim);
         } else false,
@@ -78,11 +81,12 @@ pub const Requirements = struct {
     positive_claims: enum { eligible_subset, exact_set },
     supported_provenance: ?spec.Provenance,
     candidate_bound: bool,
+    source_preservation: bool = false,
 
     pub fn rule(self: Requirements, finding: a.Finding, loss: @import("source_omission.zig").Location) Rule {
         const diagnostic = if (finding == .candidate_omission and loss != .unlocalized) @import("source_omission.zig").diagnosticClaims(self.records, loss) else null;
         return .{
-            .minimum = if (diagnostic != null and diagnostic.?.len != 0 and loss != .reconciliation_disposition) .claim_required else minimum(finding),
+            .minimum = if (diagnostic != null and diagnostic.?.len != 0 and loss != .reconciliation_disposition) .claim_required else if (self.source_preservation and finding == .supported) .claim_or_source_required else minimum(finding),
             .claims = if (diagnostic) |claims| (if (loss == .reconciliation_disposition) .{ .eligible = claims } else .{ .exact = claims }) else if (self.positive_claims == .exact_set) .{ .exact = self.eligible_claim_ids } else .{ .eligible = self.eligible_claim_ids },
             .eligible_source_ids = self.eligible_source_ids,
             .provenance = if (finding == .candidate_omission and diagnostic != null and loss != .reconciliation_disposition) null else if (finding != .supported and self.positive_claims == .eligible_subset and !self.candidate_bound) .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} } else if (self.supported_provenance) |value| value else if (finding == .candidate_omission and self.positive_claims == .exact_set) null else null,
@@ -99,16 +103,17 @@ pub fn requirements(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.e
     return .{
         .records = inputs.references.?,
         .eligible_claim_ids = eligible_claim_ids,
-        .eligible_source_ids = try sourceChoices(allocator, sources),
+        .eligible_source_ids = if (id.unit == .source) try allocator.dupe(SourceId, &.{id.unit.source}) else try sourceChoices(allocator, sources),
         .positive_claims = switch (id.unit) {
-            .signal, .conflict, .token => .exact_set,
+            .source, .signal, .conflict, .token => .exact_set,
             else => .eligible_subset,
         },
         .supported_provenance = try expectedProvenance(allocator, inputs, sources, id),
         .candidate_bound = inputs.specification != null or (inputs.brief != null and id.unit == .feature and (id.slot == .description or id.slot == .primary_goal)),
+        .source_preservation = id.unit == .source,
     };
 }
-pub const Issue = enum { invalid_loss, stale_authority, invalid_sources, ineligible_claim, invalid_selection, missing_claims, missing_evidence, wrong_claim_set, wrong_candidate_provenance };
+pub const Issue = enum { invalid_finding, invalid_loss, stale_authority, invalid_sources, ineligible_claim, invalid_selection, missing_claims, missing_evidence, wrong_claim_set, wrong_candidate_provenance };
 pub const Rejection = struct { issue: Issue, rule: Rule };
 pub const Admission = union(enum) { accepted: a.ReviewEvidence, rejected: Rejection };
 
@@ -117,6 +122,12 @@ pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
     const required = try requirements(allocator, inputs, sources, id);
     const rule = required.rule(finding, loss);
+    if (id.unit == .source) {
+        if (inputs.projection != .source_preservation or !@import("source_preservation.zig").permits(finding)) return reject(.invalid_finding, rule);
+        const original = inputs.source_inputs orelse return error.InvalidRequiredAuthority;
+        const snapshot = @import("atomic_repair.zig").snapshot;
+        if (!std.meta.eql(try snapshot(r.evidence.Inputs, allocator, original), try snapshot(r.evidence.Inputs, allocator, sources))) return reject(.stale_authority, rule);
+    }
     if (!records.items.state_id.eql(sources.corpus.state_id) or !a.contains(a.Authority, inputs.authorities, .{ .reference = records.items.state_id })) return reject(.stale_authority, rule);
     r.unique(SourceId, source_ids) catch return reject(.invalid_sources, rule);
     for (source_ids) |selected| if (!r.contains(SourceId, rule.eligible_source_ids, selected)) return reject(.invalid_sources, rule);

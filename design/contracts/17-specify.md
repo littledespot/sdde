@@ -204,6 +204,15 @@ For each feature-brief or specification unit, the declared model operation retur
   evidence projection, retained claims/citations and exact tokens; a second signal
   rendering is unnecessary in those requests. Original text is context, not a new
   provenance selection or permission to cite a discarded claim.
+- [ADR 0021](../decisions/0021-optional-source-preservation-review.md) adds the
+  opt-in `validation.sourcePreservationCheck` before generation-ready sources
+  proceed. One obligation per captured source checks meaning preserved by
+  extraction/reconciliation, including sources with no claims. Source-only loss
+  goes through the shared localization, authorized repair, dependent rebuilding
+  and re-review path. The extra check is skipped when disabled or omitted; it
+  never replaces the mandatory review below. Authorized candidate repairs use
+  the separate configured `repair` model slot; protocol retries retain their
+  original binding.
 - Assemble and validate the generated sections, then build the complete
   specification-owned requirement ledger and perform source-preservation and
   principle assessment through the existing review owners. The shared authority

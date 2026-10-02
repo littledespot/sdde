@@ -142,6 +142,7 @@ pub const Runtime = struct {
             self.native.activate_feature_logging.activator = self.logging.?.activator();
             self.native.bindRoots(self.boot.ready.roots.registry());
             self.native.bindWorkflows(self.boot.ready.workflows.registry());
+            self.native.bindConfiguration(self.boot.ready.config.config());
             self.native.bindPrinciples(self.boot.ready.roots.registry().projectPrinciples(), self.boot.ready.config.config(), self.principle_source.reader(), self.principle_source.enumerator(), self.principle_source.capturer());
         }
         self.provider_runtime = .{
@@ -1333,6 +1334,7 @@ test "native YAML validates citations extraction and reconciliation before conti
         native.bindRoots(boot.ready.roots.registry());
         native.bindWorkflows(boot.ready.workflows.registry());
         var principle_source: @import("../adapters/filesystem/principle_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        native.bindConfiguration(boot.ready.config.config());
         native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), boot.ready.config.config(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
         var providers = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project.dir, .{}, &llm_provider_contracts.Registry.empty);
         const result = testBootstrappedInvocation(std.testing.allocator, &boot, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, &native.registry, providers.bind(), .{});
@@ -1366,6 +1368,14 @@ test "native YAML validates citations extraction and reconciliation before conti
 }
 
 test "configured specification generation YAML executes native references models and authority gates" {
+    try testSpecificationWorkflows(.existing);
+}
+
+test "configured source preservation reviews before generation and repairs through the shared model slot" {
+    try testSpecificationWorkflows(.source_preservation);
+}
+
+fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation }) !void {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
     const faults = [_]@import("../test_fixtures/spec_generation_driver.zig").Fault{
@@ -1431,15 +1441,19 @@ test "configured specification generation YAML executes native references models
     const principle_faults = std.meta.tags(@import("../test_fixtures/spec_generation_responses.zig").PrincipleFault);
     const timing = @import("../test_fixtures/scenario_timing.zig");
     const membership_start = principle_start + principle_faults.len * 2;
-    var costs: [membership_start + 8]?timing.Sample = @splat(null);
-    defer timing.report(io, "specification-generation", &costs) catch |err| std.debug.panic("scenario timing report failed: {s}", .{@errorName(err)});
-    for (0..costs.len) |scenario| {
+    const preservation_start = membership_start + 8;
+    var costs: [preservation_start + 3]?timing.Sample = @splat(null);
+    const case_range_begin: usize = if (workflow_cases == .source_preservation) preservation_start else 0;
+    const case_range_end: usize = if (workflow_cases == .source_preservation) costs.len else preservation_start;
+    defer timing.report(io, "specification-generation", costs[case_range_begin..case_range_end]) catch |err| std.debug.panic("scenario timing report failed: {s}", .{@errorName(err)});
+    for (case_range_begin..case_range_end) |scenario| {
         var cost = timing.Timer.start(io, &costs[scenario]);
         defer cost.finish();
         const principle_fault = if (scenario >= principle_start and scenario < membership_start) principle_faults[(scenario - principle_start) % principle_faults.len] else null;
         const applicability = if (scenario >= applicability_start and scenario < principle_start) applicability_cases[(scenario - applicability_start) % applicability_cases.len] else null;
         const other_applicability = scenario >= applicability_start + applicability_cases.len;
-        const membership_scenario = scenario >= membership_start;
+        const membership_scenario = scenario >= membership_start and scenario < preservation_start;
+        const preservation_scenario = scenario >= preservation_start;
         const brief_scenario = scenario >= brief_start and scenario < applicability_start;
         const global_scenario = scenario >= global_start and scenario < brief_start;
         const summary_scenario = scenario >= summary_start and scenario < global_start;
@@ -1461,12 +1475,20 @@ test "configured specification generation YAML executes native references models
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
+        if (preservation_scenario) {
+            const configuration = try project.dir.readFileAlloc(io, ".sddtoolkit.json", allocator, .limited(1_048_576));
+            defer allocator.free(configuration);
+            const configured = try std.mem.concat(allocator, u8, &.{ "{\"validation\":{\"sourcePreservationCheck\":true},", configuration[1..] });
+            defer allocator.free(configured);
+            try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = configured });
+        }
         try project.dir.createDirPath(io, ".sdd/principles");
         try project.dir.createDirPath(io, ".sdd/presets");
         try project.dir.createDirPath(io, "engine/workflows/spec");
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
         if (scenario <= 1 or scenario == 3) try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/core.md", .data = if (scenario == 1) "Delete loan receipts after thirty days.\n" else "Display time in UTC.\n" });
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
+        if (preservation_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == preservation_start + 2) "# Loan renewal\nRenew eligible loans and retain the deadline when renewal is refused.\n" else "# Startup display\nStart successfully and display the current UTC date and time.\n" });
         if (membership_scenario and (scenario - membership_start) % 4 >= 2) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A borrower renews a loan and sees its return deadline. Display `Loan renewed!`.\n" });
         if (extraction_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == extraction_omission_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
         if (candidate_omission and scenario != omission_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == omission_scenario + 1) "A librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n" else "A traveller confirms a booking and sees its arrival date. Display `Booking confirmed!`.\n" });
@@ -1534,6 +1556,7 @@ test "configured specification generation YAML executes native references models
         native.capture_workflow_state.action.source = feature_inputs.workflowStateCapturer();
         if (boot != .ready) std.debug.print("generation bootstrap: {any}\n", .{boot});
         try std.testing.expect(boot == .ready);
+        try std.testing.expectEqual(preservation_scenario, boot.ready.config.config().validation.sourcePreservationCheck);
         var logging: @import("feature_logging_runtime.zig").Assembly = .{
             .allocator = allocator,
             .io = io,
@@ -1548,8 +1571,9 @@ test "configured specification generation YAML executes native references models
         native.bindRoots(boot.ready.roots.registry());
         native.bindWorkflows(boot.ready.workflows.registry());
         var principle_source: @import("../adapters/filesystem/principle_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        native.bindConfiguration(boot.ready.config.config());
         native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), boot.ready.config.config(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
-        var services = try @import("../model_request_workflow_test.zig").providerServices(allocator, null, "spec_generation", false);
+        var services = try @import("../model_request_workflow_test.zig").providerServices(allocator, null, &.{ "spec_generation", "repair" }, false);
         defer services.deinit();
         const graph = boot.ready.workflows.registry().resolve(.{ .bytes = "spec-generation" }).?;
         var runner = @import("../application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{ "--feature", "chosen", "--reference", "first" } }, .graph = graph }, &native.registry, boot.ready.logs.barrier(), .{}, &services);
@@ -1645,6 +1669,7 @@ test "configured specification generation YAML executes native references models
             if (driver.source_loss == .false_conflict) driver.measurement_prefix = ".zig-cache/r41-recovery";
             if (driver.source_loss == .false_conflict_questions) driver.measurement_prefix = ".zig-cache/fix002-question-conflict";
         }
+        if (preservation_scenario and scenario != preservation_start) driver.source_loss = .partial;
         if (summary_scenario) {
             driver.summary_sequence = if (scenario - summary_start < 2) .exhaust else .recover;
             if (scenario == summary_start) driver.measurement_prefix = ".zig-cache/r35-request";
@@ -1684,6 +1709,12 @@ test "configured specification generation YAML executes native references models
         } else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_replacement or driver.reconciliation_protocol_fault == .token_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or unbound_repaired_source or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.reconciliation_fault == .mixed_selection) .invalid else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}; candidate: {any}\n", .{ scenario, result, try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
+        if (preservation_scenario) {
+            try std.testing.expect(driver.initial_source_review_calls != 0);
+            try std.testing.expect(driver.candidate_review_calls != 0);
+            try std.testing.expectEqual(@as(usize, if (scenario == preservation_start) 0 else 1), driver.source_repair_calls);
+            try std.testing.expect(runner.repair_retry.currentPermit() == null);
+        }
         if (driver.reconciliation_fault == .mixed_selection and driver.reconciliation_protocol_fault == null) {
             const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             try std.testing.expect(!view.contains(.published_workflow_output));
@@ -1833,7 +1864,7 @@ test "configured specification generation YAML executes native references models
             defer readback.deinit();
             const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
             _ = try @import("../domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
-            try std.testing.expectEqual(@as(usize, 789), graph.authority.steps.len);
+            try std.testing.expectEqual(@as(usize, 791), graph.authority.steps.len);
         }
         if (applicability) |mode| {
             const samples = @import("../test_fixtures/spec_generation_responses.zig");
@@ -2393,7 +2424,11 @@ test "configured specification generation YAML executes native references models
                 }
             }
         }
-        if (scenario == 0) try std.testing.expectEqual(@as(usize, 4), driver.generation_calls);
+        if (scenario == 0) {
+            try std.testing.expectEqual(@as(usize, 4), driver.generation_calls);
+            try std.testing.expectEqual(@as(usize, 0), driver.initial_source_review_calls);
+            try std.testing.expect(driver.candidate_review_calls != 0);
+        }
         if (expected == .ok) {
             const content = try @import("../application/required_authority_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/required_authority_workflow.zig").content_schema, .content);
             try std.testing.expect(content.records.len != 0);

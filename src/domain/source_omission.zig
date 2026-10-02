@@ -29,11 +29,11 @@ const retry = @import("workflow_retry.zig");
 const atomic = @import("atomic_repair.zig");
 pub const Producer = enum { extraction, reconciliation };
 const Family = enum { source_omission };
-const Subject = union(enum) { feature: authority.Id, token: r.extraction.tokens.CandidateId, regenerated: authority.Id, conflict_claims: []const r.ClaimId };
+const Subject = union(enum) { requirement: authority.Id, token: r.extraction.tokens.CandidateId, regenerated: authority.Id, conflict_claims: []const r.ClaimId };
 
 fn subject(a: std.mem.Allocator, inputs: authority.Inputs, requirement: authority.Id) Error!Subject {
     return switch (requirement.unit) {
-        .feature => .{ .feature = requirement },
+        .feature, .source => .{ .requirement = requirement },
         .token => |id| token: {
             for ((inputs.references orelse return error.InvalidRequiredAuthority).items.entries) |entry| {
                 if (entry.claim.content != .preserved_token) continue;

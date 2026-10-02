@@ -6,7 +6,8 @@ baseline's authority and is subject to the accepted amendments in [§32](../desi
 - `design/schemas/sddtoolkit-config.schema.json` defines the current reader-facing JSON
   contract, and `design/examples/.sddtoolkit.json` is one accepted instance.
 - The closed top-level members are required `logs`, `models` and `paths`, plus optional
-  `principles` under ADR 0015.
+  `principles` under ADR 0015 and `validation` under
+  [ADR 0021](../decisions/0021-optional-source-preservation-review.md).
 - Neither file is a runtime default, packaged asset, search location, or fallback.
 - Bootstrap captures and canonicalizes the native executable's invocation working directory once
   and uses it as the project root.
@@ -77,12 +78,19 @@ exists.
 - For the bounded F0001 reader increment, the current closed shape is the formal [JSON
   Schema](../schemas/sddtoolkit-config.schema.json), the repository example, and the typed contract
   in [F0001 — SDDToolKitConfigService](../features/F0001-SDDToolKitConfigService.md).
-- The root requires `logs`, `models` and `paths` and permits optional `principles`;
+- The root requires `logs`, `models` and `paths` and permits optional `principles`
+  and `validation`;
   fixed records reject missing required, duplicate and unknown members.
 - `models.slots` and `principles.filenameHints` are keyed collections; each model slot has the closed slot shape.
 - The `logs` object contains exactly the F0002 threshold and optional console-mirror boolean.
   The threshold alone selects prompt capture under ADR 0018.
 - File logging is mandatory and has no configuration switch.
+- `validation.sourcePreservationCheck` is an optional boolean, disabled when
+  omitted. It controls only the additional source-preservation review before
+  generation; mandatory authority and publication validation remain required.
+  The supplied Spec definition routes authorized candidate repairs through
+  `models.slots.repair`. All statically referenced model slots must be
+  configured even when the optional review is disabled; no slot fallback exists.
 - The delimiter, timestamp, size, retention, flush, redaction, failure, prompt-size, emergency,
   and lock policy is compiler-owned.
 - Configuration has no version discriminator or compatibility reader; contract changes update

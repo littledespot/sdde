@@ -52,6 +52,139 @@ test "draft readiness requires selectable provenance while source interpretation
     }
 }
 
+test "source preservation reviews the corpus before fields exist and reuses bounded omission repair" {
+    const authority = @import("domain/required_authority.zig");
+    const support = @import("domain/specification_support.zig").Source;
+    const loss = @import("domain/source_omission.zig");
+    const projector = @import("actions/authority/build_source_preservation_requirements.zig").Action{};
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][2][]const u8{
+        .{ "# Startup display\nStart successfully and display the current UTC date and time.\n", "Display the time." },
+        .{ "# Loan renewal\nRenew eligible loans; keep the deadline when renewal is refused.\n", "Renew loans." },
+    }) |example| {
+        var fixture = try Fixture.initContent(a, example[0], null, true, example[1], 1);
+        defer fixture.deinit();
+        const inputs = try projector.execute(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, fixture.context.inputs);
+        try std.testing.expect((try (@import("actions/specification/initialize_specification_review.zig").Action{}).execute(inputs)) == .initial);
+        for ([_]@FieldType(authority.Inputs, "projection"){ .principle_assessment, .registered_obligations }) |projection| {
+            var foreign = inputs;
+            foreign.projection = projection;
+            try std.testing.expectError(error.InvalidRequiredAuthority, (@import("actions/specification/initialize_specification_review.zig").Action{}).execute(foreign));
+        }
+        const ledger = try authority.build(a, inputs);
+        try std.testing.expectEqual(fixture.context.inputs.corpus.sources.len, ledger.requirements.len);
+        const id = ledger.requirements[0].seed.id;
+        try std.testing.expect(id.unit == .source);
+        const packet = try support.packetFor(std.testing.allocator, inputs, fixture.context, .{ .finding = id });
+        defer @import("domain/model_input_packet.zig").release(packet);
+        try std.testing.expectEqualStrings("preservation_finding", packet.resultDefinition().?.bytes);
+        const json = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+        try std.testing.expect(!json.value.object.get("subject").?.object.contains("candidate"));
+        try std.testing.expectEqualStrings(example[0], json.value.object.get("sources").?.array.items[0].object.get("text").?.string);
+        try std.testing.expectEqual(@as(usize, 1), json.value.object.get("requirements").?.array.items.len);
+
+        // Inserting a missing review keeps the same closed finding schema.
+        const review_repair = @import("domain/specification_support_repair.zig").Source;
+        const missing = try support.validate(a, inputs, fixture.context.inputs, .{ .review = .{ .entries = &.{} }, .origin = null, .origins = &.{} });
+        try std.testing.expect(missing == .rejected);
+        const missing_authority = try review_repair.authorize(a, inputs, fixture.context, missing.rejected);
+        const replacement_packet = try review_repair.packet(std.testing.allocator, inputs, fixture.context, missing.rejected.candidate.?, missing_authority);
+        defer @import("domain/model_input_packet.zig").release(replacement_packet);
+        try std.testing.expectEqualStrings("preservation_finding", replacement_packet.resultDefinition().?.bytes);
+
+        // The same shared collector/gate admits source loss and selects its producer.
+        var finding: support.Finding = .{ .requirement_ordinal = 1, .value = .{
+            .kind = .candidate_omission,
+            .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} },
+            .source_ids = &.{id.unit.source},
+            .detail = "Extraction lost the named feature and its conditions.",
+            .loss = .{ .extraction_claim = fixture.extracted.ledger.chunks[0].scope.chunk_id },
+        } };
+        const admitted = try support.validate(a, inputs, fixture.context.inputs, .{ .review = .{ .entries = &.{finding} }, .origin = null, .origins = &.{null} });
+        try std.testing.expect(admitted == .accepted);
+        const checked = try authority.build(a, admitted.accepted.inputs);
+        const observations = try authority.buildObservations(a, checked);
+        const result = try authority.reconcile(a, checked, observations);
+        try std.testing.expectEqual(.invalid, result.continuation);
+        const negative: loss.Support = .{ .review = admitted.accepted.candidate, .inputs = admitted.accepted.inputs, .observations = observations, .result = result };
+        try std.testing.expect((try loss.select(a, fixture.context.inputs, negative)).location == .extraction_claim);
+        const authorization = try @import("domain/reference_extraction_repair.zig").Omission.authorize(a, .{ .extraction = .{ .inputs = fixture.context.inputs, .candidates = try tokens.candidates(a, fixture.context.inputs), .candidate = fixture.extracted_text }, .support = negative });
+
+        // Progress is judged against the stable original-source obligation.
+        const rule = try @import("domain/specification_support_evidence.zig").requirements(a, inputs, fixture.context.inputs, id);
+        finding.value = .{ .kind = .supported, .provenance = .{ .claim_ids = rule.eligible_claim_ids, .clarification_response_ids = &.{} }, .source_ids = &.{id.unit.source}, .detail = "" };
+        const positive = try support.validate(a, inputs, fixture.context.inputs, .{ .review = .{ .entries = &.{finding} }, .origin = null, .origins = &.{null} });
+        try std.testing.expect(positive == .accepted);
+        const transition = (try loss.admittedValidation(a, authorization.retry.?, positive.accepted)).?;
+        try std.testing.expectEqual(.resolved, transition.validated.result);
+
+        // Matching source IDs cannot substitute changed captured source bytes.
+        var stale = fixture.context.inputs;
+        const changed = try a.dupe(@import("domain/reference_evidence.zig").Source, stale.corpus.sources);
+        changed[0].bytes = try std.mem.concat(a, u8, &.{ changed[0].bytes, "Another requirement.\n" });
+        stale.corpus.sources = changed;
+        try std.testing.expect((try support.validate(a, inputs, stale, .{ .review = .{ .entries = &.{finding} }, .origin = null, .origins = &.{null} })) == .rejected);
+
+        // Neither a missing seed nor a model-authored question can widen this check.
+        var incomplete = inputs;
+        incomplete.seeds = &.{};
+        try std.testing.expectError(error.InvalidRequiredAuthority, authority.build(a, incomplete));
+        for (0..3) |mutation| {
+            var tampered = inputs;
+            const seeds = try a.dupe(authority.Seed, inputs.seeds);
+            switch (mutation) {
+                0 => seeds[0].id.slot = .text,
+                1 => seeds[0].requiredness = .{ .accepted_authority = inputs.authorities[0] },
+                2 => seeds[0].input_authorities = &.{},
+                else => unreachable,
+            }
+            tampered.seeds = seeds;
+            try std.testing.expectError(error.InvalidRequiredAuthority, authority.build(a, tampered));
+        }
+        for ([_]support.Decision{ .unsupported, .ambiguous, .conflicting }) |decision| {
+            finding.value.kind = decision;
+            finding.value.detail = "";
+            finding.value.question = "";
+            const forbidden = try support.validate(a, inputs, fixture.context.inputs, .{ .review = .{ .entries = &.{finding} }, .origin = null, .origins = &.{null} });
+            try std.testing.expect(forbidden == .rejected);
+            try std.testing.expectEqual(.invalid_decision, forbidden.rejected.rejection.selected().?.issue);
+            try std.testing.expectEqual(.invalid_finding, forbidden.rejected.rejection.selected().?.evidence.?.issue);
+            try std.testing.expectError(error.UnsafeSupportRepair, review_repair.authorize(a, inputs, fixture.context, forbidden.rejected));
+        }
+        finding.value.kind = .supported;
+        finding.value.question = null;
+        finding.value.source_ids = &.{.{ .ordinal = 999 }};
+        try std.testing.expect((try support.validate(a, inputs, fixture.context.inputs, .{ .review = .{ .entries = &.{finding} }, .origin = null, .origins = &.{null} })) == .rejected);
+    }
+}
+
+test "source preservation accounts for meaningful sources with empty extraction" {
+    const authority = @import("domain/required_authority.zig");
+    const support = @import("domain/specification_support.zig").Source;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initExtraction(a, "# Known feature\nIts requirements are undecided.\n", null, false);
+    defer fixture.deinit();
+    const inputs = try @import("domain/source_preservation.zig").project(a, fixture.context.inputs.corpus.feature_id, @import("domain/reference_support.zig").records(fixture.context.references), fixture.context.inputs);
+    const id = inputs.seeds[0].id;
+    const required = try @import("domain/specification_support_evidence.zig").requirements(a, inputs, fixture.context.inputs, id);
+    try std.testing.expectEqual(@as(usize, 0), required.eligible_claim_ids.len);
+    try std.testing.expectEqual(.claim_or_source_required, required.rule(.supported, .{ .unlocalized = .{} }).minimum);
+    const omitted = try support.collectFocused(a, inputs, fixture.context, null, id, "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"The supplied identity was discarded.\"}", null);
+    try std.testing.expect(omitted == .accepted);
+    try std.testing.expect(omitted.accepted.candidate.pending_localization != null);
+    const packet = try support.packetForLoss(std.testing.allocator, inputs, fixture.context, omitted.accepted.candidate);
+    defer @import("domain/model_input_packet.zig").release(packet);
+    const localized = try support.collectLoss(a, inputs, fixture.context, omitted, packet, try @import("domain/model_candidate_json.zig").encode(@import("domain/source_omission.zig").Location, a, .{ .extraction_claim = fixture.extracted.ledger.chunks[0].scope.chunk_id }));
+    try std.testing.expect(localized == .accepted);
+    const ledger = try authority.build(a, localized.accepted.inputs);
+    const result = try authority.reconcile(a, ledger, try authority.buildObservations(a, ledger));
+    try std.testing.expectEqual(.invalid, result.continuation);
+}
+
 test "draft generation and selected repair retain original source meaning without a parallel signal projection" {
     const sessions = @import("domain/specification_session.zig");
     const repair = @import("domain/specification_repair.zig");
