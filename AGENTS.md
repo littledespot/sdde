@@ -360,7 +360,11 @@ task.
   publication failures and fresh-rerun convergence.
 - Fault injection: malformed model output, parser/command/filesystem failure,
   every publication write, interruption, stale approval, and retry exhaustion.
-- Unit and integration tests may use fakes; their results are not E2E evidence.
+- Unit tests verify internal code behavior and may use fakes. Fixed offline
+  harness scenarios belong to integration tests; neither is E2E evidence.
+- Keep integration and E2E harnesses and build entry points separate. Run them
+  separately; require an explicit live E2E case, with no registered or default
+  fixed scenario. Keep fixed offline scenarios in integration tests.
 - Ask for explicit user approval before each E2E test run.
 - End to end: execute the complete production path, including the real LLM
   selected by the test's `.sddtoolkit.json`, configured external services, and

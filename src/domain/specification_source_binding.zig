@@ -15,6 +15,46 @@ pub const Bound = union(enum) {
     records: struct { signal: r.SignalId, selection: spec.Selection },
 };
 
+/// Presentation of the already bound source selection. Claims and their meaning
+/// remain in the packet's single evidence catalogue; this view grants no authority.
+pub const FieldGuidance = struct { purpose: []const u8, claim_ids: []const r.ClaimId };
+pub const Guidance = union(enum) {
+    brief: struct { title: FieldGuidance, description: FieldGuidance, primary_goal: FieldGuidance },
+    primary_user_story: FieldGuidance,
+    entities: FieldGuidance,
+    records: struct { purpose: []const u8, signal: r.SignalId, claim_ids: []const r.ClaimId },
+};
+
+pub fn guidance(a: std.mem.Allocator, bound: Bound) Error!Guidance {
+    return switch (bound) {
+        .brief => |value| .{ .brief = .{
+            .title = try fieldGuidance(a, .display_name, value.title),
+            .description = try fieldGuidance(a, .description, value.description),
+            .primary_goal = try fieldGuidance(a, .primary_goal, value.primary_goal),
+        } },
+        .primary_user_story => |value| .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, value) },
+        .entities => |value| .{ .entities = try fieldGuidance(a, .entities, value) },
+        .records => |value| .{ .records = .{
+            .purpose = try std.fmt.allocPrint(a, "{s} {s}", .{
+                (try fieldGuidance(a, .functional_requirements, value.selection)).purpose,
+                (try fieldGuidance(a, .acceptance_criteria, value.selection)).purpose,
+            }),
+            .signal = value.signal,
+            .claim_ids = value.selection.claim_ids,
+        } },
+    };
+}
+
+fn fieldGuidance(a: std.mem.Allocator, slot: @import("required_authority.zig").Slot, selected: spec.Selection) Error!FieldGuidance {
+    return .{
+        .purpose = @import("required_authority_description.zig").task(a, .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot }) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.InvalidRequiredAuthority => return error.InvalidSpecificationBinding,
+        },
+        .claim_ids = selected.claim_ids,
+    };
+}
+
 fn hasRole(signal: r.Signal, role: r.GenerationRole) bool {
     return std.mem.indexOfScalar(r.GenerationRole, signal.value.generation_roles, role) != null;
 }

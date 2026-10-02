@@ -4,7 +4,6 @@ test {
     _ = @import("src/root.zig");
     _ = @import("src/architecture_test.zig");
     _ = @import("harness.zig");
-    _ = @import("e2e.zig");
     _ = @import("build/zig_version.zig");
     _ = @import("build/provenance.zig");
     _ = @import("src/workflow_repair_retry_test.zig");

@@ -5,6 +5,7 @@
   "parts": {
     "dispositions": {"paths": ["/claim_dispositions"]},
     "signals": {"paths": ["/signals"], "requires": ["dispositions"]},
+    "roles": {"paths": ["/role_assignments"], "requires": ["dispositions", "signals"]},
     "conflicts": {"paths": ["/conflicts"], "requires": ["dispositions"]}
   }
 }

@@ -63,6 +63,10 @@
       "destination": ".sddtoolkit/workflows/spec/reconciliation-signals.prompt.md"
     },
     {
+      "source": "design/workflows/spec/reconciliation-roles.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/reconciliation-roles.prompt.md"
+    },
+    {
       "source": "design/workflows/spec/reconciliation-conflicts.prompt.md",
       "destination": ".sddtoolkit/workflows/spec/reconciliation-conflicts.prompt.md"
     },
@@ -93,6 +97,10 @@
     {
       "source": "design/workflows/spec/support.prompt.md",
       "destination": ".sddtoolkit/workflows/spec/support.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/support-loss.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/support-loss.prompt.md"
     },
     {
       "source": "design/workflows/spec/support.schema.json",

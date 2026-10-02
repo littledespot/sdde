@@ -23,11 +23,6 @@ Only these three findings have question. Never request supplied information or
 change a verdict to pass.
 
 Follow evidence_rules and each task's evidence. The engine binds claim evidence
-to the assigned subject; never return provenance or claim IDs. Select source
-locations only where the rule leaves a choice. Choose not_applicable only when
+to the assigned subject; never return provenance or claim IDs. Select sources
+only where the rule leaves a choice. Choose not_applicable only when
 its permitted rule holds. Never invent authority.
-
-Use unlocalized unless candidate_omission has a clear producer: a missing claim's
-extraction chunk, an irrelevant token classification, or a defective reconciliation
-signal/disposition, or falsely classified conflict. Never attribute an extracted claim to extraction;
-specification-only loss is unlocalized.

@@ -27,6 +27,7 @@ pub const Driver = struct {
     principle_calls: usize = 0,
     initial_source_review_calls: usize = 0,
     candidate_review_calls: usize = 0,
+    loss_calls: usize = 0,
     generation_calls: usize = 0,
     measurement_prefix: ?[]const u8 = null,
     source_gaps: bool = false,
@@ -192,9 +193,15 @@ pub const Driver = struct {
             if (current_request.id().purpose == .semantic_review) {
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
                 const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
+                const loss = std.mem.eql(u8, packet.resultDefinition().?.bytes, "loss");
                 const policy = input.value.object.get("subject").? == .string;
-                assertReviewPrompt(arena.allocator(), current_request.prepared().?, policy) catch unreachable;
-                if (policy) {
+                assertReviewPrompt(arena.allocator(), current_request.prepared().?, if (loss) "design/workflows/spec/support-loss.prompt.md" else if (policy) "design/workflows/spec/principle.prompt.md" else "design/workflows/spec/support.prompt.md") catch unreachable;
+                if (loss) {
+                    self.loss_calls += 1;
+                    std.testing.expect(!policy and input.value.object.contains("fixed_review")) catch unreachable;
+                    const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable;
+                    std.testing.expect(schema.value.object.get("oneOf") != null) catch unreachable;
+                } else if (policy) {
                     self.principle_calls += 1;
                     std.testing.expectEqualStrings("principle_consistency", input.value.object.get("subject").?.string) catch unreachable;
                     std.testing.expect(input.value.object.get("principles").?.array.items.len != 0) catch unreachable;
@@ -544,10 +551,10 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, fixed_
         const decision = std.meta.stringToEnum(@import("../domain/specification_support.zig").Source.Decision, tag).?;
         const gap = @import("../domain/specification_support_evidence.zig").questionRequired(decision.finding());
         try std.testing.expect(!properties.contains("provenance"));
-        try std.testing.expectEqual(@as(usize, if (gap or decision == .candidate_omission) 4 else 3), properties.count());
+        try std.testing.expectEqual(@as(usize, if (gap) 4 else 3), properties.count());
         try std.testing.expect(!properties.contains("decision"));
         try std.testing.expectEqual(gap, properties.contains("question"));
-        try std.testing.expectEqual(decision == .candidate_omission, properties.contains("loss"));
+        try std.testing.expect(!properties.contains("loss"));
         const required = variant.object.get("required").?.array.items;
         try std.testing.expectEqual(properties.count(), required.len);
         has_inconclusive = has_inconclusive or decision == .inconclusive;
@@ -656,12 +663,12 @@ fn assertOmissionMerge(allocator: std.mem.Allocator, before: *const data.View, a
     return authorization.retry.?;
 }
 
-fn assertReviewPrompt(a: std.mem.Allocator, request: *const @import("../domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest, principles: bool) !void {
-    const configured = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, if (principles) "design/workflows/spec/principle.prompt.md" else "design/workflows/spec/support.prompt.md", a, .unlimited);
+fn assertReviewPrompt(a: std.mem.Allocator, request: *const @import("../domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest, path: []const u8) !void {
+    const configured = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, a, .unlimited);
     var found = false;
     for (request.content) |part| if (part == .guidance) {
         found = found or std.mem.eql(u8, part.bytes(), configured);
     };
     try std.testing.expect(found);
-    try std.testing.expect(std.mem.indexOf(u8, configured, if (principles) "candidate_omission" else "principle_consistency") == null);
+    if (!std.mem.endsWith(u8, path, "support-loss.prompt.md")) try std.testing.expect(std.mem.indexOf(u8, configured, if (std.mem.endsWith(u8, path, "principle.prompt.md")) "candidate_omission" else "principle_consistency") == null);
 }

@@ -152,27 +152,37 @@
               },
               "content": {
                 "$ref": "#/$defs/content"
-              },
-              "generation_roles": {
-                "type": "array",
-                "items": {
-                  "enum": [
-                    "title",
-                    "description",
-                    "primary_goal",
-                    "primary_user_story",
-                    "entity_basis",
-                    "records"
-                  ]
-                },
-                "minItems": 1,
-                "maxItems": 6
               }
             },
             "required": [
               "claim_ids",
               "content"
             ],
+            "additionalProperties": false
+          },
+          "maxItems": 4294967295
+        },
+        "role_assignments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "claim_ids": {
+                "type": "array",
+                "items": {"$ref": "#/$defs/ordinal"},
+                "minItems": 1,
+                "maxItems": 4294967295
+              },
+              "generation_roles": {
+                "type": "array",
+                "items": {
+                  "enum": ["title", "description", "primary_goal", "primary_user_story", "entity_basis", "records"]
+                },
+                "minItems": 1,
+                "maxItems": 6
+              }
+            },
+            "required": ["claim_ids", "generation_roles"],
             "additionalProperties": false
           },
           "maxItems": 4294967295
@@ -184,6 +194,7 @@
       "required": [
         "claim_dispositions",
         "signals",
+        "role_assignments",
         "conflicts"
       ],
       "additionalProperties": false

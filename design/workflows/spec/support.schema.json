@@ -415,16 +415,12 @@
         },
         "detail": {
           "$ref": "#/$defs/required_detail_value"
-        },
-        "loss": {
-          "$ref": "#/$defs/loss"
         }
       },
       "required": [
         "kind",
         "source_ids",
-        "detail",
-        "loss"
+        "detail"
       ],
       "additionalProperties": false
     },

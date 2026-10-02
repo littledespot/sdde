@@ -1,7 +1,6 @@
-Use original source meaning: title names the feature, description explains its
-behavior, goal states its intended outcome, and story describes the user's need.
-Preserve obligations. Write behavior as prose strings. When permitted, place a
-listed preserved_tokens.claim_id as an exact_copy segment within meaningful text.
+Write each source_assignment field for its purpose using its bound claims and
+original sources. Preserve obligations. Write behavior as prose strings. Place a
+permitted preserved_tokens.claim_id as an exact_copy segment within meaningful text.
 Code samples remain context.
 For repair, return only the authorized replacement. The rejected candidate may
 omit intent: restore source-backed meaning within that scope, preserving correct

@@ -41,7 +41,7 @@ pub fn sourceChoices(allocator: std.mem.Allocator, sources: r.evidence.Inputs) s
 }
 
 /// The same facts constrain admission and describe evidence selection to a model.
-pub const selection_instruction: []const u8 = "Judge source meaning and select a loss location or source when needed. The bound subject and diagnostic location fix claim evidence; source-only omissions have no claim selection. Eligibility alone is not support.";
+pub const selection_instruction: []const u8 = "Select a source when needed. The bound subject fixes claim evidence; source-only omissions have no claim selection. Eligibility alone is not support.";
 pub const Minimum = enum { optional, claim_required, claim_or_source_required };
 pub fn minimum(finding: a.Finding) Minimum {
     return switch (finding) {

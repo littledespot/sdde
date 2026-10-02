@@ -41,6 +41,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             review: Review,
             revision: u64 = 1,
             working: bool = false,
+            pending_localization: ?u32 = null,
             origin: ?Origin,
             origins: []const ?Origin,
             last_repair: ?@import("atomic_repair.zig").Merge = null,
@@ -152,10 +153,57 @@ pub fn Contract(comptime purpose: Purpose) type {
             return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = all.state_id.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = slot } } }, .{ .semantic_review = .{ .bytes = slot } }, definition);
         }
 
+        /// A source omission's producer is a separate semantic assignment.
+        /// Its result cannot revise the already admitted finding.
+        pub fn packetForLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate) Error!*packets.Packet {
+            if (purpose != .source) return error.InvalidRequiredAuthority;
+            var arena: std.heap.ArenaAllocator = .init(allocator);
+            defer arena.deinit();
+            const scratch = arena.allocator();
+            const ordinal = candidate.pending_localization orelse return error.InvalidRequiredAuthority;
+            if (ordinal == 0 or ordinal > candidate.review.entries.len) return error.InvalidRequiredAuthority;
+            const finding = candidate.review.entries[ordinal - 1];
+            if (finding.requirement_ordinal != ordinal or finding.value.kind != .candidate_omission) return error.InvalidRequiredAuthority;
+            const ledger = try a.build(scratch, inputs);
+            if (ordinal > ledger.requirements.len) return error.InvalidRequiredAuthority;
+            const base = try packetFor(allocator, inputs, context, .{ .finding = ledger.requirements[ordinal - 1].seed.id });
+            defer packets.release(base);
+            const fixed = .{ .finding = .{ .kind = finding.value.kind, .detail = finding.value.detail, .source_ids = finding.value.source_ids } };
+            const contextual = try packets.withContext(@TypeOf(fixed), allocator, base, "fixed_review", fixed);
+            defer packets.release(contextual);
+            const slot = try std.fmt.allocPrint(scratch, "{s}-loss", .{base.unit().semantic_review.review_slot_id.bytes});
+            var unit = base.unit();
+            unit.semantic_review.review_slot_id.bytes = slot;
+            return packets.create(allocator, contextual.body(), unit, .{ .semantic_review = .{ .bytes = slot } }, .{ .bytes = "loss" });
+        }
+
+        pub fn collectLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: Collection, packet: *const packets.Packet, bytes: []const u8) Error!Collection {
+            if (purpose != .source) return error.InvalidRequiredAuthority;
+            const candidate = switch (prior) {
+                .accepted => |value| value.candidate,
+                .pending => |value| value,
+                .rejected => return error.InvalidRequiredAuthority,
+            };
+            const expected = try packetForLoss(allocator, inputs, context, candidate);
+            defer packets.release(expected);
+            if (!std.mem.eql(u8, expected.body(), packet.body()) or !@import("model_request_identity.zig").unitOwnerEql(expected.unit(), packet.unit()) or packet.purpose() != .semantic_review or !std.mem.eql(u8, expected.resultDefinition().?.bytes, (packet.resultDefinition() orelse return error.InvalidRequiredAuthority).bytes)) return error.InvalidRequiredAuthority;
+            const location = try @import("model_candidate_json.zig").decode(@import("source_omission.zig").Location, allocator, bytes);
+            const ordinal = candidate.pending_localization orelse return error.InvalidRequiredAuthority;
+            const ledger = try a.build(allocator, inputs);
+            const required = try admission.requirements(allocator, inputs, context.inputs, ledger.requirements[ordinal - 1].seed.id);
+            const entries = try allocator.dupe(Finding, candidate.review.entries);
+            entries[ordinal - 1].value = try source_model.bindLoss(required, entries[ordinal - 1].value, location);
+            var next = candidate;
+            next.review.entries = entries;
+            next.pending_localization = null;
+            next.revision = std.math.add(u64, candidate.revision, 1) catch return error.InvalidRequiredAuthority;
+            return if (next.working) validateWorking(allocator, inputs, context.inputs, next) else validate(allocator, inputs, context.inputs, next);
+        }
+
         pub fn nextSubject(allocator: std.mem.Allocator, inputs: a.Inputs, prior: ?Collection) Error!a.Id {
             const ledger = try a.build(allocator, inputs);
             const count: usize = if (prior) |value| switch (value) {
-                .pending => |candidate| if (candidate.working) candidate.review.entries.len else return error.InvalidRequiredAuthority,
+                .pending => |candidate| if (candidate.working and candidate.pending_localization == null) candidate.review.entries.len else return error.InvalidRequiredAuthority,
                 .accepted, .rejected => return error.InvalidRequiredAuthority,
             } else 0;
             if (count >= ledger.requirements.len) return error.InvalidRequiredAuthority;
@@ -186,6 +234,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .review = .{ .entries = entries },
                 .revision = if (previous) |old| std.math.add(u64, old.revision, 1) catch return error.InvalidRequiredAuthority else 1,
                 .working = true,
+                .pending_localization = if (purpose == .source and value.kind == .candidate_omission) try r.ordinal(length) else null,
                 .origin = if (previous) |old| old.origin else origin,
                 .origins = origins,
                 .occurrences = (if (previous) |old| old.occurrences.inserting(allocator, length, length) else (@import("repair_occurrences.zig").Set{}).inserting(allocator, 0, 0)) catch |err| switch (err) {

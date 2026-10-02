@@ -25,7 +25,8 @@ pub fn suffix(allocator: std.mem.Allocator, summary_count: usize) ![]const u8 {
             try result.appendSlice(allocator, summary);
         }
     }
-    try result.appendSlice(allocator, "  check-signals: { use: validate-reference-signal-proposals, on: { ok: check-conflicts, invalid: end.invalid, failed: end.failed } }\n" ++
+    try result.appendSlice(allocator, "  check-signals: { use: validate-reference-signal-proposals, on: { ok: check-roles, invalid: end.invalid, failed: end.failed } }\n" ++
+        "  check-roles: { use: validate-reference-role-assignments, on: { ok: check-conflicts, invalid: end.invalid, failed: end.failed } }\n" ++
         "  check-conflicts: { use: validate-reference-conflict-proposals, on: { ok: assign-records, invalid: end.invalid, failed: end.failed } }\n" ++
         "  assign-records: { use: assign-reference-reconciliation-identities, on: { ok: build-records, failed: end.failed } }\n" ++
         "  build-records: { use: build-reference-reconciliation-records, on: { ok: account-reconciliation, failed: end.failed } }\n" ++

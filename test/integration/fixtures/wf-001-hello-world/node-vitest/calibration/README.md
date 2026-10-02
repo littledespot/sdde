@@ -7,10 +7,10 @@ user-added UTC date/time requirement; all omit it and should receive a coverage
 finding under rubric revision 2. Their names do not imply current completeness.
 
 These are assistant-authored, supplied test specimens for
-[H-002/H-004/H-006](../../../../../design/harness/01-rubric-evaluator.md), not
+[H-002/H-004/H-006](../../../../../../design/harness/01-rubric-evaluator.md), not
 generated workflow outputs or golden specifications. The source remains the
-current [stories.md](../../reference/stories.md). The existing
-[spec.case.json](../spec.case.json) and [rubric](../rubric/spec.json) are reused.
+current [stories.md](../../../../../../test/e2e/wf-001-hello-world/reference/stories.md). The existing
+[spec.case.json](../../../../../../test/e2e/wf-001-hello-world/node-vitest/spec.case.json) and [rubric](../../../../../../test/e2e/wf-001-hello-world/node-vitest/rubric/spec.json) are reused.
 
 ## Review before grading
 
@@ -67,14 +67,14 @@ Run from the repository root, with an approved config and existing output folder
 ```sh
 zig build evaluate-spec -- \
   --case test/e2e/wf-001-hello-world/node-vitest/spec.case.json \
-  --spec test/e2e/wf-001-hello-world/node-vitest/calibration/faithful-a.md \
+  --spec test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/faithful-a.md \
   --config evaluation-input/judge.json \
   --output evaluation-output \
   --live
 ```
 
 `evaluation-input/judge.json` and `evaluation-output` are operator-selected
-examples, not new defaults. See the [configuration contract](../../../../../design/harness/evaluator.md#run).
+examples, not new defaults. See the [configuration contract](../../../../../../design/harness/evaluator.md#run).
 The calibration review belongs beside retained reports, not inside `spec.md` or
 the rubric. These reports demonstrate supplied-spec evaluation only.
 

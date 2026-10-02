@@ -10,14 +10,14 @@ pub const Action = struct {
         const slot = try std.fmt.allocPrint(allocator, "reconciliation-{d}", .{input.partition.id.ordinal});
         if (!std.mem.eql(u8, unit.reference_global.unit_slot_id.bytes, slot)) return error.InvalidReferenceReconciliation;
         var source: r.diagnostic.Source = .{ .origin = candidate.producer(&.{}) };
-        const collections: []const struct { path: []const u8, unit: r.diagnostic.Unit } = switch (input.purpose) {
+        const collections: []const struct { path: []const u8, unit: r.diagnostic.Unit, field: r.diagnostic.Field = .record } = switch (input.purpose) {
             .summary => &.{.{ .path = "statements", .unit = .summary }},
-            .global => &.{ .{ .path = "claim_dispositions", .unit = .dispositions }, .{ .path = "signals", .unit = .signals }, .{ .path = "conflicts", .unit = .conflicts } },
+            .global => &.{ .{ .path = "claim_dispositions", .unit = .dispositions }, .{ .path = "signals", .unit = .signals }, .{ .path = "role_assignments", .unit = .signals, .field = .relationship }, .{ .path = "conflicts", .unit = .conflicts } },
         };
         const fields = try allocator.alloc(r.diagnostic.FieldOrigin, collections.len);
         for (collections, fields) |collection, *field| field.* = .{
             .unit = collection.unit,
-            .field = .record,
+            .field = collection.field,
             .origin = candidate.producer(&.{collection.path}) orelse return error.InvalidReferenceReconciliation,
         };
         source.fields = fields;

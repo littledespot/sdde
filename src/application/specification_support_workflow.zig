@@ -137,6 +137,48 @@ pub const Collect = struct {
         unreachable;
     }
 };
+pub const CheckLocalization = struct {
+    pub const Action = @import("../actions/specification/check_specification_support_localization.zig").Action;
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid };
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        return .{ .outcome = switch (context.?.action.execute(try progress(&input.step.data))) {
+            .complete => .ok,
+            .next => .more,
+            .localize => .invalid,
+        }, .delta = .{} };
+    }
+};
+pub const BuildLossInput = struct {
+    pub const Action = @import("../actions/specification/build_specification_support_loss_input.zig").Action;
+    allocator: std.mem.Allocator,
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const current = try progress(&input.step.data);
+        if (current != .source) return error.OperationExecutionFailed;
+        return requests.publishPacket(self.allocator, self.action.execute(self.allocator, try inputs(&input.step.data, current), try spec.readContext(&input.step.data), current.source) catch return error.OperationExecutionFailed);
+    }
+};
+pub const CollectLoss = struct {
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };
+    pub const Action = @import("../actions/specification/collect_specification_support_loss.zig").Action;
+    allocator: std.mem.Allocator,
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const current = try progress(&input.step.data);
+        if (current != .source) return error.OperationExecutionFailed;
+        const packet = values.read(&input.step.data, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch return error.OperationExecutionFailed;
+        const handoff = try @import("model_candidate_handoff.zig").read(&input.step.data);
+        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(owner.arena.allocator(), try inputs(&input.step.data, current), try spec.readContext(&input.step.data), current.source, packet, handoff.body) catch {
+            owned.destroy(owner);
+            return error.OperationExecutionFailed;
+        };
+        return publish(.source, self.allocator, owner, current, result);
+    }
+};
 pub const Advance = struct {
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .failed };
     pub const Action = @import("../actions/specification/advance_specification_review.zig").Action;
@@ -166,6 +208,7 @@ pub const Apply = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const reviewed = owned.read(&input.step.data, schema, .support) catch return error.OperationExecutionFailed;
+        if (reviewed == .accepted and reviewed.accepted.candidate.pending_localization != null) return error.OperationExecutionFailed;
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
         owner.payload = .{ .inputs = self.action.execute(reviewed) catch return error.OperationExecutionFailed };

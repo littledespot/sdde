@@ -99,7 +99,7 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
         scopes.items;
     const payload = .{
         .unit = try unit(index),
-        .source_assignment = assigned,
+        .source_assignment = try binding.guidance(a, assigned),
         .brief = if (current.units[0]) |checked| checked.response.content.brief else null,
         .entities = if (current.units[2]) |checked| checked.response.content.entities else null,
         .claims = projected.claims,

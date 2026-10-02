@@ -30,6 +30,7 @@ pub const Payload = union(enum) {
     reconciliation_summary_ids: reconciliation.SummaryAssignment,
     reconciliation_dispositions: reconciliation.CheckedDispositions,
     reconciliation_signals: reconciliation.CheckedSignals,
+    reconciliation_roles: reconciliation.CheckedSignals,
     reconciliation_conflicts: reconciliation.CheckedConflicts,
     reconciliation_record_ids: reconciliation.RecordAssignments,
     reconciliation_records: reconciliation.Records,

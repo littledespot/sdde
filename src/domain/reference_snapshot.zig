@@ -117,7 +117,7 @@ fn validateRecords(allocator: std.mem.Allocator, value: Snapshot) !void {
     const v = @import("reference_reconciliation_validation.zig");
     const signals = try a.alloc(r.SignalProposal, records.signals.len);
     for (records.signals, signals, 0..) |signal, *proposal, index| {
-        proposal.* = .{ .claim_ids = signal.value.claim_ids, .content = @import("model_evidence.zig").content(signal.value.content), .generation_roles = signal.value.generation_roles };
+        proposal.* = .{ .claim_ids = signal.value.claim_ids, .content = @import("model_evidence.zig").content(signal.value.content) };
         const roles = signal.value.generation_roles;
         for (roles, 0..) |role, role_index| for (roles[0..role_index]) |prior_role| {
             if (role == prior_role) return error.InvalidReferenceSnapshot;

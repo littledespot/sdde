@@ -87,6 +87,9 @@ test "draft generation and selected repair retain original source meaning withou
             }
             try std.testing.expect(!input.object.contains("signals"));
             try std.testing.expect(input.object.get("claims").?.array.items.len != 0);
+            const assignment = input.object.get("source_assignment").?.object;
+            try std.testing.expectEqualStrings("A description of intended user-visible behavior.", assignment.get("description").?.object.get("purpose").?.string);
+            try std.testing.expectEqualDeep(good.provenance.claim_ids, (try @import("domain/model_candidate_json.zig").decode(@import("domain/specification_source_binding.zig").Guidance, a, try std.json.Stringify.valueAlloc(a, input.object.get("source_assignment").?, .{}))).brief.description.claim_ids);
         }
         // Added source context does not widen valid provenance or authorize lost content.
         try std.testing.expectError(error.InvalidReferenceReconciliation, provenance.select(a, fixture.context, .{ .claim_ids = &.{.{ .ordinal = 999 }}, .clarification_response_ids = &.{} }));
@@ -95,6 +98,84 @@ test "draft generation and selected repair retain original source meaning withou
         try std.testing.expectEqualDeep(good.provenance.claim_ids, validated.response.content.brief.title.provenance.claim_ids);
         try std.testing.expectEqualDeep(candidate.response.content.brief.description, recovered.response.content.brief.description);
         try std.testing.expectEqualDeep(candidate.response.content.brief.primary_goal, recovered.response.content.brief.primary_goal);
+    }
+}
+
+test "authoring assignments retain field purpose bound meaning and exact choices across source cases" {
+    const sessions = @import("domain/specification_session.zig");
+    const binding = @import("domain/specification_source_binding.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    const codec = @import("domain/model_candidate_json.zig");
+    const schema = @import("domain/model_result_schema.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const canonical = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.schema.json", a, .unlimited));
+    // Retained call 9's lost title, an unrelated business domain, a legitimate
+    // exact name, and an undecided source. These are packet/shape regressions;
+    // the exported requests permit separate live semantic comparison.
+    const cases = [_]struct { name: []const u8, source: []const u8, claim: []const u8 }{
+        .{ .name = "hello", .source = "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n- Must also output date and time in UTC\n", .claim = "The application must start successfully.When started, the application must display `Hello, World!`.The application must also output date and time in UTC." },
+        .{ .name = "renewal", .source = "# Library Loan Renewal\nA borrower may renew an eligible loan for fourteen days and sees `Loan renewed` and the new due date. Refused renewals retain the old due date.\n", .claim = "Borrowers renew eligible loans for fourteen days and see confirmation and the new due date. Refused renewals retain the old due date." },
+        .{ .name = "exact-name", .source = "The feature must be named `Ready!`. It lets an operator confirm readiness and displays that same exact message after confirmation.\n", .claim = "The feature is named Ready! and lets an operator confirm readiness, then displays the required readiness message." },
+        .{ .name = "missing-choice", .source = "# Renewal Policy\nBorrowers can renew eligible loans and see the new due date. The renewal duration is undecided and must be supplied by the owner.\n", .claim = "Borrowers renew eligible loans and see the new due date; the owner has not decided the renewal duration." },
+    };
+    try std.Io.Dir.cwd().createDirPath(std.testing.io, ".zig-cache/authoring-comparison");
+    for (cases) |example| {
+        var fixture = try Fixture.initContent(a, example.source, .business_exact_string, true, example.claim, 1);
+        defer fixture.deinit();
+        var current = try sessions.initialize(fixture.context.inputs.corpus.feature_id, fixture.context);
+        const good = try fixture.proposal(example.claim);
+        for (0..sessions.unit_count) |index| {
+            current.completed = index;
+            if (index == sessions.records_index) current.units[2] = (try g.validate(a, text.validator, fixture.context, .entities, .{ .content = .{ .entities = .{ .disposition = .not_applicable, .basis = good } } })).valid;
+            const bound = try sessions.currentBinding(a, current, fixture.context);
+            const before = try codec.encode(binding.Bound, a, bound);
+            const packet = try sessions.packet(std.testing.allocator, current, fixture.context);
+            defer packets.release(packet);
+            const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+            const assigned = try codec.decode(binding.Guidance, a, try std.json.Stringify.valueAlloc(a, body.get("source_assignment").?, .{}));
+            try std.testing.expectEqualStrings(before, try codec.encode(binding.Bound, a, bound));
+            try std.testing.expectEqualStrings(example.source, body.get("sources").?.array.items[0].object.get("text").?.string);
+            try std.testing.expectEqualStrings(example.claim, body.get("claims").?.array.items[0].object.get("content").?.object.get("model").?.object.get("segments").?.array.items[0].string);
+            switch (assigned) {
+                .brief => |brief| {
+                    try std.testing.expectEqualDeep(bound.brief.title.claim_ids, brief.title.claim_ids);
+                    try std.testing.expectEqualDeep(bound.brief.description.claim_ids, brief.description.claim_ids);
+                    try std.testing.expectEqualDeep(bound.brief.primary_goal.claim_ids, brief.primary_goal.claim_ids);
+                    try std.testing.expectEqualStrings("A name identifying the feature's purpose.", brief.title.purpose);
+                    try std.testing.expectEqualStrings("A description of intended user-visible behavior.", brief.description.purpose);
+                    try std.testing.expectEqualStrings("The intended user benefit.", brief.primary_goal.purpose);
+                    const selected = try schema.restrict(a, canonical.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+                    defer selected.release();
+                    if (body.get("preserved_tokens").?.array.items.len != 0) {
+                        const id = body.get("preserved_tokens").?.array.items[0].object.get("claim_id").?.integer;
+                        const wire = try std.fmt.allocPrint(a, "{{\"kind\":\"brief\",\"title\":{{\"value\":[{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}]}},\"description\":{{\"value\":[{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}]}},\"primary_goal\":{{\"value\":[{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}]}}}}", .{ id, id, id });
+                        // The failed live content is structurally legal, as is a
+                        // source-required exact title. Purpose is semantic, not a ban.
+                        try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = wire });
+                        const candidate = try g.parse(a, wire, bound);
+                        try std.testing.expect((try g.validate(a, text.validator, fixture.context, .brief, candidate)) == .valid);
+                    }
+                    const export_value = .{ .input = std.json.Value{ .object = body }, .prior_assignment = (try std.json.parseFromSlice(std.json.Value, a, before, .{})).value, .schema = selected.selected().modelBytes() };
+                    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = try std.fmt.allocPrint(a, ".zig-cache/authoring-comparison/{s}.json", .{example.name}), .data = try std.json.Stringify.valueAlloc(a, export_value, .{}) });
+                },
+                .primary_user_story => |story| {
+                    try std.testing.expectEqualDeep(bound.primary_user_story.claim_ids, story.claim_ids);
+                    try std.testing.expectEqualStrings("The actor, action and intended result.", story.purpose);
+                },
+                .entities => |entities| {
+                    try std.testing.expectEqualDeep(bound.entities.claim_ids, entities.claim_ids);
+                    try std.testing.expect(std.mem.indexOf(u8, entities.purpose, "business entities") != null);
+                },
+                .records => |records| {
+                    try std.testing.expectEqualDeep(bound.records.selection.claim_ids, records.claim_ids);
+                    try std.testing.expectEqualDeep(bound.records.signal, records.signal);
+                    try std.testing.expectEqualStrings("Required application behavior. Observable pass/fail outcomes.", records.purpose);
+                },
+            }
+        }
     }
 }
 
@@ -2826,6 +2907,7 @@ test "conflict review exact evidence survives repair and rejects corrupt readbac
     dispositions[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
     proposal.claim_dispositions = dispositions;
     proposal.signals = proposal.signals[2..];
+    proposal.role_assignments = &.{};
     proposal.conflicts = &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The outcomes disagree." } }} } }};
     const accounted = (try references.finish(a, global, proposal, fixture.context())).valid;
     const context: provenance.Context = .{ .inputs = fixture.inputs, .references = accounted, .registry = fixture.context().registry, .current = fixture.context().current };
@@ -3822,6 +3904,7 @@ fn introduceConflict(fixture: *Fixture) ![]const references.r.ClaimId {
         if (!affected) try signals.append(a, signal);
     }
     proposal.signals = try signals.toOwnedSlice(a);
+    proposal.role_assignments = &.{};
     proposal.conflicts = &.{.{ .claim_ids = claims, .kind = .mutually_exclusive, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The compatible requirements were incorrectly grouped as conflicting." } }} } }};
     const ctx: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry, .current = fixture.context.current };
     fixture.context.references = (try references.finish(a, original.input, proposal, ctx)).valid;
@@ -4123,12 +4206,32 @@ test "FIX002 diagnostic producer evidence survives insertion repair and readback
     const omission_wire = try model.encode(a, entries[0].value, rule);
     const omission_object = (try std.json.parseFromSlice(std.json.Value, a, omission_wire, .{})).value.object;
     try std.testing.expect(!omission_object.contains("provenance"));
-    try std.testing.expectEqualDeep(entries[0].value, try model.decode(a, omission_wire, rule));
+    const verdict = try model.decode(a, omission_wire, rule);
+    try std.testing.expectEqual(.unlocalized, verdict.loss);
+    try std.testing.expectEqualDeep(entries[0].value, try model.bindLoss(rule, verdict, .{ .reconciliation_conflict = conflict }));
     var echoed = omission_object;
     try echoed.put(a, "provenance", .{ .object = (try std.json.parseFromSlice(std.json.Value, a, "{\"claim_ids\":[1,2]}", .{})).value.object });
     try std.testing.expectError(error.InvalidJsonDocument, model.decode(a, try std.json.Stringify.valueAlloc(a, std.json.Value{ .object = echoed }, .{}), rule));
     const original = (try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), null)).accepted;
     try review.validateStored(a, original.inputs, fixture.context.inputs);
+    var awaiting_loss = original.candidate;
+    const unlocalized = try a.dupe(review.Finding, awaiting_loss.review.entries);
+    unlocalized[0].value.loss = .{ .unlocalized = .{} };
+    unlocalized[0].value.provenance.claim_ids = &.{};
+    awaiting_loss.review.entries = unlocalized;
+    awaiting_loss.pending_localization = 1;
+    const loss_packet = try review.packetForLoss(a, inputs, fixture.context, awaiting_loss);
+    defer @import("domain/model_input_packet.zig").release(loss_packet);
+    try std.testing.expectEqualStrings("loss", loss_packet.resultDefinition().?.bytes);
+    try std.testing.expectError(error.InvalidRequiredAuthority, review.nextSubject(a, inputs, .{ .pending = awaiting_loss }));
+    const located = try review.collectLoss(a, inputs, fixture.context, .{ .accepted = .{ .inputs = original.inputs, .candidate = awaiting_loss } }, loss_packet, try json.encode(loss.Location, a, .{ .reconciliation_conflict = conflict }));
+    try std.testing.expect(located == .accepted);
+    try std.testing.expect(located.accepted.candidate.pending_localization == null);
+    try std.testing.expectEqualDeep(original.candidate.review.entries[0].value, located.accepted.candidate.review.entries[0].value);
+    const wrong_loss = try review.collectLoss(a, inputs, fixture.context, .{ .accepted = .{ .inputs = original.inputs, .candidate = awaiting_loss } }, loss_packet, try json.encode(loss.Location, a, .{ .reconciliation_conflict = .{ .ordinal = 999 } }));
+    try std.testing.expect(wrong_loss == .rejected);
+    try std.testing.expectEqual(.candidate_omission, wrong_loss.rejected.candidate.?.review.entries[0].value.kind);
+    try std.testing.expectEqual(.invalid_loss, wrong_loss.rejected.rejection.selected().?.evidence.?.issue);
     const missing = (try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries[1..] }), null)).rejected;
     const insert = try repair.authorize(a, inputs, fixture.context, missing);
     const inserted = (try repair.merge(a, inputs, fixture.context, missing.candidate.?, insert, .{ .finding = entries[0].value }, null)).accepted;

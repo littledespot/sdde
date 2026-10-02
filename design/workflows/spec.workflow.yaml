@@ -17,6 +17,7 @@ resources:
   reconciliation-global: spec/reconciliation-global.composition.json
   dispositions-prompt: spec/reconciliation-dispositions.prompt.md
   signals-prompt: spec/reconciliation-signals.prompt.md
+  roles-prompt: spec/reconciliation-roles.prompt.md
   conflicts-prompt: spec/reconciliation-conflicts.prompt.md
   generation-prompt: spec/generation.prompt.md
   entities-prompt: spec/entities.prompt.md
@@ -24,6 +25,7 @@ resources:
   generation-schema: spec/generation.schema.json
   repair-prompt: spec/repair.prompt.md
   support-prompt: spec/support.prompt.md
+  loss-prompt: spec/support-loss.prompt.md
   principle-prompt: spec/principle.prompt.md
   support-schema: spec/support.schema.json
 steps:
@@ -475,6 +477,16 @@ subgraphs:
         on: {ok: release-signals, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       release-signals:
         use: retire-model-request
+        on: {ok: roles, failed: end.failed}
+      roles:
+        call: composition-request
+        with:
+          prompt: roles-prompt
+          composition-part: roles
+          retry-limit: 2
+        on: {ok: release-roles, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      release-roles:
+        use: retire-model-request
         on: {ok: conflicts, failed: end.failed}
       conflicts:
         call: composition-request
@@ -527,7 +539,10 @@ subgraphs:
         on: {ok: validate-signals, invalid: authorize-dispositions-repair, failed: end.failed}
       validate-signals:
         use: validate-reference-signal-proposals
-        on: {ok: validate-conflicts, invalid: authorize-signals-repair, failed: end.failed}
+        on: {ok: validate-roles, invalid: authorize-signals-repair, failed: end.failed}
+      validate-roles:
+        use: validate-reference-role-assignments
+        on: {ok: validate-conflicts, invalid: end.invalid, failed: end.failed}
       validate-conflicts:
         use: validate-reference-conflict-proposals
         on: {ok: assign-records, invalid: authorize-conflicts-repair, failed: end.failed}
@@ -638,13 +653,30 @@ subgraphs:
         on: {ok: collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       collect:
         use: collect-specification-support
-        on: {ok: release, more: release-more, invalid: authorize, failed: end.failed}
+        on: {ok: release, more: release, invalid: authorize, failed: end.failed}
       release:
         call: release-request
-        on: {ok: end.ok, failed: end.failed}
-      release-more:
+        on: {ok: check-localization, failed: end.failed}
+      check-localization:
+        use: check-specification-support-localization
+        on: {ok: end.ok, more: input, invalid: loss-input}
+      loss-input:
+        use: build-specification-support-loss-input
+        on: {ok: loss-model, failed: end.failed}
+      loss-model:
+        call: model-request
+        with:
+          prompt: loss-prompt
+          schema: support-schema
+          selection: input
+          retry-limit: 1
+        on: {ok: loss-collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      loss-collect:
+        use: collect-specification-support-loss
+        on: {ok: loss-release, more: loss-release, invalid: end.invalid, failed: end.failed}
+      loss-release:
         call: release-request
-        on: {ok: input, failed: end.failed}
+        on: {ok: check-localization, failed: end.failed}
       authorize:
         use: authorize-specification-support-repair
         on: {ok: retire, more: merge, blocked: end.blocked, failed: end.failed}
@@ -669,7 +701,7 @@ subgraphs:
         use: merge-specification-support-repair
         with:
           retry-limit: 2
-        on: {ok: release, more: release-more, invalid: authorize, failed: end.failed}
+        on: {ok: release, more: release, invalid: authorize, failed: end.failed}
   generate-specification:
     start: initialize-specification
     steps:

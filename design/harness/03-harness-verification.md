@@ -144,16 +144,16 @@ are separate evidence classes; both are needed, and neither replaces the other.
 ### Required work
 
 - First exercise the ordinary full workflow and evaluator handoff with fake providers.
-- Then, with explicit credentials/network/spend approval, generate the original Hello
-  World spec using the selected real generation provider and grade it with the selected
-  OpenAI or Bedrock judge and checked-in rubric.
+- Then, with explicit credentials/network/spend approval, generate a specification
+  for an explicitly selected live case using its configured provider and grade it
+  with the selected OpenAI or Bedrock judge and that case's rubric.
 - Capture the generated `spec.md`, sidecar, relevant workflow outcome and evaluator
   report.
 - Do not substitute a hand-authored spec, fake generation or a preselected best run in
   the live milestone's evidence.
 - Exercise success, malformed generation, real missing/conflicting authority,
   clarification handling, cancelled/failed execution and judge failure.
-- Use separate negative fixtures rather than silently modifying `stories.md`.
+- Use separate negative fixtures rather than silently modifying selected sources.
 - Prove complete rerun replacement of registered replaceable outputs and unresolved
   clarification forms at the same IDs/paths, byte-identical user-resolved form
   preservation, and rejection of stale-artifact evaluation after a failed/blocked rerun.
@@ -163,7 +163,7 @@ are separate evidence classes; both are needed, and neither replaces the other.
 ### Acceptance criteria
 
 - [ ] Actual live generation followed by the selected provider's rubric judgment completes for
-  the unchanged Hello World case; report all findings, including low scores.
+  an explicitly selected case; report all findings, including low scores.
 - [ ] A clarification-required result is reported honestly but does not stand
   in for the requested successful-generation-and-evaluation milestone.
 - [ ] Correct source behaviors and unsupported additions are assessed through
@@ -214,7 +214,7 @@ complete after H-017. Documentation correction can start immediately.
 - [ ] Removed/obsolete documentation and code have no competing fallback,
   compatibility shim, unused entry point or duplicate rubric authority.
 
-- Current harness commands are `e2e-spec`, `evaluate-spec`, `test-e2e-harness`,
+- Current harness commands are `e2e-spec`, `evaluate-spec`, `test-integration`,
   `test-rubric-evaluator`, `build-e2e-harness`, `build-rubric-evaluator`,
   `smoke-e2e-harness` and `smoke-rubric-evaluator`.
 - `zig build verify` includes the offline mechanical and smoke checks.

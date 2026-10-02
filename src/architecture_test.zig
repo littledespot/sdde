@@ -1869,7 +1869,8 @@ test "reconciliation is YAML visible capability free and preserves closed candid
     try std.testing.expectEqual(@as(i64, 2), native.Partition.parameters[0].integer_min);
     try std.testing.expect(native.Partition.parameters[0].required);
     try std.testing.expectEqual(@as(usize, 4), @typeInfo(r.Disposition).@"enum".fields.len);
-    try std.testing.expectEqual(@as(usize, 1), @typeInfo(@FieldType(r.ConflictProposal, "resolution")).@"enum".fields.len);
+    try std.testing.expect(!@hasField(r.ConflictProposal, "resolution"));
+    try std.testing.expectEqual(@as(usize, 1), @typeInfo(@FieldType(r.ValidatedConflict, "resolution")).@"enum".fields.len);
     try std.testing.expect(!@hasField(r.SignalProposal, "id"));
     try std.testing.expect(!@hasField(r.ConflictProposal, "id"));
     try std.testing.expect(!@hasField(r.SummaryProposal, "partition_id"));

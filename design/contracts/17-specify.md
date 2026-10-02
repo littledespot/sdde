@@ -126,11 +126,14 @@ Typed content covers these concerns; each concern does not require a separate ca
   follows existing repair/failure routing, never missing-user-information routing.
 - Focused source review sends one bound requirement at a time. Its closed response
   contains the semantic finding, explanation, required question and genuinely
-  selectable evidence. For a positive finding with a fixed claim set, the engine
+  selectable source evidence. A candidate-omission finding triggers a separate
+  loss-location call with the finding fixed; that call cannot revise the verdict.
+  The engine validates the location and complete review before repair or publication.
+  For a positive finding with a fixed claim set, the engine
   supplies that set from the current requirement rule; the response omits
   `provenance` and is rejected if it echoes it. The engine constructs invariant
-  empty clarification-response IDs and unlocalized loss. Selectable claim and
-  source choices remain explicit. For candidate omission, the selected loss
+  empty clarification-response IDs and unlocalized loss. Selectable source
+  choices remain explicit. For candidate omission, the separately selected loss
   location determines whether its diagnostic claims are constructed or selected;
   the closed decoder enforces that conditional rule before admission. The full
   canonical review is validated before it contributes to clarification, repair
@@ -142,9 +145,15 @@ Typed content covers these concerns; each concern does not require a separate ca
   free-form prose.
 
 The approved ADR 0020 successor binds source-obligation groups from validated
-reconciliation signals before model authoring. Feature-level fields have
-explicit group-role assignments; record authoring runs per bound group and may
-return several requirements. The engine constructs canonical `S` and derives
+reconciliation signals before model authoring. Signal grouping and authoring-role
+assignment are separate model calls. Feature-level fields have explicit
+group-role assignments; record authoring runs per bound group and may
+return several requirements. Each generation and repair packet presents the
+bound fields' purposes from the shared requirement descriptions beside their
+claim IDs. Claim meaning and citations appear once in the evidence catalogue;
+original sources remain available to identify extraction or assignment loss.
+This presentation does not reselect support or establish semantic adequacy.
+The engine constructs canonical `S` and derives
 exact dependencies and citations. Generation, source-review and repair
 responses contain no `provenance`; unbound or stale assignments block or return
 to source reconciliation, never to a user missing-information form. Completed

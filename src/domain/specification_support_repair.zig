@@ -194,7 +194,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 .insert => try candidate.occurrences.inserting(a, target.index, candidate.review.entries.len),
                 .delete => try candidate.occurrences.deleting(a, target.index, candidate.review.entries.len),
             };
-            const next: review.Candidate = .{ .omission_conflict_claims = candidate.omission_conflict_claims, .review = .{ .entries = try entries.toOwnedSlice(a) }, .revision = merged.revision_after, .working = candidate.working, .origin = candidate.origin, .origins = try origins.toOwnedSlice(a), .last_repair = merged, .occurrences = occurrences };
+            const next: review.Candidate = .{ .omission_conflict_claims = candidate.omission_conflict_claims, .review = .{ .entries = try entries.toOwnedSlice(a) }, .revision = merged.revision_after, .working = candidate.working, .pending_localization = if (purpose == .source and replacement != null and replacement.? == .finding and replacement.?.finding.kind == .candidate_omission) target.ordinal else candidate.pending_localization, .origin = candidate.origin, .origins = try origins.toOwnedSlice(a), .last_repair = merged, .occurrences = occurrences };
             return if (candidate.working) review.validateWorking(a, inputs, context.inputs, next) else review.validate(a, inputs, context.inputs, next);
         }
         fn valueAt(candidate: review.Candidate, index: usize, kind: std.meta.Tag(Replacement)) ?Replacement {

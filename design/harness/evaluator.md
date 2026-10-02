@@ -232,7 +232,7 @@ For scored criteria, the percentage is:
 - Human review and live calibration remain open under H-002/H-016.
 
 - The [calibration set and review
-  procedure](../../test/e2e/wf-001-hello-world/node-vitest/calibration/README.md)
+  procedure](../../test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/README.md)
   provide equivalent wording plus missing behavior, changed greeting, unsupported scope
   and embedded-instruction specimens.
 - They use this same evaluator and rubric; reviewer expectations are not included in

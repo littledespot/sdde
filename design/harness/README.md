@@ -6,7 +6,7 @@ calibration and broader acceptance remain open. **Reviewed:** 2026-09-15 (docume
 
 ## User-directed outcome
 
-- Run the ordinary `spec.workflow.yaml` against the Hello World reference, then evaluate
+- Run the ordinary selected Spec workflow against an explicitly supplied reference, then evaluate
   the **actual generated `spec.md`** using the **selected OpenAI or Bedrock API and a
   rubric**.
 - Report criterion-level judgments, scores, evidence and explanations.
@@ -25,8 +25,9 @@ calibration and broader acceptance remain open. **Reviewed:** 2026-09-15 (docume
 
 ## Scope and authority
 
-- Initial case: `test/e2e/wf-001-hello-world/node-vitest`, using its sibling
-  [stories.md](../../test/e2e/wf-001-hello-world/reference/stories.md).
+- An explicitly selectable live case is `test/e2e/wf-001-hello-world/node-vitest`,
+  using its sibling [stories.md](../../test/e2e/wf-001-hello-world/reference/stories.md).
+  Offline calibration specimens remain under `test/integration/fixtures/`.
 - Evaluator providers: OpenAI Responses or Bedrock InvokeModel, explicitly selected through
   the internal test environment.
 - The workflow's generation provider and the evaluator's provider/model are separate
@@ -88,7 +89,7 @@ calibration and broader acceptance remain open. **Reviewed:** 2026-09-15 (docume
 2. **Runnable Specify:** finish only its production dependencies and connect the
    ordinary YAML workflow to the isolated-project harness. Fake-provider tests
    prove integration before authorized live generation.
-3. **Requested milestone:** run real Spec generation for the original reference,
+3. **Requested milestone:** run real Spec generation for an explicitly selected case,
    grade that run's output through the selected provider, and produce an inspectable report.
    A low score is a valid evaluation result, not an excuse to hide the run.
 
@@ -138,7 +139,7 @@ calibration and broader acceptance remain open. **Reviewed:** 2026-09-15 (docume
   criterion evidence; this is clearly labelled evaluator-only evidence.
 - [ ] The ordinary Spec YAML executes through the production engine with fake
   model observations, without a fixture-specific execution path.
-- [ ] The original Hello World case completes real generation, and the selected provider grades
+- [ ] An explicitly selected live case completes real generation, and the selected provider grades
   the exact `spec.md` produced by that execution.
 - [x] Reports distinguish workflow failure/clarification, evaluator error,
   completed low-scoring evaluation and completed satisfactory evaluation.

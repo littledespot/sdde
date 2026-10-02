@@ -462,10 +462,11 @@ native collection validation permits authority advancement.
 - A bounded lower-level partition returns a `ReferenceReconciliationSummaryProposal`.
   The engine derives its enclosing member IDs from the supplied partition; model-authored
   statements select supporting claims, and validators require complete partition coverage.
-- The final global partition returns one `ReferenceReconciliationProposal`: total
-  claim-disposition proposals plus bounded signal and conflict proposals over the complete
-  represented claim set. Signal `generation_roles` are semantic assignments; the engine
-  validates their allowed uses and resolves selected claims through the reference ledger.
+- The final global partition assembles one `ReferenceReconciliationProposal` from
+  separate disposition, signal-grouping, authoring-role, and conflict responses.
+  Role assignments select an already grouped signal by its exact claim IDs; they
+  cannot change its content or grouping. The engine validates their allowed uses
+  and resolves selected claims through the reference ledger.
   Conflict resolution is `unresolved` until a separate authorized decision exists, so
   model conflict proposals omit that fixed status and the engine constructs it.
 - Neither variant can redefine claim/token content or mint canonical
@@ -797,8 +798,10 @@ snapshot contracts rather than silently supplying a missing binding. ADR 0020
 governs the derived exact-reference lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
-**Source-review response contract (27 September 2026):** the model chooses a
-semantic finding, detail, and any genuinely selectable source or loss location;
+**Source-review response contract (28 September 2026):** the model chooses a
+semantic finding, detail, and any genuinely selectable source. When the finding
+is candidate omission, a separate call selects only a loss location against that
+fixed finding;
 every selected generation, source-review and repair schema rejects `provenance`.
 The engine constructs the canonical claim selection from the current bound
 source group, candidate evidence or selected diagnostic producer. A selected
