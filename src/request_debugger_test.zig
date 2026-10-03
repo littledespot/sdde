@@ -616,6 +616,25 @@ test "source snapshots reject unknown fields invalid paths broken chains and for
     try std.testing.expect(!base.matches("spec", "generation-invoke", "foreign"));
 }
 
+test "source snapshots retain static JSON guidance with its prompt resource kind" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const Snapshot = @import("domain/request_source_snapshot.zig").Snapshot;
+    var snapshot = sourceFixture();
+    const context: @import("domain/request_source_snapshot.zig").Resource = .{
+        .role = .context,
+        .alias = "field-context",
+        .kind = .prompt,
+        .document = .{ .path = "prompts/fields.json", .content = "{\"answer\":\"One source-grounded fact.\"}", .redacted = false },
+    };
+    snapshot.resources = &.{ snapshot.resources[0], context, snapshot.resources[1] };
+    const bytes = try std.json.Stringify.valueAlloc(a, snapshot, .{});
+    try std.testing.expectEqualDeep(snapshot, try Snapshot.decode(a, bytes));
+    const wrong_kind = try std.mem.replaceOwned(u8, a, bytes, "\"alias\":\"field-context\",\"kind\":\"prompt\"", "\"alias\":\"field-context\",\"kind\":\"data\"");
+    try std.testing.expectError(error.InvalidJsonDocument, Snapshot.decode(a, wrong_kind));
+}
+
 // Exercise capture, fragmentation, graph release, inspection and replay through
 // the same shared owners for whole, named, composed and narrowed request shapes.
 test "selected request schemas survive capture and graph release without whole-schema fallback" {

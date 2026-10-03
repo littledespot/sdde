@@ -259,6 +259,11 @@ control. OpenAI rubric evaluation remains outside this amendment.
   (§9; ADR 0012). Bindings derive it from their immutable catalogue entry rather than
   retaining another selector. Workflow response-mode overrides reject; schemas remain workflow-owned.
 - Large resources are declared once and referenced by concise local IDs.
+- Request preparation may select an optional `context` prompt resource, including
+  JSON field guidance. It precedes task guidance in static developer content;
+  current sources and repair evidence remain dynamic user content. Both initial
+  preparation paths, protocol corrections and diagnostic source capture retain
+  that exact selection. It adds no caching behavior or schema authority.
 - The compiler captures and validates every declared resource before execution; there is no
   packaged route descriptor, prompt, schema, slot assignment, or fallback.
 - Under ADR 0012, later YAML operations consume the same immutable request through their typed

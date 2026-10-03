@@ -8,6 +8,7 @@ start: toolchain
 resources:
   protocol-prompt: spec/protocol.prompt.md
   extraction-content-prompt: spec/extraction-content.prompt.md
+  extraction-context: spec/extraction.context.json
   extraction-classifications-prompt: spec/extraction-classifications.prompt.md
   extraction-schema: spec/extraction.schema.json
   extraction-composition: spec/extraction.composition.json
@@ -113,8 +114,7 @@ steps:
     use: authorize-source-omission-repair
     on: {ok: repair-extraction, more: repair-reconciliation, invalid: end.invalid, failed: end.failed}
   repair-extraction:
-    call: repair-source-candidate
-    with: {schema: extraction-schema}
+    call: repair-source-extraction
     on: {ok: merge-source-extraction, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
   merge-source-extraction:
     use: merge-source-extraction-repair
@@ -319,11 +319,17 @@ subgraphs:
         with: {composition: extraction-composition}
         on: {ok: content, failed: end.failed}
       content:
-        call: composition-request
+        use: prepare-model-request
         with:
+          slot: spec_generation
+          protocol-prompt: protocol-prompt
+          context: extraction-context
           prompt: extraction-content-prompt
           composition-part: content
-          retry-limit: 2
+        on: {ok: content-request, failed: end.failed}
+      content-request:
+        call: composition-request-body
+        with: {retry-limit: 2}
         on: {ok: release-content, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       release-content:
         use: retire-model-request
@@ -360,13 +366,8 @@ subgraphs:
         use: build-reference-text-repair-input
         on: {ok: text-repair, failed: end.failed}
       text-repair:
-        call: model-request
-        with:
-          slot: repair
-          prompt: repair-prompt
-          schema: extraction-schema
-          selection: input
-          retry-limit: 1
+        call: repair-extraction-request
+        with: {retry-limit: 1}
         on: {ok: parse-text-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse-text-repair:
         use: parse-reference-text-repair
@@ -390,13 +391,8 @@ subgraphs:
         use: build-reference-extraction-repair-input
         on: {ok: request, failed: end.failed}
       request:
-        call: model-request
-        with:
-          slot: repair
-          prompt: repair-prompt
-          schema: extraction-schema
-          selection: input
-          retry-limit: 1
+        call: repair-extraction-request
+        with: {retry-limit: 1}
         on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       parse-repair:
         use: parse-reference-extraction-repair
@@ -877,8 +873,7 @@ subgraphs:
         use: authorize-source-omission-repair
         on: {ok: ex, more: rc, invalid: end.invalid, failed: end.failed}
       ex:
-        call: repair-source-candidate
-        with: {schema: extraction-schema}
+        call: repair-source-extraction
         on: {ok: merge-extraction, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       merge-extraction:
         use: merge-upstream-extraction-repair
@@ -892,6 +887,19 @@ subgraphs:
         use: merge-upstream-reconciliation-repair
         with: {retry-limit: 1}
         on: {more: end.more, failed: end.failed}
+  repair-source-extraction:
+    start: input
+    steps:
+      input:
+        use: build-source-omission-repair-input
+        on: {ok: request, failed: end.failed}
+      request:
+        call: repair-extraction-request
+        with: {retry-limit: 1}
+        on: {ok: result, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      result:
+        call: source-repair-result
+        on: {ok: end.ok, failed: end.failed}
   repair-source-candidate:
     start: input
     steps:
@@ -906,7 +914,13 @@ subgraphs:
           schema: {param: schema}
           selection: input
           retry-limit: 1
-        on: {ok: parse, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: result, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      result:
+        call: source-repair-result
+        on: {ok: end.ok, failed: end.failed}
+  source-repair-result:
+    start: parse
+    steps:
       parse:
         use: parse-source-omission-repair
         on: {ok: release, failed: end.failed}
@@ -922,6 +936,23 @@ subgraphs:
       validate:
         use: validate-assembled-json
         on: {ok: end.ok, failed: end.failed}
+  repair-extraction-request:
+    start: prepare
+    steps:
+      prepare:
+        use: prepare-model-request
+        with:
+          slot: repair
+          protocol-prompt: protocol-prompt
+          context: extraction-context
+          prompt: repair-prompt
+          result-schema: extraction-schema
+          result-selection: input
+        on: {ok: request, failed: end.failed}
+      request:
+        call: model-request-body
+        with: {retry-limit: {param: retry-limit}}
+        on: {ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
   model-request:
     start: prepare
     steps:
@@ -949,6 +980,13 @@ subgraphs:
           prompt: {param: prompt}
           composition-part: {param: composition-part}
         on: {ok: request, failed: end.failed}
+      request:
+        call: composition-request-body
+        with: {retry-limit: {param: retry-limit}}
+        on: {ok: end.ok, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+  composition-request-body:
+    start: request
+    steps:
       request:
         call: model-request-body
         with: {retry-limit: {param: retry-limit}}

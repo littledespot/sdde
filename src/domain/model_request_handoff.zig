@@ -9,6 +9,7 @@ const composition = @import("json_composition_runtime.zig");
 const retry = @import("model_protocol_retry.zig");
 pub const Input = union(enum) { resource: compilation.CompiledResource, packet: *const packets.Packet };
 pub const ResultSelection = enum { resource, input };
+pub const ContentBuffer = [3]provider.ModelVisibleContent;
 
 /// One immutable association, carried by typed pipeline keys. Canonical IDs are
 /// retained through their ledger owner, never cloned into a second authority.
@@ -18,6 +19,7 @@ pub const Request = opaque {
         const value = storage(self);
         return .{
             .prompt = value.prompt.id,
+            .context = if (value.context) |resource| resource.id else null,
             .protocol_prompt = if (value.protocol_prompt) |resource| resource.id else null,
             .result = value.result.id,
             .input = if (value.input) |input_value| switch (input_value) {
@@ -58,13 +60,19 @@ pub const Request = opaque {
     }
 
     /// Project original immutable inputs for initial calls and corrections.
-    pub fn content(self: *const Request, buffer: *[2]provider.ModelVisibleContent) []const provider.ModelVisibleContent {
-        buffer[0] = .{ .guidance = self.prompt() };
-        if (self.input()) |bytes| {
-            buffer[1] = .{ .user = bytes };
-            return buffer;
+    pub fn content(self: *const Request, buffer: *ContentBuffer) []const provider.ModelVisibleContent {
+        var count: usize = 0;
+        if (storage(self).context) |resource| {
+            buffer[count] = .{ .guidance = resource.content.prompt };
+            count += 1;
         }
-        return buffer[0..1];
+        buffer[count] = .{ .guidance = self.prompt() };
+        count += 1;
+        if (self.input()) |bytes| {
+            buffer[count] = .{ .user = bytes };
+            count += 1;
+        }
+        return buffer[0..count];
     }
 
     pub fn packet(self: *const Request) ?*const packets.Packet {
@@ -118,6 +126,7 @@ pub const Request = opaque {
 
 pub const SourceResources = struct {
     prompt: @import("workflow.zig").WorkflowResourceId,
+    context: ?@import("workflow.zig").WorkflowResourceId,
     protocol_prompt: ?@import("workflow.zig").WorkflowResourceId,
     result: @import("workflow.zig").WorkflowResourceId,
     input: ?@import("workflow.zig").WorkflowResourceId,
@@ -129,6 +138,7 @@ const Storage = struct {
     id: *const identity.ModelRequestId,
     binding: binding_module.ValidatedProviderModelBinding,
     prompt: compilation.CompiledResource,
+    context: ?compilation.CompiledResource = null,
     protocol_prompt: ?compilation.CompiledResource,
     result: compilation.CompiledResource,
     result_definition: ?@import("model_result_schema.zig").DefinitionId = null,
@@ -149,6 +159,7 @@ pub const Error = packets.Error || preparation.ValidationError;
 pub const Selection = struct {
     binding: binding_module.ValidatedProviderModelBinding,
     prompt: compilation.CompiledResource,
+    context: ?compilation.CompiledResource = null,
     result: compilation.CompiledResource,
     input: ?Input,
     protocol_prompt: ?compilation.CompiledResource,
@@ -164,7 +175,7 @@ pub const Selection = struct {
     }
 
     pub fn bind(self: Selection, allocator: std.mem.Allocator, assignment: identity.Assignment) Error!*Request {
-        return assign(allocator, assignment.owner, assignment.model_request_id, self.binding, self.prompt, self.result, self.input, self.protocol_prompt, self.result_selection, self.composition);
+        return assign(allocator, assignment.owner, assignment.model_request_id, self);
     }
 };
 
@@ -192,22 +203,29 @@ pub fn prepare(allocator: std.mem.Allocator, current: *const identity.ModelReque
     const checked = try validated(assigned, evidence);
     errdefer destroy(checked);
     var input_id: [32]u8 = undefined;
-    var parts: [2]provider.ModelVisibleContent = undefined;
+    var parts: ContentBuffer = undefined;
     var owned = try preparation.build(allocator, try checked.buildSource(&input_id), checked.content(&parts));
     errdefer owned.deinit();
     const built = try prepared(checked, owned, null);
     return .{ .owner = assignment.owner, .assigned = assigned, .validated = checked, .request = built };
 }
 
-pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *const identity.ModelRequestId, selected: binding_module.ValidatedProviderModelBinding, prompt: compilation.CompiledResource, result: compilation.CompiledResource, input: ?Input, protocol_prompt: ?compilation.CompiledResource, selection: ResultSelection, part_binding: ?composition.Binding) Error!*Request {
+pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *const identity.ModelRequestId, selected: Selection) Error!*Request {
+    const prompt = selected.prompt;
+    const result = selected.result;
+    const input = selected.input;
+    const protocol_prompt = selected.protocol_prompt;
+    const selection = selected.result_selection;
+    const part_binding = selected.composition;
+    if (selected.context) |resource| if (resource.content != .prompt) return error.ModelRequestAssociationInvalid;
     if (protocol_prompt) |resource| if (resource.content != .prompt) return error.ModelRequestAssociationInvalid;
     if (prompt.content != .prompt or result.content != .result_schema or
         (input != null and input.? == .resource and input.?.resource.content != .data) or
         !identity.ledger(ledger_owner).containsRequest(id) or
-        !id.model_operation_id.eql(selected.operation_id)) return error.ModelRequestAssociationInvalid;
+        !id.model_operation_id.eql(selected.binding.operation_id)) return error.ModelRequestAssociationInvalid;
     if (input) |value| if (value == .packet) {
         const current = identity.ledger(ledger_owner);
-        _ = identity.validateBinding(current, current.revision(), id, value.packet.unit(), selected.operation_id, value.packet.purpose()) catch return error.ModelRequestAssociationInvalid;
+        _ = identity.validateBinding(current, current.revision(), id, value.packet.unit(), selected.binding.operation_id, value.packet.purpose()) catch return error.ModelRequestAssociationInvalid;
     };
     var bound_result = result;
     if (part_binding) |part| {
@@ -215,7 +233,7 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
             !std.mem.eql(u8, result.id.bytes, part.plan.resultAlias().bytes) or
             !part.epoch.eql(identity.ledger(ledger_owner).stageRunEpochId())) return error.ModelRequestAssociationInvalid;
         const current = identity.ledger(ledger_owner);
-        _ = identity.validateBinding(current, current.revision(), id, part.base.unit(), selected.operation_id, part.base.purpose()) catch return error.ModelRequestAssociationInvalid;
+        _ = identity.validateBinding(current, current.revision(), id, part.base.unit(), selected.binding.operation_id, part.base.purpose()) catch return error.ModelRequestAssociationInvalid;
     }
     if (selection == .input) {
         const packet = input orelse return error.ModelRequestAssociationInvalid;
@@ -234,8 +252,9 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         .allocator = allocator,
         .ledger_owner = ledger_owner,
         .id = id,
-        .binding = selected,
+        .binding = selected.binding,
         .prompt = prompt,
+        .context = selected.context,
         .protocol_prompt = protocol_prompt,
         .result = bound_result,
         .result_definition = if (selection == .input) input.?.packet.resultDefinition() else null,

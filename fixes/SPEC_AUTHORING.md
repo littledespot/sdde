@@ -15,11 +15,21 @@ and also lost required role coverage. Those producer prompt experiments were not
 retained. Lost meaning must be repaired at its producer, without changing valid
 generation bindings or treating missing generated prose as a user decision.
 
-**3 October guidance update:** the [canonical extraction prompt](../design/workflows/spec/extraction-content.prompt.md)
-now explicitly includes identity, goals, obligations, conditions and constraints,
+**Earlier 3 October guidance update:** the [canonical extraction prompt](../design/workflows/spec/extraction-content.prompt.md)
+was revised to include identity, goals, obligations, conditions and constraints,
 while shrinking from 75 to 67 words. Citation rules, separate token classification
 and the response contract remain intact. This revision has no live comparison or
 E2E quality evidence yet; the observations below describe earlier prompt variants.
+
+**3 October JSON context update:** [extraction.context.json](../design/workflows/spec/extraction.context.json)
+defines the meanings of `kind`, `claims`, `content`, `segments`, `nodes` and
+`citations`. In particular, independent facts belong in separate claims;
+segments concatenate into one claim. The concise task prompt and this static
+JSON guidance precede dynamic source evidence in the same request. Extraction
+and its authorized repairs reuse the guide; protocol retries and debugger
+capture retain it. The selected schema remains the structural authority.
+Caching is unchanged. Offline checks establish request construction and
+retention, not improved live model quality.
 
 ## Retained reproduction and method
 

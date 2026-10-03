@@ -64,6 +64,7 @@ const yaml =
 const prompt_bytes = "Return the requested object.";
 const schema_bytes = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\",\"maxLength\":20000}},\"required\":[\"answer\"],\"additionalProperties\":false}";
 const input_bytes = "x" ** 16_384;
+const context_bytes = "{\"answer\":\"One source-grounded answer, never an invented default.\"}";
 
 fn consolidatedPreparation(allocator: std.mem.Allocator, source: []const u8) ![]const u8 {
     const assigned = try std.mem.replaceOwned(u8, allocator, source, "use: assign-model-request-id", "use: prepare-model-request");
@@ -75,6 +76,93 @@ fn consolidatedPreparation(allocator: std.mem.Allocator, source: []const u8) ![]
     ,
         \\    on: { ok: observe, failed: end.failed }
     );
+}
+
+fn withStaticContext(a: std.mem.Allocator, source: []const u8) ![]const u8 {
+    const resources = try std.mem.replaceOwned(u8, a, source, "resources: {", "resources: { context: context.json,");
+    defer a.free(resources);
+    return std.mem.replaceOwned(u8, a, resources, "slot: selected, prompt: prompt,", "slot: selected, prompt: prompt, context: context,");
+}
+
+test "static JSON guidance stays separate from dynamic input in both preparation paths and source capture" {
+    const packets = @import("domain/model_input_packet.zig");
+    for ([_]bool{ false, true }) |consolidated| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const a = fixture.arena.allocator();
+        const selected = try withStaticContext(a, yaml);
+        const source = if (consolidated) try consolidatedPreparation(a, selected) else selected;
+        const packet_source = try std.mem.replaceOwned(u8, a, source, ", input: input }", " }");
+        const dynamic_source = try std.mem.replaceOwned(u8, a, packet_source, ", input: input.txt", "");
+        const graph = try fixture.compileWithContext(dynamic_source, false);
+        for ([_][]const u8{ "{\"source\":\"Display UTC time.\"}", "{\"source\":\"Renew eligible loans.\"}" }) |body| {
+            var runner = fixture.runner(graph, std.testing.allocator);
+            defer runner.deinit();
+            const packet = try packets.create(std.testing.allocator, body, .workflow_step, .initial_generation, null);
+            runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
+            var harness: Harness = .{ .runner = &runner };
+            try std.testing.expectEqual(.ok, harness.run());
+            const retained = try currentRequest(&runner);
+            const prepared = retained.prepared().?;
+            try std.testing.expectEqual(@as(usize, 3), prepared.content.len);
+            try std.testing.expectEqualStrings(context_bytes, prepared.content[0].guidance);
+            try std.testing.expectEqualStrings(prompt_bytes, prepared.content[1].guidance);
+            try std.testing.expectEqualStrings(body, prepared.content[2].user);
+            const wire = try @import("adapters/provider/bedrock_request.zig").encodeText(a, .{ .content = prepared.content, .schema = .{ .prompt_only = prepared.response_schema.modelBytes() }, .schema_name = "test", .temperature = null, .reasoning_effort = null }, .inference);
+            var parsed = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
+            defer parsed.deinit();
+            const messages = parsed.value.object.get("messages").?.array.items;
+            try std.testing.expectEqualStrings("developer", messages[0].object.get("role").?.string);
+            try std.testing.expectEqualStrings(context_bytes, messages[0].object.get("content").?.array.items[0].object.get("text").?.string);
+            try std.testing.expectEqualStrings("user", messages[1].object.get("role").?.string);
+            const user = messages[1].object.get("content").?.array.items;
+            try std.testing.expectEqual(@as(usize, 1), user.len);
+            try std.testing.expectEqualStrings(body, user[0].object.get("text").?.string);
+            var captured_graph = graph.*;
+            captured_graph.source = .{ .path = "request.workflow.yaml", .content = dynamic_source };
+            const snapshot = (try @import("application/request_source_capture.zig").snapshot(a, .{ .graph = &captured_graph, .request = retained }, "observe", &.{})).?;
+            try snapshot.validate();
+            try std.testing.expectEqual(.context, snapshot.resources[1].role);
+            try std.testing.expectEqualStrings(context_bytes, snapshot.resources[1].document.content);
+            try std.testing.expectEqualStrings("context.json", snapshot.resources[1].document.path);
+        }
+    }
+}
+
+test "static context rejects missing resources and conflicting resource kinds before preparation" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const a = fixture.arena.allocator();
+    const source = try withStaticContext(a, yaml);
+    const foreign = try std.mem.replaceOwned(u8, a, source, "context: context,", "context: result,");
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compileWithContext(foreign, true));
+    const missing = try std.mem.replaceOwned(u8, a, source, "context: context,", "context: missing,");
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compileWithContext(missing, true));
+}
+
+test "protocol corrections retain the selected static JSON context and original dynamic input" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const graph = try fixture.compileWithContext(try withStaticContext(fixture.arena.allocator(), try protocolRetryYaml(&fixture)), true);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fake.invocation_plan.complete.content = malformed_protocol_items;
+    try prepareProtocolAttempt(&runner, false);
+    const original = (try currentRequest(&runner)).id();
+    try rejectProtocolResponse(&runner, false);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+    const corrected = try currentRequest(&runner);
+    try std.testing.expect(corrected.id() == original);
+    try std.testing.expectEqualStrings("context", corrected.sourceResources().context.?.bytes);
+    const parts = corrected.prepared().?.content;
+    try std.testing.expectEqualStrings(context_bytes, parts[0].guidance);
+    try std.testing.expectEqualStrings(prompt_bytes, parts[1].guidance);
+    try std.testing.expectEqualStrings(input_bytes, parts[2].user);
 }
 
 test "consolidated preparation publishes the same request and selected schema in one delta" {
@@ -6459,7 +6547,7 @@ test "configured parts keep admitted siblings through protocol recovery and exha
             }};
             fixture.registry.operations = &entries;
             const source_yaml = composition_yaml ++ "\n# source-secret\n";
-            var source_graph = (try fixture.compileResources(source_yaml, address_schema, false, address_composition)).*;
+            var source_graph = (try fixture.compileResources(source_yaml, address_schema, false, address_composition, null)).*;
             source_graph.source = .{ .path = "request.workflow.yaml", .content = source_yaml };
             const graph = &source_graph;
             var runner = fixture.runner(graph, std.testing.allocator);
@@ -6728,7 +6816,7 @@ test "registered non-Spec typed consumer composes references and enforces its ow
         const source_four = try std.mem.replaceOwned(u8, a, source_three, "part: street", "part: memo");
         const source_five = try std.mem.replaceOwned(u8, a, source_four, "part: flags", "part: checks");
         const audit_workflow = try std.mem.replaceOwned(u8, a, source_five, "id: compose-address", "id: audit-record");
-        const graph = try fixture.compileResources(audit_workflow, audit_schema, false, audit_composition);
+        const graph = try fixture.compileResources(audit_workflow, audit_schema, false, audit_composition, null);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var calls: AuditCalls = .{ .fake = invocationProvider(&runner, std.testing.allocator), .allocator = a, .business = business.?, .exact = exact.?, .ineligible = mode == .ineligible, .supplement = mode == .optional };
@@ -6759,7 +6847,7 @@ test "composition application handoffs release retained parts and requests at ev
         .binding = bindings.bind(ProtocolUnits, &input, ProtocolUnits.select),
     }};
     fixture.registry.operations = &entries;
-    const graph = try fixture.compileResources(composition_yaml, address_schema, false, address_composition);
+    const graph = try fixture.compileResources(composition_yaml, address_schema, false, address_composition, null);
     try std.testing.checkAllAllocationFailures(std.testing.allocator, compositionAllocationCase, .{ &fixture, graph, &entries, &input });
     try std.testing.expectEqual(fixture.authorization.prepared_count, fixture.authorization.destroyed_count);
 }
@@ -6835,27 +6923,38 @@ const Fixture = struct {
     }
 
     fn compileWithAssets(self: *Fixture, bytes: []const u8, result_schema: []const u8, include_static_input: bool) !*const compilation.CompiledWorkflow {
-        return self.compileResources(bytes, result_schema, include_static_input, null);
+        return self.compileResources(bytes, result_schema, include_static_input, null, null);
     }
 
-    fn compileResources(self: *Fixture, bytes: []const u8, result_schema: []const u8, include_static_input: bool, composition_bytes: ?[]const u8) !*const compilation.CompiledWorkflow {
+    fn compileWithContext(self: *Fixture, bytes: []const u8, include_static_input: bool) !*const compilation.CompiledWorkflow {
+        return self.compileResources(bytes, schema_bytes, include_static_input, null, context_bytes);
+    }
+
+    fn compileResources(self: *Fixture, bytes: []const u8, result_schema: []const u8, include_static_input: bool, composition_bytes: ?[]const u8, static_context: ?[]const u8) !*const compilation.CompiledWorkflow {
         const allocator = self.arena.allocator();
         var parser: @import("adapters/parsers/workflow_definitions.zig").Adapter = .{};
         var schema_parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
         const raw = try (@import("actions/workflow/parse_workflow_definitions.zig").Action{ .parser = parser.parser() }).execute(allocator, &.{.{ .ordinal = 1, .bytes = bytes }});
         const definitions = try (@import("actions/workflow/validate_workflow_definition_schema.zig").Action{}).execute(allocator, raw);
-        const paths = [_][]const u8{ "request.workflow.yaml", "prompt.md", "result.json", if (composition_bytes != null) "composition.json" else "input.txt" };
-        const bodies = [_][]const u8{ bytes, prompt_bytes, result_schema, composition_bytes orelse input_bytes };
-        var descriptors: [4]inventory.InventoryDescriptor = undefined;
-        var accounts: [4]inventory.InventoryAccount = undefined;
+        const extra = if (composition_bytes != null) "composition.json" else if (include_static_input) "input.txt" else "context.json";
+        const extra_body = composition_bytes orelse if (include_static_input) input_bytes else static_context orelse "";
+        const paths = [_][]const u8{ "request.workflow.yaml", "prompt.md", "result.json", extra, "context.json" };
+        const bodies = [_][]const u8{ bytes, prompt_bytes, result_schema, extra_body, static_context orelse "" };
+        var descriptors: [5]inventory.InventoryDescriptor = undefined;
+        var accounts: [5]inventory.InventoryAccount = undefined;
         for (paths, bodies, 0..) |path, body, index| {
             descriptors[index] = .{ .path = path, .kind = .file, .identity = .{ .filesystem_id = 1, .file_id = index + 1 }, .size = body.len };
             accounts[index] = .{ .ordinal = @intCast(index + 1), .path = path, .disposition = if (index == 0) .definition else .resource };
         }
-        const count: usize = if (include_static_input or composition_bytes != null) 4 else 3;
-        const inv: inventory.Inventory = .{ .capability = roots.registry(self.roots_owner).workflowAuthority(), .descriptors = descriptors[0..count], .accounts = accounts[0..count], .definition_ordinals = &.{1}, .resource_ordinals = if (count == 4) &.{ 2, 3, 4 } else &.{ 2, 3 } };
+        const count: usize = 3 + @as(usize, @intFromBool(include_static_input or composition_bytes != null)) + @as(usize, @intFromBool(static_context != null));
+        const inv: inventory.Inventory = .{ .capability = roots.registry(self.roots_owner).workflowAuthority(), .descriptors = descriptors[0..count], .accounts = accounts[0..count], .definition_ordinals = &.{1}, .resource_ordinals = switch (count) {
+            3 => &.{ 2, 3 },
+            4 => &.{ 2, 3, 4 },
+            5 => &.{ 2, 3, 4, 5 },
+            else => unreachable,
+        } };
         const manifest = try (@import("actions/workflow/resolve_workflow_resources.zig").Action{}).execute(allocator, inv, definitions);
-        const captures = [_]inventory.Capture{ .{ .ordinal = 2, .bytes = prompt_bytes }, .{ .ordinal = 3, .bytes = result_schema }, .{ .ordinal = 4, .bytes = composition_bytes orelse input_bytes } };
+        const captures = [_]inventory.Capture{ .{ .ordinal = 2, .bytes = prompt_bytes }, .{ .ordinal = 3, .bytes = result_schema }, .{ .ordinal = 4, .bytes = extra_body }, .{ .ordinal = 5, .bytes = static_context orelse "" } };
         const graphs = try (@import("actions/workflow/compile_workflow_graphs.zig").Action{ .registry = &self.registry, .result_schema_compiler = schema_parser.compiler() }).execute(allocator, definitions, inv, manifest, captures[0 .. count - 1]);
         _ = try (@import("actions/workflow/validate_compiled_workflow_graphs.zig").Action{}).execute(allocator, graphs);
         return &graphs[0];

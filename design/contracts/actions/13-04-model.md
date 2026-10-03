@@ -69,7 +69,7 @@ whole-workflow publication; [§25](../25-publication.md) and the clarification e
 ## `PrepareModelRequestAction`
 
 - **Input:** current request ledger/revision, compiled model binding and selected
-  prompt/schema/input resources or native input packet.
+  prompt, optional static context, schema and input resources or native input packet.
 - **Output:** one successor ledger and its assigned, validated and prepared request
   values, published atomically by the runner.
 - **Responsibility:** Prepare one request using the existing identity, binding and

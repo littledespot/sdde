@@ -178,11 +178,19 @@ pub const Driver = struct {
                     self.fake.invocation_plan.complete.content = "{\"conflicts\":{  \"conflicts\": [] }";
             };
             const validated = requests.readCurrent(&view, requests.validated_schema) catch unreachable;
-            var base_buffer: [2]@import("../domain/llm_provider_operation.zig").ModelVisibleContent = undefined;
+            var base_buffer: @import("../domain/model_request_handoff.zig").ContentBuffer = undefined;
             const base = validated.content(&base_buffer);
             const content = current_request.prepared().?.content;
             std.testing.expectEqual(base.len + @as(usize, if (attempt > 1) (if (self.fake.invocation_plan.complete.content_diagnostic == .missing_final_text) 2 else 3) else 0), content.len) catch unreachable;
             std.testing.expectEqualDeep(base, content[0..base.len]) catch unreachable;
+            if (std.mem.eql(u8, current_request.prepared().?.result_schema_id.bytes, "extraction-schema")) {
+                const prose = if (current_request.part()) |part| std.mem.eql(u8, part.plan.parts()[part.part].id.bytes, "content") else true;
+                if (prose) {
+                    std.testing.expectEqualStrings("extraction-context", current_request.sourceResources().context.?.bytes) catch unreachable;
+                    const guide = std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/extraction.context.json", arena.allocator(), .limited(1_048_576)) catch unreachable;
+                    std.testing.expectEqualStrings(guide, content[0].guidance) catch unreachable;
+                }
+            }
             if (attempt > 1) {
                 const prompt = current_request.protocolPrompt().?;
                 if (!std.mem.eql(u8, prompt, content[base.len].guidance)) {

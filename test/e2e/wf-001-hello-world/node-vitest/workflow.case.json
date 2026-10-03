@@ -27,6 +27,10 @@
       "destination": ".sddtoolkit/workflows/spec/protocol.prompt.md"
     },
     {
+      "source": "design/workflows/spec/extraction.context.json",
+      "destination": ".sddtoolkit/workflows/spec/extraction.context.json"
+    },
+    {
       "source": "design/workflows/spec/extraction-content.prompt.md",
       "destination": ".sddtoolkit/workflows/spec/extraction-content.prompt.md"
     },
