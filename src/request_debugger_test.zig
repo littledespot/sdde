@@ -323,14 +323,14 @@ test "native JSON diagnostic probes retain controls and inspect normalized and v
     parent.description.?.response_mode = .native_schema;
     parent.request = try fixture.provider.provider().prepare(a, parent.description.?);
     var previous_content: ?[]const @import("domain/llm_provider_operation.zig").ModelVisibleContent = null;
-    const Probe = struct { edit: []const u8, answer: []const u8, union_root: bool = false, constant_value: bool = false };
+    const Probe = struct { edit: []const u8, answer: []const u8, first_key: []const u8, union_root: bool = false, constant_value: bool = false };
     const tagged_answer = "{\"kind\":\"present\",\"value\":\"orchard\"}";
     const plain_answer = "{\"value\":\"orchard\"}";
     const probes = [_]Probe{
-        .{ .edit = @embedFile("test_fixtures/bedrock-json-object.edit.json"), .answer = tagged_answer },
-        .{ .edit = @embedFile("test_fixtures/bedrock-json-union.edit.json"), .answer = tagged_answer, .union_root = true },
-        .{ .edit = @embedFile("test_fixtures/bedrock-json-string.edit.json"), .answer = plain_answer },
-        .{ .edit = @embedFile("test_fixtures/bedrock-json-constant.edit.json"), .answer = plain_answer, .constant_value = true },
+        .{ .edit = @embedFile("test_fixtures/bedrock-json-object.edit.json"), .answer = tagged_answer, .first_key = "kind" },
+        .{ .edit = @embedFile("test_fixtures/bedrock-json-union.edit.json"), .answer = tagged_answer, .first_key = "kind", .union_root = true },
+        .{ .edit = @embedFile("test_fixtures/bedrock-json-string.edit.json"), .answer = plain_answer, .first_key = "value" },
+        .{ .edit = @embedFile("test_fixtures/bedrock-json-constant.edit.json"), .answer = plain_answer, .first_key = "value", .constant_value = true },
     };
     for (probes, 0..) |probe, index| {
         const edit = try @import("domain/strict_json.zig").decode(debug.Edit, a, probe.edit, .{ .maximum_depth = 64 });
@@ -338,11 +338,12 @@ test "native JSON diagnostic probes retain controls and inspect normalized and v
         if (previous_content) |content| try std.testing.expectEqualDeep(content, edit.content);
         previous_content = edit.content;
         const malformed = try std.fmt.allocPrint(a, "{{\"{{ {s}", .{probe.answer[1..]});
+        const repeated = try std.fmt.allocPrint(a, "{{\"{s}{s}", .{ probe.first_key, probe.answer });
         const different_value = try std.mem.replaceOwned(u8, a, probe.answer, "orchard", "peach");
-        for ([_][]const u8{ malformed, probe.answer, different_value }, 0..) |answer, attempt| {
+        for ([_][]const u8{ malformed, repeated, probe.answer, different_value }, 0..) |answer, attempt| {
             fixture.wire.inference_body = try debugResponse(a, answer);
             const before = fixture.wire.calls;
-            const sequence = index * 3 + attempt + 1;
+            const sequence = index * 4 + attempt + 1;
             const id = try std.fmt.allocPrint(a, "{x:0>32}", .{sequence});
             const result = try fixture.replay().replay(a, replayIdentity(id, sequence), parent, .{ .call = 0, .mode = .modified, .edit = edit });
             try std.testing.expectEqual(before + 1, fixture.wire.calls);
@@ -371,14 +372,18 @@ test "native JSON diagnostic probes retain controls and inspect normalized and v
             }
             try std.testing.expectEqual(.valid, result.validation.extraction);
             try std.testing.expectEqual(.valid, result.validation.json);
-            try std.testing.expectEqual(@as(@TypeOf(result.validation.normalization), if (attempt == 0) .removed_leading_brace_quote else .none), result.validation.normalization);
-            try std.testing.expectEqual(@as(@TypeOf(result.validation.schema), if (attempt == 2 and probe.constant_value) .invalid else .valid), result.validation.schema);
+            try std.testing.expectEqual(@as(@TypeOf(result.validation.normalization), switch (attempt) {
+                0 => .removed_leading_brace_quote,
+                1 => .removed_repeated_field_prefix,
+                else => .none,
+            }), result.validation.normalization);
+            try std.testing.expectEqual(@as(@TypeOf(result.validation.schema), if (attempt == 3 and probe.constant_value) .invalid else .valid), result.validation.schema);
             try std.testing.expectEqualStrings(answer, result.validation.model_text.?);
             try std.testing.expectEqual(@as(?u64, 10), result.validation.input_tokens);
             try std.testing.expectEqual(@as(?u64, 2), result.validation.output_tokens);
         }
     }
-    try std.testing.expectEqual(@as(usize, probes.len * 3), fixture.requests);
+    try std.testing.expectEqual(@as(usize, probes.len * 4), fixture.requests);
     try std.testing.expectEqual(fixture.requests, fixture.responses);
 }
 

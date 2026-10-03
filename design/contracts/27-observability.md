@@ -89,9 +89,11 @@ and `retry.exhausted` use existing runner counts; `repair.*` observes accepted
 native repair transitions and does not count or authorize them. Project only each
 operation's newly produced diagnostic evidence, avoiding stale-failure attribution.
 The [§22.6 normalization](22-repair.md#226-unparseable-output) emits one warning
-`model.response_normalized`, diagnostic `REMOVED_LEADING_BRACE_QUOTE`: the first
-two bytes (`{"`) were removed after strict syntax failure. Correlation identifies
-the original request/attempt, whose raw response stays intact. Emit this when
+`model.response_normalized`, diagnostic `REMOVED_LEADING_BRACE_QUOTE` for the
+two-byte opening artifact or `REMOVED_REPEATED_FIELD_PREFIX` for the opening
+artifact with an unfinished repetition of the object's first member name.
+Both are emitted only after strict syntax failure and successful remainder parsing.
+Correlation identifies the original request/attempt, whose raw response stays intact. Emit this when
 decoding succeeds even if subsequent schema validation fails; a separate schema
 event retains that failure. Logging rejection prevents continuation.
 

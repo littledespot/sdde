@@ -4913,6 +4913,7 @@ test "runner logs normalization once with call provenance and stops on log failu
     const Spy = struct {
         count: usize = 0,
         fail: bool,
+        expected_code: []const u8,
         invalid: bool = false,
         fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
             const self: *@This() = @ptrCast(@alignCast(context));
@@ -4923,13 +4924,20 @@ test "runner logs normalization once with call provenance and stops on log failu
             if (fact.fact.event_type == .model_response_normalized) {
                 self.count += 1;
                 if (fact.fact.correlation_id == null or fact.fact.attempt != 1 or
-                    !std.mem.eql(u8, fact.fact.fields.diagnostic_code.?.bytes, "REMOVED_LEADING_BRACE_QUOTE")) self.invalid = true;
+                    !std.mem.eql(u8, fact.fact.fields.diagnostic_code.?.bytes, self.expected_code)) self.invalid = true;
                 if (self.fail) return .{ .blocked = .LOG_FLUSH_FAILURE };
             }
             return .dropped;
         }
     };
-    for ([_]bool{ false, true }) |consolidated| for ([_]bool{ false, true }) |fail| for ([_][]const u8{ "{\"{\"answer\":\"valid\"}", "{\"{\"answer\":42}" }) |body| {
+    const Case = struct { body: []const u8, code: []const u8 = "REMOVED_LEADING_BRACE_QUOTE" };
+    for ([_]bool{ false, true }) |consolidated| for ([_]bool{ false, true }) |fail| for ([_]Case{
+        .{ .body = "{\"{\"answer\":\"valid\"}" },
+        .{ .body = "{\"{\"answer\":42}" },
+        .{ .body = "{\"answer{\"answer\":\"valid\"}", .code = "REMOVED_REPEATED_FIELD_PREFIX" },
+        .{ .body = "{\"answer{\"answer\":42}", .code = "REMOVED_REPEATED_FIELD_PREFIX" },
+    }) |case| {
+        const body = case.body;
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
@@ -4943,7 +4951,7 @@ test "runner logs normalization once with call provenance and stops on log failu
             .root_observation = .absent,
             .observation = .absent,
         });
-        var spy: Spy = .{ .fail = fail };
+        var spy: Spy = .{ .fail = fail, .expected_code = case.code };
         runner.barrier = .{ .context = &spy, .process_fn = Spy.process };
         var fake = invocationProvider(&runner, std.testing.allocator);
         fake.invocation_plan.complete.content = body;
@@ -4965,6 +4973,8 @@ test "normalization never bypasses schema rejection or the protocol retry allowa
     for ([_]bool{ false, true }) |consolidated| for ([_][]const u8{
         "{\"{ \"answer\":42}",
         "{\"{ \"answer\":\"invalid remainder\",}",
+        "{\"answer{\"answer\":42}",
+        "{\"answer{\"answer\":\"invalid remainder\",}",
     }) |body| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
@@ -5002,6 +5012,10 @@ test "YAML payload validation uses each exact compiled schema and retains the sa
             .{ .body = "{\"{\"answer\":\"é😀\"}" },
             .{ .body = "{\"{\"answer\":42}", .rejection = .type_mismatch },
             .{ .body = "{\"{\"answer\":\"ok\",\"approved\":true}", .rejection = .unknown_property },
+            .{ .body = "{\"answer{\"answer\":\"é😀\"}" },
+            .{ .body = "{\"answer{\"answer\":42}", .rejection = .type_mismatch },
+            .{ .body = "{\"answer{\"answer\":\"ok\",\"approved\":true}", .rejection = .unknown_property },
+            .{ .schema = variants, .body = "{\"kind{\"kind\":\"content\",\"values\":[1,2],\"marker\":true}" },
             .{ .body = "{\"answer\":\"" ++ "x" ** 20_000 ++ "\"}" },
             .{ .body = "{}", .rejection = .missing_required_property },
             .{ .body = "{\"answer\":42}", .rejection = .type_mismatch },

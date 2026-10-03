@@ -102,11 +102,19 @@ test "malformed non-object fenced prefixed and trailing model output rejects wit
 
 test "approved prefix normalization preserves content evidence and accounting" {
     const envelope = @import("domain/model_envelope.zig");
-    for ([_][]const u8{
-        "{\"{ \"kind\":\"claims\",\"items\":[1,2],\"sibling\":{\"kept\":true}}",
-        "{\"{\"value\":\"orchard\"}",
-        "{\"{\"loan\":{\"days\":1e3},\"note\":\"é😀\"}",
-    }) |bytes| {
+    const Case = struct { prefix: []const u8, object: []const u8, normalization: envelope.Normalization };
+    for ([_]Case{
+        .{ .prefix = "{\"", .object = "{ \"kind\":\"claims\",\"items\":[1,2],\"sibling\":{\"kept\":true}}", .normalization = .removed_leading_brace_quote },
+        .{ .prefix = "{\"", .object = "{\"value\":\"orchard\"}", .normalization = .removed_leading_brace_quote },
+        .{ .prefix = "{\"", .object = "{\"loan\":{\"days\":1e3},\"note\":\"é😀\"}", .normalization = .removed_leading_brace_quote },
+        .{ .prefix = "{\"kind", .object = "{\"kind\":\"claims\",\"items\":[1,2],\"sibling\":{\"kept\":true}}", .normalization = .removed_repeated_field_prefix },
+        .{ .prefix = "{\"replacement", .object = "{ \"replacement\":\"candidate\",\"sibling\":{\"kept\":true}}", .normalization = .removed_repeated_field_prefix },
+        .{ .prefix = "{\"loan", .object = "{\"loan\":{\"days\":1e3},\"note\":\"é😀\"}", .normalization = .removed_repeated_field_prefix },
+        .{ .prefix = "{\"request-id", .object = "{\n\t\"request-id\" \r\n:9}", .normalization = .removed_repeated_field_prefix },
+        .{ .prefix = "{\"état", .object = "{\"état\":\"active\"}", .normalization = .removed_repeated_field_prefix },
+    }) |case| {
+        const bytes = try std.mem.concat(std.testing.allocator, u8, &.{ case.prefix, case.object });
+        defer std.testing.allocator.free(bytes);
         var fixture: Fixture = undefined;
         try fixture.init();
         defer fixture.deinit();
@@ -119,8 +127,9 @@ test "approved prefix normalization preserves content evidence and accounting" {
         const attempts = fixture.base.attempts.current();
         var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, null);
         defer decoded.deinit();
-        try std.testing.expectEqual(.removed_leading_brace_quote, decoded.candidate.normalization());
-        var expected = try envelope.parseContent(std.testing.allocator, bytes[2..], null);
+        try std.testing.expectEqual(case.normalization, decoded.candidate.normalization());
+        try std.testing.expectEqualStrings(case.object, decoded.candidate.content());
+        var expected = try envelope.parseContent(std.testing.allocator, case.object, null);
         defer expected.deinit();
         const actual_bytes = try std.json.Stringify.valueAlloc(std.testing.allocator, decoded.candidate.json().*, .{});
         defer std.testing.allocator.free(actual_bytes);
@@ -140,7 +149,7 @@ test "approved prefix normalization preserves content evidence and accounting" {
 
 test "prefix normalization preserves valid keys and rejects every other malformed form" {
     const envelope = @import("domain/model_envelope.zig");
-    for ([_][]const u8{ "{\"{\":1}", "{\"{name\":\"value\"}", "{\"x\":\"{\\\"{\"}" }) |bytes| {
+    for ([_][]const u8{ "{\"{\":1}", "{\"{name\":\"value\"}", "{\"x\":\"{\\\"{\"}", "{\"kind\":{\"kind\":\"claims\"}}", "{\"kind{\":\"value\"}" }) |bytes| {
         var document = try envelope.parseContent(std.testing.allocator, bytes, null);
         defer document.deinit();
         try std.testing.expectEqual(.none, document.normalization);
@@ -157,6 +166,22 @@ test "prefix normalization preserves valid keys and rejects every other malforme
         "{\"{\"value\":",
         "{\"[1,2]",
         "```json\n{\"{\"value\":1}\n```",
+        "{\"kind{\"other\":\"claims\"}", // The discarded name must repeat the first key.
+        "{\"kind{\"kind_extra\":1}",
+        "{\"kind{\"kind\" 1}",
+        "{\"kind{\"kind{\"kind\":\"claims\"}",
+        " {\"kind{\"kind\":\"claims\"}",
+        "{\"kind\"{\"kind\":\"claims\"}",
+        "{\"ki\\nd{\"ki\\nd\":1}", // Do not infer escaped or closed member names.
+        "{\"kind{\"kind\":\"claims\",}",
+        "{\"kind{\"kind\":1,\"kind\":2}",
+        "{\"kind{\"kind\":1} trailing",
+        "{\"kind{\"kind\":1}{}",
+        "{\"kind{\"kind\":",
+        "{\"kind{\"kind\":\"\xff\"}",
+        "{\"kind\n{\"kind\":1}",
+        "{\"kind{}",
+        "{\"kind",
     }) |bytes| {
         var diagnostic: ?envelope.Diagnostic = null;
         defer if (diagnostic) |failure| failure.deinit(std.testing.allocator);
@@ -231,6 +256,9 @@ test "JSON container guard accepts its exact boundary and ignores brackets in st
             const prefixed = try std.fmt.allocPrint(std.testing.allocator, "{{\"{s}", .{bytes.items});
             defer std.testing.allocator.free(prefixed);
             try checkDocument(prefixed, depth == schema.max_json_depth);
+            const repeated = try std.fmt.allocPrint(std.testing.allocator, "{{\"nested{s}", .{bytes.items});
+            defer std.testing.allocator.free(repeated);
+            try checkDocument(repeated, depth == schema.max_json_depth);
         }
     }
     try checkDocument("{\"brackets\":\"" ++ "[]{}" ** 100 ++ "\"}", true);
@@ -275,7 +303,9 @@ test "every decoding allocation failure and syntax rejection frees partial trees
     for ([_][]const u8{
         "{\"a\":[true,null,{\"text\":\"\\u00e9\",\"number\":1e9999}],\"b\":{}}",
         "{\"{\"a\":[true,null,{\"text\":\"\\u00e9\",\"number\":1e9999}],\"b\":{}}",
+        "{\"a{\"a\":[true,null,{\"text\":\"\\u00e9\",\"number\":1e9999}],\"b\":{}}",
         "{\"{\"a\":1,\"a\":2}",
+        "{\"a{\"a\":1,\"a\":2}",
         "{\"a\":[{\"key\":\"one\",\"key\":\"two\"}]}",
         "{\"a\":[1,2,3]} {}",
         "[1,2,3]",
@@ -288,7 +318,7 @@ test "every decoding allocation failure and syntax rejection frees partial trees
         defer response.deinit();
         var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
         defer validated.deinit();
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ validated.evidence.result().complete, index < 2 });
+        try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ validated.evidence.result().complete, index < 3 });
         try std.testing.expectEqualStrings(bytes, validated.evidence.result().complete.content());
     }
 }

@@ -10,6 +10,7 @@ pub const Diagnostic = json.Diagnostic;
 pub const Normalization = enum {
     none,
     removed_leading_brace_quote,
+    removed_repeated_field_prefix,
 };
 
 /// One model-response syntax boundary, also used by diagnostic inspection.
@@ -29,17 +30,17 @@ pub fn parseContent(allocator: std.mem.Allocator, content: []const u8, diagnosti
     if (diagnostic) |out| out.* = null;
     var original: ?Diagnostic = null;
     defer if (original) |failure| failure.deinit(allocator);
-    var normalized: Normalization = .none;
+    var prefix: ?OpeningPrefix = null;
     const parsed = json.parse(allocator, content, .{ .maximum_depth = schema.max_json_depth }, false, &original) catch |err| recovered: {
         if (err == error.OutOfMemory) return error.OutOfMemory;
-        // Approved §22.6 exception: only this exact prefix, after syntax failure,
-        // and only once. Valid property names beginning with '{' remain intact.
-        if (original.?.reason == .SyntaxError and std.mem.startsWith(u8, content, "{\"{")) {
-            if (json.parse(allocator, content[2..], .{ .maximum_depth = schema.max_json_depth }, false, null)) |result| {
-                normalized = .removed_leading_brace_quote;
+        // Approved §22.6 exception: one opening artifact after syntax failure.
+        // The complete remainder still passes the same strict JSON parser.
+        if (original.?.reason == .SyntaxError) if (parseOpeningPrefix(content)) |opening| {
+            if (json.parse(allocator, content[opening.length..], .{ .maximum_depth = schema.max_json_depth }, false, null)) |result| {
+                prefix = opening;
                 break :recovered result;
             } else |failure| if (failure == error.OutOfMemory) return error.OutOfMemory;
-        }
+        };
         // Rejected evidence still refers to the original captured bytes.
         if (diagnostic) |out| {
             out.* = original;
@@ -52,7 +53,30 @@ pub fn parseContent(allocator: std.mem.Allocator, content: []const u8, diagnosti
         if (diagnostic) |out| out.* = .{ .reason = .ExpectedObject };
         return error.InvalidModelEnvelope;
     }
-    return .{ .content = if (normalized == .none) content else content[2..], .parsed = parsed, .normalization = normalized };
+    return .{ .content = if (prefix) |opening| content[opening.length..] else content, .parsed = parsed, .normalization = if (prefix) |opening| opening.normalization else .none };
+}
+
+const OpeningPrefix = struct { length: usize, normalization: Normalization };
+
+/// Recognize an unfinished object/member opener, never search for JSON inside
+/// arbitrary text. A nonempty member name must repeat the object's first key.
+fn parseOpeningPrefix(content: []const u8) ?OpeningPrefix {
+    if (!std.mem.startsWith(u8, content, "{\"")) return null;
+    var end: usize = 2;
+    while (end < content.len and content[end] != '{') : (end += 1) {
+        if (content[end] < 0x20 or content[end] == '"' or content[end] == '\\') return null;
+    }
+    if (end == content.len) return null;
+    if (end == 2) return .{ .length = end, .normalization = .removed_leading_brace_quote };
+    const name = content[2..end];
+    if (!std.unicode.utf8ValidateSlice(name)) return null;
+    const first_key = std.mem.trimStart(u8, content[end + 1 ..], " \t\r\n");
+    if (first_key.len == 0 or first_key[0] != '"' or !std.mem.startsWith(u8, first_key[1..], name)) return null;
+    const after_name = first_key[1 + name.len ..];
+    if (after_name.len == 0 or after_name[0] != '"') return null;
+    const after_key = std.mem.trimStart(u8, after_name[1..], " \t\r\n");
+    if (after_key.len == 0 or after_key[0] != ':') return null;
+    return .{ .length = end, .normalization = .removed_repeated_field_prefix };
 }
 
 /// Read-only views of the one parsed tree. Numbers retain their exact JSON

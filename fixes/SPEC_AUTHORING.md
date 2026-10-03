@@ -31,6 +31,12 @@ capture retain it. The selected schema remains the structural authority.
 Caching is unchanged. Offline checks establish request construction and
 retention, not improved live model quality.
 
+**3 October classification guidance update:** the same JSON guide now distinguishes
+observable product behavior, implementation constraints and verification obligations
+by the claim's purpose. It separates independent facts and preserves their qualifiers.
+Extraction and authorized extraction repairs share these definitions. Classification
+remains model-assisted; the guide does not establish semantic correctness.
+
 ## Retained reproduction and method
 
 Source run: `2026-09-29T21-07-24Z-0ad77a3a284df670f9f51d9173e07f46` under
