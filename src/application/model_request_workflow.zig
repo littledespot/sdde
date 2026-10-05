@@ -140,7 +140,7 @@ pub const Build = struct {
 
 const Selection = struct {
     value: handoff.Selection,
-    owned_packet: ?*packets.Packet = null,
+    owned_packet: ?*const packets.Packet = null,
     fn deinit(self: Selection) void {
         if (self.owned_packet) |packet| packets.release(packet);
     }
@@ -174,12 +174,9 @@ fn selections(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: op
         const binding = state.select(scratch, part) catch return error.OperationExecutionFailed;
         result.composition = binding;
         result.result = .{ .id = state.plan.resultAlias(), .content = .{ .result_schema = state.plan.resultSchema() } };
-        if (binding.prerequisites.len != 0) {
-            const context = state.inputs(scratch, binding) catch return error.OperationExecutionFailed;
-            const derived = packets.withJsonContext(allocator, state.base, "prerequisites", context) catch return error.OperationExecutionFailed;
-            result.input = .{ .packet = derived };
-            return .{ .value = result, .owned_packet = derived };
-        }
+        const derived = state.packet(allocator, binding) catch return error.OperationExecutionFailed;
+        result.input = .{ .packet = derived };
+        return .{ .value = result, .owned_packet = derived };
     } else {
         if (step.data.contains(.json_composition)) return error.OperationExecutionFailed;
         result.result = resource(step, "result-schema") orelse return error.OperationExecutionFailed;

@@ -1,8 +1,7 @@
-Assign the already grouped signals to Spec authoring roles. Select a signal by
-its exact claim_ids; do not change its grouping or content. Roles are title
-(feature name), description (summary), primary_goal (desired outcome),
-primary_user_story (actor, action, outcome), entity_basis (whether business
-entities apply), and records (requirements and acceptance criteria). Cover all
-six roles across source-supported groups. Omit context-only groups, including
-exact tokens that only supply copy. Never assign a role without supporting
-source meaning.
+Map prerequisite signal groups to authoring roles using assignment.role_definitions
+and assignment.constraints. A role selects source evidence for later authoring;
+the group need not contain the finished field's wording. Do not draft fields,
+regroup claims or change signal content.
+Assign every source-supported role. Leave unsupported roles unassigned; do not
+invent support to fill required coverage. Omit groups that only supply copied
+values or background context. Judge the source meaning, not the group's label.

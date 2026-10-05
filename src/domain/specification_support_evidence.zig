@@ -157,11 +157,11 @@ fn selection(value: spec.Provenance) spec.Selection {
     return .{ .claim_ids = value.claim_ids, .clarification_response_ids = value.clarification_response_ids };
 }
 pub fn expectedProvenance(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, id: a.Id) Error!?spec.Provenance {
-    if (inputs.brief) |brief| if (id.unit == .feature) switch (id.slot) {
-        .description => return try effectiveAttributed(allocator, brief.description),
-        .primary_goal => return try effectiveAttributed(allocator, brief.primary_goal),
-        else => {},
-    };
+    // A brief-only title remains bound to reconciled title roles until the
+    // assembled candidate supplies display_name; displaying it grants no authority.
+    if (id.slot != .display_name or inputs.specification != null) {
+        if (@import("specification_authority.zig").featureField(inputs, id)) |value| return try effectiveAttributed(allocator, value);
+    }
     if (inputs.specification) |content| if (try candidateProvenance(allocator, content, id)) |candidate| return candidate;
     // Pre-generation source review uses the roles chosen and validated during
     // reconciliation. The eligible catalogue alone cannot establish support.
@@ -256,8 +256,6 @@ fn sameProvenance(expected: spec.Provenance, actual: spec.Provenance) Error!void
 fn candidateProvenance(allocator: std.mem.Allocator, content: spec.IdentifiedContent, id: a.Id) Error!?spec.Provenance {
     switch (id.unit) {
         .feature => return switch (id.slot) {
-            .display_name => try effectiveAttributed(allocator, content.display_name),
-            .primary_user_story => try effectiveAttributed(allocator, content.primary_user_story),
             .entities => try effectiveAttributed(allocator, content.entities.basis),
             .acceptance_criteria, .functional_requirements, .scenario_coverage => try aggregateRecords(allocator, content.records, id.slot),
             else => null,

@@ -56,7 +56,8 @@ pub const Constraint = enum {
     conflict_pair_covered,
 
     /// Presentation scope only; every merged candidate still runs all validators.
-    pub const Scope = union(enum) { all, key, selection, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail };
+    pub const Assignment = enum { summary, dispositions, signals, roles, conflicts };
+    pub const Scope = union(enum) { all, key, selection, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail, assignment: Assignment };
     pub fn appliesTo(self: Constraint, purpose: @FieldType(r.Input, "purpose"), scope: Scope) bool {
         const in_purpose = switch (self) {
             .unique_nonzero, .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token => true,
@@ -75,6 +76,19 @@ pub const Constraint = enum {
                 else => true,
             },
             .summary, .conflict_detail => false,
+            .assignment => |assignment| switch (assignment) {
+                .summary => self.appliesTo(.summary, .all),
+                .dispositions => self.appliesTo(purpose, .{ .disposition = .rules }),
+                .signals => switch (self) {
+                    .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token, .nonconflicting_claims, .unique_members, .retained_claim_covered, .token_projected => true,
+                    else => false,
+                },
+                .roles => self == .supported_role_assignment,
+                .conflicts => switch (self) {
+                    .nonempty_unique_allowed_claims, .at_least_two, .conflicting_related_claims, .unique_members, .conflict_claim_covered, .conflict_pair_covered => true,
+                    else => false,
+                },
+            },
         };
     }
     pub fn description(self: Constraint) []const u8 {
@@ -96,7 +110,7 @@ pub const Constraint = enum {
             .unique_members => "Do not repeat an identical member set for the same projection kind.",
             .retained_claim_covered => "Every retained claim must appear in a signal.",
             .token_projected => "Every nonconflicting preserved token needs an exact-token signal, including after supersession.",
-            .supported_role_assignment => "Assign roles to one exact validated signal group without duplicate roles.",
+            .supported_role_assignment => "Copy one existing signal's complete claim_ids in their supplied order. Assign each group once. Roles must be unique within its assignment and may be shared across groups.",
             .conflict_claim_covered => "Every conflicting claim must appear in a conflict.",
             .conflict_pair_covered => "Every declared conflicting pair must appear together in a conflict.",
         };

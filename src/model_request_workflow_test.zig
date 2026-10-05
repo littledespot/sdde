@@ -3497,6 +3497,7 @@ const ProtocolUnits = struct {
     next: u32 = 0,
     input: []const u8 = "{}",
     exclusions: []const @import("domain/model_result_schema.zig").ExcludedVariant = &.{},
+    contexts: []const @import("domain/model_input_packet.zig").AssignmentContext = &.{},
     fn select(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         self.next += 1;
@@ -3505,7 +3506,9 @@ const ProtocolUnits = struct {
         const packet = @import("domain/model_input_packet.zig").create(std.testing.allocator, self.input, unit, .initial_generation, null) catch return error.OperationExecutionFailed;
         defer @import("domain/model_input_packet.zig").release(packet);
         const narrowed = @import("domain/model_input_packet.zig").withExcludedVariants(std.testing.allocator, packet, self.exclusions) catch return error.OperationExecutionFailed;
-        return requests.publishPacket(std.testing.allocator, narrowed);
+        defer @import("domain/model_input_packet.zig").release(narrowed);
+        const contextual = @import("domain/model_input_packet.zig").withAssignmentContexts(std.testing.allocator, narrowed, self.contexts) catch return error.OperationExecutionFailed;
+        return requests.publishPacket(std.testing.allocator, contextual);
     }
 };
 
@@ -6541,8 +6544,13 @@ const address_schema =
     \\{"type":"object","properties":{"address":{"type":"object","properties":{"street":{"type":"string","maxLength":100},"zip":{"type":"string","maxLength":20}},"required":["street","zip"],"additionalProperties":false},"flags":{"type":"array","maxItems":3,"items":{"type":"boolean"}}},"required":["address","flags"],"additionalProperties":false}
 ;
 const address_composition =
-    \\{"schema":"json-composition/v1","result":"result","parts":{"street":{"paths":["/address/street"]},"zip":{"paths":["/address/zip"],"requires":["street"]},"flags":{"paths":["/flags"]}}}
+    \\{"schema":"json-composition/v1","result":"result","parts":{"street":{"paths":["/address/street"],"input-context":"street"},"zip":{"paths":["/address/zip"],"requires":["street"],"input-context":"zip"},"flags":{"paths":["/flags"],"input-context":"flags"}}}
 ;
+const address_contexts = [_]@import("domain/model_input_packet.zig").AssignmentContext{
+    .{ .id = .{ .bytes = "street" }, .body = "{\"purpose\":\"Street address\"}" },
+    .{ .id = .{ .bytes = "zip" }, .body = "{\"purpose\":\"Postal code\"}" },
+    .{ .id = .{ .bytes = "flags" }, .body = "{\"purpose\":\"Address flags\"}" },
+};
 
 test "configured parts keep admitted siblings through protocol recovery and exhaustion with exact accounting" {
     for ([_]bool{ false, true }) |missing_answer| {
@@ -6550,7 +6558,7 @@ test "configured parts keep admitted siblings through protocol recovery and exha
             var fixture: Fixture = undefined;
             try fixture.init(std.testing.allocator);
             defer fixture.deinit();
-            var input: ProtocolUnits = .{ .exclusions = &.{.{ .kind = "unavailable" }} };
+            var input: ProtocolUnits = .{ .exclusions = &.{.{ .kind = "unavailable" }}, .contexts = &address_contexts };
             fixture.entries[fixture.entries.len - 1] = .{
                 .contract = .{ .id = "test.observe-request", .kind = .step, .requires = &.{ .assembled_json, .validated_assembled_json }, .outcomes = &.{.ok}, .side_effect = .none },
                 .binding = bindings.bind(void, null, CompositionCalls.observe),
@@ -6649,14 +6657,17 @@ const CompositionCalls = struct {
         }
         const shape = request.response_schema.modelBytes();
         if (std.mem.indexOf(u8, shape, "\"street\"") != null) {
+            self.consistent = self.consistent and std.mem.indexOf(u8, request.content[1].user, "Street address") != null;
             self.fake.invocation_plan.complete.content = "{\"address\":{\"street\":\"Main St\"}}";
         } else if (std.mem.indexOf(u8, shape, "\"flags\"") != null) {
+            self.consistent = self.consistent and std.mem.indexOf(u8, request.content[1].user, "Address flags") != null;
             self.fake.invocation_plan.complete.content = "{\"flags\":[true,false]}";
         } else {
             if (self.zip_request) |id| {
                 self.consistent = self.consistent and id == request.model_request_id;
             } else self.zip_request = request.model_request_id;
             self.consistent = self.consistent and std.mem.indexOf(u8, request.content[1].user, "\"street\":\"Main St\"") != null and
+                std.mem.indexOf(u8, request.content[1].user, "Postal code") != null and
                 std.mem.indexOf(u8, request.content[1].user, "\"flags\"") == null;
             self.fake.invocation_plan.complete.content = switch (invoked.id.model_attempt_ordinal.value) {
                 1 => "{broken",
@@ -6867,7 +6878,7 @@ test "composition application handoffs release retained parts and requests at ev
 }
 
 fn compositionAllocationCase(allocator: std.mem.Allocator, fixture: *Fixture, graph: *const compilation.CompiledWorkflow, entries: []operations.Entry, input: *ProtocolUnits) !void {
-    input.* = .{};
+    input.* = .{ .contexts = &address_contexts };
     fixture.native.init(allocator);
     fixture.authorization.allocator = allocator;
     fixture.native.prepare_authorization.action = .{ .authorization = fixture.authorization.port() };
@@ -7424,7 +7435,8 @@ test "missing answers share protocol allowance through mixed failure and success
         var fixture: Fixture = undefined;
         try fixture.initWithProvider(std.testing.allocator, 0, json);
         defer fixture.deinit();
-        const graph = try fixture.compileWithSchema(try responseAdmissionYaml(&fixture, try protocolRetryYaml(&fixture), consolidated), shape.schema);
+        const source = try withStaticContext(fixture.arena.allocator(), try responseAdmissionYaml(&fixture, try protocolRetryYaml(&fixture), consolidated));
+        const graph = try fixture.compileResources(source, shape.schema, true, null, context_bytes);
         var environment = try bedrockEnvironment(std.testing.allocator);
         defer environment.deinit();
         var runtime: @import("composition/model_provider_runtime.zig").Assembly = .{
@@ -7474,16 +7486,17 @@ test "missing answers share protocol allowance through mixed failure and success
                 try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
                 const correction = (try currentRequest(&runner)).prepared().?;
                 try std.testing.expect(correction.model_request_id == original_id.?);
-                try std.testing.expectEqualStrings(prompt_bytes, correction.content[0].guidance);
-                try std.testing.expectEqualStrings(input_bytes, correction.content[1].user);
-                try std.testing.expectEqual(@as(usize, if (absent) 4 else 5), correction.content.len);
+                try std.testing.expectEqualStrings(context_bytes, correction.content[0].guidance);
+                try std.testing.expectEqualStrings(prompt_bytes, correction.content[1].guidance);
+                try std.testing.expectEqualStrings(input_bytes, correction.content[2].user);
+                try std.testing.expectEqual(@as(usize, if (absent) 5 else 6), correction.content.len);
                 if (absent) {
-                    try std.testing.expect(std.mem.indexOf(u8, correction.content[3].guidance, "missing_final_text") != null);
-                    try std.testing.expect(std.mem.indexOf(u8, correction.content[3].guidance, "Final-answer admission failed: no final answer was received.") != null);
+                    try std.testing.expect(std.mem.indexOf(u8, correction.content[4].guidance, "missing_final_text") != null);
+                    try std.testing.expect(std.mem.indexOf(u8, correction.content[4].guidance, "Final-answer admission failed: no final answer was received.") != null);
                     for (correction.content) |part| try std.testing.expect(part != .evidence);
                     try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.model_payload_schema_result)] == null);
                 }
-                try std.testing.expectEqual(@as(usize, if (sequence == 1 and attempt > 0) 1 else 0), std.mem.count(u8, correction.content[2].guidance, "The previous correction still failed this validation."));
+                try std.testing.expectEqual(@as(usize, if (sequence == 1 and attempt > 0) 1 else 0), std.mem.count(u8, correction.content[3].guidance, "The previous correction still failed this validation."));
             }
         }
         if (sequence != 0) {

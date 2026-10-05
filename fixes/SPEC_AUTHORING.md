@@ -37,6 +37,19 @@ by the claim's purpose. It separates independent facts and preserves their quali
 Extraction and authorized extraction repairs share these definitions. Classification
 remains model-assisted; the guide does not establish semantic correctness.
 
+**3 October focused-review input update:** independent title, description, goal
+and user-story assessments now receive the assigned field's resolved text,
+provenance and purpose rather than the entire candidate and reconstruction
+context. Original sources, claims, citations and preserved tokens remain complete.
+Record and coverage judgments keep surrounding context; the separate loss-location
+assignment keeps producer context. Initial findings and authorized review repairs
+reuse the same projection. Shared guidance omits inactive procedural instructions.
+This changes request presentation, not verdicts, evidence rules or repair authority.
+Offline regression checks do not establish improved live model quality.
+Field selection is shared by review projection and evidence admission through
+`specification_authority.featureField`; admission retains its existing authority
+rules, including reconciled title roles before the complete candidate exists.
+
 ## Retained reproduction and method
 
 Source run: `2026-09-29T21-07-24Z-0ad77a3a284df670f9f51d9173e07f46` under
@@ -201,3 +214,115 @@ Cleanup checks:
   lint and clean packaged smoke checks passed.
   Log: `.zig-cache/source-preservation-review-verify.log`.
 - `git diff HEAD --check`: passed for the complete staged and unstaged change.
+
+## Role-assignment input scope (3 October 2026)
+
+Call ordinals do not identify behavior. The role-assignment responsibility now
+selects a native read-only context through the shared composition contract
+(ADR 0016's approved amendment). Summary, disposition, signal and conflict calls
+use the same mechanism. Claims, source citations and token evidence remain in one
+complete catalogue; role assignment omits hierarchy metadata, repeated summaries
+and unrelated reconciliation constraints. Prerequisite signals retain their
+candidate content because a grouped interpretation may differ from its claims.
+
+Role purposes reuse native field descriptions. The exact-group rule states that
+groups cannot be split, a group is assigned once, roles are unique within that
+assignment and roles may recur across groups. Unsupported roles remain unassigned;
+the existing required-role gate still rejects incomplete coverage. The response
+schema, semantic review, retry limits and authorized atomic repair remain unchanged.
+Corrections reuse the selected input; native repairs retain their existing scope.
+This establishes an assignment contract, not proof that live record generation
+will stop repeating. Live outcomes require a separately authorized E2E run.
+
+Validation for this change:
+
+- `zig build test-model-result-schema test-reference-model-input test-reference-reconciliation test-model-request-workflow test-specification-generation test-architecture lint -j2 --global-cache-dir .zig-cache/global --summary all`:
+  **934/934 passed**, including exact group membership/order, shared roles,
+  missing required coverage, foreign/missing contexts, protocol correction and
+  allocation cleanup. Log: `.zig-cache/role-context-targeted.log`.
+- `ZIG_GLOBAL_CACHE_DIR="$PWD/.zig-cache/global" zig build verify -j2 --global-cache-dir .zig-cache/global --summary all`:
+  **1284/1285 passed**; the sole failure remains the previously recorded native
+  scenario 103 (`OperationExecutionFailed`, source-support revision 6), also
+  present in `.zig-cache/review-cleanup-verify.log` before this change.
+  Offline integration and clean packaged smoke checks passed.
+  Log: `.zig-cache/role-context-verify.log`.
+- `git diff HEAD --check`: passed. No live E2E run was performed.
+
+### Current-change cleanup
+
+Packet projections now use one metadata-copy boundary. Replacing assignment
+contexts copies only the replacement catalogue; composed reconciliation inputs
+no longer build unused full-scope guidance. Authoring guidance uses the same
+role-to-purpose mapping as reconciliation, and context availability has one
+predicate shared by initialization, selection and binding validation.
+
+The domain review collector owns packet admission for both focused findings and
+loss localization. The action no longer reconstructs that authority check or
+selects the subject a second time. Admission checks the complete review-purpose
+binding as well as body, unit and result definition. Superseded copying helpers
+and an unused specification import were removed. Active scoped repair projections
+remain required and retained.
+
+Regression checks cover foreign source and principle review packets, foreign
+loss assignments, replacement contexts, retained repair authority, packet use
+after parent release and allocation-failure cleanup.
+
+Cleanup validation:
+
+- The targeted command above passed **936/936 tests**, architecture and lint.
+  Log: `.zig-cache/current-cleanup-targeted.log`.
+- After strengthening the parent-release regression,
+  `zig build test-reference-model-input -j2 --global-cache-dir .zig-cache/global --summary all`
+  passed **117/117 tests**. Log: `.zig-cache/current-cleanup-packet.log`.
+- The full `verify` command above passed **1285/1286 tests**. The unchanged
+  native scenario 103 still failed with `OperationExecutionFailed` at
+  source-support revision 6. Offline integration and clean packaged smoke
+  checks passed. Log: `.zig-cache/current-cleanup-verify.log`.
+- `git diff HEAD --check`: passed. No live E2E run was performed.
+
+## Primary-story request presentation (5 October 2026)
+
+The retained run's calls 10–12 belong to one primary-story assignment. The first
+two lacked final-answer text; the admitted third returned repeated literal references
+without the story's meaning. These are separate protocol and semantic failures.
+
+The story now has a dedicated prompt, using its purpose from the shared requirement
+descriptions. All specification authoring and native unit repairs reuse one static
+JSON text context explaining ordered fragments, prose and conditional exact-copy
+insertion. Reviewed omission repairs receive the same text context. Common guidance
+has been removed from the unit prompts; the selected schema still owns response shape.
+
+Native packet projection presents earlier drafts only to dependent units. Story
+requests and their native repairs retain the complete source evidence without the
+generated brief or entity decision. Entities retain the brief, and records retain
+both dependencies. Repair snapshots, selected evidence, semantic review and bounded
+protocol correction keep their existing owners and rules. Reasoning-only responses
+remain rejected; no heuristic or new continuation path treats literal-only content
+as semantically supported. Improved live output remains unverified until a separately
+approved E2E run.
+
+Validation:
+
+- `zig build test-specification-generation test-model-request-workflow -j2 --global-cache-dir .zig-cache/global --summary all`:
+  **544/544 passed**. Log: `.zig-cache/story-targeted.log`.
+- `zig build test-specification-generation test-model-result-schema test-required-authority test-architecture lint -j2 --global-cache-dir .zig-cache/global --summary all`:
+  **544/544 passed**, including allocation-failure cleanup for dependent packets,
+  unchanged source evidence and stale native repair dependencies.
+  Log: `.zig-cache/story-contracts.log`.
+- The workflow retains 32 subgraphs by generalizing the existing extraction
+  context wrapper into `model-request-with-context`; the superseded wrapper is
+  removed.
+- `ZIG_GLOBAL_CACHE_DIR="$PWD/.zig-cache/global" zig build test-integration smoke -j2 --global-cache-dir .zig-cache/global --summary all`:
+  **26/26 integration tests passed** and packaged generation YAML loaded correctly.
+  The debugger smoke check could not bind localhost inside the sandbox
+  (`Operation not permitted`). Log: `.zig-cache/story-runtime.log`.
+- `ZIG_GLOBAL_CACHE_DIR="$PWD/.zig-cache/global" zig build verify -j2 --global-cache-dir .zig-cache/global --summary all`:
+  **1286/1287 passed**, **126/129 build steps succeeded**. Rerun outside the
+  sandbox after confirming its localhost bind denial. Offline integration,
+  architecture, lint and all clean packaged smoke checks passed, including the
+  embedded debugger. The sole failure remains native scenario 103
+  (`OperationExecutionFailed`, source-support revision 6), with the same diagnostic
+  in `.zig-cache/current-cleanup-verify.log` before this change.
+  Log: `.zig-cache/story-verify-final.log`.
+- `git diff HEAD --check`: passed. Case assets exist, destinations are unique and
+  the case and static context parse as JSON. No live E2E run was performed.

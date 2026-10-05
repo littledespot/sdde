@@ -889,6 +889,13 @@ The optional composition `definition` selects an existing named definition in it
 unresolved selections. Projections, requests and complete validation retain this
 same binding, and registry transfer rebinds to its destination schema owner.
 
+A part's optional `input-context` selects a native immutable assignment context
+into `assignment` through the shared request preparation owner. The complete
+evidence packet and declared prerequisites remain available; missing contexts
+reject before inference. Corrections retain the selected presentation. Contexts
+carry applicable guidance, not independent validation, repair or gap policy
+(ADR 0016's approved assignment-context amendment).
+
 The mechanism is shared across supported JSON shapes. Domain owners contribute
 facts and semantic validators; they do not gain separate assembly, retry, storage
 or continuation policies. An assembled candidate retains every real producer

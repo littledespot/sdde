@@ -126,7 +126,15 @@ Typed content covers these concerns; each concern does not require a separate ca
   follows existing repair/failure routing, never missing-user-information routing.
 - Focused source review sends one bound requirement at a time. Its closed response
   contains the semantic finding, explanation, required question and genuinely
-  selectable source evidence. A candidate-omission finding triggers a separate
+  selectable source evidence. Independent feature fields carry only the assigned
+  field's resolved text and provenance, its purpose and complete original source
+  evidence. Exact and passive references resolve through the canonical text
+  projector. Review display and evidence admission share native feature-field
+  selection; admission alone determines the permitted evidence binding.
+  Record and coverage assessments retain surrounding candidate context;
+  separate loss localization also retains upstream reconstruction context.
+  Initial findings and authorized review corrections reuse this projection.
+  A candidate-omission finding triggers a separate
   loss-location call with the finding fixed; that call cannot revise the verdict.
   The engine validates the location and complete review before repair or publication.
   For a positive finding with a fixed claim set, the engine
@@ -147,7 +155,14 @@ Typed content covers these concerns; each concern does not require a separate ca
 The approved ADR 0020 successor binds source-obligation groups from validated
 reconciliation signals before model authoring. Signal grouping and authoring-role
 assignment are separate model calls. Feature-level fields have explicit
-group-role assignments; record authoring runs per bound group and may
+group-role assignments. Reconciliation assignments use ADR 0016's native
+assignment contexts over one complete evidence catalogue. Role assignment receives
+only its exact-group rule and role purposes projected from the shared requirement
+descriptions; summary, disposition, signal and conflict rules remain with their
+own assignments. A group may support several roles and a role several groups;
+unsupported roles remain unassigned and mandatory coverage still blocks authoring.
+No context-only literal is promoted to behavior merely to fill a role.
+Record authoring runs per bound group and may
 return several requirements. Each generation and repair packet presents the
 bound fields' purposes from the shared requirement descriptions beside their
 claim IDs. Claim meaning and citations appear once in the evidence catalogue;
@@ -171,6 +186,15 @@ For each feature-brief or specification unit, the declared model operation retur
   generation subgraph. Narrative, applicability and record drafting receive their
   purpose-specific configured prompts. The same purpose prompt accompanies native
   repairs and their protocol corrections.
+  The primary story has its own concise prompt and uses the canonical story purpose.
+  Generation, native unit repair and reviewed omission repair share static text
+  guidance from `spec/generation.context.json`: ordered fragments form one field
+  value, prose expresses its meaning and exact-copy references insert eligible
+  literals. Schemas remain the sole response-shape authority. Initial and native
+  repair packets include earlier drafts only for dependent units: entities receive
+  the brief, records receive the brief and entity decision. Brief and story requests
+  receive neither sibling draft. Source evidence and native repair dependencies
+  remain complete; packet presentation does not change semantic review or retry policy.
   Functional requirements express behavior and obligation; acceptance criteria
   express precondition, triggering action and observable outcome. A rejected
   candidate may omit intent: repair preserves source meaning and correct surrounding

@@ -57,6 +57,12 @@ test "authoring roles are assigned after grouping and reject duplicate or foreig
     }
     try std.testing.expect(found_records);
 
+    var duplicate_roles = groups;
+    const repeated_roles = try a.dupe(r.RoleAssignment, proposal.role_assignments);
+    repeated_roles[0].generation_roles = &.{ .records, .records };
+    duplicate_roles.prior.proposal.role_assignments = repeated_roles;
+    try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, duplicate_roles)).invalid.issue.rule);
+
     const bad = try a.alloc(r.RoleAssignment, proposal.role_assignments.len + 1);
     @memcpy(bad[0..proposal.role_assignments.len], proposal.role_assignments);
     bad[bad.len - 1] = proposal.role_assignments[0];
@@ -65,6 +71,34 @@ test "authoring roles are assigned after grouping and reject duplicate or foreig
     try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, changed)).invalid.issue.rule);
     bad[bad.len - 1].claim_ids = &.{.{ .ordinal = 999 }};
     try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, changed)).invalid.issue.rule);
+}
+test "role assignment permits shared roles but rejects splitting or reordering a supplied group" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "Renew the library loan.\n", "Show its new due date.\n" });
+    defer fixture.deinit();
+    const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+    var proposal = try f.global(a, input);
+    var parsed: r.Parsed = .{ .input = input, .proposal = .{ .global = proposal } };
+    const separate = (try f.validate_signals.execute(a, (try f.validate_dispositions.execute(a, parsed)).valid, fixture.context())).valid;
+    const assigned = (try f.validate_roles.execute(a, separate)).valid;
+    var record_groups: usize = 0;
+    for (assigned.signals) |signal| if (std.mem.indexOfScalar(r.GenerationRole, signal.generation_roles, .records) != null) {
+        record_groups += 1;
+    };
+    try std.testing.expectEqual(@as(usize, 2), record_groups);
+    const ids = [_]r.ClaimId{ proposal.signals[0].claim_ids[0], proposal.signals[1].claim_ids[0] };
+    proposal.signals = &.{.{ .claim_ids = &ids, .content = proposal.signals[0].content }};
+    proposal.role_assignments = &.{.{ .claim_ids = &ids, .generation_roles = &.{ .title, .records } }};
+    parsed.proposal.global = proposal;
+    const grouped = (try f.validate_signals.execute(a, (try f.validate_dispositions.execute(a, parsed)).valid, fixture.context())).valid;
+    try std.testing.expectEqual(@as(usize, 2), (try f.validate_roles.execute(a, grouped)).valid.signals[0].generation_roles.len);
+    for ([_][]const r.ClaimId{ ids[0..1], &.{ ids[1], ids[0] } }) |bad| {
+        var changed = grouped;
+        changed.prior.proposal.role_assignments = &.{.{ .claim_ids = bad, .generation_roles = &.{.records} }};
+        try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, changed)).invalid.issue.rule);
+    }
 }
 const Fixture = struct {
     inputs: r.evidence.Inputs,

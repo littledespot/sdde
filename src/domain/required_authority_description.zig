@@ -25,7 +25,7 @@ pub fn task(allocator: std.mem.Allocator, id: a.Id) a.Error![]const u8 {
             .display_name => "A name identifying the feature's purpose.",
             .description => "A description of intended user-visible behavior.",
             .primary_goal => "The intended user benefit.",
-            .primary_user_story => "The actor, action and intended result.",
+            .primary_user_story => "One narrative identifying the actor, their action and the intended result, preserving source-backed conditions and obligations.",
             .acceptance_criteria => "Observable pass/fail outcomes.",
             .functional_requirements => "Required application behavior.",
             .scenario_coverage => "Source-required triggers, outcomes and exact copy.",

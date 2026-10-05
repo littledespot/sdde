@@ -4,6 +4,7 @@ const std = @import("std");
 const schema = @import("model_result_schema.zig");
 const pointer = @import("json_pointer.zig");
 const workflow = @import("workflow.zig");
+const packets = @import("model_input_packet.zig");
 
 pub const version = "json-composition/v1";
 pub const Error = error{InvalidJsonComposition} || std.mem.Allocator.Error;
@@ -17,6 +18,7 @@ pub const Part = struct {
     paths: []const Pointer,
     requires: []const usize,
     alternatives: []const Alternative,
+    input_context: ?packets.AssignmentContextId = null,
 };
 pub const PartValue = struct { part: usize, value: std.json.Value };
 
@@ -96,6 +98,7 @@ pub const Plan = opaque {
                 .paths = paths,
                 .requires = try allocator.dupe(usize, source.requires),
                 .alternatives = &.{},
+                .input_context = if (source.input_context) |id| .{ .bytes = try allocator.dupe(u8, id.bytes) } else null,
             };
         }
         return derive(allocator, copied, self.resultAlias(), self.bytes(), canonical, self.definition());
@@ -141,8 +144,8 @@ pub fn compile(allocator: std.mem.Allocator, raw: std.json.Value, bytes: []const
     if (entries.count() == 0 or entries.count() > schema.max_properties) return invalid();
     const parts = try allocator.alloc(Part, entries.count());
     for (entries.keys(), entries.values(), parts) |name, value, *part| {
-        if (value != .object or value.object.count() < 1 or value.object.count() > 2) return invalid();
-        for (value.object.keys()) |key| if (!std.mem.eql(u8, key, "paths") and !std.mem.eql(u8, key, "requires")) return invalid();
+        if (value != .object or value.object.count() < 1 or value.object.count() > 3) return invalid();
+        for (value.object.keys()) |key| if (!std.mem.eql(u8, key, "paths") and !std.mem.eql(u8, key, "requires") and !std.mem.eql(u8, key, "input-context")) return invalid();
         const id = PartId.parse(name) orelse return invalid();
         const paths_value = value.object.get("paths") orelse return invalid();
         if (paths_value != .array or paths_value.array.items.len == 0 or paths_value.array.items.len > schema.max_properties) return invalid();
@@ -156,6 +159,11 @@ pub fn compile(allocator: std.mem.Allocator, raw: std.json.Value, bytes: []const
             if (destination.segments.len == 0 or destination.segments.len > schema.max_depth) return invalid();
         }
         part.* = .{ .id = .{ .bytes = try allocator.dupe(u8, id.bytes) }, .paths = paths, .requires = &.{}, .alternatives = &.{} };
+        if (value.object.get("input-context")) |context| {
+            if (context != .string) return invalid();
+            const context_id = packets.AssignmentContextId.parse(context.string) orelse return invalid();
+            part.input_context = .{ .bytes = try allocator.dupe(u8, context_id.bytes) };
+        }
     }
     for (entries.values(), parts, 0..) |value, *part, index| {
         if (value.object.get("requires")) |required| {

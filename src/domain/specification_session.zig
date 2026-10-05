@@ -97,11 +97,10 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
         }).scopes
     else
         scopes.items;
+    const selected = try unit(index);
     const payload = .{
-        .unit = try unit(index),
+        .unit = selected,
         .source_assignment = try binding.guidance(a, assigned),
-        .brief = if (current.units[0]) |checked| checked.response.content.brief else null,
-        .entities = if (current.units[2]) |checked| checked.response.content.entities else null,
         .claims = projected.claims,
         .citations = projected.citations,
         .preserved_tokens = exact_choices.items,
@@ -109,14 +108,23 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, offered_scopes),
     };
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), a, payload);
-    const selected = try unit(index);
-    const result = try packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, .{ .bytes = switch (selected) {
+    var result = try packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, .{ .bytes = switch (selected) {
         .brief => "brief",
         .primary_user_story => "primary_user_story",
         .entities => "entities",
         .records => "records",
     } });
     defer packets.release(result);
+    // Only dependent units receive earlier drafts. The evidence catalogue and
+    // native dependency snapshots remain complete for generation and repair.
+    switch (selected) {
+        .brief, .primary_user_story => {},
+        .entities, .records => if (current.units[0]) |checked| {
+            const contextual = try packets.withContext(@TypeOf(checked.response.content.brief), allocator, result, "brief", checked.response.content.brief);
+            packets.release(result);
+            result = contextual;
+        },
+    }
     const exact_ids = try a.alloc(i64, exact_choices.items.len);
     for (exact_choices.items, exact_ids) |choice, *id| id.* = choice.claim_id.ordinal;
     const input = @import("reference_model_input.zig");
@@ -124,6 +132,9 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
     if (selected == .records) {
         const entities = current.units[2] orelse return error.InvalidSpecificationUnit;
         if (entities.unit != .entities or entities.response != .content or entities.response.content != .entities) return error.InvalidSpecificationUnit;
+        const contextual = try packets.withContext(@TypeOf(entities.response.content.entities), allocator, result, "entities", entities.response.content.entities);
+        packets.release(result);
+        result = contextual;
         if (entities.response.content.entities.disposition == .not_applicable) {
             const fixed = try packets.withExcludedVariants(allocator, result, &.{.{ .kind = "entity" }});
             defer packets.release(fixed);

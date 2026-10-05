@@ -347,6 +347,7 @@ pub const Driver = struct {
                     found_prompt = found_prompt or std.mem.eql(u8, part.bytes(), prompt);
                 };
                 std.testing.expect(found_prompt) catch unreachable;
+                assertGenerationContext(arena.allocator(), current_request.prepared().?) catch unreachable;
                 self.generation_calls += 1;
             }
             self.calls += 1;
@@ -489,10 +490,20 @@ fn assertSupportMerge(allocator: std.mem.Allocator, before: *const data.View, af
 
 fn generationPrompt(unit: @import("../domain/specification_generation.zig").Unit) []const u8 {
     return switch (unit) {
-        .brief, .primary_user_story => "design/workflows/spec/generation.prompt.md",
+        .brief => "design/workflows/spec/generation.prompt.md",
+        .primary_user_story => "design/workflows/spec/story.prompt.md",
         .entities => "design/workflows/spec/entities.prompt.md",
         .records => "design/workflows/spec/records.prompt.md",
     };
+}
+
+fn assertGenerationContext(a: std.mem.Allocator, request: *const @import("../domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest) !void {
+    const configured = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/generation.context.json", a, .unlimited);
+    var count: usize = 0;
+    for (request.content) |part| if (part == .guidance and std.mem.eql(u8, part.guidance, configured)) {
+        count += 1;
+    };
+    try std.testing.expectEqual(@as(usize, 1), count);
 }
 
 fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest, packet: *const @import("../domain/model_input_packet.zig").Packet) !void {
@@ -503,6 +514,7 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
     try std.testing.expectEqualStrings(packet.body(), user);
     const input = try std.json.parseFromSlice(std.json.Value, a, user, .{});
     const repair = input.value.object.get("repair").?.object;
+    if (request.model_request_id.immutable_unit_owner_id == .specification_unit) try assertGenerationContext(a, request);
     try std.testing.expect(!repair.contains("expected"));
     try std.testing.expectEqual(std.mem.eql(u8, repair.get("operation").?.string, "replace"), repair.contains("current_value"));
     if (request.model_request_id.immutable_unit_owner_id == .semantic_review) {
