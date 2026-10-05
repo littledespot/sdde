@@ -14,8 +14,4 @@ if [ "$#" -ne 1 ] || [ "$1" != "--help" ]; then
     fi
 fi
 
-if [ "$#" -eq 0 ]; then
-    set -- --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json
-fi
-
 exec zig build e2e-spec -- "$@"

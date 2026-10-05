@@ -24,6 +24,7 @@ pub const schemas = [_]data.Schema{ ledger_schema, assigned_schema, validated_sc
 const preparation_parameters = [_]operation.ParameterDescriptor{
     .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
     .{ .id = "prompt", .kind = .resource, .resource_kind = .prompt, .required = true, .workflow_definition_safe = true },
+    .{ .id = "context", .kind = .resource, .resource_kind = .prompt, .required = false, .workflow_definition_safe = true },
     .{ .id = "protocol-prompt", .kind = .resource, .resource_kind = .prompt, .required = false, .workflow_definition_safe = true },
     .{ .id = "result-schema", .kind = .resource, .resource_kind = .result_schema, .required = false, .workflow_definition_safe = true },
     .{ .id = "composition-part", .kind = .string, .required = false, .workflow_definition_safe = true },
@@ -125,7 +126,7 @@ pub const Build = struct {
         const self = context.?;
         const request = try readCurrent(&input.step.data, validated_schema);
         // These resources were selected once by the originating compiled step.
-        var parts: [2]provider.ModelVisibleContent = undefined;
+        var parts: handoff.ContentBuffer = undefined;
         var input_id: [32]u8 = undefined;
         const source = request.buildSource(&input_id) catch return error.OperationExecutionFailed;
         var owned = self.action.execute(self.allocator, source, request.content(&parts)) catch return error.OperationExecutionFailed;
@@ -139,7 +140,7 @@ pub const Build = struct {
 
 const Selection = struct {
     value: handoff.Selection,
-    owned_packet: ?*packets.Packet = null,
+    owned_packet: ?*const packets.Packet = null,
     fn deinit(self: Selection) void {
         if (self.owned_packet) |packet| packets.release(packet);
     }
@@ -159,6 +160,7 @@ fn selections(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: op
     var result: handoff.Selection = .{
         .binding = selected.*,
         .prompt = resource(step, "prompt") orelse return error.OperationExecutionFailed,
+        .context = resource(step, "context"),
         .result = undefined,
         .input = if (packet) |value| .{ .packet = value } else if (static_input) |value| .{ .resource = value } else null,
         .protocol_prompt = resource(step, "protocol-prompt"),
@@ -172,12 +174,9 @@ fn selections(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: op
         const binding = state.select(scratch, part) catch return error.OperationExecutionFailed;
         result.composition = binding;
         result.result = .{ .id = state.plan.resultAlias(), .content = .{ .result_schema = state.plan.resultSchema() } };
-        if (binding.prerequisites.len != 0) {
-            const context = state.inputs(scratch, binding) catch return error.OperationExecutionFailed;
-            const derived = packets.withJsonContext(allocator, state.base, "prerequisites", context) catch return error.OperationExecutionFailed;
-            result.input = .{ .packet = derived };
-            return .{ .value = result, .owned_packet = derived };
-        }
+        const derived = state.packet(allocator, binding) catch return error.OperationExecutionFailed;
+        result.input = .{ .packet = derived };
+        return .{ .value = result, .owned_packet = derived };
     } else {
         if (step.data.contains(.json_composition)) return error.OperationExecutionFailed;
         result.result = resource(step, "result-schema") orelse return error.OperationExecutionFailed;

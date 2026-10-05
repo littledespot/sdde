@@ -89,21 +89,37 @@ cloning resolves the selection against the destination resource owner. Captured
 composition bytes include the selection. No copied schema or second registry is
 introduced. This focused §12.9 amendment was approved on 19 September 2026.
 Each part has nonempty
-`paths` and optional `requires`; unknown fields reject. Part IDs and the result
+`paths`, optional `requires`, and optional `input-context`; unknown fields reject.
+`input-context` is a resource-ID-shaped name in the native packet's immutable
+assignment-context catalogue, not a file, selector expression or replacement input.
+Part IDs and the result
 alias use the existing resource-ID contract. The existing schema-profile bound
 limits parts/selectors; dependencies and paths validate before inference.
 
 | Registered operation | Configuration / handoff |
 | --- | --- |
 | `initialize-json-composition` | `composition` resource; binds the current packet and execution epoch. |
-| `prepare-model-request` / `assign-model-request-id` | Select `composition-part`, or the existing `result-schema` path, exclusively. A part cannot override schema, result selection or input. |
+| `prepare-model-request` / `assign-model-request-id` | Select `composition-part`, or the existing `result-schema` path, exclusively. A part cannot override schema, result selection or the native evidence packet. |
 | `retain-json-part` | Retains the exact schema-admitted, terminal-accepted request result and prerequisite placements. |
 | `assemble-json` | Retires staging and installs the complete, unvalidated JSON candidate in one runner delta. |
 | `validate-assembled-json` | Reuses complete schema validation; native consumers require its associated evidence. |
 
-Dependent requests add only configured prerequisite values to the original packet's
-`prerequisites` object. The ordinary request body and protocol correction remain
-shared; each explicit call site keeps its own assignment identity.
+Dependent requests add configured prerequisite values to the original packet's
+`prerequisites` object. Each explicit call site keeps its own assignment identity.
+
+**Assignment-context amendment (user-approved, 3 October 2026):** native input
+owners may contribute typed read-only assignment contexts beside one complete
+evidence packet. A compiled part's `input-context` selects exactly one of those
+contexts into `assignment`. Unknown contexts reject before inference; no context
+is selected implicitly. The common composition/request owner performs selection,
+preserving the base packet, epoch, prerequisite origins, restrictions and native
+repair authority. Protocol corrections retain that exact selected input.
+Contexts may present applicable rules and field purposes; they cannot filter
+evidence, alter identities, choose roles, weaken coverage or create continuation
+policy. Canonical native validators and requirement descriptions remain the sole
+rule and purpose owners. Reconciliation uses this mechanism for summary,
+disposition, signal, role and conflict assignments, not a call-number-specific
+path. Atomic repairs keep their existing authorized scope and projection owner.
 
 Request preparation selects either its existing schema/definition binding or one
 sealed composition-part binding. The latter resolves the complete schema through

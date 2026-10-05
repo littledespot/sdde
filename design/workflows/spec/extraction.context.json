@@ -1,0 +1,18 @@
+{
+  "purpose": "Reference extraction field meanings. Apply only to fields in the selected result schema; the schema defines the response shape.",
+  "kind": "Use claims when prose or exact-token obligations exist. Use no_feature_claim only when neither exists.",
+  "claims": "One independently meaningful source fact per entry. Include meaningful identity and purpose headings. Keep each fact's conditions, qualifiers and obligation strength; separate independent behavior, implementation and verification facts into different entries.",
+  "content": "The meaning of this one claim. Classify by what the source requires or states, not keywords or obligation strength.",
+  "content.kind": {
+    "business": "Feature identity, purpose, goals or observable product behavior, including outputs, conditions and behavioral constraints. Preserve technical qualifiers with the behavior.",
+    "design": "An explicit design decision or constraint.",
+    "technical": "Source-stated implementation mechanisms, dependencies, runtime environments, interfaces or protocols. Technical terminology alone does not make observable behavior technical.",
+    "validation": "An explicit obligation to test, inspect, measure or otherwise verify correctness. A behavioral requirement being testable does not make it a validation claim.",
+    "implementation_assumption": "An assumption stated by the source, never an invented default.",
+    "open_question": "A question left unresolved by the source.",
+    "scope_guard": "An explicit inclusion, exclusion or scope boundary."
+  },
+  "segments": "Ordered fragments concatenated into one claim, usually one complete string. They are not separate claims. Use strings for meaning and supplied passive or exact-copy references only when eligible.",
+  "nodes": "Ordered fragments concatenated into one reference text. Use strings for meaning; supplied passive or source references display paths, not semantic descriptions.",
+  "citations": "Source evidence for the complete claim, including its conditions. Each first/last pair selects an inclusive range of source_lines IDs from the current input."
+}

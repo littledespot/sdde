@@ -142,6 +142,34 @@ The repair guidance contains:
 - the exact replacement schema;
 - the instruction that unrelated fields must not be returned or changed.
 
+**Focused-review repair (approved 26 September 2026).** A produced finding is
+validated before the next native subject is requested. A mechanically invalid
+finding may use the existing selected-value/field atomic repair while other
+subjects remain pending; pending subjects do not produce missing-finding defects.
+Authorization binds the current diagnostic, typed subject, original value,
+revision and dependencies. An admitted negative or inconclusive finding remains
+review data; repair cannot change its verdict. Protocol correction stays on the
+same request assignment and selected schema. The collection's first admitted
+native-candidate origin stays fixed through later findings and repairs, while each
+finding retains its own origin. Complete membership, evidence and relationship
+validation run before reconciliation, publication or clarification. The existing
+runner owns request retirement, per-assignment and native-defect retry allowances,
+and global actual-token accounting; successful independent work does not reset an
+unresolved target or replenish the finite budget.
+
+Selected source-review and generation repair responses reject `provenance`,
+including record insertion and coupled record repair. The engine reconstructs
+canonical `provenance.claim_ids` from the bound source group or selected
+diagnostic producer before old-value/revision and full-candidate checks.
+Source-ID or detail corrections remain in their existing selected repair
+families; detail repair cannot change the verdict. The original source-bound
+assignment, explicit `S`, effective evidence bound and siblings stay pinned by
+the existing atomic authorization. A value-only replacement cannot expand them;
+changing the source obligation requires upstream reconciliation and
+regeneration. Malformed or corrupt stored evidence is rejected before
+model-response reconstruction. Unbound authority is an engine block, not a
+model repair or user clarification.
+
 Unavailable passive/exact-copy diagnostics identify the rejected selection and
 location. Existing native evidence choices drive both schema narrowing (§12.2)
 and concise corrective guidance: state validation failed, name unavailable
@@ -224,16 +252,27 @@ The engine never trusts a model field such as `valid: true`.
 
 ### 22.6 Unparseable output
 
-**Approved model-response normalization (21 September 2026):** first parse the
-original complete response strictly. Only after a `SyntaxError`, if its first
-three bytes are exactly `{"{`, the shared model-envelope decoder may remove the
-first two bytes (`{"`) once and strictly parse the entire remainder. Accept the
-normalization only when that remainder is one complete JSON object. Valid input
-is never altered; no other prefix, fence, suffix, duplicate key or malformed
+**Approved model-response normalization (21 September, extended 3 October 2026):**
+first parse the original complete response strictly. Only after a `SyntaxError`,
+the shared model-envelope decoder may recognize an unfinished opening `{"`
+immediately followed by another object opener, or by an unclosed, unescaped member
+name followed by that object opener. In the latter case, the name must exactly
+repeat the following object's first quoted member name, followed by a colon;
+only JSON whitespace may separate that object's opener, member and colon. Thus
+both `{"{"value":1}` and `{"value{"value":1}` qualify, without a field-name,
+provider, model or workflow special case. The prefix parser considers only that
+initial unfinished opener and is bounded by the captured response length. It stops
+on a closing quote, escape or control byte and never searches past another fragment.
+Member-name bytes must be valid UTF-8.
+
+Remove that one prefix and strictly parse the entire remainder. Accept normalization
+only when it is one complete JSON object. Valid input is never altered; no leading
+whitespace, recursive removal, other prefix, fence, suffix, duplicate key or malformed
 remainder is salvaged. Schema and domain validation remain mandatory.
 
-The candidate retains a typed `removed_leading_brace_quote` fact and its original
-invocation evidence. The runner logs `model.response_normalized` at warning level
+The candidate retains a typed `removed_leading_brace_quote` or
+`removed_repeated_field_prefix` fact and its original invocation evidence.
+The runner logs `model.response_normalized` at warning level
 with that rule, node, request and attempt; logging failure remains terminal.
 Raw provider/text captures are unchanged. The shared domain handoff supplies the
 decoder-consumed bytes; composition continues to use its validated tree. Neither

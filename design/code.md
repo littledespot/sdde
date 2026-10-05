@@ -1479,6 +1479,7 @@ SDDToolKitConfig {
     specs, references, specsArchive, workflows,
     toolchainPreset, principles, templates, providers
   },
+  validation?: { sourcePreservationCheck?: boolean },
   principles?: { filenameHints: map<basename, category>,
                  selections: { stage, environment, fileKind, categories[] }[] }
 }

@@ -34,6 +34,11 @@ pub const SDDToolKitConfig = struct {
     models: ModelsConfig,
     paths: PathsConfig,
     principles: ?@import("principle_policy.zig").Config = null,
+    validation: ValidationConfig = .{},
+};
+
+pub const ValidationConfig = struct {
+    sourcePreservationCheck: bool = false,
 };
 
 pub const Owned = struct {

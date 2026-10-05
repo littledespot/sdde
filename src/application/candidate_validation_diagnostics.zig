@@ -53,6 +53,7 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
             const selected = if (tag == .support) value.support else value.principle_support.result;
             switch (selected) {
                 .rejected => |rejected| return if (tag == .support) .{ .support = rejected.rejection } else .{ .principle_review = rejected.rejection },
+                .pending => {},
                 .accepted => |accepted| for (accepted.inputs.evidence) |evidence| {
                     if (evidence.finding != .supported) return .{ .support_findings = .from(if (tag == .support) .source else .principles, accepted.inputs, null) };
                 },

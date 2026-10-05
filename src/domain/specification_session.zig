@@ -4,6 +4,7 @@ const g = @import("specification_generation.zig");
 const p = @import("specification_provenance.zig");
 const packets = @import("model_input_packet.zig");
 const identity = @import("model_request_identity.zig");
+const binding = @import("specification_source_binding.zig");
 pub const unit_count = std.meta.fields(g.Unit).len;
 pub const records_index = @intFromEnum(std.meta.Tag(g.Unit).records);
 pub const Session = struct {
@@ -11,12 +12,15 @@ pub const Session = struct {
     reference_state: @import("reference_identity.zig").StateId,
     revision: u64 = 1,
     completed: usize = 0,
+    record_cursor: usize = 0,
+    record_group_count: usize = 0,
+    record_batches: []const g.Checked = &.{},
     units: [unit_count]?g.Checked = @splat(null),
     starting_ledger: @import("specification_identity.zig").Ledger = .{},
     omission_target_bound: ?u32 = null,
     pending_coverage_repair: ?@import("atomic_repair.zig").Pending(@import("specification_coverage.zig").TokenSubject) = null,
 };
-pub const Error = @import("strict_json.zig").Error || g.Error || packets.Error;
+pub const Error = @import("strict_json.zig").Error || g.Error || packets.Error || binding.Error;
 
 pub fn unit(index: usize) error{InvalidSpecificationUnit}!g.Unit {
     return switch (index) {
@@ -31,7 +35,14 @@ pub fn unit(index: usize) error{InvalidSpecificationUnit}!g.Unit {
 pub fn initialize(feature: @import("feature_identity.zig").FeatureId, context: p.Context) Error!Session {
     if (@import("feature_identity.zig").FeatureId.parse(feature.bytes) == null or !p.generationReady(context.references)) return error.InvalidSpecificationUnit;
     _ = try p.items(context);
-    return .{ .feature = feature, .reference_state = context.inputs.corpus.state_id };
+    try binding.validate(@import("reference_support.zig").records(context.references), context.inputs);
+    return .{ .feature = feature, .reference_state = context.inputs.corpus.state_id, .record_group_count = try binding.recordCount(@import("reference_support.zig").records(context.references)) };
+}
+
+pub fn currentBinding(a: std.mem.Allocator, current: Session, context: p.Context) Error!binding.Bound {
+    if (!current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
+    if (current.record_group_count != try binding.recordCount(@import("reference_support.zig").records(context.references))) return error.InvalidSpecificationUnit;
+    return binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(current.completed), current.record_cursor);
 }
 
 pub fn owner(allocator: std.mem.Allocator, current: Session) Error!identity.ImmutableUnitOwnerId {
@@ -44,7 +55,7 @@ pub fn ownerFor(allocator: std.mem.Allocator, current: Session, index: usize) Er
             .reference_state_id = .{ .bytes = current.reference_state.bytes },
             // Feature directory is the feature identity; no second ownership registry.
             .feature_id = current.feature,
-            .unit_slot_id = .{ .bytes = try std.fmt.allocPrint(allocator, "specification-{d}", .{index + 1}) },
+            .unit_slot_id = .{ .bytes = if (index == records_index and current.completed == records_index) try std.fmt.allocPrint(allocator, "specification-{d}-group-{d}", .{ index + 1, current.record_cursor + 1 }) else try std.fmt.allocPrint(allocator, "specification-{d}", .{index + 1}) },
         },
     };
 }
@@ -64,6 +75,7 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const a = arena.allocator();
+    const assigned = try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(index), current.record_cursor);
     var claims: std.ArrayList(@import("reference_reconciliation.zig").Item) = .empty;
     var scopes: std.ArrayList(@import("reference_evidence.zig").Scope) = .empty;
     for (context.references.records.assignments.checked.prior.prior.dispositions) |disposition| {
@@ -85,10 +97,10 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
         }).scopes
     else
         scopes.items;
+    const selected = try unit(index);
     const payload = .{
-        .unit = try unit(index),
-        .brief = if (current.units[0]) |checked| checked.response.content.brief else null,
-        .entities = if (current.units[2]) |checked| checked.response.content.entities else null,
+        .unit = selected,
+        .source_assignment = try binding.guidance(a, assigned),
         .claims = projected.claims,
         .citations = projected.citations,
         .preserved_tokens = exact_choices.items,
@@ -96,18 +108,40 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, offered_scopes),
     };
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), a, payload);
-    const selected = try unit(index);
-    const result = try packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, .{ .bytes = switch (selected) {
+    var result = try packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, .{ .bytes = switch (selected) {
         .brief => "brief",
         .primary_user_story => "primary_user_story",
         .entities => "entities",
         .records => "records",
     } });
     defer packets.release(result);
+    // Only dependent units receive earlier drafts. The evidence catalogue and
+    // native dependency snapshots remain complete for generation and repair.
+    switch (selected) {
+        .brief, .primary_user_story => {},
+        .entities, .records => if (current.units[0]) |checked| {
+            const contextual = try packets.withContext(@TypeOf(checked.response.content.brief), allocator, result, "brief", checked.response.content.brief);
+            packets.release(result);
+            result = contextual;
+        },
+    }
     const exact_ids = try a.alloc(i64, exact_choices.items.len);
     for (exact_choices.items, exact_ids) |choice, *id| id.* = choice.claim_id.ordinal;
     const input = @import("reference_model_input.zig");
-    return input.withTextChoices(allocator, result, try input.passiveIds(a, payload.passive_literals), exact_ids);
+    const passive_ids = try input.passiveIds(a, payload.passive_literals);
+    if (selected == .records) {
+        const entities = current.units[2] orelse return error.InvalidSpecificationUnit;
+        if (entities.unit != .entities or entities.response != .content or entities.response.content != .entities) return error.InvalidSpecificationUnit;
+        const contextual = try packets.withContext(@TypeOf(entities.response.content.entities), allocator, result, "entities", entities.response.content.entities);
+        packets.release(result);
+        result = contextual;
+        if (entities.response.content.entities.disposition == .not_applicable) {
+            const fixed = try packets.withExcludedVariants(allocator, result, &.{.{ .kind = "entity" }});
+            defer packets.release(fixed);
+            return input.withTextChoices(allocator, fixed, passive_ids, exact_ids);
+        }
+    }
+    return input.withTextChoices(allocator, result, passive_ids, exact_ids);
 }
 
 /// A value-only repair cannot borrow choices from unchanged sibling evidence.
@@ -156,10 +190,13 @@ fn narrowDisplayCatalogues(a: std.mem.Allocator, base: *const packets.Packet, pa
         }
     }
     const body = try std.json.Stringify.valueAlloc(scratch, parsed.value, .{});
-    return if (base.repairPermit()) |permit|
+    const projected = if (base.repairPermit()) |permit|
         packets.createRepair(a, body, base.unit(), base.purpose(), base.resultDefinition(), permit, base.repairOrigin())
     else
         packets.create(a, body, base.unit(), base.purpose(), base.resultDefinition());
+    const unbound = try projected;
+    defer packets.release(unbound);
+    return packets.withRestrictions(a, unbound, base.excludedVariants(), base.integerChoices());
 }
 
 pub fn append(current: Session, checked: g.Checked) Error!Session {
@@ -172,12 +209,52 @@ pub fn append(current: Session, checked: g.Checked) Error!Session {
     return next;
 }
 
-/// Cross-unit consistency belongs to the session, not individual content fields.
-/// The same check governs admission, completed replacements and assembly.
-pub fn checkMembership(current: Session, checked: g.Checked) Error!?@import("specification_candidate.zig").Issue {
+/// Preserve each source-bound record batch until all groups have been authored.
+/// The completed unit remains one canonical owner for repair, coverage and IDs.
+pub fn appendBound(a: std.mem.Allocator, current: Session, checked: g.Checked) Error!Session {
+    if (current.completed != records_index) return append(current, checked);
+    if (checked.unit != .records or checked.response != .content or checked.response.content != .records or
+        current.record_group_count == 0 or current.record_cursor >= current.record_group_count or
+        current.record_batches.len != current.record_cursor) return error.InvalidSpecificationUnit;
+    const batches = try a.alloc(g.Checked, current.record_batches.len + 1);
+    @memcpy(batches[0..current.record_batches.len], current.record_batches);
+    batches[current.record_batches.len] = checked;
+    var next = current;
+    next.record_batches = batches;
+    next.record_cursor += 1;
+    if (next.record_cursor < next.record_group_count) {
+        next.revision = std.math.add(u64, current.revision, 1) catch return error.InvalidSpecificationUnit;
+        return next;
+    }
+    var total: usize = 0;
+    for (batches) |batch| total = std.math.add(usize, total, batch.response.content.records.len) catch return error.InvalidSpecificationUnit;
+    const records = try a.alloc(g.spec.RecordProposal, total);
+    const origins = try a.alloc(@import("specification_candidate.zig").FieldOrigin, total);
+    var offset: usize = 0;
+    for (batches) |batch| {
+        for (batch.response.content.records, 0..) |record, index| {
+            records[offset] = record;
+            origins[offset] = .{ .target = .{ .record = offset }, .origin = batch.origins.at(.{ .target = .{ .record = index } }) };
+            offset += 1;
+        }
+    }
+    var combined = checked;
+    combined.response.content.records = records;
+    combined.origins = .{ .fields = origins };
+    return append(next, combined);
+}
+
+/// Cross-batch and cross-unit consistency belongs to the session. The same
+/// check governs admission, completed replacements and assembly.
+pub fn checkConsistency(a: std.mem.Allocator, current: Session, checked: g.Checked) Error!?@import("specification_candidate.zig").Issue {
     if (checked.response != .content) return null;
     const proposed = checked.response.content;
     if (proposed != .records and proposed != .entities) return null;
+    if (proposed == .records and current.completed == records_index) for (proposed.records, 0..) |record, index| {
+        for (current.record_batches) |batch| for (batch.response.content.records) |prior| {
+            if (try g.duplicateRecordIssue(a, prior, record, index, null)) |issue| return issue;
+        };
+    };
     const entities = if (proposed == .entities) proposed.entities else (current.units[2] orelse return error.InvalidSpecificationUnit).response.content.entities;
     const records = if (proposed == .records) proposed.records else if (current.units[records_index]) |entry| entry.response.content.records else return null;
     var count: usize = 0;
@@ -186,6 +263,12 @@ pub fn checkMembership(current: Session, checked: g.Checked) Error!?@import("spe
         count += 1;
         if (first == null) first = index;
     };
+    if (proposed == .records) {
+        for (current.record_batches) |batch| for (batch.response.content.records) |record| if (record.content == .entity) {
+            count += 1;
+        };
+        if (entities.disposition == .required and count == 0 and current.record_cursor + 1 < current.record_group_count) return null;
+    }
     if (g.spec.entityMembershipSatisfied(entities.disposition, count)) return null;
     return .{
         .unit = checked.unit,
@@ -208,7 +291,7 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
             .invalid => return error.InvalidSpecificationUnit,
         };
         if (result.response != .content) return error.InvalidSpecificationUnit;
-        if (try checkMembership(current, result) != null) return error.InvalidSpecificationUnit;
+        if (try checkConsistency(allocator, current, result) != null) return error.InvalidSpecificationUnit;
         if (result.response.content == .records) {
             // Canonical section order is a projection; candidate indices and
             // repair origins retain the model's order throughout the session.
@@ -254,6 +337,6 @@ pub fn replaceCompleted(allocator: std.mem.Allocator, validator: @import("typed_
     var next = current;
     next.revision = merged.revision_after;
     next.units[index] = checked;
-    if (try checkMembership(next, checked) != null) return error.InvalidSpecificationUnit;
+    if (try checkConsistency(allocator, next, checked) != null) return error.InvalidSpecificationUnit;
     return next;
 }

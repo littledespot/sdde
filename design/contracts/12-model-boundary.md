@@ -259,6 +259,11 @@ control. OpenAI rubric evaluation remains outside this amendment.
   (§9; ADR 0012). Bindings derive it from their immutable catalogue entry rather than
   retaining another selector. Workflow response-mode overrides reject; schemas remain workflow-owned.
 - Large resources are declared once and referenced by concise local IDs.
+- Request preparation may select an optional `context` prompt resource, including
+  JSON field guidance. It precedes task guidance in static developer content;
+  current sources and repair evidence remain dynamic user content. Both initial
+  preparation paths, protocol corrections and diagnostic source capture retain
+  that exact selection. It adds no caching behavior or schema authority.
 - The compiler captures and validates every declared resource before execution; there is no
   packaged route descriptor, prompt, schema, slot assignment, or fallback.
 - Under ADR 0012, later YAML operations consume the same immutable request through their typed
@@ -270,6 +275,21 @@ control. OpenAI rubric evaluation remains outside this amendment.
   selections for their own step.
 - The internal `model-request/v1` content contract is not a YAML resource; the workflow supplies
   prompt content and its closed result-schema resource.
+
+**Focused semantic reviews (approved 26 September 2026).** For a review whose
+required subjects are known natively, the review owner selects one subject from
+its ordered ledger and binds its typed ID, purpose, parent and current dependencies
+to the request. The response is one semantic value under the selected canonical
+finding schema; it does not return the assigned ID, ordinal, expected count or
+collection-completion flag. Source-preservation, candidate-support and principle
+reviews use this shared contract. The review packet owner derives a bounded slot
+from the purpose prefix and SHA-256 of the existing canonical typed-subject
+snapshot, and binds that same slot as unit owner and semantic-review purpose.
+Request identity excludes attempt, mutable text and revision; the exact dependency
+binding rejects stale responses. The runner retires each completed request before
+another subject is selected. Native review progress retains admitted findings and
+their origins; pending subjects are work, not missing findings. Only complete
+native collection validation permits authority advancement.
 
 - The workflow-selected slot must resolve through `.sddtoolkit.json` `models.slots`,
   `ValidatedRepositoryModelAllowlist`, the validated `.sddproviders.json` catalogue entry, and
@@ -447,9 +467,13 @@ control. OpenAI rubric evaluation remains outside this amendment.
 - A bounded lower-level partition returns a `ReferenceReconciliationSummaryProposal`.
   The engine derives its enclosing member IDs from the supplied partition; model-authored
   statements select supporting claims, and validators require complete partition coverage.
-- The final global partition returns one `ReferenceReconciliationProposal`: total
-  claim-disposition proposals plus bounded signal and conflict proposals over the complete
-  represented claim set.
+- The final global partition assembles one `ReferenceReconciliationProposal` from
+  separate disposition, signal-grouping, authoring-role, and conflict responses.
+  Role assignments select an already grouped signal by its exact claim IDs; they
+  cannot change its content or grouping. The engine validates their allowed uses
+  and resolves selected claims through the reference ledger.
+  Conflict resolution is `unresolved` until a separate authorized decision exists, so
+  model conflict proposals omit that fixed status and the engine constructs it.
 - Neither variant can redefine claim/token content or mint canonical
   summary/statement/signal/conflict/decision IDs.
 - Dedicated coverage, join, ID, and build operations materialize summaries, the final claim
@@ -774,10 +798,32 @@ Source-only evidence is valid only for loss locations that permit it. A selected
 signal/conflict requires its exact producer claims; disposition loss may use its
 claim or source-only evidence. An unlocalized finding retains ordinary eligibility.
 Native source-review evidence retains `loss`, so readback repeats those same joins;
-principle evidence has no loss location. `specification-state/v6` rejects earlier
+principle evidence has no loss location. `specification-state/v7` rejects earlier
 snapshot contracts rather than silently supplying a missing binding. ADR 0020
 governs the derived exact-reference lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
+
+**Source-review response contract (28 September 2026):** the model chooses a
+semantic finding, detail, and any genuinely selectable source. When the finding
+is candidate omission, a separate call selects only a loss location against that
+fixed finding;
+every selected generation, source-review and repair schema rejects `provenance`.
+The engine constructs the canonical claim selection from the current bound
+source group, candidate evidence or selected diagnostic producer. A selected
+extraction or token loss has an empty diagnostic claim set; signal or conflict
+loss uses the named producer's exact set. Source-only negative findings may
+carry empty canonical support where the rule permits it. An eligible catalogue,
+including a singleton, cannot establish positive support. Source IDs remain
+model-selected where the rule permits them; invariant empty clarification IDs
+and an unlocalized default loss are constructed by code. Readback validates
+stored evidence against its bound authority before accepting any projection.
+
+Reconciliation supplies validated source-obligation groups and feature-field
+roles. The engine binds each record authoring task to one active group before
+dispatch and resolves its claims through the existing ledger. A task may author
+several records; overlapping or multi-claim groups preserve many-to-many links.
+Unbound or stale units block as engine defects. Semantic verdicts and ADR 0020's
+generation evidence bounds remain independently enforced.
 
 A reconciliation conflict starts as an unresolved candidate assertion. Only current
 review evidence for that exact subject establishing incompatible original meanings
@@ -842,6 +888,13 @@ The optional composition `definition` selects an existing named definition in it
 `result` resource; otherwise the resource root is selected. Compilation rejects
 unresolved selections. Projections, requests and complete validation retain this
 same binding, and registry transfer rebinds to its destination schema owner.
+
+A part's optional `input-context` selects a native immutable assignment context
+into `assignment` through the shared request preparation owner. The complete
+evidence packet and declared prerequisites remain available; missing contexts
+reject before inference. Corrections retain the selected presentation. Contexts
+carry applicable guidance, not independent validation, repair or gap policy
+(ADR 0016's approved assignment-context amendment).
 
 The mechanism is shared across supported JSON shapes. Domain owners contribute
 facts and semantic validators; they do not gain separate assembly, retry, storage

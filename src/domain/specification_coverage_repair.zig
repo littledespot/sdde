@@ -219,7 +219,19 @@ pub fn omissionPacket(a: std.mem.Allocator, current: sessions.Session, context: 
         .value => |field| .{ .target = .{ .value = .{ .subject = field.subject, .field = field.field } } },
     }));
 }
-pub const parseOmission = atomic.parse;
+pub fn parseOmission(a: std.mem.Allocator, authorization: Authorization, input: *const @import("model_input_packet.zig").Packet, bytes: []const u8) Error!Replacement {
+    if (authorization.rule != .omission) return error.InvalidSpecificationCoverageRepair;
+    const kind = try atomic.checkRequest(authorization, input);
+    const codec = @import("model_candidate_json.zig");
+    return switch (kind) {
+        .value => .{ .value = try codec.decode(g.spec.BusinessValue, a, bytes) },
+        .record => blk: {
+            const selected = authorization.rule.omission.review orelse return error.InvalidSpecificationCoverageRepair;
+            const wire = try codec.decode(g.spec.Wire.RecordProposal, a, bytes);
+            break :blk .{ .record = .{ .content = wire.content, .provenance = .{ .claim_ids = selected.provenance.claim_ids, .clarification_response_ids = selected.provenance.clarification_response_ids } } };
+        },
+    };
+}
 pub fn mergeOmission(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, support: Support, authorization: Authorization, proposed: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!sessions.Session {
     if (authorization.rule != .omission) return error.InvalidSpecificationCoverageRepair;
     const facts = try reviewedFacts(a, current, context, candidate, support);

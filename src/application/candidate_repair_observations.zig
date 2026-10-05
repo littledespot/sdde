@@ -41,6 +41,7 @@ pub fn read(a: std.mem.Allocator, view: *const data.View) (values.Error || @impo
             const selected = if (tag == .support) value.support else value.principle_support.result;
             try append(a, &result, switch (selected) {
                 .accepted => |accepted| accepted.candidate.last_repair,
+                .pending => |pending| pending.last_repair,
                 .rejected => |rejected| if (rejected.candidate) |candidate| candidate.last_repair else null,
             });
         };

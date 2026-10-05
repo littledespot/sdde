@@ -75,11 +75,14 @@ Use `zig build --help` for the repository's individual test steps. There is no
 separate changed-scope aggregate; run the relevant owning-boundary steps during
 iteration and `zig build verify` before completing cross-cutting work.
 
-Full verification imports the engine, architecture and harness tests through
-`tests.zig`, so shared source tests execute once. Dependency-module tests keep
-their own roots. `test-engine`, `test-architecture`, `test-e2e-harness` and
-`test-rubric-evaluator` remain available for targeted runs; running those together
-with `test` repeats their coverage.
+`zig build test` runs offline checks of engine internals.
+`./scripts/test-integration.sh` runs the fixed offline harness and launcher
+checks through `zig build test-integration`. `zig build verify` includes both
+as separate steps, plus architecture and smoke checks. The numbered
+specification scenarios exercise engine behavior with fake model responses;
+they do not assess prompt quality. The separately invoked live `e2e-spec`
+command runs the configured LLM and grades its published output against the
+rubric.
 
 The specification-generation integration matrix emits tab-separated
 `scenario-cost` rows to stderr, with the zero-based scenario index, outcome and
@@ -179,16 +182,15 @@ selection, retained evidence and result interpretation. Each agent-initiated
 E2E run requires explicit user approval under [AGENTS.md](AGENTS.md).
 
 ```sh
-./scripts/e2e-spec.sh
+./scripts/e2e-spec.sh --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json
 ```
 
 Automated tests and verification cannot make live model calls. Test executables
 compile out native model connections, and automated build steps reject dependencies
 on live harness execution.
 
-The launcher defaults to the checked-in Hello World case and loads the checkout's
-optional `.env.e2e`. Use `--case <path>` to select another case. It uses real APIs
-for both generation and grading. The
+The launcher requires an explicit case and loads the checkout's optional
+`.env.e2e`. It uses real APIs for both generation and grading. The
 [supplied-spec evaluator](design/harness/evaluator.md) separately grades a given
 specification; it cannot establish engine-generation success. Neither harness
 ships with the production executable.

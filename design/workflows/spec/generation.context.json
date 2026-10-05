@@ -1,0 +1,10 @@
+{
+  "purpose": "Specification text guidance. Apply only to fields in the selected schema; the schema defines the response shape and source_assignment supplies field purposes.",
+  "business_value": "An ordered array of fragments concatenated into one field value, not separate values or records.",
+  "strings": "Express the field's meaning as prose, preserving source-backed conditions, qualifiers and obligation strength.",
+  "exact_copy": "Insert a supplied preserved_tokens.claim_id only where the field needs that exact literal. A literal alone cannot express the behavior or explanation involving it.",
+  "passive": "Use supplied passive_literal_id references only for display text; a displayed path is not the behavior described by its file.",
+  "sources": "Original sources establish meaning; code samples remain context. Do not invent missing decisions.",
+  "repair": "Return only the authorized replacement. Restore source-backed meaning within that scope, preserving correct surrounding content and evidence outside it; do not preserve the rejected value's omissions.",
+  "initial_generation": "Use clarification only for a missing user decision: state known facts, the choice, its impact and the expected answer. Use inconclusive for unresolved interpretation. Missing prewritten sections are not user decisions."
+}

@@ -1,4 +1,4 @@
-//! Authorize and apply one specification value, evidence or record repair.
+//! Authorize and apply one specification value or record repair.
 const std = @import("std");
 const g = @import("specification_generation.zig");
 const p = @import("specification_provenance.zig");
@@ -22,7 +22,7 @@ pub const Rule = struct {
 const dependencies = @import("specification_candidate_context.zig");
 const shared = @import("atomic_repair.zig");
 const retry = @import("workflow_retry.zig");
-const Family = enum { provenance, value, record, attributed };
+const Family = enum { value, record, attributed };
 const atomic = shared.Contract(Target, Replacement, dependencies.Facts, Rule);
 pub const Authorization = atomic.Authorization;
 pub const Error = session.Error || atomic.Error || candidates.Error || error{ InvalidSpecificationRepair, UnsafeSpecificationRepair };
@@ -53,7 +53,9 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
         if (missing) {
             for (records) |record| if (record.content == .entity) return error.InvalidSpecificationRepair;
         } else if (target.record >= records.len or decision != .not_applicable or records[target.record].content != .entity) return error.InvalidSpecificationRepair;
-        return authorizeGroup(allocator, owner, candidate, facts, target, .{ .membership = .{ .disposition = decision, .fixed_provenance = if (missing) null else records[target.record].provenance } }, rejection, missing);
+        const assigned = try session.currentBinding(allocator, current, context);
+        if (assigned != .records) return error.InvalidSpecificationRepair;
+        return authorizeGroup(allocator, owner, candidate, facts, target, .{ .membership = .{ .disposition = decision, .fixed_provenance = if (missing) assigned.records.selection else records[target.record].provenance } }, rejection, missing);
     }
     if (rejection.issue.field != .target) return error.InvalidSpecificationRepair;
     if (rejection.issue.blocked != null) return error.UnsafeSpecificationRepair;
@@ -67,7 +69,7 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
         break :bound .{ .target = stable, .explicit = resolved.provenance.claim_ids, .effective = resolved.effective_claim_ids, .citations = resolved.provenance.citation_ids };
     } else null;
     const rule: Rule = .{ .text_issue = rejection.issue.text_issue, .value_choices = rejection.issue.value_choices, .value_bound = value_bound, .requirement = switch (rejection.issue.rule) {
-        .provenance => "Select unique retained claim IDs. Empty selection requires eligible exact-copy support in the unchanged content; clarification responses are unavailable.",
+        .provenance => return error.UnsafeSpecificationRepair,
         .typed_text, .exact_copy => if (rejection.issue.value_choices) |choices| try choices.correction(allocator, rejection.issue.text_issue orelse return error.InvalidSpecificationRepair) else (rejection.issue.text_issue orelse return error.InvalidSpecificationRepair).description(),
         .duplicate_record => "Remove only the evidence-equivalent redundant occurrence; preserve coverage and sibling order.",
         .entity_membership, .unit_kind, .interpretation => return error.UnsafeSpecificationRepair,
@@ -112,7 +114,7 @@ pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!ret
     const target = try repairTarget(a, candidate, authorization);
     const bound = candidate.origins.repair_target_bound orelse try targetBound(candidate.response);
     const family: Family = switch (authorization.target) {
-        .provenance => .provenance,
+        .provenance => return error.InvalidSpecificationRepair,
         .value => .value,
         .attributed => .attributed,
         .record => .record,
@@ -183,15 +185,7 @@ fn targetValid(a: std.mem.Allocator, validator: @import("typed_text.zig").Valida
     const response = candidate.response;
     const selected = try candidates.select(response, target);
     switch (target) {
-        .provenance => |subject| {
-            if (subject == .record) {
-                const record = response.content.records[subject.record];
-                _ = p.lineageForRepair(a, context, record.provenance, try p.recordValues(a, record.content)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
-            } else {
-                const evidence = try candidates.attributedValue(.model, response, subject, .value);
-                _ = p.lineageForRepair(a, context, evidence.provenance, &.{evidence.value}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
-            }
-        },
+        .provenance => return error.InvalidSpecificationRepair,
         .value => |field| {
             const evidence = try candidates.attributedValue(.model, response, field.subject, field.field);
             const values = if (field.subject == .record) try p.recordValues(a, response.content.records[field.subject.record].content) else &.{evidence.value};
@@ -222,7 +216,7 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         try session.packet(allocator, current, context);
     defer packets.release(base);
     const definition = switch (kind) {
-        .provenance => "provenance",
+        .provenance => return error.InvalidSpecificationRepair,
         .value => "value",
         .attributed => "attributed_value",
         .record => switch (authorization.rule.group orelse return error.InvalidSpecificationRepair) {
@@ -231,7 +225,7 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
     };
     if (authorization.operation == .insert) return atomic.packet(allocator, authorization, base, .{ .bytes = definition }, authorization.dependencies.candidate.origins.initial);
     // current_value already carries the whole selected record. Containing-field
-    // context is needed only when a smaller value/provenance selection is writable.
+    // context is needed only when a smaller value selection is writable.
     if (kind == .record or kind == .attributed) {
         const fixed = if (authorization.rule.group) |group| (if (group == .membership) group.membership.fixed_provenance else null) else null;
         const narrowed = if (fixed) |selection|
@@ -261,10 +255,34 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
 }
 
 pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_value: *const packets.Packet, bytes: []const u8) Error!Replacement {
-    return atomic.parse(allocator, authorization, packet_value, bytes);
+    const kind = try atomic.checkRequest(authorization, packet_value);
+    const codec = @import("model_candidate_json.zig");
+    return switch (kind) {
+        .provenance => error.InvalidSpecificationRepair,
+        .value => .{ .value = try codec.decode(g.spec.BusinessValue, allocator, bytes) },
+        .attributed => blk: {
+            if (authorization.operation != .replace or authorization.operation.replace != .attributed) return error.InvalidSpecificationRepair;
+            const value = try codec.decode(g.spec.Wire.AttributedValue, allocator, bytes);
+            break :blk .{ .attributed = .{ .value = value.value, .provenance = authorization.operation.replace.attributed.provenance } };
+        },
+        .record => blk: {
+            const value = try codec.decode(g.spec.Wire.RecordProposal, allocator, bytes);
+            const selected = switch (authorization.operation) {
+                .replace => |prior| if (prior == .record) prior.record.provenance else return error.InvalidSpecificationRepair,
+                .insert => blk_selection: {
+                    const group = authorization.rule.group orelse return error.InvalidSpecificationRepair;
+                    if (group != .membership) return error.InvalidSpecificationRepair;
+                    break :blk_selection group.membership.fixed_provenance orelse return error.InvalidSpecificationRepair;
+                },
+                .delete => return error.InvalidSpecificationRepair,
+            };
+            break :blk .{ .record = .{ .content = value.content, .provenance = selected } };
+        },
+    };
 }
 
 pub fn merge(allocator: std.mem.Allocator, current: session.Session, context: p.Context, candidate: Candidate, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!Candidate {
+    if (authorization.target == .provenance or (proposed_replacement != null and proposed_replacement.? == .provenance)) return error.InvalidSpecificationRepair;
     const facts = try dependencies.capture(allocator, current, context, candidate);
     defer allocator.free(facts.references.lineage.history);
     var result = candidate;

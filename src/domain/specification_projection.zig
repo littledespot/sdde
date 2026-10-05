@@ -4,6 +4,29 @@ const std = @import("std");
 const spec = @import("specification.zig");
 const provenance = @import("specification_provenance.zig");
 pub const Error = provenance.Error;
+pub const RequirementTrace = struct {
+    id: spec.Id,
+    occurrences: []const @import("reference_support.zig").Occurrence,
+};
+
+/// Completed-state source view. Canonical admission and the same reference
+/// ledger determine each record's effective lineage independently.
+pub fn traceRequirements(allocator: std.mem.Allocator, snapshot: @import("reference_snapshot.zig").Snapshot, content: spec.IdentifiedContent) Error![]const RequirementTrace {
+    const support = @import("reference_support.zig");
+    const references = try support.snapshot(allocator, snapshot);
+    const traces = try allocator.alloc(RequirementTrace, content.records.len);
+    for (content.records, traces) |record, *trace| {
+        const resolved = try provenance.storedRecordLineage(allocator, snapshot.inputs, references, record.proposal);
+        trace.* = .{
+            .id = record.id,
+            .occurrences = support.occurrences(allocator, references.items, snapshot.inputs, resolved.effective_claim_ids) catch |err| switch (err) {
+                error.InvalidReferenceState => return error.InvalidSpecification,
+                else => |other| return other,
+            },
+        };
+    }
+    return traces;
+}
 
 pub fn scalar(allocator: std.mem.Allocator, context: provenance.Context, attributed: spec.AttributedValue) Error!spec.Scalar {
     return scalarInScopes(allocator, context, attributed.value, try provenance.scopesFor(allocator, context, attributed));

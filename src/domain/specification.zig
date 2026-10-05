@@ -106,6 +106,14 @@ pub fn Values(comptime boundary: Boundary) type {
     };
 }
 pub const Model = Values(.model);
+/// Closed model response values. Evidence is bound before the request and is
+/// reconstructed in the native candidate; no wire value can carry provenance.
+pub const Wire = struct {
+    pub const AttributedValue = struct { value: BusinessValue };
+    pub const Brief = struct { title: Wire.AttributedValue, description: Wire.AttributedValue, primary_goal: Wire.AttributedValue };
+    pub const RecordProposal = struct { content: Content(BusinessValue) };
+    pub const ApplicabilityProposal = struct { disposition: Applicability, basis: Wire.AttributedValue };
+};
 pub const AttributedValue = Values(.canonical).AttributedValue;
 pub const Brief = Values(.canonical).Brief;
 

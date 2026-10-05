@@ -11,6 +11,7 @@ pub const Slot = enum { display_name, description, primary_goal, primary_user_st
 pub const Unit = union(enum) {
     feature: enum { singleton },
     record: @import("specification.zig").Id,
+    source: @import("reference_identity.zig").SourceId,
     signal: @import("reference_reconciliation.zig").SignalId,
     conflict: @import("reference_reconciliation.zig").ConflictId,
     token: @import("structured_tokens.zig").Id,
@@ -46,7 +47,7 @@ pub fn policy(id: Id) ?Policy {
             else => null,
         },
         .entity_applicability => if (id.unit == .feature and id.slot == .entities) .{ .owner = .spec, .not_applicable = .no_business_data } else null,
-        .reference_meaning => if ((id.unit == .signal or id.unit == .conflict) and id.slot == .disposition) .{ .owner = .spec } else null,
+        .reference_meaning => if ((id.unit == .source or id.unit == .signal or id.unit == .conflict) and id.slot == .disposition) .{ .owner = .spec } else null,
         .preservation => if (id.unit == .token and id.slot == .value) .{ .owner = .spec } else null,
         .design_decision => if (id.unit == .decision and id.slot == .decision) .{ .owner = .plan } else null,
         .executable_decomposition => if (id.unit == .decision and id.slot == .decision) .{ .owner = .tasks } else null,
@@ -92,7 +93,8 @@ pub const Exception = struct { id: ExceptionId, requirement: Id, authority: Auth
 pub const ForcedGap = struct { requirement: Id, reason: GapReason, subject: enum { authority, candidate } = .authority };
 pub const Inputs = struct {
     feature: @import("feature_identity.zig").FeatureId,
-    projection: enum { specification, principle_assessment, registered_obligations } = .registered_obligations,
+    projection: enum { specification, source_preservation, principle_assessment, registered_obligations } = .registered_obligations,
+    source_inputs: ?@import("reference_evidence.zig").Inputs = null,
     principle_context: ?@import("principle_assessment.zig").Context = null,
     principle_assessment: ?@import("principle_assessment.zig").Canonical = null,
     specification: ?@import("specification.zig").IdentifiedContent = null,
@@ -130,22 +132,21 @@ pub const Result = struct { feature: @import("feature_identity.zig").FeatureId, 
 
 pub fn build(allocator: std.mem.Allocator, inputs: Inputs) Error!Ledger {
     if (@import("feature_identity.zig").FeatureId.parse(inputs.feature.bytes) == null) return error.InvalidRequiredAuthority;
+    if (inputs.projection == .source_preservation) {
+        const expected = try @import("source_preservation.zig").project(allocator, inputs.feature, inputs.references orelse return error.InvalidRequiredAuthority, inputs.source_inputs orelse return error.InvalidRequiredAuthority);
+        if (inputs.specification != null or inputs.brief != null or inputs.forced_gaps.len != 0) return error.InvalidRequiredAuthority;
+        try sameSeeds(expected.seeds, inputs.seeds);
+        try sameSet(Authority, expected.authorities, inputs.authorities);
+    } else if (inputs.source_inputs != null) return error.InvalidRequiredAuthority;
     if (inputs.projection == .specification) {
         const expected = try @import("specification_authority.zig").projectRecords(allocator, inputs.feature, inputs.references orelse return error.InvalidRequiredAuthority, inputs.specification, inputs.brief);
-        if (expected.seeds.len != inputs.seeds.len) return error.InvalidRequiredAuthority;
-        for (expected.seeds, inputs.seeds) |required, actual| {
-            if (!std.meta.eql(required.id, actual.id) or !std.meta.eql(required.requiredness, actual.requiredness)) return error.InvalidRequiredAuthority;
-            try sameSet(Authority, required.input_authorities, actual.input_authorities);
-        }
+        try sameSeeds(expected.seeds, inputs.seeds);
         try sameSet(ForcedGap, expected.forced_gaps, inputs.forced_gaps);
     }
     if (inputs.projection == .principle_assessment) {
         const expected = @import("principle_assessment.zig").project(allocator, inputs.principle_context orelse return error.InvalidRequiredAuthority) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
-        if (expected.seeds.len != inputs.seeds.len or inputs.specification != null or inputs.candidates.len != 0 or inputs.forced_gaps.len != 0) return error.InvalidRequiredAuthority;
-        for (expected.seeds, inputs.seeds) |required, actual| {
-            if (!std.meta.eql(required.id, actual.id) or !std.meta.eql(required.requiredness, actual.requiredness)) return error.InvalidRequiredAuthority;
-            try sameSet(Authority, required.input_authorities, actual.input_authorities);
-        }
+        if (inputs.specification != null or inputs.candidates.len != 0 or inputs.forced_gaps.len != 0) return error.InvalidRequiredAuthority;
+        try sameSeeds(expected.seeds, inputs.seeds);
         try sameSet(Authority, expected.authorities, inputs.authorities);
     } else if (inputs.principle_context != null) return error.InvalidRequiredAuthority;
     try unique(Authority, inputs.authorities);
@@ -360,7 +361,7 @@ fn validId(id: Id) bool {
     return switch (id.unit) {
         .feature => true,
         .record => |record| record.ordinal != 0,
-        inline .signal, .conflict, .token, .decision => |value| value.ordinal != 0,
+        inline .source, .signal, .conflict, .token, .decision => |value| value.ordinal != 0,
     };
 }
 fn findRequirement(requirements: []const Requirement, id: Id) ?Requirement {
@@ -386,7 +387,7 @@ fn unitOrdinal(unit: Unit) u64 {
     return switch (unit) {
         .feature => 0,
         .record => |id| (@as(u64, @intFromEnum(id.kind)) << 32) | id.ordinal,
-        inline .signal, .conflict, .token, .decision => |id| id.ordinal,
+        inline .source, .signal, .conflict, .token, .decision => |id| id.ordinal,
     };
 }
 pub fn contains(comptime T: type, list: []const T, value: T) bool {
@@ -407,6 +408,14 @@ fn sameOutcome(a: Outcome, b: Outcome) bool {
         else => std.meta.eql(a, b),
     };
 }
+fn sameSeeds(expected: []const Seed, actual: []const Seed) Error!void {
+    if (expected.len != actual.len) return error.InvalidRequiredAuthority;
+    for (expected, actual) |required, supplied| {
+        if (!std.meta.eql(required.id, supplied.id) or !std.meta.eql(required.requiredness, supplied.requiredness)) return error.InvalidRequiredAuthority;
+        try sameSet(Authority, required.input_authorities, supplied.input_authorities);
+    }
+}
+
 fn unique(comptime T: type, list: []const T) Error!void {
     for (list, 0..) |item, index| if (contains(T, list[0..index], item)) return error.InvalidRequiredAuthority;
 }

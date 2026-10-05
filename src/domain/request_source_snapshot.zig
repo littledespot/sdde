@@ -5,7 +5,7 @@ const workflow = @import("workflow.zig");
 pub const Entry = @import("workflow_source.zig").Entry;
 pub const Document = struct { path: []const u8, content: []const u8, redacted: bool };
 pub const Resource = struct {
-    role: enum { prompt, protocol_prompt, result, input, composition },
+    role: enum { prompt, context, protocol_prompt, result, input, composition },
     alias: []const u8,
     kind: @import("workflow_operation.zig").ResourceKind,
     document: Document,
@@ -42,7 +42,7 @@ pub const Snapshot = struct {
             try documentValid(resource.document);
             for (self.resources[0..index]) |prior| if (prior.role == resource.role) return error.InvalidJsonDocument;
             const expected: @TypeOf(resource.kind) = switch (resource.role) {
-                .prompt, .protocol_prompt => .prompt,
+                .prompt, .context, .protocol_prompt => .prompt,
                 .result => .result_schema,
                 .input => .data,
                 .composition => .json_composition,

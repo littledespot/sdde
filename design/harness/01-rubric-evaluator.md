@@ -10,7 +10,7 @@ this implementation task. Unchecked live/calibration criteria below remain
 unverified, not passed or replaced by fake judgments. H-007 onward are separate
 production work.
 
-Remaining acceptance preparation: the [calibration set](../../test/e2e/wf-001-hello-world/node-vitest/calibration/README.md)
+Remaining acceptance preparation: the [calibration set](../../test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/README.md)
 contains two equivalent specifications and five deliberate defects, with proposed
 review findings and the existing command to run them. A future live run requires
 explicit judge configuration/allowance and credentials. No live evidence or

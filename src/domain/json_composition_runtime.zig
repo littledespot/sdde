@@ -22,6 +22,7 @@ pub const Binding = struct {
 
     pub fn valid(self: Binding) bool {
         if (self.part >= self.plan.parts().len) return false;
+        if (!hasContext(self.plan.parts()[self.part], self.base)) return false;
         var expected: usize = 0;
         for (self.plan.parts(), 0..) |_, index| {
             if (!self.plan.dependsOn(self.part, index)) continue;
@@ -52,12 +53,14 @@ pub const State = struct {
     origin: ?Origin = null,
 
     pub fn init(allocator: std.mem.Allocator, plan: *const composition.Plan, base: *const packets.Packet, epoch: identity.StageRunEpochId) Error!State {
+        for (plan.parts()) |part| if (!hasContext(part, base)) return error.InvalidCompositionBinding;
         const entries = try allocator.alloc(?Entry, plan.parts().len);
         @memset(entries, null);
         return .{ .plan = plan, .base = base, .epoch = epoch, .entries = entries };
     }
     pub fn select(self: State, allocator: std.mem.Allocator, part: usize) Error!Binding {
         if (part >= self.plan.parts().len or self.getEntry(part) != null) return error.InvalidCompositionBinding;
+        if (!hasContext(self.plan.parts()[part], self.base)) return error.InvalidCompositionBinding;
         var prerequisites: std.ArrayList(Prerequisite) = .empty;
         var input_values: std.ArrayList(composition.PartValue) = .empty;
         for (self.plan.parts(), 0..) |_, index| {
@@ -85,6 +88,20 @@ pub const State = struct {
             try result.put(allocator, self.plan.parts()[required.part].id.bytes, source.proof.candidate().json().*);
         }
         return .{ .object = result };
+    }
+    /// One presentation owner for every composed assignment. Evidence and
+    /// prerequisite selection stay bound to this exact base, plan and epoch.
+    pub fn packet(self: State, allocator: std.mem.Allocator, binding: Binding) (Error || packets.Error || @import("strict_json.zig").Error)!*const packets.Packet {
+        try self.checkBinding(binding);
+        const selected = if (self.plan.parts()[binding.part].input_context) |id|
+            try packets.withAssignmentContext(allocator, self.base, id)
+        else
+            try packets.retain(self.base);
+        defer packets.release(selected);
+        if (binding.prerequisites.len == 0) return packets.retain(selected);
+        var arena: std.heap.ArenaAllocator = .init(allocator);
+        defer arena.deinit();
+        return packets.withJsonContext(allocator, selected, "prerequisites", try self.inputs(arena.allocator(), binding));
     }
     pub fn retain(self: State, allocator: std.mem.Allocator, binding: Binding, proof: *const payload.Evidence, origin: Origin, ledger: *const identity.ModelRequestIdentityLedger) Error!State {
         try self.checkBinding(binding);
@@ -146,6 +163,10 @@ pub const State = struct {
         if (selected != binding.schema) return error.InvalidCompositionBinding;
     }
 };
+
+fn hasContext(part: composition.Part, base: *const packets.Packet) bool {
+    return if (part.input_context) |id| base.assignmentContext(id) != null else true;
+}
 
 pub const Candidate = struct {
     body: []const u8,

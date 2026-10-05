@@ -1,8 +1,8 @@
 const std = @import("std");
-const c = @import("contracts.zig");
-const fixture = @import("fixture.zig");
-const oracle = @import("oracle.zig");
-const run_directory = @import("run_directory.zig");
+const c = @import("../e2e/contracts.zig");
+const fixture = @import("../e2e/fixture.zig");
+const oracle = @import("../e2e/oracle.zig");
+const run_directory = @import("../e2e/run_directory.zig");
 const artifacts = @import("../../../src/domain/workflow_artifact_registry.zig");
 const expected = [_]c.Artifact{ .specification, .reference_context, .clarification_state, .workflow_state };
 const selected: c.Case = .{
@@ -20,7 +20,7 @@ const selected: c.Case = .{
 };
 
 test "E2E command selects one live case and rejects mock modes and extra cases" {
-    const parse = @import("cli.zig").parse;
+    const parse = @import("../e2e/cli.zig").parse;
     try std.testing.expectEqualStrings("case.json", try parse(&.{ "--case", "case.json" }));
     for ([_][]const []const u8{ &.{}, &.{"case.json"}, &.{ "--case", "one.json", "--case", "two.json" }, &.{ "--case", "case.json", "--mock" }, &.{ "--case", "case.json", "--scripted" }, &.{ "--suite", "suite.json" }, &.{ "--case", "../case.json" }, &.{ "--case", "/case.json" } }) |arguments| {
         if (parse(arguments)) |_| return error.AcceptedInvalidE2EArguments else |err| switch (err) {
@@ -260,7 +260,7 @@ test "production E2E binding honors configured models and cannot succeed without
         var evidence_run = std.testing.tmpDir(.{});
         defer evidence_run.cleanup();
         const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_run.dir, .secrets = &.{} };
-        const output = try @import("invoke.zig").run(io, a, project.dir, choice, captured, null, store, &report);
+        const output = try @import("../e2e/invoke.zig").run(io, a, project.dir, choice, captured, null, store, &report);
         try std.testing.expect(output == null);
         try std.testing.expectEqual(.live, report.origin);
         try std.testing.expectEqual(.workflow_failed, report.status);
@@ -337,7 +337,7 @@ test "rubric handoff preserves poor output and scores without changing workflow 
     const a = arena.allocator();
     const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
     const captured = try fixture.capture(io, a, .cwd(), choice);
-    const evaluation = @import("evaluation.zig");
+    const evaluation = @import("../e2e/evaluation.zig");
     var report: c.Report = .{ .started_at_utc = "2026-09-11T00:00:00Z", .status = .generated, .workflow_outcome = .ok, .publication_check = .passed, .specification = "specs/hello-world/spec.md", .models = &.{.{ .slot = "spec_generation", .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0" }} };
     const inputs = try evaluation.inputs(a, report, captured.evaluation, "Readable but poor output.", "run-123");
     try std.testing.expectEqualStrings("Readable but poor output.", inputs.specification);
@@ -355,7 +355,7 @@ test "rubric handoff preserves poor output and scores without changing workflow 
     try std.testing.expectEqual(.ok, report.workflow_outcome.?);
     try std.testing.expectEqual(@as(f64, 10), report.evaluation.?.outcome.evaluated.score_percent.?);
     try std.testing.expectEqual(.evaluated, report.status);
-    const terminal = try @import("report.zig").terminal(a, report, "runs", "sample");
+    const terminal = try @import("../e2e/report.zig").terminal(a, report, "runs", "sample");
     try std.testing.expect(std.mem.indexOf(u8, terminal, "threshold: not_met; score: 10.00%") != null);
     var failed_judge = result;
     failed_judge.outcome = .{ .evaluator_error = .authentication };
@@ -465,7 +465,7 @@ test "clarification reports are ungraded normal pauses with registered IDs and p
     const a = arena.allocator();
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const output = try @import("report.zig").Output.reserve(io, dir.dir);
+    const output = try @import("../e2e/report.zig").Output.reserve(io, dir.dir);
     defer output.close(io);
     const id = @import("../../../src/domain/clarification_inputs.zig").Id.parse("S02").?;
     const report: c.Report = .{ .started_at_utc = "2026-09-16T00:00:00Z", .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed, .specification = "outputs/chosen/spec.md", .clarifications = &.{.{ .id = id, .path = try @import("../../../src/domain/workflow_output.zig").path(a, try resolve(a), .{ .form = id }) }} };
@@ -479,7 +479,7 @@ test "clarification reports are ungraded normal pauses with registered IDs and p
     try std.testing.expect(retained.status.commandSucceeded());
     for (std.meta.tags(c.Status)) |status| try std.testing.expectEqual(status == .awaiting_clarification or status == .evaluated, status.commandSucceeded());
     const markdown = try @import("../files.zig").read(io, a, dir.dir, "report.md");
-    const terminal = try @import("report.zig").terminal(a, report, "runs", "example");
+    const terminal = try @import("../e2e/report.zig").terminal(a, report, "runs", "example");
     for ([_][]const u8{ markdown, terminal }) |rendered| {
         try std.testing.expect(std.mem.indexOf(u8, rendered, "Awaiting clarification") != null);
         try std.testing.expect(std.mem.indexOf(u8, rendered, "S02") != null);
@@ -496,7 +496,7 @@ test "failure reports preserve separate engine provider and model evidence" {
     const a = arena.allocator();
     var dir = std.testing.tmpDir(.{});
     defer dir.cleanup();
-    const output = try @import("report.zig").Output.reserve(io, dir.dir);
+    const output = try @import("../e2e/report.zig").Output.reserve(io, dir.dir);
     defer output.close(io);
     const report: c.Report = .{
         .started_at_utc = "2026-09-11T00:00:00Z",
@@ -536,7 +536,7 @@ test "failure reports preserve separate engine provider and model evidence" {
     try std.testing.expect(std.mem.indexOf(u8, view, "provider stopped generation at its output limit") != null);
     try std.testing.expect(std.mem.indexOf(u8, view, "100 input + 512 output = 612 tokens") != null);
     try std.testing.expect(std.mem.indexOf(u8, view, "No rubric grade is available") != null);
-    const terminal = try @import("report.zig").terminal(a, report, "runs", "example");
+    const terminal = try @import("../e2e/report.zig").terminal(a, report, "runs", "example");
     for ([_][]const u8{ view, terminal }) |rendered|
         try std.testing.expect(std.mem.indexOf(u8, rendered, "JSON error: SyntaxError at line 2, column 8 (byte offset 9)") != null);
     const diagnostic = try std.json.Stringify.valueAlloc(a, report.candidate_error.?, .{});
@@ -546,14 +546,14 @@ test "failure reports preserve separate engine provider and model evidence" {
     const retry_diagnostic = try std.json.Stringify.valueAlloc(a, report.retry_error.?, .{});
     for ([_][]const u8{ view, terminal }) |rendered| try std.testing.expect(std.mem.indexOf(u8, rendered, retry_diagnostic) != null);
     try std.testing.expect(std.mem.indexOf(u8, terminal, "runs/example/report.json") != null);
-    try std.testing.expectError(error.PathAlreadyExists, @import("report.zig").Output.reserve(io, dir.dir));
+    try std.testing.expectError(error.PathAlreadyExists, @import("../e2e/report.zig").Output.reserve(io, dir.dir));
 }
 
 test "retired protocol rejection stays associated with its call across later failures" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var snapshot: @import("observation.zig").LastModelRejection = .{};
+    var snapshot: @import("../e2e/observation.zig").LastModelRejection = .{};
     defer snapshot.deinit(std.testing.allocator);
     const empty: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
     var rejected = empty;
@@ -628,7 +628,7 @@ test "source selection reports retain the producing call separately from the las
     const retained = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
     try std.testing.expectEqualDeep(report, retained);
     const diagnostic = try std.json.Stringify.valueAlloc(a, report.candidate_error.?, .{});
-    for ([_][]const u8{ try @import("report.zig").renderMarkdown(a, retained), try @import("report.zig").terminal(a, retained, "runs", "sample") }) |rendered| {
+    for ([_][]const u8{ try @import("../e2e/report.zig").renderMarkdown(a, retained), try @import("../e2e/report.zig").terminal(a, retained, "runs", "sample") }) |rendered| {
         try std.testing.expect(std.mem.indexOf(u8, rendered, diagnostic) != null);
         try std.testing.expect(std.mem.indexOf(u8, rendered, report.candidate_model_output.?) != null);
         try std.testing.expect(std.mem.indexOf(u8, rendered, report.last_model_output.?) != null);
@@ -639,7 +639,7 @@ test "later budget transport and capture stops retain separate protocol and exch
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const obs = @import("observation.zig");
+    const obs = @import("../e2e/observation.zig");
     const Usage = @import("../../../src/domain/llm_provider_operation.zig").ProviderUsage;
     var calls: [35]obs.Call = undefined;
     for (&calls, 1..) |*call, ordinal| call.* = .{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = @intCast(ordinal) } }, .step = "repair", .raw_response_available = true, .output = if (ordinal < 35) .available else .not_projected };
@@ -674,7 +674,7 @@ test "later budget transport and capture stops retain separate protocol and exch
         if (stop != 2) try std.testing.expectEqual(@as(u64, 2818), report.last_model_usage.?.total_tokens) else try std.testing.expect(report.last_model_usage == null);
         const protocol = try std.json.Stringify.valueAlloc(a, report.last_protocol_rejection, .{});
         const exchange = try std.json.Stringify.valueAlloc(a, evidence, .{});
-        for ([_][]const u8{ try std.json.Stringify.valueAlloc(a, report, .{}), try @import("report.zig").terminal(a, report, "runs", "example"), try @import("report.zig").renderMarkdown(a, report) }) |output| {
+        for ([_][]const u8{ try std.json.Stringify.valueAlloc(a, report, .{}), try @import("../e2e/report.zig").terminal(a, report, "runs", "example"), try @import("../e2e/report.zig").renderMarkdown(a, report) }) |output| {
             try std.testing.expect(std.mem.indexOf(u8, output, protocol) != null);
             try std.testing.expect(std.mem.indexOf(u8, output, exchange) != null);
         }
@@ -685,7 +685,7 @@ test "provider cause survives request release without inventing a candidate reje
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const obs = @import("observation.zig");
+    const obs = @import("../e2e/observation.zig");
     var calls = [_]obs.Call{.{
         .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } },
         .step = "extract",
@@ -705,7 +705,7 @@ test "provider cause survives request release without inventing a candidate reje
     try std.testing.expect(released.last_protocol_rejection == null);
     try std.testing.expectEqual(@as(u16, 403), released.exchange_evidence.?.status.?);
     try std.testing.expect(released.exchange_evidence.?.raw_response != null);
-    for ([_][]const u8{ try std.json.Stringify.valueAlloc(a, released, .{}), try @import("report.zig").terminal(a, released, "runs", "example"), try @import("report.zig").renderMarkdown(a, released) }, 0..) |output, index| {
+    for ([_][]const u8{ try std.json.Stringify.valueAlloc(a, released, .{}), try @import("../e2e/report.zig").terminal(a, released, "runs", "example"), try @import("../e2e/report.zig").renderMarkdown(a, released) }, 0..) |output, index| {
         try std.testing.expect(std.mem.indexOf(u8, output, if (index == 2) "authorization\\_denied" else "authorization_denied") != null);
         try std.testing.expect(std.mem.indexOf(u8, output, "AccessDeniedException") != null);
     }
@@ -821,7 +821,7 @@ test "unrepairable responses preserve complete production logs and forbid public
             try runner.envelope.apply(.{ .id = "test.retire-request", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &retired, .side_effect = .none }, &retirement, .ok);
             for (retired) |key| try std.testing.expect(runner.envelope.slots[@intFromEnum(key)] == null);
             report.workflow_outcome = outcome.executionStatus();
-            try @import("observation.zig").capture(a, runner, &report);
+            try @import("../e2e/observation.zig").capture(a, runner, &report);
         }
         try std.testing.expectEqual(@as(u128, 2796), report.total_tokens);
         try std.testing.expectEqual(@as(u64, 932), report.last_model_usage.?.total_tokens);
@@ -838,7 +838,7 @@ test "unrepairable responses preserve complete production logs and forbid public
         }
         const encoded = try std.json.Stringify.valueAlloc(a, report, .{});
         _ = try @import("../../../src/domain/strict_json.zig").decode(c.Report, a, encoded, .{ .maximum_depth = 64 });
-        if (mode == 0) try std.testing.expect(std.mem.indexOf(u8, try @import("report.zig").renderMarkdown(a, report), "missing_final_text") != null);
+        if (mode == 0) try std.testing.expect(std.mem.indexOf(u8, try @import("../e2e/report.zig").renderMarkdown(a, report), "missing_final_text") != null);
     }
 }
 
@@ -869,7 +869,7 @@ test "reports retain scoped retry history and rejected-content usage after owner
         break :retained .{ .defects = try state.observe(a, .{ .bytes = "merge" }), .assignments = try state.observeAssignments(a, .{ .bytes = "account" }) };
     };
     try std.testing.expectEqual(@as(usize, 3), counts.defects.len);
-    var calls = [_]@import("observation.zig").Call{.{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .step = "repair", .raw_response_available = true, .status = 200 }};
+    var calls = [_]@import("../e2e/observation.zig").Call{.{ .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .step = "repair", .raw_response_available = true, .status = 200 }};
     var observed: c.Report = .{
         .started_at_utc = "",
         .status = .workflow_failed,
@@ -883,16 +883,16 @@ test "reports retain scoped retry history and rejected-content usage after owner
             .{ .step = "account", .limit = 2, .scope = .model_request, .operation_executions = 0, .defects = &.{}, .assignments = counts.assignments },
         },
     };
-    try @import("observation.zig").correlate(a, &calls, &observed);
+    try @import("../e2e/observation.zig").correlate(a, &calls, &observed);
     var retained: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .retry_settings = observed.retry_settings };
-    try @import("observation.zig").correlate(a, &calls, &retained);
+    try @import("../e2e/observation.zig").correlate(a, &calls, &retained);
     try std.testing.expectEqual(@as(u64, 932), retained.last_model_usage.?.total_tokens);
     try std.testing.expectEqual(@as(usize, 0), retained.repairs.len);
     try std.testing.expect(retained.last_model_output == null);
     const encoded = try std.json.Stringify.valueAlloc(a, retained, .{});
     const decoded = try @import("../../../src/domain/strict_json.zig").decode(c.Report, a, encoded, .{ .maximum_depth = 64 });
     const settings = try std.json.Stringify.valueAlloc(a, decoded.retry_settings, .{});
-    for ([_][]const u8{ encoded, try @import("report.zig").renderMarkdown(a, decoded) }) |output| {
+    for ([_][]const u8{ encoded, try @import("../e2e/report.zig").renderMarkdown(a, decoded) }) |output| {
         try std.testing.expect(std.mem.indexOf(u8, output, settings) != null);
         try std.testing.expect(std.mem.indexOf(u8, output, "missing_final_text") != null);
     }
@@ -937,7 +937,7 @@ test "input failure report explains environment setup and escapes untrusted labe
         .status = .input_invalid,
         .diagnostic = "InvalidEvaluationEnvironment",
     };
-    const view = try @import("report.zig").renderMarkdown(arena.allocator(), report);
+    const view = try @import("../e2e/report.zig").renderMarkdown(arena.allocator(), report);
     try std.testing.expect(std.mem.indexOf(u8, view, "Input setup failed before workflow execution") != null);
     try std.testing.expect(std.mem.indexOf(u8, view, "scripts/e2e-spec.sh") != null);
     try std.testing.expect(std.mem.indexOf(u8, view, "workflow: not_run") == null);
@@ -950,7 +950,7 @@ test "step events keep the newer exchange usage separate from an older rejected 
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const obs = @import("observation.zig");
+    const obs = @import("../e2e/observation.zig");
     const Origin = @import("../../../src/domain/model_candidate_origin.zig").Origin;
     const original: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
     const repair: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
@@ -979,7 +979,7 @@ test "step events keep the newer exchange usage separate from an older rejected 
     try std.testing.expectEqualStrings("repair", report.last_model_step.?);
     try std.testing.expectEqualStrings("extract", report.candidate_model_step.?);
     try std.testing.expectEqual(@as(u64, 340), report.last_model_usage.?.total_tokens);
-    const event = try @import("trace.zig").Trace.stepEvent(a, 91, .{ .bytes = "validate-selections" }, .{ .outcome = .invalid }, report);
+    const event = try @import("../e2e/trace.zig").Trace.stepEvent(a, 91, .{ .bytes = "validate-selections" }, .{ .outcome = .invalid }, report);
     const tree = try std.json.parseFromSlice(std.json.Value, a, event, .{});
     const exchange = tree.value.object.get("exchange").?.object;
     const candidate = tree.value.object.get("candidate_source").?.object;
@@ -995,7 +995,7 @@ test "step events keep the newer exchange usage separate from an older rejected 
     report.terminal_rejection = .{ .kind = .operation_failed };
     try obs.correlate(a, &calls, &report);
     try std.testing.expectEqual(@as(u64, 340), report.last_model_usage.?.total_tokens);
-    for ([_][]const u8{ try @import("report.zig").renderMarkdown(a, report), try @import("report.zig").terminal(a, report, "runs", "sample") }) |rendered| {
+    for ([_][]const u8{ try @import("../e2e/report.zig").renderMarkdown(a, report), try @import("../e2e/report.zig").terminal(a, report, "runs", "sample") }) |rendered| {
         try std.testing.expect(std.mem.indexOf(u8, rendered, "validate-accounting") != null);
         try std.testing.expect(std.mem.indexOf(u8, rendered, "operation_failed") != null);
     }
@@ -1050,7 +1050,12 @@ test "reports preserve native extraction reconciliation specification and comple
         var omission_inputs = review_inputs;
         omission_inputs.review_origin = origin;
         retained[4] = try (Diagnostic{ .support_findings = .from(.source, omission_inputs, .unlocalized_omission) }).copy(a);
-        const missing = (try @import("../../../src/domain/specification_support.zig").Source.collect(scratch, review_inputs, context, "{\"entries\":[]}", origin)).rejected;
+        const missing = (try @import("../../../src/domain/specification_support.zig").Source.validate(scratch, review_inputs, context.inputs, .{
+            .review = .{ .entries = &.{} },
+            .origin = origin,
+            .origins = &.{},
+            .omission_conflict_claims = context.references.records.assignments.checked.prior.prior.source.omission_conflict_claims,
+        })).rejected;
         try std.testing.expect(missing.rejection.diagnostics.len > 1);
         retained[3] = try (Diagnostic{ .support = missing.rejection }).copy(a);
         const registry = @import("../../../src/domain/principle_registry.zig");
@@ -1073,7 +1078,7 @@ test "reports preserve native extraction reconciliation specification and comple
         try std.testing.expectEqualDeep(report, decoded);
         try std.testing.expectEqualDeep(origin, decoded.candidate_error.?.origin().?);
         const bytes = try std.json.Stringify.valueAlloc(a, diagnostic, .{});
-        for ([_][]const u8{ try @import("report.zig").renderMarkdown(a, decoded), try @import("report.zig").terminal(a, decoded, "runs", "case") }) |output| {
+        for ([_][]const u8{ try @import("../e2e/report.zig").renderMarkdown(a, decoded), try @import("../e2e/report.zig").terminal(a, decoded, "runs", "case") }) |output| {
             try std.testing.expect(std.mem.indexOf(u8, output, bytes) != null);
             try std.testing.expect(std.mem.indexOf(u8, output, "native-validation") != null);
             if (diagnostic == .support_findings) try std.testing.expect(std.mem.indexOf(u8, output, "No safe repair target can be authorized") != null);
@@ -1123,8 +1128,8 @@ test "events and reports preserve native repair changes and text spans after rel
         try std.testing.expectEqual(@as(u64, 1), merge.revision_before);
         try std.testing.expectEqual(@as(u64, 2), merge.revision_after);
         const bytes = try std.json.Stringify.valueAlloc(a, report.repairs, .{});
-        for ([_][]const u8{ try @import("report.zig").renderMarkdown(a, decoded), try @import("report.zig").terminal(a, decoded, "runs", "case") }) |output| try std.testing.expect(std.mem.indexOf(u8, output, bytes) != null);
-        const event = try @import("trace.zig").Trace.stepEvent(a, index + 1, .{ .bytes = "validate-signals" }, .{ .outcome = report.workflow_outcome.? }, decoded);
+        for ([_][]const u8{ try @import("../e2e/report.zig").renderMarkdown(a, decoded), try @import("../e2e/report.zig").terminal(a, decoded, "runs", "case") }) |output| try std.testing.expect(std.mem.indexOf(u8, output, bytes) != null);
+        const event = try @import("../e2e/trace.zig").Trace.stepEvent(a, index + 1, .{ .bytes = "validate-signals" }, .{ .outcome = report.workflow_outcome.? }, decoded);
         const tree = try std.json.parseFromSlice(std.json.Value, a, event, .{});
         try std.testing.expectEqual(index == 1, tree.value.object.get("repairs").?.array.items[0].object.get("changed").?.bool);
     }

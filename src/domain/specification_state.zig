@@ -6,7 +6,7 @@ const reference = @import("reference_snapshot.zig");
 const authority = @import("required_authority.zig");
 const clarification = @import("clarification_inputs.zig");
 const ids = @import("specification_identity.zig");
-pub const schema = "specification-state/v6";
+pub const schema = "specification-state/v7";
 pub const max_bytes = 64 * 1024 * 1024;
 pub const State = struct {
     schema: []const u8,
@@ -132,6 +132,22 @@ fn validateAssociations(backing: std.mem.Allocator, state: State) !void {
     defer scratch.deinit();
     const allocator = scratch.allocator();
     const records = try @import("reference_support.zig").snapshot(allocator, state.reference);
+    const binding = @import("specification_source_binding.zig");
+    try binding.validate(records, state.reference.inputs);
+    const brief = try binding.forUnit(allocator, records, state.reference.inputs, .brief, 0);
+    const story = try binding.forUnit(allocator, records, state.reference.inputs, .primary_user_story, 0);
+    const entities = try binding.forUnit(allocator, records, state.reference.inputs, .entities, 0);
+    if (!sameClaims(state.brief.title.provenance.claim_ids, brief.brief.title.claim_ids) or
+        !sameClaims(state.brief.description.provenance.claim_ids, brief.brief.description.claim_ids) or
+        !sameClaims(state.brief.primary_goal.provenance.claim_ids, brief.brief.primary_goal.claim_ids) or
+        !sameClaims(state.content.primary_user_story.provenance.claim_ids, story.primary_user_story.claim_ids) or
+        !sameClaims(state.content.entities.basis.provenance.claim_ids, entities.entities.claim_ids)) return error.InvalidSpecificationState;
+    for (state.content.records) |record| {
+        for (0..try binding.recordCount(records)) |index| {
+            const source = try binding.record(allocator, records, state.reference.inputs, index);
+            if (sameClaims(record.proposal.provenance.claim_ids, source.records.selection.claim_ids)) break;
+        } else return error.InvalidSpecificationState;
+    }
     try @import("specification_provenance.zig").validateStored(allocator, state.reference.inputs, .{ .records = state.reference.passive_records, .occurrences = state.reference.passive_occurrences }, records, state.brief, state.content);
     const coverage = @import("specification_coverage.zig");
     const checked = try coverage.checkRecords(allocator, records, state.brief, state.content);
@@ -147,4 +163,10 @@ fn validateAssociations(backing: std.mem.Allocator, state: State) !void {
     try @import("specification_support.zig").Source.validateStored(allocator, inputs, state.reference.inputs);
     try @import("principle_assessment.zig").validateStored(allocator, inputs, state.reference.inputs, state.principle_assessment);
     if (!try authority.validate(allocator, inputs, state.review.observations, state.review.result)) return error.InvalidSpecificationState;
+}
+
+fn sameClaims(left: []const @import("reference_reconciliation.zig").ClaimId, right: []const @import("reference_reconciliation.zig").ClaimId) bool {
+    if (left.len != right.len) return false;
+    for (left, right) |a, b| if (a.ordinal != b.ordinal) return false;
+    return true;
 }

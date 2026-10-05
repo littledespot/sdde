@@ -14,6 +14,7 @@ pub fn snapshot(a: std.mem.Allocator, context: Context, caller: []const u8, cred
     var resources: std.ArrayList(source.Resource) = .empty;
     const selected = request.sourceResources();
     try append(a, &resources, graph, .prompt, selected.prompt.bytes, credentials);
+    if (selected.context) |id| try append(a, &resources, graph, .context, id.bytes, credentials);
     if (selected.protocol_prompt) |id| try append(a, &resources, graph, .protocol_prompt, id.bytes, credentials);
     try append(a, &resources, graph, .result, selected.result.bytes, credentials);
     if (selected.input) |id| try append(a, &resources, graph, .input, id.bytes, credentials);

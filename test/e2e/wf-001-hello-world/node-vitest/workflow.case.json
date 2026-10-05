@@ -27,6 +27,10 @@
       "destination": ".sddtoolkit/workflows/spec/protocol.prompt.md"
     },
     {
+      "source": "design/workflows/spec/extraction.context.json",
+      "destination": ".sddtoolkit/workflows/spec/extraction.context.json"
+    },
+    {
       "source": "design/workflows/spec/extraction-content.prompt.md",
       "destination": ".sddtoolkit/workflows/spec/extraction-content.prompt.md"
     },
@@ -63,6 +67,10 @@
       "destination": ".sddtoolkit/workflows/spec/reconciliation-signals.prompt.md"
     },
     {
+      "source": "design/workflows/spec/reconciliation-roles.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/reconciliation-roles.prompt.md"
+    },
+    {
       "source": "design/workflows/spec/reconciliation-conflicts.prompt.md",
       "destination": ".sddtoolkit/workflows/spec/reconciliation-conflicts.prompt.md"
     },
@@ -73,6 +81,14 @@
     {
       "source": "design/workflows/spec/generation.prompt.md",
       "destination": ".sddtoolkit/workflows/spec/generation.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/story.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/story.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/generation.context.json",
+      "destination": ".sddtoolkit/workflows/spec/generation.context.json"
     },
     {
       "source": "design/workflows/spec/entities.prompt.md",
@@ -93,6 +109,10 @@
     {
       "source": "design/workflows/spec/support.prompt.md",
       "destination": ".sddtoolkit/workflows/spec/support.prompt.md"
+    },
+    {
+      "source": "design/workflows/spec/support-loss.prompt.md",
+      "destination": ".sddtoolkit/workflows/spec/support-loss.prompt.md"
     },
     {
       "source": "design/workflows/spec/support.schema.json",

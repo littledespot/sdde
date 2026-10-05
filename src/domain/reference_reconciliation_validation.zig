@@ -112,7 +112,7 @@ pub fn checkSignal(a: std.mem.Allocator, validator: r.text.Validator, context: T
         .invalid => |issue| return .{ .invalid = issue },
     };
     if (!signalSelectionAvailable(prior.proposal.signals[0..index], index, proposed.claim_ids)) return .{ .invalid = .{ .rule = .duplicate_signal, .observed = .{ .claims = proposed.claim_ids }, .expected = .{ .constraint = .unique_members } } };
-    return .{ .valid = .{ .claim_ids = proposed.claim_ids, .citation_ids = try r.citationUnion(a, items, proposed.claim_ids), .content = accepted } };
+    return .{ .valid = .{ .claim_ids = proposed.claim_ids, .citation_ids = try r.citationUnion(a, items, proposed.claim_ids), .content = accepted, .generation_roles = &.{} } };
 }
 
 pub fn checkConflict(a: std.mem.Allocator, validator: r.text.Validator, context: TextContext, prior: r.CheckedDispositions, index: usize) r.Error!d.Check(r.ValidatedConflict) {
@@ -518,4 +518,32 @@ pub fn checkSignals(allocator: std.mem.Allocator, validator: r.text.Validator, p
     }
     if (try signalCoverage(allocator, items, prior.dispositions, prior.proposal.signals)) |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .signals, issue);
     return .{ .valid = .{ .prior = prior, .signals = signals } };
+}
+
+pub fn checkRoles(allocator: std.mem.Allocator, prior: r.CheckedSignals) r.Error!d.Result(r.CheckedSignals) {
+    const source = prior.prior.source;
+    const input_value = prior.prior.input;
+    const assignments = prior.prior.proposal.role_assignments;
+    const signals = try allocator.dupe(r.ValidatedSignal, prior.signals);
+    for (assignments, 0..) |assignment, assignment_index| {
+        const invalid: d.Issue = .{ .rule = .role_assignment, .observed = .{ .claims = assignment.claim_ids }, .expected = .{ .constraint = .supported_role_assignment } };
+        if (assignment.generation_roles.len == 0 or assignment.claim_ids.len == 0) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
+        r.unique(r.ClaimId, assignment.claim_ids) catch return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
+        for (assignments[0..assignment_index]) |earlier| if (sameClaimIds(earlier.claim_ids, assignment.claim_ids)) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
+        for (assignment.generation_roles, 0..) |role, index| for (assignment.generation_roles[0..index]) |earlier| {
+            if (role == earlier) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
+        };
+        for (signals, 0..) |signal, index| {
+            if (!sameClaimIds(signal.claim_ids, assignment.claim_ids)) continue;
+            signals[index].generation_roles = assignment.generation_roles;
+            break;
+        } else return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
+    }
+    return .{ .valid = .{ .prior = prior.prior, .signals = signals } };
+}
+
+fn sameClaimIds(left: []const r.ClaimId, right: []const r.ClaimId) bool {
+    if (left.len != right.len) return false;
+    for (left, right) |a, b| if (a.ordinal != b.ordinal) return false;
+    return true;
 }

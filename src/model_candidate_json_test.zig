@@ -24,6 +24,27 @@ test "reconciliation rejects the observed native union response and accepts the 
     }) |content| try check(schema, .{ .bytes = try std.mem.concat(a, u8, &.{ prefix, content, "}]}" }) });
 }
 
+test "reconciliation roles have a separate closed assignment response" {
+    const prefix = "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[1],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"Start successfully.\"]}}";
+    const suffix = "}],\"role_assignments\":[{\"claim_ids\":[1],\"generation_roles\":[\"title\",\"records\"]}],\"conflicts\":[]}";
+    try checkCandidate("reconciliation", "global", prefix ++ suffix);
+    try candidateSchemaCase("reconciliation", "global", prefix ++ ",\"generation_roles\":[\"title\"]" ++ suffix, .unknown_property, "/signals/0/generation_roles");
+    try candidateSchemaCase("reconciliation", "global", prefix ++ "}],\"role_assignments\":[{\"claim_ids\":[1],\"generation_roles\":[]}],\"conflicts\":[]}", .array_length, "/role_assignments/0/generation_roles");
+    try candidateSchemaCase("reconciliation", "global", prefix ++ "}],\"role_assignments\":[{\"claim_ids\":[1],\"generation_roles\":[\"unknown\"]}],\"conflicts\":[]}", .enum_mismatch, "/role_assignments/0/generation_roles/0");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const source = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .limited(@import("domain/model_result_schema.zig").max_bytes));
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const selected = (try parser.compiler().compile(a, source)).select(.{ .bytes = "global" }).?;
+    const bedrock = try @import("domain/model_schema_projection.zig").render(a, selected, .bedrock);
+    const projected = (try std.json.parseFromSlice(std.json.Value, a, bedrock, .{})).value.object;
+    const signal = projected.get("properties").?.object.get("signals").?.object.get("items").?.object;
+    try std.testing.expect(signal.get("properties").?.object.get("generation_roles") == null);
+    const roles = projected.get("properties").?.object.get("role_assignments").?.object.get("items").?.object;
+    try std.testing.expectEqual(@as(i64, 1), roles.get("properties").?.object.get("generation_roles").?.object.get("minItems").?.integer);
+}
+
 test "compact model JSON keeps sibling objects intact and round trips native unions" {
     try roundTrip(std.testing.allocator);
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -75,7 +96,7 @@ const response_wire = struct {
     const nodes = "[\"Source meaning\",{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "},{\"kind\":\"source\",\"source_id\":" ++ id ++ "}]";
     const normalized = segments;
     const exact = "[{\"kind\":\"exact_copy\",\"claim_id\":" ++ id ++ "}]";
-    const attributed = "{\"value\":" ++ normalized ++ ",\"provenance\":" ++ provenance ++ "}";
+    const attributed = "{\"value\":" ++ normalized ++ "}";
     const selection = "{\"first\":7,\"last\":9}";
     const classifications = "[{\"kind\":\"preserve\",\"preserve\":{\"token_candidate_id\":{\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":7},\"kind\":\"business_exact_string\"}},{\"kind\":\"irrelevant\",\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}]";
     const clarification = "{\"kind\":\"clarification\",\"reason\":\"ambiguous\",\"question\":" ++ attributed ++ "}";
@@ -97,25 +118,25 @@ test "independent wire cases cover every selected specification result and neste
         const content = "{\"kind\":\"" ++ kind ++ "\"," ++ (if (comptime std.mem.eql(u8, kind, "business") or std.mem.eql(u8, kind, "scope_guard")) "\"segments\":" ++ response_wire.segments else "\"nodes\":" ++ response_wire.nodes) ++ "}";
         try checkCandidate("extraction", null, "{\"kind\":\"claims\",\"claims\":[{\"content\":" ++ content ++ ",\"citations\":[" ++ response_wire.selection ++ "]}],\"token_classifications\":" ++ response_wire.classifications ++ "}");
         try checkCandidate("reconciliation", "summary", "{\"statements\":[{\"local_key\":7,\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"model\",\"model\":" ++ content ++ "}}]}");
-        try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[{\"claim_id\":" ++ response_wire.id ++ ",\"disposition\":{\"kind\":\"retained\"}}],\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"model\",\"model\":" ++ content ++ "}}],\"conflicts\":[]}");
+        try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[{\"claim_id\":" ++ response_wire.id ++ ",\"disposition\":{\"kind\":\"retained\"}}],\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"model\",\"model\":" ++ content ++ "}}],\"role_assignments\":[],\"conflicts\":[]}");
     }
     try checkCandidate("extraction", null, "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":" ++ response_wire.nodes ++ "},\"token_classifications\":[]}");
     try checkCandidate("extraction", "classification_replacement", "{\"token_classifications\":" ++ response_wire.classifications ++ "}");
     try checkCandidate("extraction", "citation_replacement", "{\"citations\":[" ++ response_wire.selection ++ "]}");
     try checkCandidate("extraction", "source_selection_replacement", response_wire.selection);
     try checkCandidate("reconciliation", "summary", "{\"statements\":[{\"local_key\":7,\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"preserved_token\",\"token_id\":" ++ response_wire.id ++ "}}]}");
-    try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"preserved_token\",\"token_id\":" ++ response_wire.id ++ "}}],\"conflicts\":[{\"claim_ids\":[" ++ response_wire.id ++ ",9],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "},\"resolution\":\"unresolved\"}]}");
+    try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[" ++ response_wire.id ++ "],\"content\":{\"kind\":\"preserved_token\",\"token_id\":" ++ response_wire.id ++ "}}],\"role_assignments\":[],\"conflicts\":[{\"claim_ids\":[" ++ response_wire.id ++ ",9],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "}}]}");
     // Structural conformance is not a claim that these independently shaped
     // records satisfy the graph, source-join or semantic validators.
     try checkCandidate("generation", "brief", "{\"kind\":\"brief\",\"title\":" ++ response_wire.attributed ++ ",\"description\":" ++ response_wire.attributed ++ ",\"primary_goal\":" ++ response_wire.attributed ++ "}");
-    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.exact ++ ",\"provenance\":" ++ response_wire.provenance ++ "}");
+    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.exact ++ "}");
     try checkCandidate("generation", "entities", "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"basis\":" ++ response_wire.attributed ++ "}");
     inline for (.{ "brief", "primary_user_story", "entities" }) |selection| try checkCandidate("generation", selection, response_wire.clarification);
     // Assignment-specific rules require the unit context: schema checks here,
     // with native validation covered by specification_generation_test.
     try candidateSchemaCase("generation", "records", response_wire.clarification, .missing_required_property, "/record_kind");
     inline for (response_wire.records) |record| {
-        const bytes = "{\"content\":" ++ record[1] ++ ",\"provenance\":" ++ response_wire.provenance ++ "}";
+        const bytes = "{\"content\":" ++ record[1] ++ "}";
         try checkCandidate("generation", "records", "{\"kind\":\"records\",\"records\":[" ++ bytes ++ "]}");
         const need = response_wire.clarification[0 .. response_wire.clarification.len - 1] ++ ",\"record_kind\":\"" ++ record[0] ++ "\"}";
         try checkCandidate("generation", "records", need);
@@ -123,20 +144,18 @@ test "independent wire cases cover every selected specification result and neste
         if (comptime std.mem.eql(u8, record[0], "acceptance_criterion") or std.mem.eql(u8, record[0], "functional_requirement") or std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_" ++ record[0], bytes);
         if (comptime !std.mem.eql(u8, record[0], "entity")) try checkCandidate("generation", "repair_record_non_entity", bytes);
     }
-    try checkCandidate("generation", "provenance", response_wire.provenance);
     try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.exact ++ "}");
     try checkCandidate("support", "detail", "{\"detail\":\"Which deadline applies?\"}");
     try candidateCase("support", "detail", "{\"detail\":\"Which deadline applies?\",\"finding\":\"supported\"}", .unknown_property, "/finding");
-    try checkCandidate("support", "selection", "{\"provenance\":" ++ response_wire.provenance ++ ",\"source_ids\":[]}");
-    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"loss\":{\"kind\":\"unlocalized\"},\"provenance\":" ++ response_wire.provenance ++ ",\"source_ids\":[],\"detail\":\"Preserve the required confirmation.\"}");
-    try checkCandidate("support", null, "{\"entries\":[{\"requirement_ordinal\":7,\"value\":{\"kind\":\"supported\",\"loss\":{\"kind\":\"unlocalized\"},\"provenance\":" ++ response_wire.provenance ++ ",\"source_ids\":[],\"detail\":\"\"}},{\"requirement_ordinal\":9,\"value\":{\"kind\":\"unsupported\",\"loss\":{\"kind\":\"unlocalized\"},\"provenance\":{\"claim_ids\":[],\"clarification_response_ids\":[]},\"source_ids\":[],\"detail\":\"Which deadline applies?\",\"question\":\"Which deadline applies? Supply a duration.\"}}]}");
+    try checkCandidate("support", "selection", "{\"source_ids\":[]}");
+    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"Preserve the required confirmation.\"}");
+    try checkCandidate("support", null, "{\"kind\":\"supported\",\"source_ids\":[],\"detail\":\"\"}");
 }
 
 test "support schemas expose applicability only when selected and reject superseded fields" {
-    const value = "{\"kind\":\"not_applicable\",\"loss\":{\"kind\":\"unlocalized\"},\"provenance\":" ++ response_wire.provenance ++ ",\"source_ids\":[],\"detail\":\"No business data is involved.\"}";
-    const review = "{\"entries\":[{\"requirement_ordinal\":9,\"value\":" ++ value ++ "}]}";
+    const value = "{\"kind\":\"not_applicable\",\"source_ids\":[],\"detail\":\"No business data is involved.\"}";
     try checkCandidate("support", "applicability_finding", value);
-    try checkCandidate("support", "review_applicability", review);
+    try candidateCase("support", "applicability_finding", "{\"kind\":\"not_applicable\",\"provenance\":{\"claim_ids\":[1,2]},\"source_ids\":[],\"detail\":\"\"}", .unknown_property, "/provenance");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -145,18 +164,33 @@ test "support schemas expose applicability only when selected and reject superse
     const schema = try adapter.compiler().compile(a, bytes);
     try std.testing.expect(schema.select(.{ .bytes = "disposition" }) == null);
 
-    inline for (.{ "finding", "review" }) |selection| {
-        const selected = schema.select(.{ .bytes = selection }).?;
-        // Native decoding represents the full decision union; native admission
-        // enforces each requirement's policy after this selected wire schema.
-        try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = if (std.mem.eql(u8, selection, "finding")) value else review, .rejection = .unknown_variant, .path = if (std.mem.eql(u8, selection, "finding")) "/kind" else "/entries/0/value/kind" });
-    }
+    const selected = schema.select(.{ .bytes = "finding" }).?;
+    // Native admission enforces each requirement's policy after schema admission.
+    try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = value, .rejection = .unknown_variant, .path = "/kind" });
     inline for (.{ "finding", "disposition", "decision" }) |field| {
-        try candidateCase("support", "finding", "{\"kind\":\"unsupported\",\"loss\":{\"kind\":\"unlocalized\"},\"" ++ field ++ "\":\"supported\",\"provenance\":" ++ response_wire.provenance ++ ",\"source_ids\":[],\"detail\":\"The source leaves a decision open.\",\"question\":\"Which deadline applies?\"}", .unknown_property, "/" ++ field);
+        try candidateCase("support", "finding", "{\"kind\":\"unsupported\",\"" ++ field ++ "\":\"supported\",\"source_ids\":[],\"detail\":\"The source leaves a decision open.\",\"question\":\"Which deadline applies?\"}", .unknown_property, "/" ++ field);
     }
 }
 
-test "D1 source variants require questions only for gaps across initial and inserted findings" {
+test "fixed source review reconstructs bound claims and rejects an echoed union" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const model = @import("domain/specification_support_model.zig");
+    const required: @import("domain/specification_support_evidence.zig").Requirements = .{
+        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{} },
+        .eligible_claim_ids = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } },
+        .eligible_source_ids = &.{.{ .ordinal = 1 }},
+        .positive_claims = .eligible_subset,
+        .supported_provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{}, .clarification_response_ids = &.{} },
+        .candidate_bound = true,
+    };
+    const wire = "{\"kind\":\"supported\",\"source_ids\":[],\"detail\":\"\"}";
+    try std.testing.expectEqualDeep(&[_]@import("domain/reference_reconciliation.zig").ClaimId{.{ .ordinal = 1 }}, (try model.decode(a, wire, required)).provenance.claim_ids);
+    try std.testing.expectError(error.InvalidJsonDocument, model.decode(a, "{\"kind\":\"supported\",\"provenance\":{\"claim_ids\":[1,2]},\"source_ids\":[],\"detail\":\"\"}", required));
+}
+
+test "D1 source variants require questions only for gaps in focused findings" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -165,29 +199,40 @@ test "D1 source variants require questions only for gaps across initial and inse
     const schema = try adapter.compiler().compile(a, source);
     const review = @import("domain/specification_support.zig").Source;
     const json = @import("domain/model_candidate_json.zig");
+    const model = @import("domain/specification_support_model.zig");
+    const required: @import("domain/specification_support_evidence.zig").Requirements = .{
+        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{} },
+        .eligible_claim_ids = &.{.{ .ordinal = 1 }},
+        .eligible_source_ids = &.{.{ .ordinal = 1 }},
+        .positive_claims = .eligible_subset,
+        .supported_provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{}, .clarification_response_ids = &.{} },
+        .candidate_bound = false,
+    };
     for (std.meta.tags(review.Decision)) |tag| {
         const gap = @import("domain/specification_support_evidence.zig").questionRequired(tag.finding());
-        const value: review.Value = .{ .kind = tag, .provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} }, .source_ids = &.{.{ .ordinal = 1 }}, .detail = "The request identifies the action but leaves its duration undecided.", .question = if (gap) "Which duration applies? Supply the duration and starting event." else null };
-        const valid = try json.encode(review.Value, a, value);
-        try std.testing.expectEqualDeep(value, try json.decode(review.Value, a, valid));
-        var wrong = value;
-        wrong.question = if (gap) null else "Should this outcome be accepted?";
-        const invalid = try json.encode(review.Value, a, wrong);
-        for ([_][]const u8{ "finding", "applicability_finding", "review", "review_applicability" }) |definition| {
+        const value: review.Value = .{ .kind = tag, .provenance = .{ .claim_ids = if (tag == .supported or tag == .not_applicable) &.{.{ .ordinal = 1 }} else &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{.{ .ordinal = 1 }}, .detail = "The request identifies the action but leaves its duration undecided.", .question = if (gap) "Which duration applies? Supply the duration and starting event." else null };
+        const canonical = try json.encode(review.Value, a, value);
+        try std.testing.expectEqualDeep(value, try json.decode(review.Value, a, canonical));
+        const valid = try model.encode(a, value, required);
+        try std.testing.expectEqualDeep(value, try model.decode(a, valid, required));
+        var echoed = (try std.json.parseFromSlice(std.json.Value, a, valid, .{})).value;
+        try echoed.object.put(a, "provenance", .{ .null = {} });
+        try std.testing.expectError(error.InvalidJsonDocument, model.decode(a, try std.json.Stringify.valueAlloc(a, echoed, .{}), required));
+        var wrong = (try std.json.parseFromSlice(std.json.Value, a, valid, .{})).value;
+        if (gap) _ = wrong.object.orderedRemove("question") else try wrong.object.put(a, "question", .{ .string = "Should this outcome be accepted?" });
+        const invalid = try std.json.Stringify.valueAlloc(a, wrong, .{});
+        for ([_][]const u8{ "finding", "applicability_finding" }) |definition| {
             if (tag == .not_applicable and std.mem.indexOf(u8, definition, "applicability") == null) continue;
-            const whole = std.mem.startsWith(u8, definition, "review");
-            const good_bytes = if (whole) try std.fmt.allocPrint(a, "{{\"entries\":[{{\"requirement_ordinal\":1,\"value\":{s}}}]}}", .{valid}) else valid;
-            const bad_bytes = if (whole) try std.fmt.allocPrint(a, "{{\"entries\":[{{\"requirement_ordinal\":1,\"value\":{s}}}]}}", .{invalid}) else invalid;
             const selected = schema.select(.{ .bytes = definition }).?;
-            try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = good_bytes });
-            try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = bad_bytes, .rejection = if (gap) .missing_required_property else .unknown_property, .path = if (whole) "/entries/0/value/question" else "/question" });
+            try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = valid });
+            try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = invalid, .rejection = if (gap) .missing_required_property else .unknown_property, .path = "/question" });
         }
         var parsed = try std.json.parseFromSlice(std.json.Value, a, valid, .{});
         const discriminator = parsed.value.object.get("kind").?;
         _ = parsed.value.object.orderedRemove("kind");
         try parsed.value.object.put(a, "decision", discriminator);
         const legacy = try std.json.Stringify.valueAlloc(a, parsed.value, .{});
-        try std.testing.expectError(error.InvalidJsonDocument, json.decode(review.Value, a, legacy));
+        try std.testing.expectError(error.InvalidJsonDocument, json.decode(model.Value, a, legacy));
     }
 }
 
@@ -211,54 +256,107 @@ test "selected source and reconciliation repairs conform to their native respons
     try candidateCase("reconciliation", "business_text", "{\"segments\":" ++ response_wire.segments ++ ",\"claim_ids\":[]}", .unknown_property, "/claim_ids");
 }
 
+test "required text and citation presence follows native rules in initial and selected schemas" {
+    const claim = "{\"content\":{\"kind\":\"business\",\"segments\":[\"Requirement\"]},\"citations\":[" ++ response_wire.selection ++ "]}";
+    try checkCandidate("extraction", null, "{\"kind\":\"claims\",\"claims\":[" ++ claim ++ "],\"token_classifications\":[]}");
+    try candidateSchemaCase("extraction", null, "{\"kind\":\"claims\",\"claims\":[{\"content\":{\"kind\":\"business\",\"segments\":[\"Requirement\"]},\"citations\":[]}],\"token_classifications\":[]}", .array_length, "/claims/0/citations");
+    try candidateSchemaCase("extraction", "citation_replacement", "{\"citations\":[]}", .array_length, "/citations");
+    inline for (.{ "business", "scope_guard", "design", "technical", "validation", "implementation_assumption", "open_question" }) |kind| {
+        const field = if (comptime std.mem.eql(u8, kind, "business") or std.mem.eql(u8, kind, "scope_guard")) "segments" else "nodes";
+        const prefix = "{\"kind\":\"claims\",\"claims\":[{\"content\":{\"kind\":\"" ++ kind ++ "\",\"" ++ field ++ "\":";
+        try candidateSchemaCase("extraction", null, prefix ++ "[]},\"citations\":[" ++ response_wire.selection ++ "]}],\"token_classifications\":[]}", .array_length, "/claims/0/content/" ++ field);
+        try candidateSchemaCase("extraction", null, prefix ++ "[\"\"]},\"citations\":[" ++ response_wire.selection ++ "]}],\"token_classifications\":[]}", .string_length, "/claims/0/content/" ++ field ++ "/0");
+    }
+    try candidateSchemaCase("extraction", null, "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[]},\"token_classifications\":[]}", .array_length, "/reason/nodes");
+    try candidateSchemaCase("extraction", "business_text_replacement", "{\"segments\":[\"\"]}", .string_length, "/segments/0");
+    try candidateSchemaCase("extraction", "reference_text_replacement", "{\"nodes\":[\"\"]}", .string_length, "/nodes/0");
+
+    try checkCandidate("reconciliation", "summary", "{\"statements\":[]}");
+    try checkCandidate("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[],\"role_assignments\":[],\"conflicts\":[]}");
+    try candidateSchemaCase("reconciliation", "summary", "{\"statements\":[{\"local_key\":1,\"claim_ids\":[],\"content\":{\"kind\":\"preserved_token\",\"token_id\":7}}]}", .array_length, "/statements/0/claim_ids");
+    try candidateSchemaCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[],\"content\":{\"kind\":\"preserved_token\",\"token_id\":7}}],\"role_assignments\":[],\"conflicts\":[]}", .array_length, "/signals/0/claim_ids");
+    try candidateSchemaCase("reconciliation", "repair_selection", "{\"claim_ids\":[]}", .array_length, "/claim_ids");
+    inline for (.{ .{ "business_text", "segments" }, .{ "reference_text", "nodes" } }) |case| {
+        try candidateSchemaCase("reconciliation", case[0], "{\"" ++ case[1] ++ "\":[]}", .array_length, "/" ++ case[1]);
+        try candidateSchemaCase("reconciliation", case[0], "{\"" ++ case[1] ++ "\":[\"\"]}", .string_length, "/" ++ case[1] ++ "/0");
+    }
+
+    try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.exact ++ "}");
+    try candidateSchemaCase("generation", "value", "{\"value\":[]}", .array_length, "/value");
+    try candidateSchemaCase("generation", "value", "{\"value\":[\"\"]}", .string_length, "/value/0");
+    try candidateSchemaCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":[]}", .array_length, "/value");
+
+    const review_prefix = "{\"kind\":\"";
+    const review_tail = "\",\"source_ids\":[],\"detail\":\"\"}";
+    try checkCandidate("support", "finding", review_prefix ++ "supported" ++ review_tail);
+    try checkCandidate("support", "applicability_finding", review_prefix ++ "not_applicable" ++ review_tail);
+    inline for (.{ "ambiguous", "conflicting", "unsupported", "candidate_omission", "inconclusive" }) |kind| {
+        const question = if (comptime std.mem.eql(u8, kind, "ambiguous") or std.mem.eql(u8, kind, "conflicting") or std.mem.eql(u8, kind, "unsupported")) ",\"question\":\"Which rule applies?\"" else "";
+        const body = review_prefix ++ kind ++ "\",\"source_ids\":[],\"detail\":\"\"" ++ question ++ "}";
+        try candidateSchemaCase("support", "finding", body, .string_length, "/detail");
+    }
+    try candidateSchemaCase("support", "gap_detail", "{\"detail\":\"\",\"question\":\"Which rule applies?\"}", .string_length, "/detail");
+    try checkCandidate("support", "detail", "{\"detail\":\"\"}");
+}
+
+test "provider schema projections retain expressible collection minima" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    inline for (.{
+        .{ "extraction", "citation_replacement", "citations" },
+        .{ "generation", "value", "value" },
+        .{ "reconciliation", "business_text", "segments" },
+        .{ "reconciliation", "reference_text", "nodes" },
+    }) |case| {
+        const source = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/" ++ case[0] ++ ".schema.json", a, .limited(@import("domain/model_result_schema.zig").max_bytes));
+        const compiled = try parser.compiler().compile(a, source);
+        const selected = compiled.select(.{ .bytes = case[1] }).?;
+        for (std.enums.values(@import("domain/model_schema_projection.zig").Profile)) |profile| {
+            const bytes = try @import("domain/model_schema_projection.zig").render(a, selected, profile);
+            const projected = (try std.json.parseFromSlice(std.json.Value, a, bytes, .{})).value;
+            const field = projected.object.get("properties").?.object.get(case[2]).?.object;
+            try std.testing.expectEqual(@as(i64, 1), field.get("minItems").?.integer);
+        }
+    }
+}
+
 test "business values use one segment shape for prose and exact references" {
     const value = "[\"Display \",{\"kind\":\"exact_copy\",\"claim_id\":7},\" with UTC date/time.\"]";
     try checkCandidate("generation", "value", "{\"value\":" ++ value ++ "}");
-    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ value ++ ",\"provenance\":" ++ response_wire.provenance ++ "}");
+    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ value ++ "}");
     try candidateCase("generation", "value", "{\"value\":{\"kind\":\"exact_copy\",\"claim_id\":7}}", .type_mismatch, "/value");
     try candidateCase("generation", "value", "{\"value\":[{\"kind\":\"exact_copy\",\"token_id\":7,\"citation_id\":9}]}", .unknown_property, "/value/0/token_id");
 }
 
-test "review and insertion evidence shapes follow native minima without excluding source-only diagnoses" {
+test "focused review evidence shapes follow native minima without excluding source-only diagnoses" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const review = @import("domain/specification_support.zig").Source;
+    const model = @import("domain/specification_support_model.zig");
     const admission = @import("domain/specification_support_evidence.zig");
-    const check = @import("model_payload_schema_test.zig").checkDocument;
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schema = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
-    for (std.meta.tags(review.Decision)) |decision| {
-        var value: review.Value = .{
-            .kind = decision,
-            .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} },
-            .source_ids = &.{.{ .ordinal = 7 }},
-            .detail = "The source establishes an action; its duration is unspecified.",
-            .question = if (admission.questionRequired(decision.finding())) "Which duration applies? Supply the duration and starting event." else null,
-        };
-        for ([_][]const u8{ "finding", "applicability_finding", "review", "review_applicability" }) |definition| {
-            if (decision == .not_applicable and std.mem.indexOf(u8, definition, "applicability") == null) continue;
-            const selected = schema.select(.{ .bytes = definition }).?;
-            const whole = std.mem.startsWith(u8, definition, "review");
-            for (0..2) |claims| {
-                value.provenance.claim_ids = if (claims == 0) &.{} else &.{.{ .ordinal = 7 }};
-                const encoded = if (whole) try codec.encode(review.Review, a, .{ .entries = &.{.{ .requirement_ordinal = 7, .value = value }} }) else try codec.encode(review.Value, a, value);
-                const rejects = claims == 0 and admission.minimum(decision.finding()) == .claim_required;
-                try check(selected.modelBytes(), .{ .bytes = encoded, .rejection = if (rejects) .array_length else null, .path = if (!rejects) null else if (whole) "/entries/0/value/provenance/claim_ids" else "/provenance/claim_ids" });
-            }
-        }
-    }
-    // The provider projection must also retain the nonempty condition. The full
-    // schema and native validator continue to own admission and evidence meaning.
+    const bound: admission.Requirements = .{
+        .records = .{ .items = .{ .state_id = .{ .bytes = "test-reference-state" }, .entries = &.{} }, .dispositions = &.{}, .signals = &.{}, .conflicts = &.{} },
+        .eligible_claim_ids = &.{.{ .ordinal = 7 }},
+        .eligible_source_ids = &.{.{ .ordinal = 7 }},
+        .positive_claims = .eligible_subset,
+        .supported_provenance = null,
+        .candidate_bound = false,
+    };
+    const source_only = "{\"kind\":\"candidate_omission\",\"source_ids\":[7],\"detail\":\"The generated content omitted the source rule.\"}";
+    try candidateSchemaCase("support", "finding", source_only, null, null);
+    try std.testing.expectEqual(@as(usize, 0), (try model.decode(a, source_only, bound)).provenance.claim_ids.len);
+    try std.testing.expectError(error.InvalidJsonDocument, model.decode(a, "{\"kind\":\"supported\",\"source_ids\":[7],\"detail\":\"\"}", bound));
+    try candidateSchemaCase("support", "finding", "{\"kind\":\"supported\",\"source_ids\":[7],\"detail\":\"\",\"provenance\":{\"claim_ids\":[7]}}", .unknown_property, "/provenance");
+    // Provider projections also exclude the forbidden bookkeeping field.
     const projection = @import("domain/model_schema_projection.zig");
     const native = try projection.value(a, schema.select(.{ .bytes = "applicability_finding" }).?.root(), .bedrock);
     for (native.object.get("anyOf").?.array.items) |variant| {
         const properties = variant.object.get("properties").?.object;
-        const decision = std.meta.stringToEnum(review.Decision, properties.get("kind").?.object.get("const").?.string).?;
-        const claims = properties.get("provenance").?.object.get("properties").?.object.get("claim_ids").?.object;
-        const required = admission.minimum(decision.finding()) == .claim_required;
-        try std.testing.expectEqual(required, claims.contains("minItems"));
-        if (required) try std.testing.expectEqual(@as(i64, 1), claims.get("minItems").?.integer);
+        try std.testing.expect(!properties.contains("provenance"));
     }
 }
 
@@ -274,12 +372,11 @@ test "loss attribution wire variants stay closed across initial review insertion
     try std.testing.expectEqual(@typeInfo(@import("domain/source_omission.zig").Location).@"union".fields.len, locations.len);
     inline for (locations) |location| {
         try checkCandidate("support", "loss", location);
-        const value = "{\"kind\":\"candidate_omission\",\"loss\":" ++ location ++ ",\"provenance\":" ++ response_wire.provenance ++ ",\"source_ids\":[" ++ response_wire.id ++ "],\"detail\":\"Preserve the deadline.\"}";
-        inline for (.{ "finding", "applicability_finding" }) |selection| try checkCandidate("support", selection, value);
-        inline for (.{ "review", "review_applicability" }) |selection| try checkCandidate("support", selection, "{\"entries\":[{\"requirement_ordinal\":7,\"value\":" ++ value ++ "}]}");
+        const value = "{\"kind\":\"candidate_omission\",\"loss\":" ++ location ++ ",\"source_ids\":[" ++ response_wire.id ++ "],\"detail\":\"Preserve the deadline.\"}";
+        inline for (.{ "finding", "applicability_finding" }) |selection| try candidateCase("support", selection, value, .unknown_property, "/loss");
     }
     try candidateCase("support", "loss", "{\"kind\":\"unlocalized\",\"value\":null}", .unknown_property, "/value");
-    try candidateCase("support", "finding", "{\"kind\":\"candidate_omission\",\"provenance\":" ++ response_wire.provenance ++ ",\"source_ids\":[],\"detail\":\"Preserve the deadline.\"}", .missing_required_property, "/loss");
+    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"Preserve the deadline.\"}");
 }
 
 fn checkCandidate(comptime name: []const u8, comptime selection: ?[]const u8, bytes: []const u8) !void {
@@ -342,16 +439,18 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         return selectedWire(T, a, @field(std.meta.Tag(T), definition["repair_".len..]), bytes);
     } else if (comptime std.mem.eql(u8, name, "generation")) {
         const definition = selection.?;
-        if (comptime std.mem.eql(u8, definition, "provenance") or std.mem.eql(u8, definition, "value") or std.mem.startsWith(u8, definition, "repair_record_")) {
-            return selectedWire(@import("domain/specification_repair.zig").Replacement, a, if (std.mem.eql(u8, definition, "provenance")) .provenance else if (std.mem.eql(u8, definition, "value")) .value else .record, bytes);
-        }
+        if (comptime std.mem.eql(u8, definition, "value")) return nativeWire(struct { value: @import("domain/specification.zig").BusinessValue }, a, bytes);
+        if (comptime std.mem.startsWith(u8, definition, "repair_record_")) return nativeWire(@import("domain/specification.zig").Wire.RecordProposal, a, bytes);
         return nativeWire(@import("domain/specification_generation.zig").ModelResponse, a, bytes);
-    } else if (comptime selection != null and !std.mem.startsWith(u8, selection.?, "review")) {
+    } else if (comptime selection != null) {
         const selected = selection.?;
         if (comptime std.mem.eql(u8, selected, "loss")) return nativeWire(@import("domain/source_omission.zig").Location, a, bytes);
+        const model = @import("domain/specification_support_model.zig");
+        if (comptime std.mem.eql(u8, selected, "finding") or std.mem.eql(u8, selected, "applicability_finding")) return nativeWire(model.Value, a, bytes);
+        if (comptime std.mem.eql(u8, selected, "selection")) return nativeWire(model.Selection, a, bytes);
         const T = @import("domain/specification_support_repair.zig").Source.Replacement;
-        return selectedWire(T, a, if (comptime std.mem.eql(u8, selected, "applicability_finding")) .finding else @field(std.meta.Tag(T), selected), bytes);
-    } else return nativeWire(@import("domain/specification_support.zig").Source.Review, a, bytes);
+        return selectedWire(T, a, @field(std.meta.Tag(T), selected), bytes);
+    } else return nativeWire(@import("domain/specification_support_model.zig").Value, a, bytes);
 }
 
 test "final proposal schemas and native readers reject deterministic echoes and mixed shapes" {
@@ -359,16 +458,16 @@ test "final proposal schemas and native readers reject deterministic echoes and 
     inline for (.{ "member_claim_ids", "member_summary_ids" }) |field| {
         try candidateCase("reconciliation", "summary", "{\"statements\":[],\"" ++ field ++ "\":[]}", .unknown_property, "/" ++ field);
     }
-    try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.normalized ++ ",\"provenance\":" ++ echoed ++ "}", .unknown_property, "/provenance/citation_ids");
-    try candidateCase("generation", "provenance", echoed, .unknown_property, "/citation_ids");
-    try candidateCase("support", null, "{\"entries\":[{\"requirement_ordinal\":7,\"value\":{\"kind\":\"supported\",\"loss\":{\"kind\":\"unlocalized\"},\"provenance\":" ++ echoed ++ ",\"source_ids\":[],\"detail\":\"\"}}]}", .unknown_property, "/entries/0/value/provenance/citation_ids");
-    try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[7],\"citation_ids\":[],\"content\":{\"kind\":\"preserved_token\",\"token_id\":7}}],\"conflicts\":[]}", .unknown_property, "/signals/0/citation_ids");
-    try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[],\"conflicts\":[{\"claim_ids\":[7,9],\"citation_ids\":[],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "},\"resolution\":\"unresolved\"}]}", .unknown_property, "/conflicts/0/citation_ids");
+    try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.normalized ++ ",\"provenance\":" ++ echoed ++ "}", .unknown_property, "/provenance");
+    try candidateCase("support", null, "{\"kind\":\"supported\",\"provenance\":" ++ echoed ++ ",\"source_ids\":[],\"detail\":\"\"}", .unknown_property, "/provenance");
+    try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[{\"claim_ids\":[7],\"citation_ids\":[],\"content\":{\"kind\":\"preserved_token\",\"token_id\":7}}],\"role_assignments\":[],\"conflicts\":[]}", .unknown_property, "/signals/0/citation_ids");
+    try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[],\"role_assignments\":[],\"conflicts\":[{\"claim_ids\":[7,9],\"citation_ids\":[],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "}}]}", .unknown_property, "/conflicts/0/citation_ids");
+    try candidateCase("reconciliation", "global", "{\"claim_dispositions\":[],\"signals\":[],\"role_assignments\":[],\"conflicts\":[{\"claim_ids\":[7,9],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "},\"resolution\":\"unresolved\"}]}", .unknown_property, "/conflicts/0/resolution");
 }
 
 test "independent multi-record proposals retain siblings and all disposition variants" {
     const dispositions =
-        \\{"claim_dispositions":[{"claim_id":7,"disposition":{"kind":"retained"}},{"claim_id":9,"disposition":{"kind":"duplicate","target_claim_id":7}},{"claim_id":11,"disposition":{"kind":"superseded","related_claim_ids":[7,9]}},{"claim_id":13,"disposition":{"kind":"conflicting","related_claim_ids":[15]}},{"claim_id":15,"disposition":{"kind":"conflicting","related_claim_ids":[13]}}],"signals":[],"conflicts":[]}
+        \\{"claim_dispositions":[{"claim_id":7,"disposition":{"kind":"retained"}},{"claim_id":9,"disposition":{"kind":"duplicate","target_claim_id":7}},{"claim_id":11,"disposition":{"kind":"superseded","related_claim_ids":[7,9]}},{"claim_id":13,"disposition":{"kind":"conflicting","related_claim_ids":[15]}},{"claim_id":15,"disposition":{"kind":"conflicting","related_claim_ids":[13]}}],"signals":[],"role_assignments":[],"conflicts":[]}
     ;
     try checkCandidate("reconciliation", "global", dispositions);
     const statements =
@@ -376,7 +475,7 @@ test "independent multi-record proposals retain siblings and all disposition var
     ;
     try checkCandidate("reconciliation", "summary", statements);
     const records =
-        \\{"kind":"records","records":[{"content":{"kind":"functional_requirement","text":["Confirm a booking."]},"provenance":{"claim_ids":[7],"clarification_response_ids":[]}},{"content":{"kind":"functional_requirement","text":["Issue a receipt."]},"provenance":{"claim_ids":[9],"clarification_response_ids":[]}}]}
+        \\{"kind":"records","records":[{"content":{"kind":"functional_requirement","text":["Confirm a booking."]}},{"content":{"kind":"functional_requirement","text":["Issue a receipt."]}}]}
     ;
     try checkCandidate("generation", "records", records);
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -384,7 +483,7 @@ test "independent multi-record proposals retain siblings and all disposition var
     const a = arena.allocator();
     const parsed = try codec.decode(@import("domain/specification_generation.zig").ModelResponse, a, records);
     try std.testing.expectEqual(@as(usize, 2), parsed.records.records.len);
-    try std.testing.expectEqual(@as(u32, 9), parsed.records.records[1].provenance.claim_ids[0].ordinal);
+    try std.testing.expectEqualStrings("Issue a receipt.", parsed.records.records[1].content.functional_requirement.text.segments[0].literal.value);
     for ([_][]const u8{
         "{\"kind\":\"records\",\"records\":[],\"records\":[]}",
         "{\"kind\":\"records\",\"records\":[{},{}]}",
@@ -395,7 +494,7 @@ test "independent multi-record proposals retain siblings and all disposition var
 
 test "disposition schemas reject legacy fields incompatible variants and missing targets" {
     const prefix = "{\"claim_dispositions\":[{\"claim_id\":7,\"disposition\":";
-    const suffix = "}],\"signals\":[],\"conflicts\":[]}";
+    const suffix = "}],\"signals\":[],\"role_assignments\":[],\"conflicts\":[]}";
     try candidateCase("reconciliation", "global", prefix ++ "\"retained\",\"related_claim_ids\":[]" ++ suffix, .unknown_property, "/claim_dispositions/0/related_claim_ids");
     try candidateCase("reconciliation", "global", prefix ++ "{\"kind\":\"retained\"},\"related_claim_ids\":[]" ++ suffix, .unknown_property, "/claim_dispositions/0/related_claim_ids");
     try candidateCase("reconciliation", "global", prefix ++ "{\"kind\":\"retained\",\"related_claim_ids\":[]}" ++ suffix, .unknown_property, "/claim_dispositions/0/disposition/related_claim_ids");
@@ -413,7 +512,7 @@ test "superseded and conflicting response schemas require nonempty relationship 
     const schema = (try adapter.compiler().compile(a, source)).select(.{ .bytes = "global" }).?;
     inline for (.{ "superseded", "conflicting" }) |kind| {
         try @import("model_payload_schema_test.zig").checkDocument(schema.modelBytes(), .{
-            .bytes = "{\"claim_dispositions\":[{\"claim_id\":7,\"disposition\":{\"kind\":\"" ++ kind ++ "\",\"related_claim_ids\":[]}}],\"signals\":[],\"conflicts\":[]}",
+            .bytes = "{\"claim_dispositions\":[{\"claim_id\":7,\"disposition\":{\"kind\":\"" ++ kind ++ "\",\"related_claim_ids\":[]}}],\"signals\":[],\"role_assignments\":[],\"conflicts\":[]}",
             .rejection = .array_length,
             .path = "/claim_dispositions/0/disposition/related_claim_ids",
         });

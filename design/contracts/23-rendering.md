@@ -134,6 +134,10 @@ Renderers own:
 
 - `reference-context.md`, `plan.md`, `research.md`, `data-model.md`, contract views,
   `quickstart.md`, and `tasks.md` are never parsed as authoritative execution input.
+- Completed `reference-context.md` renders requirement-keyed claim-to-citation
+  links from validated canonical lineage. Each citation retains its captured
+  reference-state identity, source ID, block and span. Pending views have no
+  generated-record links. The editable `spec.md` grammar is unchanged.
 - The engine loads their canonical IR, renders the expected bytes, and checks the view for exact
   equality.
 - A modified generated view produces `GENERATED_VIEW_MODIFIED`; the engine may regenerate the

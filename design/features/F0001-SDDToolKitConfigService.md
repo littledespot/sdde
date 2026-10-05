@@ -57,7 +57,8 @@ SDDToolKitConfig {
   logs: LogsConfig,
   models: ModelsConfig,
   paths: PathsConfig,
-  principles?: PrinciplesConfig | null
+  principles?: PrinciplesConfig | null,
+  validation?: { sourcePreservationCheck?: boolean } // omitted = disabled
 }
 
 LogsConfig {

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Run offline integration tests from this checkout.
+set -eu
+
+integration_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+cd -- "$integration_root"
+
+exec zig build test-integration "$@"

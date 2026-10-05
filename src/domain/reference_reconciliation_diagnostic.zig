@@ -32,7 +32,7 @@ pub const Source = struct {
     }
 };
 pub const Unit = union(enum) { summary, statement: usize, dispositions, disposition: usize, signals, signal: usize, conflicts, conflict: usize };
-pub const Rule = enum { membership, local_key, claim_selection, content, cardinality, duplicate_disposition, relationship, cycle, signal_coverage, duplicate_signal, conflict_coverage, duplicate_conflict, typed_text };
+pub const Rule = enum { membership, local_key, claim_selection, content, cardinality, duplicate_disposition, relationship, cycle, signal_coverage, duplicate_signal, role_assignment, conflict_coverage, duplicate_conflict, typed_text };
 pub const Constraint = enum {
     unique_nonzero,
     nonempty_unique_allowed_claims,
@@ -51,11 +51,13 @@ pub const Constraint = enum {
     unique_members,
     retained_claim_covered,
     token_projected,
+    supported_role_assignment,
     conflict_claim_covered,
     conflict_pair_covered,
 
     /// Presentation scope only; every merged candidate still runs all validators.
-    pub const Scope = union(enum) { all, key, selection, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail };
+    pub const Assignment = enum { summary, dispositions, signals, roles, conflicts };
+    pub const Scope = union(enum) { all, key, selection, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail, assignment: Assignment };
     pub fn appliesTo(self: Constraint, purpose: @FieldType(r.Input, "purpose"), scope: Scope) bool {
         const in_purpose = switch (self) {
             .unique_nonzero, .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token => true,
@@ -74,6 +76,19 @@ pub const Constraint = enum {
                 else => true,
             },
             .summary, .conflict_detail => false,
+            .assignment => |assignment| switch (assignment) {
+                .summary => self.appliesTo(.summary, .all),
+                .dispositions => self.appliesTo(purpose, .{ .disposition = .rules }),
+                .signals => switch (self) {
+                    .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token, .nonconflicting_claims, .unique_members, .retained_claim_covered, .token_projected => true,
+                    else => false,
+                },
+                .roles => self == .supported_role_assignment,
+                .conflicts => switch (self) {
+                    .nonempty_unique_allowed_claims, .at_least_two, .conflicting_related_claims, .unique_members, .conflict_claim_covered, .conflict_pair_covered => true,
+                    else => false,
+                },
+            },
         };
     }
     pub fn description(self: Constraint) []const u8 {
@@ -95,6 +110,7 @@ pub const Constraint = enum {
             .unique_members => "Do not repeat an identical member set for the same projection kind.",
             .retained_claim_covered => "Every retained claim must appear in a signal.",
             .token_projected => "Every nonconflicting preserved token needs an exact-token signal, including after supersession.",
+            .supported_role_assignment => "Copy one existing signal's complete claim_ids in their supplied order. Assign each group once. Roles must be unique within its assignment and may be shared across groups.",
             .conflict_claim_covered => "Every conflicting claim must appear in a conflict.",
             .conflict_pair_covered => "Every declared conflicting pair must appear together in a conflict.",
         };
@@ -144,6 +160,7 @@ pub fn reject(comptime T: type, input: r.Input, source: Source, unit: Unit, issu
     return .{ .invalid = .{ .state_id = input.progress.plan.layout.items.state_id, .partition_id = input.partition.id, .revision = source.revision, .origin = source.at(unit, fieldFor(unit, issue.rule)), .unit = unit, .issue = issue } };
 }
 pub fn fieldFor(unit: Unit, rule: Rule) Field {
+    if (rule == .role_assignment) return .relationship;
     if (rule == .relationship and (unit == .signal or unit == .conflict)) return .selections;
     return switch (rule) {
         .local_key => .key,

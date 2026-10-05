@@ -143,6 +143,7 @@ pub const DataKey = enum {
     reference_summary_identities,
     validated_reference_dispositions,
     validated_reference_signals,
+    validated_reference_roles,
     validated_reference_conflicts,
     reference_reconciliation_identities,
     reference_reconciliation_records,

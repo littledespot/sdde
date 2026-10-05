@@ -91,12 +91,11 @@ pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.
     var requirements: std.ArrayList(Requirement) = .empty;
     for (ledger.requirements, 0..) |requirement, index| {
         const matches = switch (scope) {
-            .all => true,
             .finding, .correction => |id| std.meta.eql(id, requirement.seed.id),
         };
         if (matches) try requirements.append(scratch, .{ .ordinal = @intCast(index + 1), .subject = assigned[index] });
     }
-    if (scope != .all and requirements.items.len != 1) return error.InvalidRequiredAuthority;
+    if (requirements.items.len != 1) return error.InvalidRequiredAuthority;
     const projection = @import("specification_projection.zig");
     const payload = .{
         .subject = @as([]const u8, "principle_consistency"),
@@ -108,7 +107,10 @@ pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.
     };
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
     const state = source_context.inputs.corpus.state_id;
-    return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = state.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = "principle-consistency" } } }, .{ .semantic_review = .{ .bytes = "principle-consistency" } }, .{ .bytes = "principle_review" });
+    const slot = switch (scope) {
+        .finding, .correction => |id| try @import("specification_support.zig").reviewSlot(scratch, inputs, id),
+    };
+    return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = state.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = slot } } }, .{ .semantic_review = .{ .bytes = slot } }, .{ .bytes = "principle_finding" });
 }
 pub fn rule(inputs: a.Inputs, finding: a.Finding) Error!Rule {
     return .{ .citations_required = finding != .supported, .permitted_chunks = (inputs.principle_context orelse return error.InvalidRequiredAuthority).selection.chunks };

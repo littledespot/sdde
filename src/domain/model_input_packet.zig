@@ -6,6 +6,14 @@ const schema = @import("model_result_schema.zig");
 const retry = @import("workflow_retry.zig");
 const Origin = @import("model_candidate_origin.zig").Origin;
 pub const Error = identity.Error || error{InvalidModelInputPacket};
+pub const AssignmentContextId = struct {
+    bytes: []const u8,
+    pub fn parse(bytes: []const u8) ?AssignmentContextId {
+        _ = @import("workflow.zig").WorkflowResourceId.parse(bytes) orelse return null;
+        return .{ .bytes = bytes };
+    }
+};
+pub const AssignmentContext = struct { id: AssignmentContextId, body: []const u8 };
 pub const Packet = opaque {
     pub fn body(self: *const Packet) []const u8 {
         return storage(self).body;
@@ -31,6 +39,12 @@ pub const Packet = opaque {
     pub fn integerChoices(self: *const Packet) []const schema.IntegerChoice {
         return storage(self).integer_choices;
     }
+    pub fn assignmentContext(self: *const Packet, id: AssignmentContextId) ?[]const u8 {
+        for (storage(self).assignment_contexts) |context| {
+            if (std.mem.eql(u8, context.id.bytes, id.bytes)) return context.body;
+        }
+        return null;
+    }
 };
 const Storage = struct {
     allocator: std.mem.Allocator,
@@ -44,6 +58,7 @@ const Storage = struct {
     repair_origin: ?Origin = null,
     excluded_variants: []const schema.ExcludedVariant = &.{},
     integer_choices: []const schema.IntegerChoice = &.{},
+    assignment_contexts: []const AssignmentContext = &.{},
     handle: Handle,
 };
 const Handle = struct { owner: *Storage };
@@ -109,7 +124,11 @@ pub fn withExcludedVariants(allocator: std.mem.Allocator, base: *const Packet, e
 }
 
 pub fn withRestrictions(allocator: std.mem.Allocator, base: *const Packet, excluded: []const schema.ExcludedVariant, choices: []const schema.IntegerChoice) Error!*Packet {
-    const result = try createBound(allocator, base.body(), base.unit(), base.purpose(), base.resultDefinition(), base.repairPermit(), base.repairOrigin());
+    return cloneWith(allocator, base, base.body(), excluded, choices, storage(base).assignment_contexts);
+}
+/// All projections copy native metadata once, into the resulting packet's owner.
+fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8, excluded: []const schema.ExcludedVariant, choices: []const schema.IntegerChoice, contexts: []const AssignmentContext) Error!*Packet {
+    const result = try createBound(allocator, body, base.unit(), base.purpose(), base.resultDefinition(), base.repairPermit(), base.repairOrigin());
     errdefer release(result);
     const a = storage(result).arena.allocator();
     const copy = try a.alloc(schema.ExcludedVariant, excluded.len);
@@ -124,7 +143,34 @@ pub fn withRestrictions(allocator: std.mem.Allocator, base: *const Packet, exclu
         };
     }
     storage(result).integer_choices = selected;
+    const copied_contexts = try a.alloc(AssignmentContext, contexts.len);
+    for (contexts, copied_contexts) |context, *destination| destination.* = .{
+        .id = .{ .bytes = try a.dupe(u8, context.id.bytes) },
+        .body = try a.dupe(u8, context.body),
+    };
+    storage(result).assignment_contexts = copied_contexts;
     return result;
+}
+
+/// Native presentation facts only. The catalogue stays outside model content;
+/// selection never replaces or filters the base evidence packet.
+pub fn withAssignmentContexts(allocator: std.mem.Allocator, base: *const Packet, contexts: []const AssignmentContext) (Error || @import("strict_json.zig").Error)!*Packet {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    for (contexts, 0..) |context, index| {
+        _ = AssignmentContextId.parse(context.id.bytes) orelse return error.InvalidModelInputPacket;
+        for (contexts[0..index]) |prior| if (std.mem.eql(u8, prior.id.bytes, context.id.bytes)) return error.InvalidModelInputPacket;
+        var parsed = try @import("strict_json.zig").parse(arena.allocator(), context.body, .{ .maximum_depth = schema.max_json_depth }, false, null);
+        defer parsed.deinit();
+        if (parsed.value != .object) return error.InvalidModelInputPacket;
+    }
+    return cloneWith(allocator, base, base.body(), base.excludedVariants(), base.integerChoices(), contexts);
+}
+pub fn withAssignmentContext(allocator: std.mem.Allocator, base: *const Packet, id: AssignmentContextId) (Error || @import("strict_json.zig").Error)!*Packet {
+    const body = base.assignmentContext(id) orelse return error.InvalidModelInputPacket;
+    var parsed = try @import("strict_json.zig").parse(allocator, body, .{ .maximum_depth = schema.max_json_depth }, false, null);
+    defer parsed.deinit();
+    return withJsonContext(allocator, base, "assignment", parsed.value);
 }
 /// Add one typed read-context projection without changing request ownership.
 pub fn withContext(comptime T: type, allocator: std.mem.Allocator, base: *const Packet, comptime field: []const u8, context: T) (Error || @import("strict_json.zig").Error)!*Packet {
@@ -151,9 +197,7 @@ pub fn withJsonContext(allocator: std.mem.Allocator, base: *const Packet, compti
     if (input.value != .object or input.value.object.contains(field)) return error.InvalidModelInputPacket;
     try input.value.object.put(input.arena.allocator(), field, context);
     const body = try std.json.Stringify.valueAlloc(scratch, input.value, .{});
-    const result = if (base.repairPermit()) |permit| try createRepair(allocator, body, base.unit(), base.purpose(), base.resultDefinition(), permit, base.repairOrigin()) else try create(allocator, body, base.unit(), base.purpose(), base.resultDefinition());
-    defer release(result);
-    return withRestrictions(allocator, result, base.excludedVariants(), base.integerChoices());
+    return cloneWith(allocator, base, body, base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
 }
 fn storage(packet: *const Packet) *Storage {
     const handle: *const Handle = @ptrCast(@alignCast(packet));

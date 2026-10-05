@@ -4,6 +4,22 @@ const schemas = @import("adapters/parsers/model_result_schemas.zig");
 const schema = @import("domain/model_result_schema.zig");
 const pointer = @import("domain/json_pointer.zig");
 
+test "spec reconciliation composition separates grouping and role assignment" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const schema_bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .limited(schema.max_bytes));
+    const plan_bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation-global.composition.json", a, .limited(schema.max_bytes));
+    const plan = try compilePlan(a, plan_bytes, try compileSchema(a, schema_bytes));
+    try std.testing.expectEqual(@as(usize, 4), plan.parts().len);
+    const grouping = plan.part(.{ .bytes = "signals" }).?;
+    const roles = plan.part(.{ .bytes = "roles" }).?;
+    try std.testing.expect(plan.dependsOn(roles, grouping));
+    const signal_schema = try plan.selectSchema(grouping, &.{.{ .part = plan.part(.{ .bytes = "dispositions" }).?, .value = .{ .object = .{} } }});
+    try std.testing.expect(schema.findProperty(signal_schema.root().object, "signals") != null);
+    try std.testing.expect(schema.findProperty(signal_schema.root().object, "role_assignments") == null);
+}
+
 fn compileSchema(allocator: std.mem.Allocator, bytes: []const u8) !*const schema.Schema {
     var adapter: schemas.Adapter = .{};
     return adapter.compiler().compile(allocator, bytes);
@@ -22,7 +38,7 @@ test "named composition derives from one captured schema and rebinds after sourc
         \\{"$ref":"#/$defs/header","$defs":{"header":{"type":"object","properties":{"title":{"type":"string","maxLength":40}},"required":["title"],"additionalProperties":false},"ledger":{"type":"object","properties":{"rows":{"type":"array","items":{"type":"integer","minimum":0,"maximum":9},"maxItems":4},"complete":{"type":"boolean"}},"required":["rows","complete"],"additionalProperties":false}}}
     ;
     const config =
-        \\{"schema":"json-composition/v1","result":"report","definition":"ledger","parts":{"rows":{"paths":["/rows"]},"state":{"paths":["/complete"]}}}
+        \\{"schema":"json-composition/v1","result":"report","definition":"ledger","parts":{"rows":{"paths":["/rows"],"input-context":"ledger-rows"},"state":{"paths":["/complete"]}}}
     ;
     const original_schema = try compileSchema(source.allocator(), raw);
     const original = try compilePlan(source.allocator(), config, original_schema);
@@ -34,6 +50,7 @@ test "named composition derives from one captured schema and rebinds after sourc
     try std.testing.expect(copied.completeSchema() != canonical);
     try std.testing.expectEqualStrings(config, copied.bytes());
     try std.testing.expectEqualStrings("ledger", copied.definition().?.bytes);
+    try std.testing.expectEqualStrings("ledger-rows", copied.parts()[0].input_context.?.bytes);
     try std.testing.expect((try copied.selectSchema(0, &.{})).root().object[0].schema == copied.completeSchema().root().object[0].schema);
     const root = try compilePlan(a,
         \\{"schema":"json-composition/v1","result":"report","parts":{"header":{"paths":["/title"]}}}
@@ -46,6 +63,10 @@ test "named composition derives from one captured schema and rebinds after sourc
     for ([_][]const u8{ "\"definition\":null", "\"definition\":3", "\"definition\":\"\"", "\"definition\":\"ledger\",\"fallback\":true" }) |bad| {
         const invalid = try std.mem.replaceOwned(u8, a, config, "\"definition\":\"ledger\"", bad);
         try std.testing.expectError(error.InvalidJsonComposition, compilePlan(a, invalid, canonical));
+    }
+    for ([_][]const u8{ "null", "3", "\"\"", "\"../rows\"", "{}" }) |bad| {
+        const invalid_context = try std.mem.replaceOwned(u8, a, config, "\"input-context\":\"ledger-rows\"", try std.fmt.allocPrint(a, "\"input-context\":{s}", .{bad}));
+        try std.testing.expectError(error.InvalidJsonComposition, compilePlan(a, invalid_context, canonical));
     }
     const foreign = try compileSchema(a, nested);
     try std.testing.expectError(error.InvalidJsonComposition, copied.clone(a, foreign));

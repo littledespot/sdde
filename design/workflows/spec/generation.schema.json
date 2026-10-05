@@ -5,14 +5,10 @@
       "properties": {
         "value": {
           "$ref": "#/$defs/business_value"
-        },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
         }
       },
       "required": [
-        "value",
-        "provenance"
+        "value"
       ],
       "additionalProperties": false
     },
@@ -21,12 +17,14 @@
       "items": {
         "$ref": "#/$defs/business_segment"
       },
+      "minItems": 1,
       "maxItems": 4294967295
     },
     "business_segment": {
       "oneOf": [
         {
           "type": "string",
+          "minLength": 1,
           "maxLength": 4294967295
         },
         {
@@ -67,30 +65,6 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 4294967295
-    },
-    "provenance": {
-      "type": "object",
-      "properties": {
-        "claim_ids": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ordinal"
-          },
-          "maxItems": 4294967295
-        },
-        "clarification_response_ids": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ordinal"
-          },
-          "maxItems": 4294967295
-        }
-      },
-      "required": [
-        "claim_ids",
-        "clarification_response_ids"
-      ],
-      "additionalProperties": false
     },
     "clarification": {
       "type": "object",
@@ -157,15 +131,11 @@
         },
         "value": {
           "$ref": "#/$defs/business_value"
-        },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
         }
       },
       "required": [
         "kind",
-        "value",
-        "provenance"
+        "value"
       ],
       "additionalProperties": false
     },
@@ -470,14 +440,10 @@
               "$ref": "#/$defs/record_entity"
             }
           ]
-        },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
         }
       },
       "required": [
-        "content",
-        "provenance"
+        "content"
       ],
       "additionalProperties": false
     },
@@ -527,14 +493,10 @@
       "properties": {
         "content": {
           "$ref": "#/$defs/record_entity"
-        },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
         }
       },
       "required": [
-        "content",
-        "provenance"
+        "content"
       ],
       "additionalProperties": false
     },
@@ -543,14 +505,10 @@
       "properties": {
         "content": {
           "$ref": "#/$defs/record_acceptance_criterion"
-        },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
         }
       },
       "required": [
-        "content",
-        "provenance"
+        "content"
       ],
       "additionalProperties": false
     },
@@ -559,14 +517,10 @@
       "properties": {
         "content": {
           "$ref": "#/$defs/record_functional_requirement"
-        },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
         }
       },
       "required": [
-        "content",
-        "provenance"
+        "content"
       ],
       "additionalProperties": false
     },
@@ -600,14 +554,10 @@
               "$ref": "#/$defs/record_prohibited_behavior"
             }
           ]
-        },
-        "provenance": {
-          "$ref": "#/$defs/provenance"
         }
       },
       "required": [
-        "content",
-        "provenance"
+        "content"
       ],
       "additionalProperties": false
     },

@@ -6,7 +6,7 @@ const std = @import("std");
 pub const spec = @import("specification.zig");
 const provenance = @import("specification_provenance.zig");
 pub const Error = provenance.Error || error{InvalidSpecificationUnit};
-pub const Unit = union(enum) { brief, primary_user_story, entities, records };
+pub const Unit = @import("specification_source_binding.zig").Unit;
 pub const Brief = spec.Brief;
 pub fn Responses(comptime boundary: spec.Boundary) type {
     const fields = spec.Values(boundary);
@@ -34,35 +34,61 @@ pub const Validation = union(enum) { valid: Checked, invalid: candidate.Issue };
 
 /// Compact model result, without the native IR's content wrapper.
 pub const ModelResponse = union(enum) {
-    brief: spec.Model.Brief,
-    primary_user_story: spec.Model.AttributedValue,
-    entities: spec.Model.ApplicabilityProposal,
-    records: struct { records: []const spec.Model.RecordProposal },
-    clarification: Need,
+    brief: spec.Wire.Brief,
+    primary_user_story: spec.Wire.AttributedValue,
+    entities: spec.Wire.ApplicabilityProposal,
+    records: struct { records: []const spec.Wire.RecordProposal },
+    clarification: struct { reason: NeedReason, question: spec.Wire.AttributedValue, record_kind: ?spec.Kind = null },
     inconclusive: Inconclusive,
 
-    pub fn from(response: Response) ModelResponse {
+    pub fn from(allocator: std.mem.Allocator, response: Response) std.mem.Allocator.Error!ModelResponse {
         return switch (response) {
-            .clarification => |need| .{ .clarification = need },
+            .clarification => |need| .{ .clarification = .{ .reason = need.reason, .question = .{ .value = need.question.value }, .record_kind = need.record_kind } },
             .inconclusive => |failure| .{ .inconclusive = failure },
             .content => |content| switch (content) {
-                .records => |records| .{ .records = .{ .records = records } },
-                inline else => |value, tag| @unionInit(ModelResponse, @tagName(tag), value),
+                .brief => |brief| .{ .brief = .{ .title = .{ .value = brief.title.value }, .description = .{ .value = brief.description.value }, .primary_goal = .{ .value = brief.primary_goal.value } } },
+                .primary_user_story => |story| .{ .primary_user_story = .{ .value = story.value } },
+                .entities => |entities| .{ .entities = .{ .disposition = entities.disposition, .basis = .{ .value = entities.basis.value } } },
+                .records => |records| blk: {
+                    const projected = try allocator.alloc(spec.Wire.RecordProposal, records.len);
+                    for (records, projected) |record, *wire| wire.* = .{ .content = record.content };
+                    break :blk .{ .records = .{ .records = projected } };
+                },
             },
         };
     }
 };
 
-pub fn parse(allocator: std.mem.Allocator, bytes: []const u8) Error!Response {
+pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, bound: @import("specification_source_binding.zig").Bound) Error!Response {
     const response = @import("model_candidate_json.zig").decode(ModelResponse, allocator, bytes) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         error.InvalidJsonDocument => error.InvalidSpecificationUnit,
     };
     return switch (response) {
-        .clarification => |need| .{ .clarification = need },
+        .clarification => |need| .{ .clarification = .{ .reason = need.reason, .question = .{ .value = need.question.value, .provenance = try questionSelection(allocator, bound) }, .record_kind = need.record_kind } },
         .inconclusive => |failure| .{ .inconclusive = failure },
-        .records => |records| .{ .content = .{ .records = records.records } },
-        inline else => |value, tag| .{ .content = @unionInit(Content, @tagName(tag), value) },
+        .brief => |brief| if (bound == .brief) .{ .content = .{ .brief = .{
+            .title = .{ .value = brief.title.value, .provenance = bound.brief.title },
+            .description = .{ .value = brief.description.value, .provenance = bound.brief.description },
+            .primary_goal = .{ .value = brief.primary_goal.value, .provenance = bound.brief.primary_goal },
+        } } } else error.InvalidSpecificationUnit,
+        .primary_user_story => |story| if (bound == .primary_user_story) .{ .content = .{ .primary_user_story = .{ .value = story.value, .provenance = bound.primary_user_story } } } else error.InvalidSpecificationUnit,
+        .entities => |entities| if (bound == .entities) .{ .content = .{ .entities = .{ .disposition = entities.disposition, .basis = .{ .value = entities.basis.value, .provenance = bound.entities } } } } else error.InvalidSpecificationUnit,
+        .records => |records| blk: {
+            if (bound != .records) return error.InvalidSpecificationUnit;
+            const selected = try allocator.alloc(spec.Model.RecordProposal, records.records.len);
+            for (records.records, selected) |record, *value| value.* = .{ .content = record.content, .provenance = bound.records.selection };
+            break :blk .{ .content = .{ .records = selected } };
+        },
+    };
+}
+
+fn questionSelection(a: std.mem.Allocator, bound: @import("specification_source_binding.zig").Bound) Error!spec.Selection {
+    return switch (bound) {
+        .brief => |brief| .{ .claim_ids = try @import("reference_support.zig").lineage(a, brief.title.claim_ids, try @import("reference_support.zig").lineage(a, brief.description.claim_ids, brief.primary_goal.claim_ids)), .clarification_response_ids = &.{} },
+        .primary_user_story => |value| value,
+        .entities => |value| value,
+        .records => |value| value.selection,
     };
 }
 
@@ -106,7 +132,7 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
                     for (records, checked, 0..) |record, *accepted, index| {
                         const observed: ?candidate.Replacement = if (boundary == .model) .{ .record = record } else null;
                         accepted.* = provenance.inspectRecord(boundary, allocator, validator, context, record, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .{ .record = index }, inspection, err);
-                        for (checked[0..index]) |prior| if (try equalContent(allocator, prior.content, accepted.content)) return .{ .invalid = .{ .unit = unit, .field = .{ .target = .{ .record = index } }, .rule = .duplicate_record, .observed = observed, .blocked = if (try equalEvidence(allocator, prior.provenance, accepted.provenance)) null else .competing_records } };
+                        for (checked[0..index]) |prior| if (try duplicateRecordIssue(allocator, prior, accepted.*, index, observed)) |issue| return .{ .invalid = issue };
                     }
                     break :records .{ .records = checked };
                 },
@@ -123,6 +149,12 @@ pub fn equalContent(allocator: std.mem.Allocator, a: spec.Content(spec.BusinessV
     const right = try std.json.Stringify.valueAlloc(allocator, b, .{});
     defer allocator.free(right);
     return std.mem.eql(u8, left, right);
+}
+
+/// The same duplicate rule applies inside a batch and against earlier batches.
+pub fn duplicateRecordIssue(allocator: std.mem.Allocator, prior: spec.RecordProposal, current: spec.RecordProposal, index: usize, observed: ?candidate.Replacement) Error!?candidate.Issue {
+    if (!try equalContent(allocator, prior.content, current.content)) return null;
+    return .{ .unit = .records, .field = .{ .target = .{ .record = index } }, .rule = .duplicate_record, .observed = observed, .blocked = if (try equalEvidence(allocator, prior.provenance, current.provenance)) null else .competing_records };
 }
 
 fn rejected(unit: Unit, field: candidate.Field, observed: ?candidate.Replacement, text_issue: ?@import("typed_text.zig").Issue, err: provenance.Error) Error!Validation {

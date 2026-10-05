@@ -93,18 +93,48 @@ pub const ClaimDispositionProposal = struct {
         } };
     }
 };
+/// Semantic uses of an already selected source-obligation group. These are
+/// assignments for Spec authoring, not additional reference identities.
+pub const GenerationRole = enum {
+    title,
+    description,
+    primary_goal,
+    primary_user_story,
+    entity_basis,
+    records,
+
+    /// Presentation reuses registered field purposes; no role eligibility or
+    /// requiredness policy is established here.
+    pub fn purpose(self: GenerationRole, allocator: std.mem.Allocator) @import("required_authority.zig").Error![]const u8 {
+        const authority = @import("required_authority.zig");
+        const descriptions = @import("required_authority_description.zig");
+        if (self == .records) {
+            const requirements = try descriptions.task(allocator, .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .functional_requirements });
+            const criteria = try descriptions.task(allocator, .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .acceptance_criteria });
+            return std.fmt.allocPrint(allocator, "{s} {s}", .{ requirements, criteria });
+        }
+        const slot: authority.Slot = switch (self) {
+            .title => .display_name,
+            .description => .description,
+            .primary_goal => .primary_goal,
+            .primary_user_story => .primary_user_story,
+            .entity_basis => .entities,
+            .records => unreachable,
+        };
+        return descriptions.task(allocator, .{ .kind = if (self == .entity_basis) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot });
+    }
+};
 pub const SignalProposal = struct { claim_ids: []const ClaimId, content: ContentProposal };
-pub const ValidatedSignal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: Content };
+pub const RoleAssignment = struct { claim_ids: []const ClaimId, generation_roles: []const GenerationRole };
+pub const ValidatedSignal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: Content, generation_roles: []const GenerationRole };
 pub const ConflictKind = enum { mutually_exclusive, precedence_missing, value_mismatch, scope_mismatch };
 pub const ConflictProposal = struct {
     claim_ids: []const ClaimId,
     kind: ConflictKind,
     summary: text.ReferenceSemanticText,
-    // No registered precedence authority is available in this increment.
-    resolution: enum { unresolved },
 };
 pub const ValidatedConflict = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, kind: ConflictKind, summary: text.ValidatedReferenceSemanticText, resolution: enum { unresolved } };
-pub const Proposal = struct { claim_dispositions: []const ClaimDispositionProposal, signals: []const SignalProposal, conflicts: []const ConflictProposal };
+pub const Proposal = struct { claim_dispositions: []const ClaimDispositionProposal, signals: []const SignalProposal, role_assignments: []const RoleAssignment = &.{}, conflicts: []const ConflictProposal };
 pub const diagnostic = @import("reference_reconciliation_diagnostic.zig");
 pub const Raw = struct { source: diagnostic.Source = .{}, input: Input, bytes: []const u8 };
 pub const Parsed = struct { source: diagnostic.Source = .{}, input: Input, proposal: union(enum) { summary: SummaryProposal, global: Proposal } };

@@ -1081,6 +1081,7 @@ decision history:
 | [0018](decisions/0018-debug-model-exchange-logging.md) | Debug/trace capture complete credential-redacted production model exchanges, including failed attempts, without silent truncation. |
 | [0019](decisions/0019-single-request-debugger.md) | The native browser debugger inspects captured calls and explicitly replays one selected prompt with immutable parent links and no workflow execution. |
 | [0020](decisions/0020-derived-exact-reference-lineage.md) | One preserved-token claim handle selects an exact occurrence; the shared reference owner derives its lineage and bounds repair. The coordinated format cutover remains to be implemented. |
+| [0021](decisions/0021-optional-source-preservation-review.md) | Optional source-preservation review before Spec generation, using shared authority/repair contracts and a dedicated configured candidate-repair model slot. |
 
 Additional accepted feature boundaries:
 

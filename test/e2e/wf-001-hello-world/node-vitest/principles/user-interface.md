@@ -14,9 +14,8 @@ Project: Hello World
 
 | UI Area                 | Required Outcome                         | Priority |
 | ----------------------- | ---------------------------------------- | -------- |
-| Semantic Composition    | Present the greeting as plain text.             | MUST     |
+| Semantic Composition    | Present required output as plain text.          | MUST     |
 | Reusable Interaction    | Not applicable; there is no interaction.        | MUST     |
-| State Visibility        | Display only the Hello World greeting.          | MUST     |
 | Loading and Failure     | Do not add loading or failure interface states. | MUST     |
 | Focus and Input         | Not applicable; there is no input.              | MUST     |
 | Component Consistency   | Do not introduce user-interface components.     | MUST     |
@@ -45,7 +44,7 @@ Project: Hello World
 | Semantic Structure  | Keep the output as readable text.               | MUST     | Exact output.                |
 | Accessible Names    | Not applicable.                                | MUST     | Not applicable.              |
 | Keyboard Operation  | Not applicable.                                | MUST     | Not applicable.              |
-| Screen Readers      | Do not replace the greeting with non-text data. | MUST     | Exact output.                |
+| Screen Readers      | Do not replace required text with non-text data. | MUST    | Exact output.                |
 | Focus Visibility    | Not applicable.                                | MUST     | Not applicable.              |
 | Color Contrast      | Do not apply color.                            | MUST     | Exact output.                |
 | Text Alternatives   | Not applicable; the output is text.            | MUST     | Exact output.                |
@@ -63,7 +62,6 @@ Project: Hello World
 | Form Feedback        | Not applicable.                                 | MUST     |
 | Empty States         | Not applicable.                                 | SHOULD   |
 | Motion               | Do not introduce motion.                        | SHOULD   |
-| User Confirmation    | The greeting is the only success output.        | SHOULD   |
 
 ---
 
@@ -85,9 +83,7 @@ Project: Hello World
 
 | Area                 | Required Outcome                       | Priority |
 | -------------------- | -------------------------------------- | -------- |
-| Language Support     | Output the required English greeting.  | MUST     |
-| Text Direction       | Use the greeting's natural text order. | SHOULD   |
-| Date and Time        | Not applicable.                        | MUST     |
+| Text Direction       | Use text's natural reading order.       | SHOULD   |
 | Number and Currency  | Not applicable.                        | MUST     |
 | Pluralization        | Not applicable.                        | MUST     |
 | Content Expansion    | Not applicable.                        | SHOULD   |

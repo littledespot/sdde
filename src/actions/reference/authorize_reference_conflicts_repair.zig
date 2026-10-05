@@ -8,7 +8,7 @@ pub const Action = struct {
         .kind = .action,
         .requires = &.{ .parsed_reference_reconciliation, .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .validated_reference_conflicts },
         .produces = &.{.reference_reconciliation_repair},
-        .invalidates = &.{ .validated_reference_dispositions, .validated_reference_signals, .validated_reference_conflicts },
+        .invalidates = &.{ .validated_reference_dispositions, .validated_reference_signals, .validated_reference_roles, .validated_reference_conflicts },
         .side_effect = .none,
     };
     pub fn execute(_: Action, a: std.mem.Allocator, parsed: r.Parsed, context: @import("../../domain/reference_reconciliation_validation.zig").TextContext, rejection: r.diagnostic.Rejection) repair.Error!repair.Decision {

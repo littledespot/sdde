@@ -16,6 +16,67 @@ const config =
     \\{"schema":"json-composition/v1","result":"result","parts":{"value":{"paths":["/value"]}}}
 ;
 
+test "composition selects native assignment contexts without filtering evidence or changing authority" {
+    try assignmentContexts(std.testing.allocator);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, assignmentContexts, .{});
+}
+fn assignmentContexts(allocator: std.mem.Allocator) !void {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var adapter: schema_adapter.Adapter = .{};
+    const canonical = try adapter.compiler().compile(a, contract);
+    const plan = try adapter.compiler().compileComposition(a,
+        \\{"schema":"json-composition/v1","result":"result","parts":{"renamed-part":{"paths":["/value"],"input-context":"count"}}}
+    , canonical);
+    const ledger = try identity.createInitial(allocator, identity.RequestPurposeRegistry.all());
+    defer identity.deinitOwner(ledger);
+    const base = try packets.create(allocator, "{\"evidence\":1e0}", .workflow_step, .initial_generation, null);
+    defer packets.release(base);
+    const contexts = [_]packets.AssignmentContext{
+        .{ .id = .{ .bytes = "count" }, .body = "{\"purpose\":\"Count supplied evidence\"}" },
+        .{ .id = .{ .bytes = "other" }, .body = "{\"purpose\":\"Unrelated task\"}" },
+    };
+    const native = try packets.withAssignmentContexts(allocator, base, &contexts);
+    defer packets.release(native);
+    const restricted = try packets.withRestrictions(allocator, native, &.{.{ .kind = "unavailable" }}, &.{.{ .kind = "exact_copy", .field = "claim_id", .allowed = &.{7} }});
+    defer packets.release(restricted);
+    const state = try runtime.State.init(a, plan, restricted, identity.ledger(ledger).stageRunEpochId());
+    const bound = try state.select(a, 0);
+    const projected = try state.packet(allocator, bound);
+    defer packets.release(projected);
+    try std.testing.expectEqualStrings("{\"evidence\":1e0,\"assignment\":{\"purpose\":\"Count supplied evidence\"}}", projected.body());
+    try std.testing.expectEqualStrings("{\"evidence\":1e0}", restricted.body());
+    try std.testing.expect(identity.unitOwnerEql(restricted.unit(), projected.unit()));
+    try std.testing.expectEqualDeep(restricted.purpose(), projected.purpose());
+    try std.testing.expectEqualDeep(restricted.integerChoices(), projected.integerChoices());
+    try std.testing.expectEqualDeep(restricted.excludedVariants(), projected.excludedVariants());
+    try std.testing.expect(projected.assignmentContext(.{ .bytes = "other" }) != null);
+    try std.testing.expectError(error.InvalidCompositionBinding, runtime.State.init(a, plan, base, state.epoch));
+    const duplicate = [_]packets.AssignmentContext{ contexts[0], contexts[0] };
+    try expectPacketRejection(packets.withAssignmentContexts(allocator, base, &duplicate));
+    try expectPacketRejection(packets.withAssignmentContexts(allocator, base, &.{.{ .id = .{ .bytes = "../foreign" }, .body = "{}" }}));
+    try expectPacketRejection(packets.withAssignmentContexts(allocator, base, &.{.{ .id = .{ .bytes = "bad" }, .body = "[]" }}));
+    try expectPacketRejection(packets.withAssignmentContext(allocator, restricted, .{ .bytes = "missing" }));
+    var foreign = bound;
+    foreign.base = base;
+    try std.testing.expectError(error.InvalidCompositionBinding, state.packet(allocator, foreign));
+    const Collision = struct { purpose: []const u8 };
+    const collision = try packets.withContext(Collision, allocator, restricted, "assignment", .{ .purpose = "forged" });
+    defer packets.release(collision);
+    const conflicting_state = try runtime.State.init(a, plan, collision, state.epoch);
+    try expectPacketRejection(conflicting_state.packet(allocator, try conflicting_state.select(a, 0)));
+}
+fn expectPacketRejection(result: (packets.Error || runtime.Error || @import("domain/strict_json.zig").Error)!*const packets.Packet) !void {
+    if (result) |unexpected| {
+        packets.release(unexpected);
+        return error.TestUnexpectedSuccess;
+    } else |err| {
+        if (err == error.OutOfMemory) return err;
+        try std.testing.expectEqual(error.InvalidModelInputPacket, err);
+    }
+}
+
 test "composition retains only accepted schema-associated requests and placement is idempotent" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

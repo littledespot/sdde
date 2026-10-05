@@ -124,11 +124,59 @@ Typed content covers these concerns; each concern does not require a separate ca
   Existing source review must distinguish a path-valued requirement from a filename
   substituted for the behavior described in that file; confirmed candidate loss
   follows existing repair/failure routing, never missing-user-information routing.
+- Focused source review sends one bound requirement at a time. Its closed response
+  contains the semantic finding, explanation, required question and genuinely
+  selectable source evidence. Independent feature fields carry only the assigned
+  field's resolved text and provenance, its purpose and complete original source
+  evidence. Exact and passive references resolve through the canonical text
+  projector. Review display and evidence admission share native feature-field
+  selection; admission alone determines the permitted evidence binding.
+  Record and coverage assessments retain surrounding candidate context;
+  separate loss localization also retains upstream reconstruction context.
+  Initial findings and authorized review corrections reuse this projection.
+  A candidate-omission finding triggers a separate
+  loss-location call with the finding fixed; that call cannot revise the verdict.
+  The engine validates the location and complete review before repair or publication.
+  For a positive finding with a fixed claim set, the engine
+  supplies that set from the current requirement rule; the response omits
+  `provenance` and is rejected if it echoes it. The engine constructs invariant
+  empty clarification-response IDs and unlocalized loss. Selectable source
+  choices remain explicit. For candidate omission, the separately selected loss
+  location determines whether its diagnostic claims are constructed or selected;
+  the closed decoder enforces that conditional rule before admission. The full
+  canonical review is validated before it contributes to clarification, repair
+  or publication.
 - There is no unreferenced command description to use as provenance.
 - The model returns typed business content rather than Markdown.
 - Each acceptance-criterion proposal contains exactly one nonempty typed `given`, `when`, and
   `then` value; the model does not supply Markdown labels or combine the three values into
   free-form prose.
+
+The approved ADR 0020 successor binds source-obligation groups from validated
+reconciliation signals before model authoring. Signal grouping and authoring-role
+assignment are separate model calls. Feature-level fields have explicit
+group-role assignments. Reconciliation assignments use ADR 0016's native
+assignment contexts over one complete evidence catalogue. Role assignment receives
+only its exact-group rule and role purposes projected from the shared requirement
+descriptions; summary, disposition, signal and conflict rules remain with their
+own assignments. A group may support several roles and a role several groups;
+unsupported roles remain unassigned and mandatory coverage still blocks authoring.
+No context-only literal is promoted to behavior merely to fill a role.
+Record authoring runs per bound group and may
+return several requirements. Each generation and repair packet presents the
+bound fields' purposes from the shared requirement descriptions beside their
+claim IDs. Claim meaning and citations appear once in the evidence catalogue;
+original sources remain available to identify extraction or assignment loss.
+This presentation does not reselect support or establish semantic adequacy.
+The engine constructs canonical `S` and derives
+exact dependencies and citations. Generation, source-review and repair
+responses contain no `provenance`; unbound or stale assignments block or return
+to source reconciliation, never to a user missing-information form. Completed
+`reference-context.md` displays each generated record ID with its effective
+claim-to-citation occurrence edges and captured source spans. This read-only
+view adds no selection or stored authority; pending output has no generated
+record links. Original requirement IDs appear only when captured as validated
+source associations, never inferred from headings or claim ordinals.
 
 For each feature-brief or specification unit, the declared model operation returns content, an identifiable clarification need, or an inconclusive interpretation. Inconclusive interpretation fails; it is not missing user information. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
@@ -138,6 +186,15 @@ For each feature-brief or specification unit, the declared model operation retur
   generation subgraph. Narrative, applicability and record drafting receive their
   purpose-specific configured prompts. The same purpose prompt accompanies native
   repairs and their protocol corrections.
+  The primary story has its own concise prompt and uses the canonical story purpose.
+  Generation, native unit repair and reviewed omission repair share static text
+  guidance from `spec/generation.context.json`: ordered fragments form one field
+  value, prose expresses its meaning and exact-copy references insert eligible
+  literals. Schemas remain the sole response-shape authority. Initial and native
+  repair packets include earlier drafts only for dependent units: entities receive
+  the brief, records receive the brief and entity decision. Brief and story requests
+  receive neither sibling draft. Source evidence and native repair dependencies
+  remain complete; packet presentation does not change semantic review or retry policy.
   Functional requirements express behavior and obligation; acceptance criteria
   express precondition, triggering action and observable outcome. A rejected
   candidate may omit intent: repair preserves source meaning and correct surrounding
@@ -171,6 +228,15 @@ For each feature-brief or specification unit, the declared model operation retur
   evidence projection, retained claims/citations and exact tokens; a second signal
   rendering is unnecessary in those requests. Original text is context, not a new
   provenance selection or permission to cite a discarded claim.
+- [ADR 0021](../decisions/0021-optional-source-preservation-review.md) adds the
+  opt-in `validation.sourcePreservationCheck` before generation-ready sources
+  proceed. One obligation per captured source checks meaning preserved by
+  extraction/reconciliation, including sources with no claims. Source-only loss
+  goes through the shared localization, authorized repair, dependent rebuilding
+  and re-review path. The extra check is skipped when disabled or omitted; it
+  never replaces the mandatory review below. Authorized candidate repairs use
+  the separate configured `repair` model slot; protocol retries retain their
+  original binding.
 - Assemble and validate the generated sections, then build the complete
   specification-owned requirement ledger and perform source-preservation and
   principle assessment through the existing review owners. The shared authority
@@ -342,7 +408,7 @@ After validation:
 
 1. assign requirement IDs;
 2. render `spec.md` from `SpecificationIR` and the canonical template contract;
-3. render the mandatory `reference-context.md`;
+3. render the mandatory `reference-context.md`, including completed requirement-to-source occurrence links;
 4. serialize the immutable reference-derived feature-request state, exact passive-literal registry revision, specification ID ledger, initial/next specification-acknowledgement and clarification-registry states, clarification views, specification-provenance state revision, canonical reference snapshot, and §17.3.1 evidence/obligations within their existing canonical owners;
 5. reparse `spec.md` and compare its normalized IR to the validated source IR;
 6. compare the read-only reference-context view with deterministic rendering from its canonical IR;

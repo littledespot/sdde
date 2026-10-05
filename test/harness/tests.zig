@@ -998,7 +998,7 @@ test "missing content is recorded as absence without inventing a candidate quote
     try std.testing.expectEqual(@as(f64, 0), (try judgment.validate(a, null, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{}))).score_percent.?);
 }
 
-test "the checked-in Hello World case and rubric load without a fixture-specific judge" {
+test "the selected live case and rubric load without a fixture-specific judge" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1049,13 +1049,14 @@ test "all calibration specimens reach the ordinary packet without semantic prefi
     defer arena.deinit();
     const a = arena.allocator();
     const root = "test/e2e/wf-001-hello-world/node-vitest/";
+    const calibration_root = "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/";
     const names = .{
         "faithful-a.md",     "faithful-b.md",     "missing-startup.md",       "missing-greeting.md",
         "wrong-greeting.md", "invented-scope.md", "embedded-instructions.md",
     };
     inline for (names) |name| {
-        const input = try @import("files.zig").capture(std.testing.io, a, .cwd(), root ++ "spec.case.json", root ++ "calibration/" ++ name, "calibration-" ++ name, (try capture(a)).generation);
-        try std.testing.expectEqualStrings(@embedFile("../e2e/wf-001-hello-world/node-vitest/calibration/" ++ name), input.specification);
+        const input = try @import("files.zig").capture(std.testing.io, a, .cwd(), root ++ "spec.case.json", calibration_root ++ name, "calibration-" ++ name, (try capture(a)).generation);
+        try std.testing.expectEqualStrings(@embedFile("../integration/fixtures/wf-001-hello-world/node-vitest/calibration/" ++ name), input.specification);
         try std.testing.expectEqual(@as(usize, 1), input.sources.len);
         try std.testing.expectEqualStrings(@embedFile("../e2e/wf-001-hello-world/reference/stories.md"), input.sources[0].text);
         const message = try c.decode(std.json.Value, a, try packet.input(a, input));

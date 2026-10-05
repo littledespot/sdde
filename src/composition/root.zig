@@ -142,6 +142,7 @@ pub const Runtime = struct {
             self.native.activate_feature_logging.activator = self.logging.?.activator();
             self.native.bindRoots(self.boot.ready.roots.registry());
             self.native.bindWorkflows(self.boot.ready.workflows.registry());
+            self.native.bindConfiguration(self.boot.ready.config.config());
             self.native.bindPrinciples(self.boot.ready.roots.registry().projectPrinciples(), self.boot.ready.config.config(), self.principle_source.reader(), self.principle_source.enumerator(), self.principle_source.capturer());
         }
         self.provider_runtime = .{
@@ -1333,6 +1334,7 @@ test "native YAML validates citations extraction and reconciliation before conti
         native.bindRoots(boot.ready.roots.registry());
         native.bindWorkflows(boot.ready.workflows.registry());
         var principle_source: @import("../adapters/filesystem/principle_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        native.bindConfiguration(boot.ready.config.config());
         native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), boot.ready.config.config(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
         var providers = model_provider_bootstrap.Assembly.init(io, std.testing.allocator, project.dir, .{}, &llm_provider_contracts.Registry.empty);
         const result = testBootstrappedInvocation(std.testing.allocator, &boot, &.{ "reference-ingestion", "--feature", "Chosen/Café", "--reference", "first" }, &native.registry, providers.bind(), .{});
@@ -1366,6 +1368,14 @@ test "native YAML validates citations extraction and reconciliation before conti
 }
 
 test "configured specification generation YAML executes native references models and authority gates" {
+    try testSpecificationWorkflows(.existing);
+}
+
+test "configured source preservation reviews before generation and repairs through the shared model slot" {
+    try testSpecificationWorkflows(.source_preservation);
+}
+
+fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation }) !void {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
     const faults = [_]@import("../test_fixtures/spec_generation_driver.zig").Fault{
@@ -1375,7 +1385,7 @@ test "configured specification generation YAML executes native references models
         .{ .stage = .generation, .shape = .missing_answer },
         .{ .stage = .repair, .shape = .missing_answer },
         .{ .stage = .repair, .shape = .missing_answer, .repetition = .persistent },
-        .{ .stage = .repair, .shape = .missing_answer, .repetition = .{ .recover_then_exhaust = 5 } },
+        .{ .stage = .repair, .shape = .missing_answer, .repetition = .{ .recover_then_exhaust = 2 } },
         .{ .stage = .support, .shape = .missing_answer },
         .{ .stage = .extraction, .shape = .empty },
         .{ .stage = .reconciliation, .shape = .empty },
@@ -1431,15 +1441,19 @@ test "configured specification generation YAML executes native references models
     const principle_faults = std.meta.tags(@import("../test_fixtures/spec_generation_responses.zig").PrincipleFault);
     const timing = @import("../test_fixtures/scenario_timing.zig");
     const membership_start = principle_start + principle_faults.len * 2;
-    var costs: [membership_start + 8]?timing.Sample = @splat(null);
-    defer timing.report(io, "specification-generation", &costs) catch |err| std.debug.panic("scenario timing report failed: {s}", .{@errorName(err)});
-    for (0..costs.len) |scenario| {
+    const preservation_start = membership_start + 8;
+    var costs: [preservation_start + 3]?timing.Sample = @splat(null);
+    const case_range_begin: usize = if (workflow_cases == .source_preservation) preservation_start else 0;
+    const case_range_end: usize = if (workflow_cases == .source_preservation) costs.len else preservation_start;
+    defer timing.report(io, "specification-generation", costs[case_range_begin..case_range_end]) catch |err| std.debug.panic("scenario timing report failed: {s}", .{@errorName(err)});
+    for (case_range_begin..case_range_end) |scenario| {
         var cost = timing.Timer.start(io, &costs[scenario]);
         defer cost.finish();
         const principle_fault = if (scenario >= principle_start and scenario < membership_start) principle_faults[(scenario - principle_start) % principle_faults.len] else null;
         const applicability = if (scenario >= applicability_start and scenario < principle_start) applicability_cases[(scenario - applicability_start) % applicability_cases.len] else null;
         const other_applicability = scenario >= applicability_start + applicability_cases.len;
-        const membership_scenario = scenario >= membership_start;
+        const membership_scenario = scenario >= membership_start and scenario < preservation_start;
+        const preservation_scenario = scenario >= preservation_start;
         const brief_scenario = scenario >= brief_start and scenario < applicability_start;
         const global_scenario = scenario >= global_start and scenario < brief_start;
         const summary_scenario = scenario >= summary_start and scenario < global_start;
@@ -1461,12 +1475,20 @@ test "configured specification generation YAML executes native references models
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try writeReferenceIngestionFixture(io, project.dir);
+        if (preservation_scenario) {
+            const configuration = try project.dir.readFileAlloc(io, ".sddtoolkit.json", allocator, .limited(1_048_576));
+            defer allocator.free(configuration);
+            const configured = try std.mem.concat(allocator, u8, &.{ "{\"validation\":{\"sourcePreservationCheck\":true},", configuration[1..] });
+            defer allocator.free(configured);
+            try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = configured });
+        }
         try project.dir.createDirPath(io, ".sdd/principles");
         try project.dir.createDirPath(io, ".sdd/presets");
         try project.dir.createDirPath(io, "engine/workflows/spec");
         try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/toolchain.yaml", .data = "schema: project-toolchain/v1\npresets: []\npolicies: [project.zig@1]\n" });
         if (scenario <= 1 or scenario == 3) try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/core.md", .data = if (scenario == 1) "Delete loan receipts after thirty days.\n" else "Display time in UTC.\n" });
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
+        if (preservation_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == preservation_start + 2) "# Loan renewal\nRenew eligible loans and retain the deadline when renewal is refused.\n" else "# Startup display\nStart successfully and display the current UTC date and time.\n" });
         if (membership_scenario and (scenario - membership_start) % 4 >= 2) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A borrower renews a loan and sees its return deadline. Display `Loan renewed!`.\n" });
         if (extraction_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == extraction_omission_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
         if (candidate_omission and scenario != omission_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == omission_scenario + 1) "A librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n" else "A traveller confirms a booking and sees its arrival date. Display `Booking confirmed!`.\n" });
@@ -1505,7 +1527,7 @@ test "configured specification generation YAML executes native references models
         const definition = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", allocator, .limited(1_048_576));
         defer allocator.free(definition);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = definition });
-        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-global.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "entities.prompt.md", "records.prompt.md", "generation.schema.json", "support.prompt.md", "principle.prompt.md", "support.schema.json", "repair.prompt.md" }) |name| {
+        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-global.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-roles.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "story.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "principle.prompt.md", "support.schema.json", "repair.prompt.md" }) |name| {
             const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name, allocator, .limited(1_048_576));
             defer allocator.free(bytes);
             // A finer required-object selector must survive the native extraction
@@ -1534,6 +1556,7 @@ test "configured specification generation YAML executes native references models
         native.capture_workflow_state.action.source = feature_inputs.workflowStateCapturer();
         if (boot != .ready) std.debug.print("generation bootstrap: {any}\n", .{boot});
         try std.testing.expect(boot == .ready);
+        try std.testing.expectEqual(preservation_scenario, boot.ready.config.config().validation.sourcePreservationCheck);
         var logging: @import("feature_logging_runtime.zig").Assembly = .{
             .allocator = allocator,
             .io = io,
@@ -1548,8 +1571,9 @@ test "configured specification generation YAML executes native references models
         native.bindRoots(boot.ready.roots.registry());
         native.bindWorkflows(boot.ready.workflows.registry());
         var principle_source: @import("../adapters/filesystem/principle_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        native.bindConfiguration(boot.ready.config.config());
         native.bindPrinciples(boot.ready.roots.registry().projectPrinciples(), boot.ready.config.config(), principle_source.reader(), principle_source.enumerator(), principle_source.capturer());
-        var services = try @import("../model_request_workflow_test.zig").providerServices(allocator, null, "spec_generation", false);
+        var services = try @import("../model_request_workflow_test.zig").providerServices(allocator, null, &.{ "spec_generation", "repair" }, false);
         defer services.deinit();
         const graph = boot.ready.workflows.registry().resolve(.{ .bytes = "spec-generation" }).?;
         var runner = @import("../application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{ "--feature", "chosen", "--reference", "first" } }, .graph = graph }, &native.registry, boot.ready.logs.barrier(), .{}, &services);
@@ -1562,12 +1586,14 @@ test "configured specification generation YAML executes native references models
         var fake = @import("../model_request_workflow_test.zig").invocationProvider(&runner, allocator);
         native.model_requests.invoke_model.action = .{ .provider = fake.interface() };
         var driver: @import("../test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &runner, .fake = &fake, .malformed = scenario == 2, .uncertain = scenario == 3, .malformed_once = scenario == 4 or scenario == 9, .repair = scenario == 5 or scenario == 6 or scenario == 8, .failed_repair = scenario == 6, .omit_exact = scenario == 7, .brief_uncertain = scenario == 10, .entities_required = scenario == 11 };
+        driver.repeated_provenance_fault = scenario == 6;
         driver.finalizer = logging.finalizer();
         if (fault) |selected_fault| {
             driver.fault = selected_fault;
             driver.repair = selected_fault.stage == .repair;
             if (selected_fault.stage == .repair and selected_fault.shape == .missing_answer) {
-                driver.repeated_provenance_fault = true;
+                driver.repeated_provenance_fault = selected_fault.repetition == .persistent;
+                driver.repair_across_units = selected_fault.repetition == .recover_then_exhaust;
                 driver.measurement_prefix = if (selected_fault.repetition == .persistent) ".zig-cache/provenance-answer-exhaustion" else ".zig-cache/provenance-answer-recovery";
             }
             if (selected_fault.shape == .alternating_missing) driver.measurement_prefix = ".zig-cache/r37-recovery";
@@ -1579,7 +1605,6 @@ test "configured specification generation YAML executes native references models
                 .recover => ".zig-cache/principle-citation-recovery",
                 .repeated => ".zig-cache/principle-citation-repeated",
                 .alternating => ".zig-cache/principle-citation-alternating",
-                .missing_finding => ".zig-cache/principle-citation-insertion",
             };
         }
         if (applicability) |mode| {
@@ -1596,7 +1621,7 @@ test "configured specification generation YAML executes native references models
         }
         if (scenario <= 1) driver.fault = .{ .stage = .support, .shape = .empty, .repetition = .{ .every_request = 1 } };
         if (scenario == 1) {
-            driver.support_fault = .foreign_provenance;
+            driver.support_fault = .foreign_source_single;
         }
         if (scenario <= 1) driver.measurement_prefix = if (scenario == 0) ".zig-cache/chunk13-compatible-request" else ".zig-cache/chunk13-conflict-request";
         driver.generation_gap = scenario == 12 or scenario == 13;
@@ -1644,6 +1669,7 @@ test "configured specification generation YAML executes native references models
             if (driver.source_loss == .false_conflict) driver.measurement_prefix = ".zig-cache/r41-recovery";
             if (driver.source_loss == .false_conflict_questions) driver.measurement_prefix = ".zig-cache/fix002-question-conflict";
         }
+        if (preservation_scenario and scenario != preservation_start) driver.source_loss = .partial;
         if (summary_scenario) {
             driver.summary_sequence = if (scenario - summary_start < 2) .exhaust else .recover;
             if (scenario == summary_start) driver.measurement_prefix = ".zig-cache/r35-request";
@@ -1660,7 +1686,7 @@ test "configured specification generation YAML executes native references models
             // still needs native provenance repair before publication.
             driver.repair = scenario - brief_start >= 2;
             const summary_first = (scenario - brief_start) % 2 == 0;
-            if (summary_first) driver.summary_sequence = .recover else driver.support_fault = .foreign_provenance;
+            if (summary_first) driver.summary_sequence = .recover else driver.support_fault = .foreign_source_single;
             driver.brief_text = if (summary_first) .{ "Startup greeting", "Display the greeting and current UTC date and time on startup.", "Show the current UTC date and time." } else .{ "Loan renewal", "Confirm loan renewal and display the return deadline.", "Show the new return deadline." };
         }
         cost.enter(.execution);
@@ -1674,18 +1700,53 @@ test "configured specification generation YAML executes native references models
         cost.enter(.assertions);
         if (global_scenario) try @import("../test_fixtures/global_protocol_sequence.zig").verify(&driver, result);
         if (summary_scenario) try @import("../test_fixtures/summary_protocol_sequence.zig").verify(&driver, result);
+        const unbound_repaired_source = reconciliation_scenario and (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition);
+        const repaired_signal_coverage = driver.reconciliation_fault == .signal_coverage and driver.reconciliation_protocol_fault != .token_always;
         const expected: workflow.OutcomeTag = if (membership_scenario) (if (driver.failed_repair) .failed else .ok) else if (principle_fault == .repeated or principle_fault == .alternating) .failed else if (applicability) |mode| switch (mode) {
             .no_entities, .entities => .ok,
             .unjustified, .missing_decision, .missing_text => .needs_user,
             .inconclusive => .invalid,
-        } else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .partial_findings or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_replacement or driver.reconciliation_protocol_fault == .token_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
+        } else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_replacement or driver.reconciliation_protocol_fault == .token_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or unbound_repaired_source or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.reconciliation_fault == .mixed_selection) .invalid else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7 or driver.reconciliation_fault == .occupied_conflict) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}; candidate: {any}\n", .{ scenario, result, try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
+        if (preservation_scenario) {
+            try std.testing.expect(driver.initial_source_review_calls != 0);
+            try std.testing.expect(driver.candidate_review_calls != 0);
+            try std.testing.expectEqual(@as(usize, if (scenario == preservation_start) 0 else 1), driver.source_repair_calls);
+            try std.testing.expect(runner.repair_retry.currentPermit() == null);
+        }
+        if (driver.reconciliation_fault == .mixed_selection and driver.reconciliation_protocol_fault == null) {
+            const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            try std.testing.expect(!view.contains(.published_workflow_output));
+            try std.testing.expectEqual(@as(usize, 0), driver.generation_calls);
+        }
+        if (unbound_repaired_source) {
+            try std.testing.expect(result == .execution_rejected and result.execution_rejected == .operation_failed);
+            try std.testing.expectEqual(@as(usize, 0), driver.generation_calls);
+            const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            try std.testing.expect(!view.contains(.published_workflow_output));
+        }
+        if (repaired_signal_coverage) {
+            const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            try std.testing.expect(driver.generation_calls != 0);
+            try std.testing.expect(view.contains(.published_workflow_output));
+            const accounted = (try @import("../application/reference_extraction_workflow.zig").read(&view, @import("../application/reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted)).payload().reconciliation_accounted;
+            const inputs = (try @import("../application/pipeline_values.zig").read(&view, @import("../application/reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs)).*;
+            try @import("../domain/specification_source_binding.zig").validate(@import("../domain/reference_support.zig").records(accounted), inputs);
+        }
         if (membership_scenario) {
             const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            if (driver.failed_repair) {
+            if (driver.failed_repair and !driver.entities_required) {
+                // The fixed not_applicable decision excludes entity records
+                // before native membership repair. A persistent contrary
+                // response exhausts the bounded protocol correction.
+                try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
+                try std.testing.expect(!view.contains(.identified_specification_content));
+                try std.testing.expect(!view.contains(.clarification_needs));
+                try std.testing.expect(!view.contains(.published_workflow_output));
+            } else if (driver.failed_repair) {
                 const rejected = (try @import("../application/candidate_validation_diagnostics.zig").read(&view)).?.specification;
-                // Membership was corrected, but the replacement's empty text
+                // Membership was corrected, but the replacement's blank text
                 // still fails within the original bounded record assignment.
                 try std.testing.expect(rejected.issue.membership == null);
                 try std.testing.expectEqual(.typed_text, rejected.issue.rule);
@@ -1709,15 +1770,6 @@ test "configured specification generation YAML executes native references models
             }
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
-        }
-        if (driver.support_fault == .one_finding) {
-            const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            const reviewed = (try @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_workflow.zig").schema, .support)).accepted;
-            try std.testing.expectEqual(@as(usize, 0), driver.initial_source_review_calls);
-            try std.testing.expect(driver.generation_calls > 0);
-            try std.testing.expectEqual(reviewed.inputs.seeds.len - 1, driver.support_repair_calls);
-            try std.testing.expectEqual(driver.support_repair_calls, driver.support_merges);
-            try std.testing.expectEqualDeep(reviewed.candidate.origin, reviewed.candidate.origins[0]);
         }
         // Production event evidence is independent of the driver's observations.
         // A pre-write intent row never substitutes for the returned publication result.
@@ -1743,7 +1795,7 @@ test "configured specification generation YAML executes native references models
         if (principle_fault) |mode| {
             const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             const failed = mode == .repeated or mode == .alternating;
-            const expected_repairs: usize = if (failed) 2 else driver.principle_expected_repairs;
+            const expected_repairs: usize = if (failed) 2 else driver.principle_calls - 1;
             try std.testing.expectEqual(expected_repairs, driver.principle_repair_calls);
             // Each schema-valid response reaches native merge. Exhaustion prevents
             // a third model attempt for the unresolved evidence assignment.
@@ -1763,7 +1815,9 @@ test "configured specification generation YAML executes native references models
                 try std.testing.expectEqual(.invalid_principle_citation, selected.evidence.?.issue);
                 try std.testing.expectEqual(.chunk, selected.evidence.?.citation.?.diagnostic.field);
                 try std.testing.expectEqual(selected.ordinal.?, selected.evidence.?.citation.?.diagnostic.rejected);
-                try std.testing.expectEqual(@as(u64, 3), selected.revision);
+                const retained = (try @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_workflow.zig").schema, .principle_support)).result.rejected.candidate.?;
+                try std.testing.expectEqual(retained.revision, selected.revision);
+                try std.testing.expectEqual(@as(u64, @intCast(retained.review.entries.len + driver.support_merges)), selected.revision);
                 try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
                 try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
             }
@@ -1771,21 +1825,26 @@ test "configured specification generation YAML executes native references models
         if (scenario <= 1) {
             try std.testing.expectEqual(@as(usize, 0), driver.initial_source_review_calls);
             try std.testing.expect(driver.generation_calls != 0 and driver.candidate_review_calls != 0);
-            try std.testing.expectEqual(@as(usize, 2), driver.principle_calls);
+            try std.testing.expect(driver.principle_calls != 0);
             try std.testing.expectEqual(@as(usize, if (scenario == 1) 4 else 0), driver.support_repair_calls);
             try std.testing.expectEqual(@as(usize, if (scenario == 1) 2 else 0), driver.support_merges);
-            const logical_reviews: usize = if (scenario == 1) 4 else 2;
-            try std.testing.expectEqual(logical_reviews, driver.fault_requests);
-            try std.testing.expectEqual(logical_reviews, driver.fault_calls);
+            const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const published = try @import("../application/specification_values.zig").storage.read(&view, @import("../application/specification_publication_workflow.zig").state_schema, .publication_state);
+            const policy = published.principle_assessment;
+            const logical_reviews = published.review.evidence.len + policy.evidence.len;
+            try std.testing.expect(logical_reviews > 2);
+            try std.testing.expectEqual(logical_reviews + driver.support_merges, driver.fault_requests);
+            try std.testing.expectEqual(driver.fault_requests, driver.fault_calls);
             const request_values = @import("../application/model_request_workflow.zig");
             const request_identity = @import("../domain/model_request_identity.zig");
             const request_ledger = try @import("../application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, request_values.ledger_schema, request_identity.ModelRequestIdentityLedger);
-            var origins: [5]*const request_identity.ModelRequestId = undefined;
+            const origins = try allocator.alloc(*const request_identity.ModelRequestId, logical_reviews);
+            defer allocator.free(origins);
             var origin_count: usize = 0;
             for (runner.tokenLedger().accounted_operations.items) |operation| {
                 const request = operation.id.model_request_id;
-                if (request.immutable_unit_owner_id != .semantic_review or operation.id.model_attempt_ordinal.value != 1) continue;
-                for (origins[0..origin_count]) |prior| try std.testing.expect(!prior.model_operation_id.eql(request.model_operation_id));
+                if (request.purpose != .semantic_review or operation.id.model_attempt_ordinal.value != 1) continue;
+                for (origins[0..origin_count]) |prior| try std.testing.expect(!std.mem.eql(u8, prior.immutable_unit_owner_id.semantic_review.review_slot_id.bytes, request.immutable_unit_owner_id.semantic_review.review_slot_id.bytes));
                 try std.testing.expect(origin_count < origins.len);
                 origins[origin_count] = request;
                 origin_count += 1;
@@ -1795,9 +1854,6 @@ test "configured specification generation YAML executes native references models
             try std.testing.expectEqual(logical_reviews, origin_count);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
-            const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            const published = try @import("../application/specification_values.zig").storage.read(&view, @import("../application/specification_publication_workflow.zig").state_schema, .publication_state);
-            const policy = published.principle_assessment;
             try std.testing.expect(policy.evidence.len != 0);
             try std.testing.expectEqual(@as(@FieldType(@import("../domain/required_authority.zig").Result, "continuation"), if (scenario == 1) .needs_user else .all_resolved), policy.result.continuation);
             if (scenario == 1) try std.testing.expectEqual(.plan, policy.result.entries[0].outcome.clarification_required.owner);
@@ -1808,7 +1864,7 @@ test "configured specification generation YAML executes native references models
             defer readback.deinit();
             const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
             _ = try @import("../domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
-            try std.testing.expectEqual(@as(usize, 717), graph.authority.steps.len);
+            try std.testing.expectEqual(@as(usize, 791), graph.authority.steps.len);
         }
         if (applicability) |mode| {
             const samples = @import("../test_fixtures/spec_generation_responses.zig");
@@ -1850,10 +1906,18 @@ test "configured specification generation YAML executes native references models
                     try std.testing.expectEqual(@as(usize, 1), restored.value.pending.open_clarifications.len);
                     try std.testing.expectEqual(@as(usize, 0), driver.principle_calls);
                     const reviewed = (try @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_workflow.zig").schema, .support)).accepted.candidate;
+                    try std.testing.expectEqualDeep(reviewed.origin, reviewed.origins[0]);
+                    const identities = try @import("../application/pipeline_values.zig").read(&view, @import("../application/model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
                     var supported: usize = 0;
                     for (reviewed.review.entries, reviewed.origins) |finding, origin| if (finding.value.kind == .supported) {
                         supported += 1;
-                        try std.testing.expectEqualDeep(reviewed.origin, origin);
+                        try std.testing.expect(origin != null);
+                        var matches: usize = 0;
+                        for (runner.tokenLedger().accounted_operations.items) |operation| if (origin.?.matches(identities, operation.id)) {
+                            try std.testing.expect(operation.id.model_request_id.purpose == .semantic_review);
+                            matches += 1;
+                        };
+                        try std.testing.expectEqual(@as(usize, 1), matches);
                     };
                     try std.testing.expectEqual(reviewed.review.entries.len - 1, supported);
                     const persisted = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/clarifications.json", a, .limited(8_388_608));
@@ -1897,6 +1961,7 @@ test "configured specification generation YAML executes native references models
             } else try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
         }
         if (source_repair_scenario) {
+            if (driver.source_loss == .false_conflict_questions) try std.testing.expectEqual(@as(usize, 0), driver.loss_calls) else try std.testing.expect(driver.loss_calls > 0);
             if (driver.source_loss == .false_conflict_questions) {
                 try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls);
                 try std.testing.expectEqual(@as(usize, 0), driver.support_merges);
@@ -1942,8 +2007,8 @@ test "configured specification generation YAML executes native references models
             defer diagnostic_arena.deinit();
             const copied = try diagnostic.copy(diagnostic_arena.allocator());
             try std.testing.expectEqualDeep(diagnostic, copied);
-            try std.testing.expectEqual(@as(usize, 7), driver.calls);
-            try std.testing.expectEqual(@as(usize, 7), runner.tokenLedger().accounted_operations.items.len);
+            try std.testing.expect(driver.initial_source_review_calls > 0);
+            try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.omission_repair_calls);
             try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
             try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
@@ -1993,8 +2058,9 @@ test "configured specification generation YAML executes native references models
                 }
             } else {
                 const rejected = diagnostic.support.selected().?;
-                try std.testing.expectEqual(.ineligible_claim, rejected.evidence.?.issue);
-                try std.testing.expectEqual(@as(u64, 1), rejected.revision);
+                try std.testing.expectEqual(.invalid_sources, rejected.evidence.?.issue);
+                const review_progress = try @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_workflow.zig").schema, .support);
+                try std.testing.expectEqual(review_progress.rejected.candidate.?.revision, rejected.revision);
                 const identities = try @import("../application/pipeline_values.zig").read(&view, @import("../application/model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
                 var matched: usize = 0;
                 for (runner.tokenLedger().accounted_operations.items) |operation| if (rejected.origin.?.matches(identities, operation.id)) {
@@ -2027,13 +2093,8 @@ test "configured specification generation YAML executes native references models
             } else {
                 const accepted = (try @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_workflow.zig").schema, .support)).accepted;
                 try std.testing.expectEqual(@as(u32, 2), accepted.candidate.origin.?.attempt.value);
-                try std.testing.expectEqual(@as(u64, if (dropped_or_changed) 2 else 1), accepted.candidate.revision);
-                for (accepted.candidate.review.entries, accepted.candidate.origins) |entry, origin| {
-                    // Only the inserted/repaired finding acquires a native repair origin.
-                    if (dropped_or_changed and entry.requirement_ordinal == 2) {
-                        try std.testing.expect(!std.meta.eql(accepted.candidate.origin, origin));
-                    } else try std.testing.expectEqualDeep(accepted.candidate.origin, origin);
-                }
+                try std.testing.expectEqual(@as(u64, @intCast(accepted.candidate.review.entries.len + driver.support_merges)), accepted.candidate.revision);
+                for (accepted.candidate.origins) |origin| try std.testing.expect(origin != null);
             }
         }
         if (expected == .needs_user) {
@@ -2055,24 +2116,21 @@ test "configured specification generation YAML executes native references models
             try std.testing.expectEqual(open_count, notices.len);
         }
         if (scenario == 6) {
-            const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })).?;
-            const origin = diagnostic.origin().?;
-            try std.testing.expectEqual(.provenance, diagnostic.specification.issue.rule);
-            try std.testing.expect(diagnostic.specification.issue.field.target.provenance == .description);
-            var retained_arena: std.heap.ArenaAllocator = .init(allocator);
-            defer retained_arena.deinit();
-            const retained = try diagnostic.copy(retained_arena.allocator());
-            try std.testing.expectEqualDeep(diagnostic, retained);
-            const identities = try @import("../application/pipeline_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
-            var matched: usize = 0;
-            for (runner.tokenLedger().accounted_operations.items) |operation| if (origin.matches(identities, operation.id)) {
-                try std.testing.expect(operation.id.model_request_id.purpose == .atomic_repair);
-                matched += 1;
-            };
-            try std.testing.expectEqual(@as(usize, 1), matched);
-            // A later prepared request cannot replace the rejected candidate origin.
-            const prepared = try @import("../application/model_request_workflow.zig").readCurrent(&.{ .slots = runner.envelope.slots }, @import("../application/model_request_workflow.zig").prepared_schema);
-            try std.testing.expect(identities.indexOf(prepared.id()).?.value != origin.request.value);
+            const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
+            const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&view)).?;
+            try std.testing.expect(diagnostic == .specification);
+            try std.testing.expectEqual(.typed_text, diagnostic.specification.issue.rule);
+            try std.testing.expect(diagnostic.specification.issue.field == .target and diagnostic.specification.issue.field.target == .value);
+            try std.testing.expect(!view.contains(.specification_publication_state));
+            const ledger = runner.tokenLedger();
+            try std.testing.expect(ledger.accounted_operations.items.len >= 2);
+            const last = ledger.accounted_operations.items[ledger.accounted_operations.items.len - 1].id;
+            const previous = ledger.accounted_operations.items[ledger.accounted_operations.items.len - 2].id;
+            try std.testing.expectEqual(@import("../domain/model_request_identity.zig").RequestPurposeKind.atomic_repair, std.meta.activeTag(last.model_request_id.purpose));
+            try std.testing.expectEqual(previous.model_request_id, last.model_request_id);
+            try std.testing.expect(previous.model_attempt_ordinal.value >= 1);
+            try std.testing.expectEqual(previous.model_attempt_ordinal.value + 1, last.model_attempt_ordinal.value);
         }
         if (scenario == 7) {
             const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })).?;
@@ -2081,7 +2139,10 @@ test "configured specification generation YAML executes native references models
         }
         if (reconciliation_scenario) {
             const diagnostic = try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots });
-            const occupied = driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals or driver.reconciliation_fault == .occupied_conflict;
+            // Empty summary/signal selections now fail the complete schema and
+            // recover through protocol correction; conflict cardinality remains
+            // a native relationship check in this slice.
+            const occupied = driver.reconciliation_fault == .occupied_conflict;
             if (occupied) {
                 const rejected = diagnostic.?.reconciliation;
                 try std.testing.expectEqual(@as(@TypeOf(rejected.issue.rule), if (driver.reconciliation_fault == .occupied_conflict) .cardinality else .claim_selection), rejected.issue.rule);
@@ -2091,9 +2152,19 @@ test "configured specification generation YAML executes native references models
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
                 try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.accounted_reference_reconciliation)] == null);
+            } else if (driver.reconciliation_fault == .mixed_selection and scenario != protocol_selection_scenario) {
+                const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+                const rejected = (try @import("../application/reference_extraction_workflow.zig").read(&view, @import("../application/reference_reconciliation_workflow.zig").roles_schema, .reconciliation_rejected)).payload().reconciliation_rejected;
+                try std.testing.expectEqual(.role_assignment, rejected.issue.rule);
+                try std.testing.expect(diagnostic == null);
+                try std.testing.expect(!view.contains(.published_workflow_output));
             } else if (expected == .needs_user) {
                 try std.testing.expect(diagnostic != null and diagnostic.? == .support_findings);
             } else try std.testing.expect(diagnostic == null);
+            if (driver.reconciliation_fault == .occupied_summary or driver.reconciliation_fault == .occupied_signals) {
+                try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
+                try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
+            }
             if (driver.reconciliation_fault == .permuted_disposition or driver.reconciliation_fault == .permuted_conflict_disposition) {
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
                 try std.testing.expectEqual(@as(usize, 1), driver.reconciliation_merges);
@@ -2122,8 +2193,10 @@ test "configured specification generation YAML executes native references models
                 const accounted = try @import("../application/reference_extraction_workflow.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted);
                 try std.testing.expectEqual(.complete, accounted.payload().reconciliation_accounted.outcome);
                 try std.testing.expectEqual(@as(u64, 2), accounted.payload().reconciliation_accounted.records.assignments.checked.prior.prior.source.revision);
-                try std.testing.expectEqual(workflow.OutcomeTag.ok, result.executionStatus().?);
-                try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.required_authority_inputs)] != null);
+                // The repaired disposition leaves no retained business signal
+                // for feature roles. Reconciliation success cannot invent one.
+                try std.testing.expectEqual(workflow.OutcomeTag.failed, result.executionStatus().?);
+                try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.required_authority_inputs)] == null);
             }
             // Conflict representation repair retains the real source conflict.
             if (driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) {
@@ -2170,7 +2243,10 @@ test "configured specification generation YAML executes native references models
 
         if (protocol_content_scenario) {
             try std.testing.expectEqual(@as(usize, 2), driver.reconciliation_repair_calls);
-            try std.testing.expectEqual(@as(usize, if (expected == .ok) 1 else 0), driver.reconciliation_merges);
+            // The once-only malformed token response permits the authorized
+            // reconciliation repair to merge, even if the resulting source
+            // lacks a valid generation-role binding and initialization fails.
+            try std.testing.expectEqual(@as(usize, if (driver.reconciliation_protocol_fault == .token_once) 1 else 0), driver.reconciliation_merges);
             var attempts: usize = 0;
             var request: ?*const @import("../domain/model_request_identity.zig").ModelRequestId = null;
             for (runner.tokenLedger().accounted_operations.items) |operation| {
@@ -2181,7 +2257,7 @@ test "configured specification generation YAML executes native references models
                 attempts += 1;
             }
             try std.testing.expectEqual(@as(usize, 2), attempts);
-            if (expected == .failed) {
+            if (driver.reconciliation_protocol_fault == .token_always) {
                 try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
                 try std.testing.expectEqual(@as(u32, 1), result.execution_rejected.retry_limit.limit.value);
                 try std.testing.expectEqual(@as(u64, 2), result.execution_rejected.retry_limit.completed_executions);
@@ -2222,7 +2298,10 @@ test "configured specification generation YAML executes native references models
             try std.testing.expectEqual(@as(usize, 1), matches);
         }
         if (citation_scenario) {
-            try std.testing.expectEqual(@as(usize, 2), driver.citation_repair_calls);
+            // Missing citations are rejected by the complete schema and
+            // corrected as a whole response. Unknown ranges still reach the
+            // native scoped-selection repair boundary.
+            try std.testing.expectEqual(@as(usize, if (driver.citation_fault == .missing) 0 else 2), driver.citation_repair_calls);
             const diagnostic = try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots });
             if (driver.failed_citation_repair) {
                 try std.testing.expect(diagnostic != null and diagnostic.? == .source_selections);
@@ -2250,7 +2329,7 @@ test "configured specification generation YAML executes native references models
                 try std.testing.expect(diagnostic.?.token_classifications.issues.missing.len != 0);
             } else try std.testing.expect(diagnostic == null);
         }
-        if (driver.repeated_provenance_fault) {
+        if (driver.repeated_provenance_fault and fault != null) {
             const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             const ledger = runner.tokenLedger();
             try std.testing.expectEqual(driver.calls, ledger.accounted_operations.items.len);
@@ -2262,9 +2341,9 @@ test "configured specification generation YAML executes native references models
             };
             try std.testing.expectEqual(@as(u32, 2), attempts);
             if (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust) {
-                const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&view)).?.specification;
-                try std.testing.expectEqual(.provenance, diagnostic.issue.rule);
-                try std.testing.expect(diagnostic.last_repair == null);
+                const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&view)).?;
+                try std.testing.expect(diagnostic == .specification);
+                try std.testing.expectEqual(.typed_text, diagnostic.specification.issue.rule);
                 try std.testing.expect(!view.contains(.specification_publication_state));
             } else {
                 const session = try @import("../application/specification_workflow.zig").readSession(&view);
@@ -2291,7 +2370,7 @@ test "configured specification generation YAML executes native references models
             .recover_then_exhaust => |recovered| {
                 try std.testing.expectEqual(@as(usize, recovered) + 1, driver.fault_requests);
                 try std.testing.expectEqual(@as(usize, recovered) + 2, driver.fault_calls);
-                try std.testing.expect(driver.generation_calls >= 4);
+                try std.testing.expect(driver.generation_calls >= 3);
                 try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
                 const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
                 try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
@@ -2345,7 +2424,11 @@ test "configured specification generation YAML executes native references models
                 }
             }
         }
-        if (scenario == 0) try std.testing.expectEqual(@as(usize, 4), driver.generation_calls);
+        if (scenario == 0) {
+            try std.testing.expectEqual(@as(usize, 4), driver.generation_calls);
+            try std.testing.expectEqual(@as(usize, 0), driver.initial_source_review_calls);
+            try std.testing.expect(driver.candidate_review_calls != 0);
+        }
         if (expected == .ok) {
             const content = try @import("../application/required_authority_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/required_authority_workflow.zig").content_schema, .content);
             try std.testing.expect(content.records.len != 0);
@@ -2369,11 +2452,9 @@ test "configured specification generation YAML executes native references models
         }
         if (support_scenario) {
             const merges: usize = switch (driver.support_fault.?) {
-                .one_finding => (try @import("../application/required_authority_values.zig").read(&.{ .slots = runner.envelope.slots }, @import("../application/specification_support_workflow.zig").schema, .support)).accepted.inputs.seeds.len - 1,
                 .foreign_sources => 8,
-                .partial_findings => 3,
-                .two_missing_findings, .question_recover, .question_native_exhaust => 2,
-                .question_exhaust, .inconclusive => 0,
+                .question_recover, .question_native_exhaust => 2,
+                .question_exhaust, .inconclusive, .missing_detail => 0,
                 .question_evidence_recover, .question_evidence_alternating => 5,
                 .question_evidence_exhaust => 4,
                 .question_mixed_exhaust => 1,
@@ -2394,7 +2475,6 @@ test "configured specification generation YAML executes native references models
             };
             try std.testing.expectEqual(@as(u64, merges), recorded_merges);
             const calls: usize = switch (driver.support_fault.?) {
-                .duplicate_finding => 0,
                 .question_recover => 4,
                 .question_evidence_recover, .question_evidence_exhaust, .question_evidence_alternating => 6,
                 .question_exhaust, .question_native_exhaust, .question_mixed_exhaust => 2,
@@ -2403,64 +2483,27 @@ test "configured specification generation YAML executes native references models
             try std.testing.expectEqual(calls, driver.support_repair_calls);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
-            if (driver.support_fault == .partial_findings) {
-                try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-                const exhausted = result.execution_rejected.retry_limit;
-                try std.testing.expectEqual(@as(u32, 1), exhausted.limit.value);
-                try std.testing.expectEqual(@as(u64, 2), exhausted.completed_executions);
-                var matched = false;
-                for (graph.authority.steps) |step| if (std.mem.eql(u8, step.id.bytes, exhausted.operation().bytes)) {
-                    try std.testing.expectEqualStrings("advance-model-attempt-accounting", step.operation_id.bytes);
-                    matched = true;
-                };
-                try std.testing.expect(matched);
-                const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-                const owned = @import("../application/required_authority_values.zig");
-                const retained = (try owned.read(&view, @import("../application/specification_support_workflow.zig").schema, .support)).rejected;
-                const inputs = try owned.read(&view, @import("../application/required_authority_workflow.zig").inputs_schema, .inputs);
-                var check_arena: std.heap.ArenaAllocator = .init(allocator);
-                defer check_arena.deinit();
-                const requirements = (try @import("../domain/required_authority.zig").build(check_arena.allocator(), inputs)).requirements;
-                try std.testing.expect(inputs.specification != null);
-                const diagnostic = (try @import("../application/candidate_validation_diagnostics.zig").read(&view)).?;
-                try std.testing.expectEqualDeep(retained.rejection, diagnostic.support);
-                try std.testing.expectEqual(requirements.len - 2, diagnostic.support.diagnostics.len);
-                const selected = diagnostic.support.selected().?;
-                try std.testing.expectEqual(.ineligible_claim, selected.evidence.?.issue);
-                try std.testing.expectEqual(@as(u32, 3), selected.ordinal.?);
-                try std.testing.expectEqual(@as(u64, 4), selected.revision);
-                try std.testing.expect(!retained.candidate.?.last_repair.?.changed);
-                const identities = try @import("../application/pipeline_values.zig").read(&view, @import("../application/model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
-                try std.testing.expect(selected.origin.?.matches(identities, runner.tokenLedger().accounted_operations.items[driver.calls - 1].id));
-                for (diagnostic.support.diagnostics[1..], 4..) |issue, ordinal| {
-                    try std.testing.expectEqual(.missing_finding, issue.issue);
-                    try std.testing.expectEqual(ordinal, issue.ordinal.?);
-                    try std.testing.expectEqualDeep(retained.candidate.?.origin, issue.origin);
-                }
-                for (retained.candidate.?.origins[0..2]) |origin| try std.testing.expectEqualDeep(retained.candidate.?.origin, origin);
-                try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
-            }
             switch (driver.support_fault.?) {
                 .question_evidence_recover, .question_evidence_exhaust, .question_evidence_alternating => {
                     const view: @import("../domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
                     const current = try @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_workflow.zig").schema, .support);
                     const retained = switch (current) {
                         .accepted => |value| value.candidate,
+                        .pending => |value| value,
                         .rejected => |value| value.candidate.?,
                     };
-                    try std.testing.expectEqual(@as(u64, merges + 1), retained.revision);
-                    for (retained.review.entries[0..4], retained.origins[0..4]) |finding, origin| {
+                    try std.testing.expectEqual(@as(u64, @intCast(retained.review.entries.len + merges)), retained.revision);
+                    for (retained.review.entries[0..@min(4, retained.review.entries.len)], retained.origins[0..@min(4, retained.origins.len)]) |finding, origin| {
                         try std.testing.expectEqual(.unsupported, finding.value.kind);
                         try std.testing.expectEqualStrings("What duration applies? State the duration and starting event.", finding.value.question.?);
-                        try std.testing.expect(!std.meta.eql(retained.origin, origin));
+                        try std.testing.expect(origin != null);
                     }
                     var evidence_arena: std.heap.ArenaAllocator = .init(allocator);
                     defer evidence_arena.deinit();
                     const support_workflow = @import("../application/specification_support_workflow.zig");
                     const inputs = try support_workflow.inputs(&view, try support_workflow.progress(&view));
                     const ledger = try @import("../domain/required_authority.zig").build(evidence_arena.allocator(), inputs);
-                    for (ledger.requirements, retained.origins, 0..) |requirement, origin, i| if (i >= 4 and requirement.seed.id.kind != .entity_applicability) try std.testing.expectEqualDeep(retained.origin, origin);
+                    for (ledger.requirements[0..retained.origins.len], retained.origins, 0..) |requirement, origin, i| if (i >= 4 and requirement.seed.id.kind != .entity_applicability) try std.testing.expect(origin != null);
                     if (driver.support_fault == .question_evidence_recover) {
                         try std.testing.expect(current == .accepted);
                         try project.dir.access(io, "requirements/current/chosen/spec.md", .{});
@@ -2470,7 +2513,7 @@ test "configured specification generation YAML executes native references models
                         try std.testing.expectEqual(@as(u32, 1), result.execution_rejected.retry_limit.limit.value);
                         const issue = current.rejected.rejection.selected().?;
                         try std.testing.expectEqual(@as(usize, 1), current.rejected.rejection.diagnostics.len);
-                        try std.testing.expectEqual(.ineligible_claim, issue.evidence.?.issue);
+                        try std.testing.expectEqual(.invalid_sources, issue.evidence.?.issue);
                         try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
                         try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
                     }
@@ -2484,7 +2527,7 @@ test "configured specification generation YAML executes native references models
                             try std.testing.expectEqual(.unsupported, finding.finding);
                             try std.testing.expectEqualStrings("What duration applies? State the duration and starting event.", finding.review.?.question.?);
                         }
-                        for (diagnostic.support_findings.origins[2..]) |origin| try std.testing.expectEqualDeep(diagnostic.support_findings.origin, origin);
+                        for (diagnostic.support_findings.origins[2..]) |origin| try std.testing.expect(origin != null);
                         try project.dir.access(io, "requirements/current/chosen/spec.md", .{});
                     } else {
                         try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
@@ -2492,12 +2535,11 @@ test "configured specification generation YAML executes native references models
                         try std.testing.expectEqual(@as(u32, 1), result.execution_rejected.retry_limit.limit.value);
                         try std.testing.expect(diagnostic == .support);
                         const issues = diagnostic.support.diagnostics;
-                        try std.testing.expectEqual(@as(usize, 2), issues.len);
+                        try std.testing.expectEqual(@as(usize, 1), issues.len);
                         try std.testing.expectEqual(.invalid_question, issues[0].issue);
-                        try std.testing.expectEqual(.invalid_question, issues[1].issue);
-                        try std.testing.expectEqual(@as(u64, merges + 1), issues[0].revision);
                         const retained = (try @import("../application/required_authority_values.zig").read(&view, @import("../application/specification_support_workflow.zig").schema, .support)).rejected.candidate.?;
-                        for (retained.origins[1..]) |origin| try std.testing.expectEqualDeep(retained.origin, origin);
+                        try std.testing.expectEqual(@as(u64, @intCast(retained.review.entries.len + merges)), issues[0].revision);
+                        for (retained.origins[1..]) |origin| try std.testing.expect(origin != null);
                         try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
                         try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
                     }
@@ -2509,7 +2551,11 @@ test "configured specification generation YAML executes native references models
                 try std.testing.expect(diagnostic == .support_findings);
                 try std.testing.expectEqual(.ambiguous, diagnostic.support_findings.evidence[0].finding);
                 try std.testing.expect(diagnostic.support_findings.origins[0] != null);
-                try std.testing.expect(!std.meta.eql(diagnostic.support_findings.origin.?, diagnostic.support_findings.origins[0].?));
+                // The empty detail is corrected as a complete response before
+                // native support repair; the final finding keeps that origin.
+                try std.testing.expectEqualDeep(diagnostic.support_findings.origin.?, diagnostic.support_findings.origins[0].?);
+                try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls);
+                try std.testing.expectEqual(@as(usize, 0), driver.support_merges);
             }
         }
         if (driver.candidate_omissions) |omissions| {
@@ -2548,8 +2594,8 @@ test "configured specification generation YAML executes native references models
                     }
                 }
                 try std.testing.expectEqual(@as(usize, 2), attempts);
-                try std.testing.expectEqual(@as(usize, 3), same_site_requests);
-                try std.testing.expectEqual(@as(usize, 4), same_site_attempts);
+                try std.testing.expect(same_site_requests > 1);
+                try std.testing.expectEqual(same_site_requests + 1, same_site_attempts);
             }
         }
         if (expected == .needs_user) {

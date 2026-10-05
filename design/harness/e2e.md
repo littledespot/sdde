@@ -5,13 +5,13 @@ Run one live case from the repository root:
 1. Configure credentials and judge selection under [Environment setup](#environment-setup).
 2. Obtain explicit user approval for this E2E run under
    [AGENTS.md](../../AGENTS.md#testing-expectations).
-3. Run the launcher for the checked-in Hello World case:
+3. Run the launcher with an explicitly selected live case:
 
    ```sh
-   ./scripts/e2e-spec.sh
+   ./scripts/e2e-spec.sh --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json
    ```
 
-   Or supply an explicit case through the same production path:
+   The equivalent direct build command is:
 
    ```sh
    zig build e2e-spec -- --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json
@@ -24,8 +24,8 @@ Run one live case from the repository root:
 
 - The command makes live API calls for generation and grading; there is no mock mode.
 - The script requires the pinned Zig compiler and locates the checkout from its own path.
-- Case paths are repository-relative. With no arguments, the script selects the
-  checked-in Hello World case. Use `--case <path>` to select another case.
+- Case paths are repository-relative and must be supplied with `--case <path>`.
+  The script has no default case.
 - Automated tests cannot open native model connections, including with credentials
   present. Smoke subprocesses use the same application entry points with model
   connections compiled out. Test/verification build steps reject transitive dependencies on live
@@ -108,7 +108,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   its separate cumulative budget.
 - Provider-owned response limits still apply and are reported as provider stops.
 - GPT-OSS supports explicit `low`, `medium` and `high` reasoning effort through the
-  shared Bedrock serializer; the Hello World generation slot and judge select `low`.
+  shared Bedrock serializer; the selected case configures the generation and judge settings.
 
 - Every generation call and both evaluator providers use the engine's short [universal
   JSON framing instruction](../decisions/0014-universal-response-format-guidance.md).
@@ -118,9 +118,8 @@ credentials. No model answer means no evidence yet about schema conformance.
 - Closed schemas and strict response validation remain independent of whether the model
   follows that instruction.
 
-- The Hello World case runs `spec-generation` with `--feature hello-world --reference
-  hello-world`.
-- It exercises Specify; Plan, Tasks and Implement need their own workflow cases.
+- The selected case supplies the workflow, feature and reference selectors.
+- A Spec case exercises Specify; Plan, Tasks and Implement need their own workflow cases.
 - The copied resources are declared test inputs, not production source-tree fallbacks.
 - Changes to the reference, including its UTC date/time requirement, are captured
   directly for both engine and judge.
@@ -346,12 +345,12 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
 
 ## Verification
 
-- `zig build test-e2e-launcher --summary all` verifies local environment loading, help
-  without credentials, invocation from another directory, argument forwarding and
-  failure exit status without provider calls.
-- `zig build test-e2e-harness test-rubric-evaluator --summary all` checks harness and
-  judge mechanics offline.
-- Those results are unit/integration evidence.
+- `zig build test-integration --summary all` runs fixed offline harness and
+  launcher cases, including argument forwarding, publication identity, evidence
+  capture and failure reports. It makes no provider calls.
+- `zig build test-rubric-evaluator --summary all` checks judge mechanics offline.
+- These results establish integration and evaluator behavior, not prompt quality.
+  Live generation and grading run separately through `./scripts/e2e-spec.sh`.
 - `zig build smoke-e2e-harness --summary all` checks the standalone executable's startup
   and mandatory case selection in a clean directory without credentials.
 - `zig build verify --summary all` includes mechanical tests, lint, architecture and

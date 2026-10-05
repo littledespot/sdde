@@ -3,8 +3,9 @@
   "result": "reconciliation-schema",
   "definition": "global",
   "parts": {
-    "dispositions": {"paths": ["/claim_dispositions"]},
-    "signals": {"paths": ["/signals"], "requires": ["dispositions"]},
-    "conflicts": {"paths": ["/conflicts"], "requires": ["dispositions"]}
+    "dispositions": {"paths": ["/claim_dispositions"], "input-context": "dispositions"},
+    "signals": {"paths": ["/signals"], "requires": ["dispositions"], "input-context": "signals"},
+    "roles": {"paths": ["/role_assignments"], "requires": ["dispositions", "signals"], "input-context": "roles"},
+    "conflicts": {"paths": ["/conflicts"], "requires": ["dispositions"], "input-context": "conflicts"}
   }
 }

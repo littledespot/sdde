@@ -14,12 +14,12 @@ Project: Hello World
 
 | Outcome                | Requirement                                             | Priority |
 | ---------------------- | ------------------------------------------------------- | -------- |
-| Behavioral Correctness | Verify the exact Hello World greeting.                  | MUST     |
+| Behavioral Correctness | Verify required observable behavior and exact values.   | MUST     |
 | Boundary Correctness   | Verify the application can start successfully.          | MUST     |
 | Failure Behavior       | Preserve unexpected failures as failed execution.       | MUST     |
 | Accessibility          | Not applicable beyond plain readable text.              | MUST     |
 | Visual and Layout      | Not applicable.                                         | MUST     |
-| Regression Protection  | Keep a focused Vitest test for the greeting behavior.   | MUST     |
+| Regression Protection  | Keep focused Vitest tests for required behavior.         | MUST     |
 
 ---
 
@@ -27,11 +27,11 @@ Project: Hello World
 
 | Domain      | Applicability Rule                                | Required Evidence             |
 | ----------- | ------------------------------------------------- | ----------------------------- |
-| Unit        | Applies to the greeting behavior.                 | Passing Vitest assertion.     |
+| Unit        | Applies to required behavior.                     | Passing Vitest assertion.     |
 | Contract    | Not applicable; no external contract exists.      | Not applicable.               |
 | Integration | Not required for this isolated application.       | Not applicable.               |
 | Security    | Applies only to absence of added unsafe behavior. | Review of the bounded change. |
-| User Flow   | Applies to starting and observing the greeting.   | Successful execution.         |
+| User Flow   | Applies to starting and observing required output. | Successful execution.         |
 | Performance | Not applicable.                                   | Not applicable.               |
 
 Exact paths, suffixes, include patterns, runners, and commands are not declared
@@ -45,10 +45,10 @@ by this principle.
 
 | Requirement           | Description                                         | Priority |
 | --------------------- | --------------------------------------------------- | -------- |
-| Isolation             | Test greeting behavior without external services.  | MUST     |
-| Observable Assertions | Assert the exact greeting value.                    | MUST     |
+| Isolation             | Test behavior without external services.           | MUST     |
+| Observable Assertions | Assert source-required exact values.               | MUST     |
 | External Boundaries   | Do not require filesystem, network, or database I/O. | MUST    |
-| Determinism           | The same test input must produce the same greeting. | MUST     |
+| Determinism           | The same test input must produce the same result.   | MUST     |
 
 ### Integration Validation
 
@@ -88,7 +88,7 @@ by this principle.
 | Unit Boundaries    | No test double is needed for pure behavior.   | MUST     |
 | External Services  | Do not add or mock external services.         | MUST     |
 | Integration Scope  | Not applicable.                               | MUST     |
-| Realistic Behavior | Test the real greeting behavior directly.     | MUST     |
+| Realistic Behavior | Test the real behavior directly.              | MUST     |
 | Interaction Checks | Avoid interaction assertions without a boundary. | SHOULD |
 
 ---
@@ -98,6 +98,6 @@ by this principle.
 | Requirement     | Description                                     | Priority |
 | --------------- | ----------------------------------------------- | -------- |
 | Isolation       | Tests must use no external state.               | MUST     |
-| Determinism     | Repeated runs must assert the same greeting.    | MUST     |
+| Determinism     | Repeated runs must assert the same result.      | MUST     |
 | Repeatability   | Tests must pass without manual setup.           | MUST     |
 | Parallel Safety | No shared mutable test resource may be added.   | SHOULD   |

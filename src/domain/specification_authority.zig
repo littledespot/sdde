@@ -4,6 +4,19 @@ const authority = @import("required_authority.zig");
 const spec = @import("specification.zig");
 const reference = @import("reference_reconciliation.zig");
 
+/// Address an independent feature value by its native requirement ID. This is
+/// a read-only projection; evidence admission still owns authority selection.
+pub fn featureField(inputs: authority.Inputs, id: authority.Id) ?spec.AttributedValue {
+    if (id.unit != .feature) return null;
+    return switch (id.slot) {
+        .display_name => if (inputs.specification) |content| content.display_name else if (inputs.brief) |brief| brief.title else null,
+        .description => if (inputs.brief) |brief| brief.description else null,
+        .primary_goal => if (inputs.brief) |brief| brief.primary_goal else null,
+        .primary_user_story => if (inputs.specification) |content| content.primary_user_story else null,
+        else => null,
+    };
+}
+
 pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: reference.Accounted, content: ?spec.IdentifiedContent, brief: ?spec.Brief) authority.Error!authority.Inputs {
     return projectRecords(allocator, feature, @import("reference_support.zig").records(references), content, brief);
 }

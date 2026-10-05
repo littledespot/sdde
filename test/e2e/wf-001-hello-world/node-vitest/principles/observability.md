@@ -38,7 +38,7 @@ No optional context fields are required.
 ### Logging Prohibitions
 
 - Do not add routine debug or informational logs.
-- Do not log the Hello World application output as diagnostic telemetry.
+- Do not log normal application output as diagnostic telemetry.
 - Do not add a logging dependency.
 
 ---

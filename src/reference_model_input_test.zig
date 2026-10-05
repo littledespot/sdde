@@ -14,6 +14,88 @@ test "reference model packets preserve exact chunk bytes and engine bound scope"
 test "reference packet and iteration allocations have deterministic cleanup" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, exercisePackets, .{});
 }
+
+test "reconciliation assignments scope instructions while retaining complete source evidence" {
+    for ([_][]const u8{
+        "The application must start. Display `Hello, World!` and the current UTC time.\n",
+        "Renew a library loan and show its new due date. Display `Loan renewed!`.\n",
+    }) |source_text| {
+        try exerciseAssignmentPackets(std.testing.allocator, source_text);
+        try std.testing.checkAllAllocationFailures(std.testing.allocator, exerciseAssignmentPackets, .{source_text});
+    }
+}
+fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const u8) !void {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try @import("reference_reconciliation_test.zig").prepare(a, &.{source_text});
+    defer fixture.deinit();
+    const initial = try reconciliation.initialize(a, fixture.inputs, fixture.extracted, 2);
+    const summary = try reconciliation.build_input.execute(a, initial);
+    const summary_packet = try input.reconciliationCompositionPacket(allocator, summary, fixture.inputs, fixture.text.registry);
+    defer packets.release(summary_packet);
+    try std.testing.expect(summary_packet.assignmentContext(.{ .bytes = "summary" }) != null);
+    try std.testing.expect(summary_packet.assignmentContext(.{ .bytes = "roles" }) == null);
+    const global = try reconciliation.summaries(a, initial, fixture.context());
+    const composed = try input.reconciliationCompositionPacket(allocator, global, fixture.inputs, fixture.text.registry);
+    defer packets.release(composed);
+    const full = try input.reconciliationPacket(allocator, global, fixture.inputs, fixture.text.registry, .all);
+    defer packets.release(full);
+    const full_json = try std.json.parseFromSlice(std.json.Value, a, full.body(), .{});
+    defer full_json.deinit();
+    for ([_][]const u8{ "dispositions", "signals", "roles", "conflicts" }) |id| {
+        const selected = try packets.withAssignmentContext(allocator, composed, .{ .bytes = id });
+        defer packets.release(selected);
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, selected.body(), .{});
+        defer parsed.deinit();
+        try checkProjectedPacket(a, selected.body());
+        for ([_][]const u8{ "claims", "citations", "preserved_tokens", "passive_literals" }) |field| {
+            try std.testing.expectEqualStrings(
+                try std.json.Stringify.valueAlloc(a, full_json.value.object.get(field).?, .{}),
+                try std.json.Stringify.valueAlloc(a, parsed.value.object.get(field).?, .{}),
+            );
+        }
+        const assignment = parsed.value.object.get("assignment").?.object;
+        if (std.mem.eql(u8, id, "roles")) {
+            try std.testing.expect(!assignment.contains("summaries"));
+            try std.testing.expect(!assignment.contains("member_summary_ids"));
+            const rules = assignment.get("constraints").?.array.items;
+            try std.testing.expectEqual(@as(usize, 1), rules.len);
+            try std.testing.expectEqualStrings("supported_role_assignment", rules[0].object.get("constraint").?.string);
+            try std.testing.expectEqual(@as(usize, 6), assignment.get("role_definitions").?.array.items.len);
+            for (assignment.get("role_definitions").?.array.items) |definition| {
+                const role = std.meta.stringToEnum(reconciliation.r.GenerationRole, definition.object.get("role").?.string).?;
+                try std.testing.expectEqualStrings(try role.purpose(a), definition.object.get("purpose").?.string);
+            }
+        } else {
+            try std.testing.expect(assignment.contains("summaries"));
+            const encoded_rules = try std.json.Stringify.valueAlloc(a, assignment.get("constraints").?, .{});
+            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "supported_role_assignment") == null);
+            if (std.mem.eql(u8, id, "dispositions")) try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "reciprocal_conflict") != null);
+            if (std.mem.eql(u8, id, "signals")) try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "retained_claim_covered") != null);
+            if (std.mem.eql(u8, id, "conflicts")) try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "conflict_pair_covered") != null);
+        }
+    }
+}
+
+test "shared text choice projection retains unrelated fixed exclusions" {
+    const base = try packets.create(std.testing.allocator, "{}", .workflow_step, .initial_generation, null);
+    defer packets.release(base);
+    const fixed = try packets.withExcludedVariants(std.testing.allocator, base, &.{.{ .kind = "source" }});
+    defer packets.release(fixed);
+    const first = try input.withTextChoices(std.testing.allocator, fixed, &.{7}, &.{});
+    defer packets.release(first);
+    try std.testing.expectEqual(@as(usize, 2), first.excludedVariants().len);
+    try std.testing.expectEqualStrings("source", first.excludedVariants()[0].kind);
+    try std.testing.expectEqualStrings("exact_copy", first.excludedVariants()[1].kind);
+    const second = try input.withTextChoices(std.testing.allocator, first, &.{}, &.{2});
+    defer packets.release(second);
+    try std.testing.expectEqual(@as(usize, 2), second.excludedVariants().len);
+    try std.testing.expectEqualStrings("source", second.excludedVariants()[0].kind);
+    try std.testing.expectEqualStrings("passive", second.excludedVariants()[1].kind);
+    try std.testing.expectEqual(@as(usize, 1), second.integerChoices().len);
+    try std.testing.expectEqualStrings("exact_copy", second.integerChoices()[0].kind);
+}
 fn exercisePackets(allocator: std.mem.Allocator) !void {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
@@ -195,6 +277,46 @@ test "typed and admitted packet context preserve exact numbers and assignment ow
     const base = try packets.create(std.testing.allocator, "{\"candidate\":{}}", .workflow_step, .initial_generation, null);
     defer packets.release(base);
     try std.testing.expectError(error.InvalidModelInputPacket, packets.withContext(struct {}, std.testing.allocator, base, "candidate", .{}));
+}
+
+test "packet projections replace native contexts while preserving repair authority and ownership" {
+    try repairPacketContexts(std.testing.allocator);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, repairPacketContexts, .{});
+}
+fn repairPacketContexts(allocator: std.mem.Allocator) !void {
+    const authorization = "native-repair";
+    var digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(authorization, &digest, .{});
+    const permit: @import("domain/workflow_retry.zig").Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = digest, .revision = 7, .maximum_targets = 1 };
+    const producer: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 3 } };
+    const derived = owned: {
+        const base = try packets.createRepair(allocator, "{\"evidence\":1e0}", .workflow_step, .{ .atomic_repair = .{ .bytes = authorization } }, .{ .bytes = "replacement" }, permit, producer);
+        defer packets.release(base);
+        const original = try packets.withAssignmentContexts(allocator, base, &.{.{ .id = .{ .bytes = "old" }, .body = "{}" }});
+        defer packets.release(original);
+        const replaced = try packets.withAssignmentContexts(allocator, original, &.{.{ .id = .{ .bytes = "current" }, .body = "{\"instruction\":\"Preserve evidence\"}" }});
+        defer packets.release(replaced);
+        const restricted = try packets.withRestrictions(allocator, replaced, &.{.{ .kind = "unavailable" }}, &.{.{ .kind = "exact_copy", .field = "claim_id", .allowed = &.{7} }});
+        defer packets.release(restricted);
+        const selected = try packets.withAssignmentContext(allocator, restricted, .{ .bytes = "current" });
+        defer packets.release(selected);
+        break :owned try packets.withContext(struct { value: bool }, allocator, selected, "prerequisites", .{ .value = true });
+    };
+    defer packets.release(derived);
+    try std.testing.expectEqualStrings("{\"evidence\":1e0,\"assignment\":{\"instruction\":\"Preserve evidence\"},\"prerequisites\":{\"value\":true}}", derived.body());
+    try std.testing.expect(derived.assignmentContext(.{ .bytes = "old" }) == null);
+    try std.testing.expectEqualStrings("{\"instruction\":\"Preserve evidence\"}", derived.assignmentContext(.{ .bytes = "current" }).?);
+    try std.testing.expectEqualDeep(permit, derived.repairPermit().?);
+    try std.testing.expectEqualDeep(producer, derived.repairOrigin().?);
+    try std.testing.expect(derived.unit() == .workflow_step);
+    try std.testing.expectEqualStrings(authorization, derived.purpose().atomic_repair.bytes);
+    try std.testing.expectEqualStrings("replacement", derived.resultDefinition().?.bytes);
+    try std.testing.expectEqual(@as(usize, 1), derived.integerChoices().len);
+    try std.testing.expectEqualStrings("exact_copy", derived.integerChoices()[0].kind);
+    try std.testing.expectEqualStrings("claim_id", derived.integerChoices()[0].field);
+    try std.testing.expectEqualSlices(i64, &.{7}, derived.integerChoices()[0].allowed);
+    try std.testing.expectEqual(@as(usize, 1), derived.excludedVariants().len);
+    try std.testing.expectEqualStrings("unavailable", derived.excludedVariants()[0].kind);
 }
 
 fn packetContextPrecision(allocator: std.mem.Allocator) !void {

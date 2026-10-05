@@ -142,14 +142,25 @@ pub fn build(b: *std.Build) void {
     const all_tests = b.addRunArtifact(b.addTest(.{ .name = "repository-tests", .root_module = all_tests_module }));
     all_tests.setCwd(b.path("."));
     test_step.dependOn(&all_tests.step);
-    const e2e_tests = b.addTest(.{ .root_module = e2e_module });
-    const run_e2e_tests = b.addRunArtifact(e2e_tests);
-    b.step("test-e2e-harness", "Test single-case E2E fixture and publication checks").dependOn(&run_e2e_tests.step);
+    const integration_module = b.createModule(.{
+        .root_source_file = b.path("integration.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
+            .{ .name = "unicode_normalization", .module = unicode_module },
+        },
+    });
+    integration_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
+    // Imported engine modules retain their own tests in the repository suite.
+    const integration_tests = b.addTest(.{ .root_module = integration_module, .filters = &.{"test.harness.integration.tests."} });
+    const run_integration_tests = b.addRunArtifact(integration_tests);
     const launcher_tests = b.addSystemCommand(&.{"sh"});
-    launcher_tests.addFileArg(b.path("test/harness/e2e/launcher_test.sh"));
+    launcher_tests.addFileArg(b.path("test/harness/integration/launcher_test.sh"));
     launcher_tests.addFileArg(b.path("scripts/e2e-spec.sh"));
-    b.step("test-e2e-launcher", "Test local E2E environment setup and argument forwarding without API calls").dependOn(&launcher_tests.step);
-    test_step.dependOn(&launcher_tests.step);
+    const integration_step = b.step("test-integration", "Run fixed offline harness and launcher integration tests");
+    integration_step.dependOn(&run_integration_tests.step);
+    integration_step.dependOn(&launcher_tests.step);
     const e2e_executable = b.addExecutable(.{ .name = "sdde-e2e-spec", .root_module = e2e_module });
     const run_e2e = b.addRunArtifact(e2e_executable);
     run_e2e.has_side_effects = true;
@@ -607,9 +618,10 @@ pub fn build(b: *std.Build) void {
     const verify_step = b.step("verify", "Run all repository verification");
     verify_step.dependOn(lint_step);
     verify_step.dependOn(test_step);
+    verify_step.dependOn(integration_step);
     verify_step.dependOn(smoke_step);
     @import("build/test_registration.zig").check(b.allocator, verify_step, &.{
-        all_tests, run_executable_tests, run_yaml_safety_tests, run_unicode_tests,
+        all_tests, run_integration_tests, run_executable_tests, run_yaml_safety_tests, run_unicode_tests,
     }) catch |err| std.debug.panic("full-suite test registration failed: {s}", .{@errorName(err)});
     // Live execution is reachable only from the explicitly selected manual
     // commands. Check transitive dependencies, including every targeted suite.

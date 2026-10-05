@@ -205,7 +205,7 @@ pub fn replace(a: std.mem.Allocator, response: g.Response, selected: Target, rep
         switch (selected) {
             .record => records[index] = replacement.record,
             .attributed => return error.InvalidSpecificationRepair,
-            .provenance => records[index].provenance = replacement.provenance,
+            .provenance => return error.InvalidSpecificationRepair,
             .value => |field| {
                 if (field.field == .relationship) {
                     const relationships = try a.dupe(g.spec.BusinessValue, records[index].content.entity.relationships);
@@ -215,7 +215,7 @@ pub fn replace(a: std.mem.Allocator, response: g.Response, selected: Target, rep
             },
         }
     } else switch (selected) {
-        .provenance => |subject| (try attributed(.model, &result.content, subject)).provenance = replacement.provenance,
+        .provenance => return error.InvalidSpecificationRepair,
         .attributed => |subject| (try attributed(.model, &result.content, subject)).* = replacement.attributed,
         .value => |field| (try attributed(.model, &result.content, field.subject)).value = replacement.value,
         .record => unreachable,

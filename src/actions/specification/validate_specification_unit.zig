@@ -8,7 +8,7 @@ pub const Action = struct {
         const session = @import("../../domain/specification_session.zig");
         if (proposed.revision == 0 or !current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
         var result = try g.validate(allocator, self.validator, context, try session.unit(current.completed), proposed.response);
-        if (result == .valid) if (try session.checkMembership(current, result.valid)) |issue| {
+        if (result == .valid) if (try session.checkConsistency(allocator, current, result.valid)) |issue| {
             result = .{ .invalid = issue };
         };
         @import("../../domain/specification_repair.zig").retainGroupTarget(proposed, &result) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;

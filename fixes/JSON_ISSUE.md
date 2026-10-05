@@ -48,9 +48,9 @@ an alteration log. [§22.6](../design/contracts/22-repair.md#226-unparseable-out
 owns the exact contract; it supersedes this note's earlier recommendation against
 any prefix removal.
 
-- Try the original complete response first. After `SyntaxError` only, match the
-  exact leading `{"{`, remove its first two bytes (`{"`) once, then strictly parse
-  the entire remainder. Valid JSON, including a property named `{`, is unchanged.
+- Try the original complete response first. After `SyntaxError` only, apply the
+  bounded opening-prefix parser defined in §22.6, then strictly parse the entire
+  remainder. Valid JSON, including a property named `{`, is unchanged.
 - Keep one shared model-envelope decoder for both admission operations and
   debugger inspection. The existing domain handoff supplies its validated bytes
   to generation, review and repair consumers; composition uses the validated tree.
@@ -59,8 +59,8 @@ any prefix removal.
   uses its original diagnostic and existing correction flow; exhaustion still
   prevents publication. This cannot recover missing requirements.
 - Retain a typed normalization fact. Emit warning `model.response_normalized`,
-  diagnostic `REMOVED_LEADING_BRACE_QUOTE`, with node/request/attempt correlation.
-  It means exactly two leading bytes were removed. A logging failure stops the
+  diagnostic `REMOVED_LEADING_BRACE_QUOTE` or `REMOVED_REPEATED_FIELD_PREFIX`,
+  with node/request/attempt correlation. A logging failure stops the
   runner; schema failure after normalization remains a separate rejection.
 - Show normalization in the debugger beside the original text and derived tree.
   Requests, prompts, provider calls, retries and token accounting do not change.
@@ -68,6 +68,20 @@ any prefix removal.
 Implementation uses the existing owners and adds no dependency, action, prompt or
 configuration switch. Verification status is recorded below. No live call or E2E
 run is authorized by this implementation request.
+
+**3 October extension:** the reported `{"kind{"kind":...` opening artifact now
+uses the same decoder as the earlier `{"{` artifact. Unrelated member names are
+covered by the same repeated-name rule. Raw captures, remainder validation and
+failure diagnostics retain their existing owners; no model retry is needed solely
+for an admitted prefix. Offline checks do not establish broader live model quality.
+
+The envelope, request-workflow, logging/debugger, architecture and lint steps pass
+554 tests, including one-call admission, schema rejection, warning-log failure,
+Unicode names, depth boundaries and allocation failures. Full offline `verify`
+passes 1,280 of 1,281 tests and the packaging smoke checks. The remaining failure
+is the pre-existing specification-generation scenario 103, with
+`OperationExecutionFailed` and retained source-support findings at revision 6,
+also present in the earlier saved verification log. No live E2E run was performed.
 
 ## Can the existing JSON correction action fix a poor initial response?
 

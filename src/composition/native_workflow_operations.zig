@@ -136,6 +136,7 @@ pub const Assembly = struct {
     build_reconciliation_summary: reconciliation.BuildSummary,
     validate_reconciliation_dispositions: reconciliation.ValidateDispositions,
     validate_reconciliation_signals: reconciliation.ValidateSignals,
+    validate_reconciliation_roles: reconciliation.ValidateRoles,
     validate_reconciliation_conflicts: reconciliation.ValidateConflicts,
     assign_reconciliation_records: reconciliation.AssignRecords,
     build_reconciliation_records: reconciliation.BuildRecords,
@@ -155,6 +156,8 @@ pub const Assembly = struct {
     check_reconciliation: reference_model.CheckReconciliation,
     collect_reconciliation: reference_model.CollectReconciliation,
     specification_source_readiness: specification.SourceReadiness,
+    source_preservation_policy: authority.SourcePreservationPolicy,
+    project_source_preservation: authority.ProjectSourcePreservation,
     initialize_specification: specification.Initialize,
     check_specification: specification.Check,
     build_specification_packet: specification.BuildInput,
@@ -181,6 +184,9 @@ pub const Assembly = struct {
     merge_omission_repair: omission_repair.Merge,
     build_specification_support: specification_support.BuildInput,
     collect_specification_support: specification_support.Collect,
+    check_specification_support_localization: specification_support.CheckLocalization,
+    build_specification_support_loss: specification_support.BuildLossInput,
+    collect_specification_support_loss: specification_support.CollectLoss,
     apply_specification_support: specification_support.Apply,
     advance_specification_review: specification_support.Advance,
     initialize_specification_review: specification_support.Initialize,
@@ -213,7 +219,7 @@ pub const Assembly = struct {
     build_reference_snapshot: publication.BuildSnapshot,
     render_reference_context: publication.RenderReference,
     prepare_specification_output: publication.Prepare,
-    entries: [core.entries.len + 158 + model_request.count]operations.Entry,
+    entries: [core.entries.len + 164 + model_request.count]operations.Entry,
     registry: operations.Registry,
 
     pub fn init(self: *Assembly, allocator: std.mem.Allocator, project_source: source.ProjectCapturer, preset_source: source.PresetEnumerator, preset_capture: source.PresetCapturer, document_parser: parser.Parser, policies: toolchain.PolicyRegistry, unicode: normalizer.Normalizer, directory_inspector: reference_source.Inspector, feature_inspector: feature_source.Inspector, input_capture: input_source.Capturer, state_parser: input_parser.StateParser, form_parser: input_parser.FormParser, reference_inventory: corpus_source.Enumerator, reference_capture: corpus_source.Capturer, reference_decoder: corpus_decoder.Decoder, case_folder: normalizer.CaseFolder, reference_identity: identity_source.Source, classifier: normalizer.LexicalClassifier) void {
@@ -297,6 +303,7 @@ pub const Assembly = struct {
             .build_reconciliation_summary = .{ .allocator = allocator },
             .validate_reconciliation_dispositions = .{ .allocator = allocator, .action = .{} },
             .validate_reconciliation_signals = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
+            .validate_reconciliation_roles = .{ .allocator = allocator },
             .validate_reconciliation_conflicts = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
             .assign_reconciliation_records = .{ .allocator = allocator },
             .build_reconciliation_records = .{ .allocator = allocator },
@@ -319,6 +326,8 @@ pub const Assembly = struct {
             .validate_passive_literals = .{ .allocator = allocator, .action = .{ .normalizer = unicode, .folder = case_folder, .classifier = classifier } },
             .model_requests = undefined,
             .specification_source_readiness = .{},
+            .source_preservation_policy = .{},
+            .project_source_preservation = .{ .allocator = allocator },
             .initialize_specification = .{ .allocator = allocator },
             .project_specification_document = .{ .allocator = allocator },
             .build_authority_needs = .{ .allocator = allocator },
@@ -365,6 +374,9 @@ pub const Assembly = struct {
             .merge_omission_repair = .{ .allocator = allocator, .action = .{ .validator = .{ .normalizer = unicode, .folder = case_folder } } },
             .build_specification_support = .{ .allocator = allocator },
             .collect_specification_support = .{ .allocator = allocator },
+            .check_specification_support_localization = .{},
+            .build_specification_support_loss = .{ .allocator = allocator },
+            .collect_specification_support_loss = .{ .allocator = allocator },
             .apply_specification_support = .{ .allocator = allocator },
             .advance_specification_review = .{ .allocator = allocator },
             .initialize_specification_review = .{ .allocator = allocator },
@@ -430,6 +442,8 @@ pub const Assembly = struct {
             entry(reference_model.CheckReconciliation, &self.check_reconciliation),
             entry(reference_model.CollectReconciliation, &self.collect_reconciliation),
             entry(specification.SourceReadiness, &self.specification_source_readiness),
+            entry(authority.SourcePreservationPolicy, &self.source_preservation_policy),
+            entry(authority.ProjectSourcePreservation, &self.project_source_preservation),
             entry(specification.Initialize, &self.initialize_specification),
             entry(specification.Check, &self.check_specification),
             entry(specification.BuildInput, &self.build_specification_packet),
@@ -463,6 +477,9 @@ pub const Assembly = struct {
             entry(omission_repair.Merge, &self.merge_omission_repair),
             entry(specification_support.BuildInput, &self.build_specification_support),
             entry(specification_support.Collect, &self.collect_specification_support),
+            entry(specification_support.CheckLocalization, &self.check_specification_support_localization),
+            entry(specification_support.BuildLossInput, &self.build_specification_support_loss),
+            entry(specification_support.CollectLoss, &self.collect_specification_support_loss),
             entry(specification_support.Apply, &self.apply_specification_support),
             entry(specification_support.Advance, &self.advance_specification_review),
             entry(specification_support.Initialize, &self.initialize_specification_review),
@@ -500,6 +517,7 @@ pub const Assembly = struct {
             entry(reconciliation.BuildSummary, &self.build_reconciliation_summary),
             entry(reconciliation.ValidateDispositions, &self.validate_reconciliation_dispositions),
             entry(reconciliation.ValidateSignals, &self.validate_reconciliation_signals),
+            entry(reconciliation.ValidateRoles, &self.validate_reconciliation_roles),
             entry(reconciliation.ValidateConflicts, &self.validate_reconciliation_conflicts),
             entry(reconciliation.AssignRecords, &self.assign_reconciliation_records),
             entry(reconciliation.BuildRecords, &self.build_reconciliation_records),
@@ -553,6 +571,9 @@ pub const Assembly = struct {
         self.capture_principle_registry.action.source.?.capability = root;
         self.capture_principle_registry.action.config = if (config.principles) |value| @import("../domain/principle_policy.zig").Input.fromConfig(value) else null;
         self.build_principles.action.config = if (config.principles) |value| @import("../domain/principle_policy.zig").Input.fromConfig(value) else null;
+    }
+    pub fn bindConfiguration(self: *Assembly, config: *const @import("../domain/config.zig").SDDToolKitConfig) void {
+        self.source_preservation_policy.policy = &config.validation;
     }
     pub fn bindWorkflows(self: *Assembly, registry: *const @import("../domain/workflow_registry.zig").ValidatedWorkflowDefinitionRegistry) void {
         const contracts = registry.contractSource();

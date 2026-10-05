@@ -12,6 +12,7 @@ pub const assign_summary = @import("../actions/reference/assign_reference_summar
 pub const build_summary = @import("../actions/reference/build_reference_reconciliation_summary.zig").Action{};
 pub const validate_dispositions = @import("../actions/reference/validate_reference_claim_dispositions.zig").Action{};
 pub const validate_signals = @import("../actions/reference/validate_reference_signal_proposals.zig").Action{ .validator = @import("reference_text.zig").validator };
+pub const validate_roles = @import("../actions/reference/validate_reference_role_assignments.zig").Action{};
 pub const validate_conflicts = @import("../actions/reference/validate_reference_conflict_proposals.zig").Action{ .validator = @import("reference_text.zig").validator };
 pub const assign_records = @import("../actions/reference/assign_reference_reconciliation_identities.zig").Action{};
 pub const build_records = @import("../actions/reference/build_reference_reconciliation_records.zig").Action{};
@@ -46,14 +47,27 @@ pub fn summary(allocator: std.mem.Allocator, input: r.Input) !r.SummaryProposal 
 pub fn global(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
     const dispositions = try allocator.alloc(r.ClaimDispositionProposal, input.items.len);
     const signals = try allocator.alloc(r.SignalProposal, input.items.len);
+    const roles = try allocator.alloc(r.RoleAssignment, input.items.len);
+    var role_count: usize = 0;
+    var assigned_feature = false;
     for (input.items, dispositions, signals) |item, *disposition, *signal| {
         const ids = try allocator.alloc(r.ClaimId, 1);
         ids[0] = item.claim.id;
         disposition.* = .{ .claim_id = item.claim.id, .disposition = .{ .retained = .{} } };
+        const business = item.claim.content == .model and item.claim.content.model == .business;
         signal.* = .{ .claim_ids = ids, .content = content(item.claim) };
+        if (business) {
+            roles[role_count] = .{ .claim_ids = ids, .generation_roles = if (!assigned_feature)
+                &.{ .title, .description, .primary_goal, .primary_user_story, .entity_basis, .records }
+            else
+                &.{.records} };
+            role_count += 1;
+        }
+        if (business) assigned_feature = true;
     }
-    return .{ .claim_dispositions = dispositions, .signals = signals, .conflicts = &.{} };
+    return .{ .claim_dispositions = dispositions, .signals = signals, .role_assignments = roles[0..role_count], .conflicts = &.{} };
 }
+
 pub fn initialize(allocator: std.mem.Allocator, inputs: r.evidence.Inputs, extracted: r.extraction.Accounted, size: u32) !r.Progress {
     return validate_partitions.execute(allocator, try assign_partitions.execute(allocator, try partition.execute(allocator, try build_items.execute(allocator, inputs, extracted), size)));
 }
@@ -74,7 +88,9 @@ pub fn finish(allocator: std.mem.Allocator, input: r.Input, proposal: r.Proposal
     if (dispositions == .invalid) return .{ .invalid = dispositions.invalid };
     const signals = try validate_signals.execute(allocator, dispositions.valid, context);
     if (signals == .invalid) return .{ .invalid = signals.invalid };
-    const conflicts = try validate_conflicts.execute(allocator, signals.valid, context);
+    const roles = try validate_roles.execute(allocator, signals.valid);
+    if (roles == .invalid) return .{ .invalid = roles.invalid };
+    const conflicts = try validate_conflicts.execute(allocator, roles.valid, context);
     if (conflicts == .invalid) return .{ .invalid = conflicts.invalid };
     return .{ .valid = try account.execute(allocator, try build_records.execute(allocator, try assign_records.execute(allocator, conflicts.valid))) };
 }
