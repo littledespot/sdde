@@ -22,14 +22,14 @@ pub fn question(allocator: std.mem.Allocator, id: a.Id) a.Error![]const u8 {
 pub fn task(allocator: std.mem.Allocator, id: a.Id) a.Error![]const u8 {
     return switch (id.unit) {
         .feature => switch (id.slot) {
-            .display_name => "A name identifying the feature's purpose.",
+            .display_name => "A concise name derived from the feature's source-backed purpose. The source need not supply a title.",
             .description => "A description of intended user-visible behavior.",
-            .primary_goal => "The intended user benefit.",
-            .primary_user_story => "One narrative identifying the actor, their action and the intended result, preserving source-backed conditions and obligations.",
+            .primary_goal => "The intended user benefit derived from the source-backed behavior and outcome.",
+            .primary_user_story => "One narrative identifying a source-backed actor, action and intended result. The source need not use story format; preserve its conditions and obligations.",
             .acceptance_criteria => "Observable pass/fail outcomes.",
             .functional_requirements => "Required application behavior.",
             .scenario_coverage => "Source-required triggers, outcomes and exact copy.",
-            .entities => "Whether the specified behavior requires business entities. Judge source meaning, not an entity heading or explicit declaration of absence; displayed values alone do not establish entities.",
+            .entities => "Whether source-backed behavior requires business entities or relationships. Behavior can support required or not_applicable without an explicit declaration of absence; displayed values alone do not establish entities.",
             else => error.InvalidRequiredAuthority,
         },
         .record => |id_record| std.fmt.allocPrint(allocator, "Source support for {s} {d}, field {s}, member {d}.", .{ @tagName(id_record.kind), id_record.ordinal, @tagName(id.slot), id.member }),

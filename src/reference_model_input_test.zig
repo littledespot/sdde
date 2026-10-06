@@ -24,6 +24,70 @@ test "reconciliation assignments scope instructions while retaining complete sou
         try std.testing.checkAllAllocationFailures(std.testing.allocator, exerciseAssignmentPackets, .{source_text});
     }
 }
+
+test "role handoffs offer and accept the same retained groups as authoring and readback" {
+    const r = reconciliation.r;
+    const stage = @import("domain/reference_reconciliation_stage.zig");
+    const refs = @import("domain/reference_support.zig");
+    const codec = @import("domain/model_candidate_json.zig");
+    const snapshot = @import("domain/reference_snapshot.zig");
+    const binding = @import("domain/specification_source_binding.zig");
+    const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 45 }, .attempt = .{ .value = 1 } };
+    for ([_][2][]const u8{
+        .{ "MOCK Start the application and show a greeting.\n", "MOCK Also display UTC date and time.\n" },
+        .{ "MOCK Renew an eligible library loan.\n", "MOCK Also show its new return deadline.\n" },
+    }) |sources| for ([_]r.Disposition{ .superseded, .duplicate }) |retired| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try @import("reference_reconciliation_test.zig").prepare(a, &sources);
+        defer fixture.deinit();
+        const global = try reconciliation.summaries(a, try reconciliation.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+        var proposal = try reconciliation.global(a, global);
+        const mixed = [_]r.ClaimId{ global.items[0].claim.id, global.items[1].claim.id };
+        proposal.claim_dispositions[0].disposition = if (retired == .superseded)
+            .{ .superseded = .{ .related_claim_ids = &.{mixed[1]} } }
+        else
+            .{ .duplicate = .{ .target_claim_id = mixed[1] } };
+        proposal.signals[0].claim_ids = &mixed;
+        const parsed: r.Parsed = .{ .phase = .signals, .input = global, .proposal = .{ .global = proposal } };
+        const signals = (try reconciliation.validate_signals.execute(a, (try reconciliation.validate_dispositions.execute(a, parsed)).valid, fixture.context())).valid;
+        try std.testing.expect(!try refs.eligibleSelection(signals.prior.dispositions, &mixed));
+        try std.testing.expect(try refs.eligibleSelection(signals.prior.dispositions, &.{mixed[1]}));
+        try std.testing.expect(!try refs.eligibleSelection(signals.prior.dispositions, &.{}));
+        try std.testing.expectError(error.InvalidReferenceReconciliation, refs.eligibleSelection(signals.prior.dispositions, &.{.{ .ordinal = 999 }}));
+        const packet = try stage.packet(std.testing.allocator, .{ .roles = signals }, fixture.inputs, fixture.text.registry);
+        defer packets.release(packet);
+        const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+        const offered = body.value.object.get("accepted").?.object.get("signals").?.array.items;
+        try std.testing.expectEqual(@as(usize, 1), offered.len);
+        // Filtering never renumbers the native occurrence or removes source evidence.
+        try std.testing.expectEqual(@as(i64, 2), offered[0].object.get("signal_id").?.integer);
+        try std.testing.expectEqual(global.items.len, body.value.object.get("claims").?.array.items.len);
+        const roles = std.enums.values(r.GenerationRole);
+        const bad: stage.Response = .{ .roles = .{ .role_assignments = &.{.{ .signal_id = .{ .ordinal = 1 }, .generation_roles = roles }} } };
+        const rejected = try stage.collect(a, .{ .roles = signals }, packet, try codec.encodeSelected(stage.Response, a, bad), origin);
+        const failure = (try reconciliation.validate_roles.execute(a, (try reconciliation.validate_signals.execute(a, (try reconciliation.validate_dispositions.execute(a, rejected)).valid, fixture.context())).valid)).invalid;
+        try std.testing.expectEqual(.role_assignment, failure.issue.rule);
+        try std.testing.expectEqualDeep(origin, failure.origin.?);
+        const good: stage.Response = .{ .roles = .{ .role_assignments = &.{.{ .signal_id = .{ .ordinal = 2 }, .generation_roles = roles }} } };
+        const accepted = try stage.collect(a, .{ .roles = signals }, packet, try codec.encodeSelected(stage.Response, a, good), origin);
+        const complete = (try reconciliation.finish(a, global, accepted.proposal.global, fixture.context())).valid;
+        try binding.validate(refs.records(complete), fixture.inputs);
+        try std.testing.expectEqual(@as(usize, 1), try binding.recordCount(refs.records(complete)));
+        try std.testing.expectEqual(@as(usize, 0), complete.records.signals[0].value.generation_roles.len);
+        const contracts = try @import("test_fixtures/extraction_contract.zig").Fixture.init(a);
+        const contract = try @import("domain/reference_extraction_contract.zig").capture(a, contracts.authority, fixture.inputs.chunks.partition);
+        const stored = try snapshot.build(.{ .bytes = "references" }, fixture.inputs, fixture.extracted, complete, fixture.text.registry, contract);
+        try snapshot.validate(a, stored);
+        var forged = stored;
+        const changed = try a.dupe(r.Signal, stored.signals);
+        changed[0].value.generation_roles = roles;
+        forged.signals = changed;
+        try std.testing.expectError(error.InvalidReferenceSnapshot, snapshot.validate(a, forged));
+    };
+}
+
 fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const u8) !void {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();

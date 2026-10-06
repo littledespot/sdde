@@ -288,9 +288,9 @@ test "authoring assignments retain field purpose bound meaning and exact choices
                     try std.testing.expectEqualDeep(bound.brief.title.claim_ids, brief.title.claim_ids);
                     try std.testing.expectEqualDeep(bound.brief.description.claim_ids, brief.description.claim_ids);
                     try std.testing.expectEqualDeep(bound.brief.primary_goal.claim_ids, brief.primary_goal.claim_ids);
-                    try std.testing.expectEqualStrings("A name identifying the feature's purpose.", brief.title.purpose);
-                    try std.testing.expectEqualStrings("A description of intended user-visible behavior.", brief.description.purpose);
-                    try std.testing.expectEqualStrings("The intended user benefit.", brief.primary_goal.purpose);
+                    try std.testing.expectEqualStrings(try references.r.GenerationRole.title.purpose(a), brief.title.purpose);
+                    try std.testing.expectEqualStrings(try references.r.GenerationRole.description.purpose(a), brief.description.purpose);
+                    try std.testing.expectEqualStrings(try references.r.GenerationRole.primary_goal.purpose(a), brief.primary_goal.purpose);
                     const selected = try schema.restrict(a, canonical.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
                     defer selected.release();
                     if (body.get("preserved_tokens").?.array.items.len != 0) {
@@ -311,12 +311,12 @@ test "authoring assignments retain field purpose bound meaning and exact choices
                 },
                 .entities => |entities| {
                     try std.testing.expectEqualDeep(bound.entities.claim_ids, entities.claim_ids);
-                    try std.testing.expect(std.mem.indexOf(u8, entities.purpose, "business entities") != null);
+                    try std.testing.expectEqualStrings(try references.r.GenerationRole.entity_basis.purpose(a), entities.purpose);
                 },
                 .records => |records| {
                     try std.testing.expectEqualDeep(bound.records.selection.claim_ids, records.claim_ids);
                     try std.testing.expectEqualDeep(bound.records.signal, records.signal);
-                    try std.testing.expectEqualStrings("Required application behavior. Observable pass/fail outcomes.", records.purpose);
+                    try std.testing.expectEqualStrings(try references.r.GenerationRole.records.purpose(a), records.purpose);
                 },
             }
         }
@@ -441,8 +441,42 @@ test "specification choices acceptance and coverage share retained claim eligibi
             };
             try std.testing.expectEqual(eligible, covered);
             const missing: r.ClaimId = .{ .ordinal = 999 };
-            try std.testing.expect(!provenance.eligibleClaim(null));
+            try std.testing.expect(!@import("domain/reference_support.zig").eligibleClaim(null));
             try std.testing.expectError(error.InvalidReferenceReconciliation, provenance.select(a, context, .{ .claim_ids = &.{missing}, .clarification_response_ids = &.{} }));
+        }
+    }
+}
+
+test "specification initialization rejects partial authoring roles in unrelated sources" {
+    const binding = @import("domain/specification_source_binding.zig");
+    const sessions = @import("domain/specification_session.zig");
+    const r = references.r;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{
+        "The application must start, display `Hello, World!` and output UTC date and time.\n",
+        "A borrower renews an eligible loan and sees its new due date.\n",
+    }) |source| {
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+        _ = try sessions.initialize(fixture.context.inputs.corpus.feature_id, fixture.context);
+        const signals = try a.dupe(r.Signal, fixture.context.references.records.signals);
+        var partial = fixture.context;
+        partial.references.records.signals = signals;
+        for (signals) |*signal| signal.value.generation_roles = &.{ .description, .records };
+        try std.testing.expectError(error.InvalidSpecificationBinding, binding.validate(@import("domain/reference_support.zig").records(partial.references), partial.inputs));
+        try std.testing.expectError(error.InvalidSpecificationBinding, sessions.initialize(partial.inputs.corpus.feature_id, partial));
+        const roles = std.meta.tags(r.GenerationRole);
+        const remaining = try a.alloc(r.GenerationRole, roles.len - 1);
+        for (roles) |missing| {
+            var count: usize = 0;
+            for (roles) |role| if (role != missing) {
+                remaining[count] = role;
+                count += 1;
+            };
+            for (signals) |*signal| signal.value.generation_roles = remaining;
+            try std.testing.expectError(error.InvalidSpecificationBinding, sessions.initialize(partial.inputs.corpus.feature_id, partial));
         }
     }
 }

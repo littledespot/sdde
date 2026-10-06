@@ -26,7 +26,7 @@ pub fn eligible(records: refs.Records, id: a.Id, claim: r.ClaimId) bool {
             const item = r.item(records.items, claim) catch break :token false;
             break :token disposition != .conflicting and item.claim.content == .preserved_token and std.meta.eql(item.claim.content.preserved_token.value.id, selected);
         },
-        .feature, .record => @import("specification_provenance.zig").eligibleClaim(disposition),
+        .feature, .record => @import("reference_support.zig").eligibleClaim(disposition),
         .decision => false,
     };
 }

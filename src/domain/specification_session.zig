@@ -81,7 +81,7 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
     var claims: std.ArrayList(@import("reference_reconciliation.zig").Item) = .empty;
     var scopes: std.ArrayList(@import("reference_evidence.zig").Scope) = .empty;
     for (context.references.records.assignments.checked.prior.prior.dispositions) |disposition| {
-        if (!p.eligibleClaim(disposition.disposition)) continue;
+        if (!@import("reference_support.zig").eligibleClaim(disposition.disposition)) continue;
         const item = try @import("reference_reconciliation.zig").item(all, disposition.claim_id);
         try claims.append(a, item);
         try scopes.append(a, .{ .state_id = all.state_id, .chunk_id = item.claim.chunk_id });

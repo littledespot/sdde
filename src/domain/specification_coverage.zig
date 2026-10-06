@@ -46,7 +46,7 @@ pub fn checkRecords(allocator: std.mem.Allocator, references: @import("reference
     var accounts: std.ArrayList(Account) = .empty;
     var obligations: std.ArrayList(Obligation) = .empty;
     for (references.dispositions) |disposition| {
-        if (!@import("specification_provenance.zig").eligibleClaim(disposition.disposition)) continue;
+        if (!@import("reference_support.zig").eligibleClaim(disposition.disposition)) continue;
         const item = r.item(items, disposition.claim_id) catch return error.InvalidSpecificationCoverage;
         var targets: std.ArrayList(Key) = .empty;
         for (singletons(brief, candidate)) |entry| {

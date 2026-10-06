@@ -15,7 +15,7 @@ pub fn render(a: std.mem.Allocator, value: draft.State, clarifications: c.Valida
         try write(w, "\n## " ++ section[1] ++ "\n\n");
         var count: usize = 0;
         for (value.reference.extraction.claims, value.reference.dispositions) |claim, disposition| {
-            if (!@import("specification_provenance.zig").eligibleClaim(disposition.disposition) or
+            if (!@import("reference_support.zig").eligibleClaim(disposition.disposition) or
                 claim.content != .model or claim.content.model != section[0]) continue;
             try write(w, "- ");
             try @import("reference_markdown.zig").business(w, value.reference, @field(claim.content.model, @tagName(section[0])).value);

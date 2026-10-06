@@ -109,7 +109,7 @@ pub const Constraint = enum {
             .unique_members => "Do not repeat an identical member set for the same projection kind.",
             .retained_claim_covered => "Every retained claim must appear in a signal.",
             .token_projected => "Native code projects every nonconflicting preserved token, including after supersession.",
-            .supported_role_assignment => "Select an existing native signal_id from this assignment. Assign each group once. Roles must be unique within its assignment and may be shared across groups.",
+            .supported_role_assignment => "Select a native signal_id from accepted.signals; every claim in an authoring group must be retained. Assign each group once. Roles must be unique within its assignment and may be shared across groups.",
             .conflict_claim_covered => "Every conflicting claim must appear in a conflict.",
             .conflict_pair_covered => "Explain every accepted conflict group; native code attaches its membership.",
         };

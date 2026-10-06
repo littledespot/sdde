@@ -58,13 +58,7 @@ fn hasRole(signal: r.Signal, role: r.GenerationRole) bool {
 
 fn activeSignal(records: refs.Records, signal: r.Signal) Error!bool {
     if (signal.value.claim_ids.len == 0) return error.InvalidSpecificationBinding;
-    for (signal.value.claim_ids) |id| {
-        const disposition = for (records.dispositions) |value| {
-            if (value.claim_id.ordinal == id.ordinal) break value.disposition;
-        } else return error.InvalidSpecificationBinding;
-        if (disposition != .retained) return false;
-    }
-    return true;
+    return refs.eligibleSelection(records.dispositions, signal.value.claim_ids) catch return error.InvalidSpecificationBinding;
 }
 
 fn checked(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, claims: []const r.ClaimId) Error!spec.Selection {
@@ -75,13 +69,7 @@ fn checked(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs,
     };
     defer a.free(selected.citation_ids);
     defer a.free(selected.scopes);
-    for (selected.claim_ids) |id| {
-        for (records.dispositions) |disposition| {
-            if (disposition.claim_id.ordinal != id.ordinal) continue;
-            if (disposition.disposition != .retained) return error.InvalidSpecificationBinding;
-            break;
-        } else return error.InvalidSpecificationBinding;
-    }
+    if (!(refs.eligibleSelection(records.dispositions, selected.claim_ids) catch return error.InvalidSpecificationBinding)) return error.InvalidSpecificationBinding;
     return .{ .claim_ids = selected.claim_ids, .clarification_response_ids = &.{} };
 }
 
@@ -157,12 +145,6 @@ pub fn validate(records: refs.Records, inputs: evidence.Inputs) Error!void {
         if (!try activeSignal(records, signal)) continue;
         for (signal.value.claim_ids) |id| {
             const item = try r.item(records.items, id);
-            var retained = false;
-            for (records.dispositions) |disposition| if (disposition.claim_id.ordinal == id.ordinal) {
-                retained = disposition.disposition == .retained;
-                break;
-            };
-            if (!retained) return error.InvalidSpecificationBinding;
             _ = evidence.resolve(inputs, .{ .state_id = records.items.state_id, .chunk_id = item.claim.chunk_id }) catch return error.InvalidSpecificationBinding;
         }
     }

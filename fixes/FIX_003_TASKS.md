@@ -12,8 +12,8 @@ This checklist tracks implementation; it adds no independent engine policy.
 | FIX3-04 | D3 decision, FIX3-02 | Summary parser/projection, schema, atomic repair, fixtures | Remove keys/token echoes in initial and repair responses; preserve response order, insertion/deletion identity and exact tokens. | Implemented |
 | FIX3-05 | D1/D5 decision | Forced-classification action, extraction repair, shared composition runtime/compiler, YAML | Distinguish forced/empty collections from semantic token-only claims; no fabricated origin or malformed-output fallback. | Implemented |
 | FIX3-06 | D4 decision, FIX3-02 | Conflict-group owner, disposition/conflict validators, atomic/omission repair, schema | Preserve chain/triangle/overlap semantics; select groups once; reject foreign handles and grouped repair scope expansion. | Implemented |
-| FIX3-07 | FIX3-01–06 | Prompts, packaged resources, contracts §§12/16/22, diagrams, implementation records | Remove superseded global composition and wire shapes. Separate semantic authoring selections from complete source evidence at the shared packet owner. Run owning tests, full offline verification, native packaging and diff review. | Verified offline including assignment follow-up: 1300/1300 tests; 129/129 build steps |
-| FIX3-08 | FIX3-07, separate approval for each run | Existing live E2E harness and explicit cases | Actual production publication and rubric evaluation; repeated cases establish semantic reliability separately from mechanical acceptance. | Newly approved follow-up passed reconciliation, then failed specification initialization with four roles unassigned by call 7. No publication or rubric result. |
+| FIX3-07 | FIX3-01–06 | Prompts, packaged resources, contracts §§12/16/22, diagrams, implementation records | Remove superseded global composition and wire shapes. Separate semantic authoring selections from complete source evidence at the shared packet owner. Clarify shared field derivation without requiring finished wording in sources. Run owning tests, full offline verification, native packaging and diff review. | Verified including both follow-ups: 1301/1301 tests; 129/129 build steps (§12.5). |
+| FIX3-08 | FIX3-07, separate approval for each run | Existing live E2E harness and explicit cases | Actual production publication and rubric evaluation; repeated cases establish semantic reliability separately from mechanical acceptance. | Last live run failed initialization with four roles unassigned by call 7. Shared role-purpose follow-up is verified offline; the next live publication/rubric run awaits its required approval. |
 
 Initial requests and protocol corrections use the same named phase schemas and
 immutable packets. Atomic and source-omission repairs use the same native
@@ -34,3 +34,5 @@ and full offline checks are in [§12.3](FIX_003.md#123-assignment-projection-fol
 The newly approved follow-up run is recorded in
 [§12.4](FIX_003.md#124-approved-follow-up-live-execution). No successful publication,
 rubric result or improved live reliability is claimed by this checklist.
+Resumed shared role-purpose work is recorded in
+[§12.5](FIX_003.md#125-resumed-role-purpose-guidance-work).

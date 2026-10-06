@@ -347,7 +347,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             const all = try @import("../domain/specification_provenance.zig").items(context);
             const dispositions = context.references.records.assignments.checked.prior.prior.dispositions;
             const first = for (dispositions) |disposition| {
-                if (@import("../domain/specification_provenance.zig").eligibleClaim(disposition.disposition) and (try businessValue(allocator, (try r.item(all, disposition.claim_id)).claim)) != null) break disposition.claim_id;
+                if (@import("../domain/reference_support.zig").eligibleClaim(disposition.disposition) and (try businessValue(allocator, (try r.item(all, disposition.claim_id)).claim)) != null) break disposition.claim_id;
             } else return error.InvalidFixture;
             const value = try attributed(allocator, all, &.{first});
             if (request.id().purpose == .atomic_repair) {
@@ -781,7 +781,7 @@ fn businessValue(allocator: std.mem.Allocator, claim: r.extraction.Claim) !?g.sp
 }
 
 fn eligibleRecordClaim(dispositions: []const r.ClaimDisposition, id: r.ClaimId) bool {
-    for (dispositions) |disposition| if (std.meta.eql(disposition.claim_id, id)) return @import("../domain/specification_provenance.zig").eligibleClaim(disposition.disposition);
+    for (dispositions) |disposition| if (std.meta.eql(disposition.claim_id, id)) return @import("../domain/reference_support.zig").eligibleClaim(disposition.disposition);
     return false;
 }
 

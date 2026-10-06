@@ -161,6 +161,10 @@ only its exact-group rule and role purposes projected from the shared requiremen
 descriptions; summary, disposition, signal and conflict rules remain with their
 own assignments. A group may support several roles and a role several groups;
 unsupported roles remain unassigned and mandatory coverage still blocks authoring.
+Shared field purposes describe derivation from source-backed behavior, not a
+requirement for a ready-made title, goal or story in the source. Role assignment
+assesses each purpose using explicit or necessarily implied meaning; it cannot
+invent an actor, benefit or entity merely to fill coverage.
 No context-only literal is promoted to behavior merely to fill a role.
 Record authoring runs per bound group and may
 return several requirements. Each generation and repair packet presents the

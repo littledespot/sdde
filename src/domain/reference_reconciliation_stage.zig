@@ -27,11 +27,15 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
         .roles, .conflicts => |v| v.signals,
         else => &.{},
     };
-    const groups = try scratch.alloc(struct { signal_id: r.SignalSelectionId, value: r.ValidatedSignal }, signal_values.len);
-    for (signal_values, groups, 0..) |signal, *group, i| group.* = .{ .signal_id = .{ .ordinal = ((switch (prior) {
-        .roles, .conflicts => |v| v.prior.source.signals.at(i, signal_values.len),
-        else => unreachable,
-    }) catch return error.InvalidReferenceReconciliation).ordinal }, .value = signal };
+    var groups: std.ArrayList(struct { signal_id: r.SignalSelectionId, value: r.ValidatedSignal }) = .empty;
+    for (signal_values, 0..) |signal, i| {
+        if (prior == .roles and !try @import("reference_support.zig").eligibleSelection(prior.roles.prior.dispositions, signal.claim_ids)) continue;
+        const occurrence = (switch (prior) {
+            .roles, .conflicts => |v| v.prior.source.signals.at(i, signal_values.len),
+            else => unreachable,
+        }) catch return error.InvalidReferenceReconciliation;
+        try groups.append(scratch, .{ .signal_id = .{ .ordinal = occurrence.ordinal }, .value = signal });
+    }
     const conflict_groups: []const @import("reference_conflict_groups.zig").Group = switch (prior) {
         .roles, .conflicts => |v| v.prior.proposal.conflict_groups,
         else => &.{},
@@ -40,7 +44,7 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     const accepted = switch (prior) {
         .dispositions => try json.encode(r.PartitionId, scratch, current.partition.id),
         .signals => |value| try json.encode(@TypeOf(.{ .dispositions = value.dispositions, .signals = value.proposal.signals }), scratch, .{ .dispositions = value.dispositions, .signals = value.proposal.signals }),
-        .roles, .conflicts => |value| try json.encode(@TypeOf(.{ .dispositions = value.prior.dispositions, .signals = groups, .conflict_groups = conflict_catalogue }), scratch, .{ .dispositions = value.prior.dispositions, .signals = groups, .conflict_groups = conflict_catalogue }),
+        .roles, .conflicts => |value| try json.encode(@TypeOf(.{ .dispositions = value.prior.dispositions, .signals = groups.items, .conflict_groups = conflict_catalogue }), scratch, .{ .dispositions = value.prior.dispositions, .signals = groups.items, .conflict_groups = conflict_catalogue }),
     };
     const values = std.json.parseFromSlice(std.json.Value, scratch, accepted, .{}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
     const with_facts = try packets.withJsonContext(a, selected, "accepted", values.value);

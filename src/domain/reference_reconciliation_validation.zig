@@ -520,6 +520,7 @@ pub fn checkRoles(allocator: std.mem.Allocator, prior: r.CheckedSignals) r.Error
             if ((source.signals.at(index, signals.len) catch return error.InvalidReferenceReconciliation).ordinal == id) break index;
         } else null;
         if (assignment.generation_roles.len == 0 or selected == null) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
+        if (!try @import("reference_support.zig").eligibleSelection(prior.prior.dispositions, signals[selected.?].claim_ids)) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
         for (assignments[0..assignment_index]) |earlier| if (earlier.signal_id.ordinal == id) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
         for (assignment.generation_roles, 0..) |role, index| for (assignment.generation_roles[0..index]) |earlier| {
             if (role == earlier) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
