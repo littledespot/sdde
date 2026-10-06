@@ -9,8 +9,7 @@ pub fn suffix(allocator: std.mem.Allocator, summary_count: usize) ![]const u8 {
         "  validate-partitions: { use: validate-reference-reconciliation-partitions, on: { ok: input-0, failed: end.failed } }\n");
     for (0..summary_count + 1) |index| {
         const block = try std.fmt.allocPrint(allocator, "  input-{d}: {{ use: build-reference-reconciliation-input, on: {{ ok: propose-{d}, failed: end.failed }} }}\n" ++
-            "  propose-{d}: {{ use: test.propose-reconciliation, on: {{ ok: parse-{d} }} }}\n" ++
-            "  parse-{d}: {{ use: parse-reference-reconciliation-result, on: {{ ok: check-{d}, failed: end.failed }} }}\n", .{ index, index, index, index, index, index });
+            "  propose-{d}: {{ use: test.propose-reconciliation, on: {{ ok: check-{d} }} }}\n", .{ index, index, index, index });
         defer allocator.free(block);
         try result.appendSlice(allocator, block);
         if (index == summary_count) {

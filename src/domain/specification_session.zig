@@ -75,7 +75,9 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const assigned = try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(index), current.record_cursor);
+    // Completed units are repaired under an atomic target and its evidence.
+    // Their authoring cursor no longer selects a current source assignment.
+    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(index), current.record_cursor));
     var claims: std.ArrayList(@import("reference_reconciliation.zig").Item) = .empty;
     var scopes: std.ArrayList(@import("reference_evidence.zig").Scope) = .empty;
     for (context.references.records.assignments.checked.prior.prior.dispositions) |disposition| {
@@ -100,7 +102,7 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
     const selected = try unit(index);
     const payload = .{
         .unit = selected,
-        .source_assignment = try binding.guidance(a, assigned),
+        .source_assignment = assigned,
         .claims = projected.claims,
         .citations = projected.citations,
         .preserved_tokens = exact_choices.items,

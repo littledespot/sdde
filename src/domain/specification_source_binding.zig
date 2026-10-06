@@ -112,6 +112,19 @@ pub fn record(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inpu
     return error.InvalidSpecificationBinding;
 }
 
+/// A canonical record retains exactly one accepted group's ordered selection.
+/// An aggregate role selection does not authorize a new cross-group record.
+pub fn recordForClaims(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, claims: []const r.ClaimId) Error!Bound {
+    matching: for (0..try recordCount(records)) |index| {
+        const bound = try record(a, records, inputs, index);
+        const selected = bound.records.selection.claim_ids;
+        if (claims.len != selected.len) continue;
+        for (claims, selected) |left, right| if (left.ordinal != right.ordinal) continue :matching;
+        return bound;
+    }
+    return error.InvalidSpecificationBinding;
+}
+
 pub fn forUnit(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, unit: Unit, record_index: usize) Error!Bound {
     return switch (unit) {
         .brief => .{ .brief = .{

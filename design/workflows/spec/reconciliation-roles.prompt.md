@@ -1,5 +1,4 @@
-Map prerequisite signal groups to authoring roles using assignment.role_definitions
-and assignment.constraints. A role selects source evidence for later authoring;
+Select accepted signal_id groups to authoring roles using assignment.role_definitions. A role selects source evidence for later authoring;
 the group need not contain the finished field's wording. Do not draft fields,
 regroup claims or change signal content.
 Assign every source-supported role. Leave unsupported roles unassigned; do not

@@ -11,7 +11,8 @@ const packets = @import("model_input_packet.zig");
 const Origin = @import("model_candidate_origin.zig").Origin;
 
 pub const Error = error{ InvalidCompositionBinding, ConflictingCompositionPart, IncompleteComposition, InvalidAssembledCandidate } || std.mem.Allocator.Error;
-pub const Prerequisite = struct { part: usize, origin: Origin };
+const Snapshot = @import("atomic_repair.zig").Snapshot;
+pub const Prerequisite = struct { part: usize, origin: ?Origin, native_snapshot: ?Snapshot = null };
 pub const Binding = struct {
     plan: *const composition.Plan,
     part: usize,
@@ -19,6 +20,12 @@ pub const Binding = struct {
     epoch: identity.StageRunEpochId,
     schema: *const schema.Schema,
     prerequisites: []const Prerequisite,
+
+    fn copy(self: Binding, allocator: std.mem.Allocator) std.mem.Allocator.Error!Binding {
+        var result = self;
+        result.prerequisites = try allocator.dupe(Prerequisite, self.prerequisites);
+        return result;
+    }
 
     pub fn valid(self: Binding) bool {
         if (self.part >= self.plan.parts().len) return false;
@@ -30,7 +37,9 @@ pub const Binding = struct {
             var found = false;
             for (self.prerequisites) |required| {
                 if (required.part != index) continue;
-                if (found or required.origin.request.value == 0 or required.origin.attempt.value == 0) return false;
+                if (found) return false;
+                if ((required.origin != null) == (required.native_snapshot != null)) return false;
+                if (required.origin) |origin| if (origin.request.value == 0 or origin.attempt.value == 0) return false;
                 found = true;
             }
             if (!found) return false;
@@ -41,9 +50,26 @@ pub const Binding = struct {
     }
 };
 pub const Entry = struct {
-    proof: *const payload.Evidence,
-    origin: Origin,
+    source: union(enum) { model: struct { proof: *const payload.Evidence, origin: Origin }, native: struct { value: std.json.Value, snapshot: Snapshot } },
     binding: Binding,
+    pub fn value(self: Entry) std.json.Value {
+        return switch (self.source) {
+            .model => |model| model.proof.candidate().json().*,
+            .native => |value_| value_.value,
+        };
+    }
+    pub fn nativeSnapshot(self: Entry) ?Snapshot {
+        return switch (self.source) {
+            .native => |v| v.snapshot,
+            .model => null,
+        };
+    }
+    pub fn origin(self: Entry) ?Origin {
+        return switch (self.source) {
+            .model => |model| model.origin,
+            .native => null,
+        };
+    }
 };
 pub const State = struct {
     plan: *const composition.Plan,
@@ -66,8 +92,8 @@ pub const State = struct {
         for (self.plan.parts(), 0..) |_, index| {
             if (!self.plan.dependsOn(part, index)) continue;
             const entry = self.getEntry(index) orelse return error.IncompleteComposition;
-            try prerequisites.append(allocator, .{ .part = index, .origin = entry.origin });
-            try input_values.append(allocator, .{ .part = index, .value = entry.proof.candidate().json().* });
+            try prerequisites.append(allocator, .{ .part = index, .origin = entry.origin(), .native_snapshot = entry.nativeSnapshot() });
+            try input_values.append(allocator, .{ .part = index, .value = entry.value() });
         }
         return .{
             .plan = self.plan,
@@ -85,7 +111,7 @@ pub const State = struct {
         var result: std.json.ObjectMap = .{};
         for (binding.prerequisites) |required| {
             const source = self.getEntry(required.part).?;
-            try result.put(allocator, self.plan.parts()[required.part].id.bytes, source.proof.candidate().json().*);
+            try result.put(allocator, self.plan.parts()[required.part].id.bytes, source.value());
         }
         return .{ .object = result };
     }
@@ -112,31 +138,47 @@ pub const State = struct {
         _ = identity.validateBinding(ledger, ledger.revision(), request.model_request_id, self.base.unit(), request.model_request_id.model_operation_id, self.base.purpose()) catch return error.InvalidCompositionBinding;
         if (self.getEntry(binding.part)) |existing| {
             const current_bytes = candidate.association().result().complete.content();
-            const existing_bytes = existing.proof.candidate().association().result().complete.content();
-            if (!sameOrigin(existing.origin, origin) or !std.mem.eql(u8, current_bytes, existing_bytes)) return error.ConflictingCompositionPart;
+            if (existing.source != .model) return error.ConflictingCompositionPart;
+            const existing_bytes = existing.source.model.proof.candidate().association().result().complete.content();
+            if (!sameOptionalOrigin(existing.origin(), origin) or !std.mem.eql(u8, current_bytes, existing_bytes)) return error.ConflictingCompositionPart;
             return self;
         }
         const entries = try allocator.alloc(?Entry, self.plan.parts().len);
         @memset(entries, null);
         @memcpy(entries[0..self.entries.len], self.entries);
-        const retained_prerequisites = try allocator.dupe(Prerequisite, binding.prerequisites);
-        var retained_binding = binding;
-        retained_binding.prerequisites = retained_prerequisites;
-        entries[binding.part] = .{ .proof = proof, .origin = origin, .binding = retained_binding };
+        entries[binding.part] = .{ .source = .{ .model = .{ .proof = proof, .origin = origin } }, .binding = try binding.copy(allocator) };
         return .{ .plan = self.plan, .base = self.base, .epoch = self.epoch, .entries = entries, .origin = self.origin orelse origin };
     }
+    /// Schema-check a native projection without fabricating provider evidence.
+    /// The native caller owns its semantic prerequisites; this owner is structural.
+    pub fn retainNative(self: State, allocator: std.mem.Allocator, binding: Binding, value: std.json.Value) Error!State {
+        try self.checkBinding(binding);
+        if (self.getEntry(binding.part) != null) return error.ConflictingCompositionPart;
+        const bytes = try std.json.Stringify.valueAlloc(allocator, value, .{});
+        defer allocator.free(bytes);
+        // The retained tree belongs to the caller's arena. Use the shared
+        // lossless parser before exposing numbers to the schema value view.
+        const copied = @import("strict_json.zig").parse(allocator, bytes, .{ .maximum_depth = schema.max_json_depth }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAssembledCandidate;
+        if (payload.validateValue(envelope.value(&copied.value), binding.schema.root()) != null) return error.InvalidAssembledCandidate;
+        const snapshot = try @import("atomic_repair.zig").snapshot(std.json.Value, allocator, copied.value);
+        const entries = try allocator.dupe(?Entry, self.entries);
+        entries[binding.part] = .{ .source = .{ .native = .{ .value = copied.value, .snapshot = snapshot } }, .binding = try binding.copy(allocator) };
+        var result = self;
+        result.entries = entries;
+        return result;
+    }
     pub fn assemble(self: State, allocator: std.mem.Allocator) Error!Candidate {
-        if (self.entries.len != self.plan.parts().len or self.origin == null) return error.IncompleteComposition;
+        if (self.entries.len != self.plan.parts().len) return error.IncompleteComposition;
         var result: std.json.Value = .{ .object = .{} };
         for (self.entries, 0..) |optional, index| {
             const entry = optional orelse return error.IncompleteComposition;
             try self.checkBinding(entry.binding);
-            const value = entry.proof.candidate().json().*;
+            const value = entry.value();
             for (self.plan.parts()[index].paths) |path| {
                 try place(allocator, &result, path.segments, value);
             }
         }
-        return .{ .body = try std.json.Stringify.valueAlloc(allocator, result, .{}), .base = self.base, .origin = self.origin.?, .plan = self.plan, .entries = self.entries, .value = result };
+        return .{ .body = try std.json.Stringify.valueAlloc(allocator, result, .{}), .base = self.base, .origin = self.origin, .plan = self.plan, .entries = self.entries, .value = result };
     }
     pub fn getEntry(self: State, index: usize) ?Entry {
         return if (index < self.entries.len) self.entries[index] else null;
@@ -149,11 +191,11 @@ pub const State = struct {
             if (!self.plan.dependsOn(binding.part, index)) continue;
             expected += 1;
             const current = self.getEntry(index) orelse return error.InvalidCompositionBinding;
-            input_values[expected - 1] = .{ .part = index, .value = current.proof.candidate().json().* };
+            input_values[expected - 1] = .{ .part = index, .value = current.value() };
             var matched = false;
             for (binding.prerequisites) |required| {
                 if (required.part != index) continue;
-                if (matched or !sameOrigin(required.origin, current.origin)) return error.InvalidCompositionBinding;
+                if (matched or !sameOptionalOrigin(required.origin, current.origin()) or !std.meta.eql(required.native_snapshot, current.nativeSnapshot())) return error.InvalidCompositionBinding;
                 matched = true;
             }
             if (!matched) return error.InvalidCompositionBinding;
@@ -171,7 +213,7 @@ fn hasContext(part: composition.Part, base: *const packets.Packet) bool {
 pub const Candidate = struct {
     body: []const u8,
     base: *const packets.Packet,
-    origin: Origin,
+    origin: ?Origin,
     plan: *const composition.Plan,
     entries: []const ?Entry,
     value: std.json.Value,
@@ -190,7 +232,7 @@ pub const Candidate = struct {
                 // Structural parents have no invented producer. Attribute a
                 // present subtree only when all its contributing values agree.
                 if (!selected.isPrefixOf(path) and !(path.isPrefixOf(selected) and composition.lookup(self.value, selected) != null)) continue;
-                const producer_origin = (entry orelse return null).origin;
+                const producer_origin = (entry orelse return null).origin() orelse return null;
                 if (result) |prior| if (!sameOrigin(prior, producer_origin)) return null;
                 result = producer_origin;
             }
@@ -218,4 +260,8 @@ fn place(allocator: std.mem.Allocator, destination: *std.json.Value, segments: [
 
 fn sameOrigin(left: Origin, right: Origin) bool {
     return left.request.value == right.request.value and left.attempt.value == right.attempt.value and left.kind == right.kind;
+}
+
+fn sameOptionalOrigin(left: ?Origin, right: ?Origin) bool {
+    return if (left) |value| if (right) |other| sameOrigin(value, other) else false else right == null;
 }

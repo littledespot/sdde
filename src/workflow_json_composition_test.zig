@@ -67,6 +67,33 @@ test "composition flow rejects missing dependency foreign selection incomplete a
     try rejected(state, assemble(), &resources);
 }
 
+test "native composition flow admits declared placements only after their prerequisites" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const resources = try fixtureResources(arena.allocator());
+    const initial = try flow.apply(.{}, initialize(), &resources, .ok);
+    var native = step();
+    native.requires = &.{.json_composition};
+    native.replaces = &.{.json_composition};
+    native.parameters = &.{.{ .id = .{ .bytes = "native-composition-part" }, .value = .{ .string = "flags" } }};
+    try rejected(initial, native, &resources);
+    var ready = try flow.apply(initial, request("text"), &resources, .ok);
+    ready = try flow.apply(ready, complete(), &resources, .ok);
+    ready = try flow.apply(ready, retain(), &resources, .ok);
+    ready = try flow.apply(ready, retire(), &resources, .ok);
+    try std.testing.expect(ready.eql(try flow.apply(ready, native, &resources, .more)));
+    try std.testing.expect(ready.eql(try flow.apply(ready, native, &resources, .failed)));
+    const placed = try flow.apply(ready, native, &resources, .ok);
+    try std.testing.expect(placed.completed.isSet(placed.plan.?.part(.{ .bytes = "flags" }).?));
+    try rejected(placed, native, &resources);
+    try std.testing.expect((try flow.apply(placed, assemble(), &resources, .ok)).eql(.{}));
+    native.parameters = &.{.{ .id = .{ .bytes = "native-composition-part" }, .value = .{ .string = "unknown" } }};
+    try rejected(ready, native, &resources);
+    native.parameters = &.{.{ .id = .{ .bytes = "native-composition-part" }, .value = .{ .string = "flags" } }};
+    native.requires = &.{};
+    try rejected(ready, native, &resources);
+}
+
 fn rejected(state: flow.State, selected: compilation.CompiledStep, resources: []const compilation.CompiledResource) !void {
     try std.testing.expectError(error.InvalidWorkflowComposition, flow.apply(state, selected, resources, .ok));
 }

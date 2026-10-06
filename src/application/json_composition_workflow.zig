@@ -9,7 +9,7 @@ const requests = @import("model_request_workflow.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const identity = @import("../domain/model_request_identity.zig");
-const Payload = union(enum) { state: runtime.State, candidate: runtime.Candidate, validated: *const runtime.Candidate };
+pub const Payload = union(enum) { state: runtime.State, candidate: runtime.Candidate, validated: *const runtime.Candidate };
 pub const Value = opaque {};
 pub const state_schema = values.schema(.json_composition, Value, 1, null).captured();
 pub const assembled_schema = values.schema(.assembled_json, Value, 1, null).captured();
@@ -103,19 +103,19 @@ fn read(view: *const data.View, schema: data.Schema) operations.Error!*const Own
 fn descriptor(action: pipeline.NodeContract, parameters: []const @import("../domain/workflow_operation.zig").ParameterDescriptor) @import("../domain/workflow_operation.zig").Contract {
     return .{ .id = action.id, .kind = .step, .parameters = parameters, .requires = action.requires, .produces = action.produces, .replaces = action.replaces, .invalidates = action.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none };
 }
-fn publish(owner: *Owner, schema: data.Schema, replacement: bool, invalidates: []const pipeline.DataKey) operations.Error!execution.Candidate {
+pub fn publish(owner: *Owner, schema: data.Schema, replacement: bool, invalidates: []const pipeline.DataKey) operations.Error!execution.Candidate {
     const value = values.adopt(owner.allocator, schema, Value, Owner, owner, Owner.view, Owner.destroy, null) catch return error.OperationExecutionFailed;
     var delta: pipeline.NodeDelta = .{};
     if (replacement) delta.data_replacements[@intFromEnum(schema.key)] = value else delta.data_writes[@intFromEnum(schema.key)] = value;
     for (invalidates) |key| delta.data_invalidations.insert(key);
     return .{ .outcome = .ok, .delta = delta };
 }
-const Owner = struct {
+pub const Owner = struct {
     allocator: std.mem.Allocator,
     arena: std.heap.ArenaAllocator,
     retained: [2]?*data.Value = @splat(null),
     payload: Payload,
-    fn create(allocator: std.mem.Allocator, source: *const data.View, keys: []const pipeline.DataKey) operations.Error!*Owner {
+    pub fn create(allocator: std.mem.Allocator, source: *const data.View, keys: []const pipeline.DataKey) operations.Error!*Owner {
         const owner = allocator.create(Owner) catch return error.OperationExecutionFailed;
         owner.* = .{ .allocator = allocator, .arena = .init(allocator), .payload = undefined };
         errdefer owner.destroy();
@@ -125,7 +125,7 @@ const Owner = struct {
     fn view(self: *const Owner) *const Value {
         return @ptrCast(self);
     }
-    fn destroy(self: *Owner) void {
+    pub fn destroy(self: *Owner) void {
         for (self.retained) |value| if (value) |retained| values.destroy(retained);
         self.arena.deinit();
         self.allocator.destroy(self);

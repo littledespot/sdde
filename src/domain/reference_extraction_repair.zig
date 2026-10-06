@@ -289,6 +289,12 @@ pub const Omission = struct {
                 if (entry.outcome == .claims) try claims.appendSlice(a, entry.outcome.claims);
                 try claims.append(a, checked.valid.entries[0].outcome.claims[0]);
                 changed.outcome = .{ .claims = try claims.toOwnedSlice(a) };
+                if (entry.outcome == .no_feature_claim) {
+                    // Forced irrelevant choices depended on the retired outcome.
+                    // The existing classification validator/repair gate now owns them.
+                    changed.token_classifications = &.{};
+                    changed.classification_origins = &.{};
+                }
             }
         };
         var result = facts.extraction.candidate;

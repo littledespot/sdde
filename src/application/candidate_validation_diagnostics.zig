@@ -21,7 +21,7 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
     }
     const reconciliation = @import("reference_reconciliation_workflow.zig");
     if (try @import("reference_reconciliation_repair_workflow.zig").diagnostic(view)) |rejection| return .{ .reconciliation = rejection };
-    for ([_]data.Schema{ reconciliation.summary_schema, reconciliation.dispositions_schema, reconciliation.signals_schema, reconciliation.conflicts_schema }) |schema| {
+    for ([_]data.Schema{ reconciliation.summary_schema, reconciliation.dispositions_schema, reconciliation.signals_schema, reconciliation.roles_schema, reconciliation.conflicts_schema }) |schema| {
         if (!view.contains(schema.key)) continue;
         const value = try values.read(view, schema, @import("../domain/reference_candidate_value.zig").Value);
         if (value.payload().* == .reconciliation_rejected) return .{ .reconciliation = value.payload().reconciliation_rejected };

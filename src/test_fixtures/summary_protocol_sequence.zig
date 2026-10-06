@@ -11,8 +11,8 @@ pub fn response(a: std.mem.Allocator, input: r.Input, attempt: u32, mode: Mode) 
     var proposal = try @import("reference_reconciliation.zig").summary(a, input);
     const first = input.progress.summary_count == 0;
     if (first) {
-        // After shape admission, native validation must discover both mixed
-        // content and the token coverage defect exposed by repairing selection.
+        // Native validation rejects a semantic selection mixing source kinds;
+        // mandatory token projections are constructed independently.
         try std.testing.expect(proposal.statements.len >= 2);
         const statements = try a.dupe(r.StatementProposal, proposal.statements);
         statements[0].claim_ids = try a.dupe(r.ClaimId, &.{ input.items[0].claim.id, input.items[1].claim.id });
@@ -21,23 +21,20 @@ pub fn response(a: std.mem.Allocator, input: r.Input, attempt: u32, mode: Mode) 
         @memcpy(retained[1..], statements[2..]);
         proposal.statements = retained;
     }
-    const body = try @import("../domain/model_candidate_json.zig").encodeSelected(@FieldType(r.Parsed, "proposal"), a, .{ .summary = proposal });
+    const body = try @import("reference_reconciliation.zig").modelWire(a, .{ .summary = proposal });
     if (input.progress.summary_count > 1 or (attempt == 3 and (first or mode == .recover))) return body;
     var parsed = try std.json.parseFromSlice(std.json.Value, a, body, .{});
-    const statement = &parsed.value.object.getPtr("statements").?.array.items[0];
-    const content = statement.object.getPtr("content").?;
-    const kind = content.object.get("kind").?;
-    _ = content.object.swapRemove("kind");
-    if (!first and attempt > 1) try statement.object.put(a, "kind", kind);
-    // The independent summary also nests a token payload incorrectly. Fixing
-    // the first diagnostic alone cannot establish complete shape conformance.
-    if (!first and attempt == 1) {
-        const token = parsed.value.object.getPtr("statements").?.array.items[1].object.getPtr("content").?;
-        const id = token.object.get("token_id").?;
-        _ = token.object.swapRemove("token_id");
-        var wrapper: std.json.ObjectMap = .{};
-        try wrapper.put(a, "token_id", id);
-        try token.object.put(a, "preserved_token", .{ .object = wrapper });
+    const statements = parsed.value.object.getPtr("statements").?;
+    if (statements.array.items.len == 0) {
+        // A token-only partition has no semantic statements to echo. Distinct
+        // malformed collection shapes still exercise bounded correction.
+        statements.* = if (attempt == 1) .{ .string = "invalid" } else .null;
+    } else {
+        const statement = &statements.array.items[0];
+        const content = statement.object.getPtr("content").?;
+        const kind = content.object.get("kind").?;
+        _ = content.object.swapRemove("kind");
+        if (!first and attempt > 1) try statement.object.put(a, "kind", kind);
     }
     return std.json.Stringify.valueAlloc(a, parsed.value, .{});
 }
@@ -51,34 +48,23 @@ pub fn assertMerge(before: *const data.View, after: *const data.View, ordinal: u
     try std.testing.expectEqual(prior.source.revision + 1, current.source.revision);
     try std.testing.expectEqualDeep(prior.source.origin, current.source.origin);
     try std.testing.expectEqual(initial_attempt, current.source.origin.?.attempt.value);
-    if (ordinal == 0) {
-        try std.testing.expectEqual(left.len, right.len);
-        try std.testing.expectEqual(@as(usize, 2), left[0].claim_ids.len);
-        try std.testing.expectEqual(@as(usize, 1), right[0].claim_ids.len);
-        try std.testing.expectEqualDeep(left[0].content, right[0].content);
-        try std.testing.expectEqualDeep(left[1..], right[1..]);
-        try std.testing.expectEqualDeep(prior.source.at(.{ .statement = 0 }, .content), current.source.at(.{ .statement = 0 }, .content));
-        const identities = try @import("../application/pipeline_values.zig").read(after, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
-        try std.testing.expectEqual(identities.recordCount(), current.source.at(.{ .statement = 0 }, .selections).?.request.value);
-        try std.testing.expect(identities.latestRecord().?.model_request_id.purpose == .atomic_repair);
-    } else {
-        try std.testing.expectEqual(@as(usize, 1), ordinal);
-        try std.testing.expectEqual(left.len + 1, right.len);
-        for (left, 0..) |statement, index| {
-            const preserved = for (right) |candidate| {
-                if (candidate.local_key == statement.local_key) break candidate;
-            } else return error.MissingSibling;
-            try std.testing.expectEqualDeep(statement, preserved);
-            try std.testing.expectEqualDeep(prior.source.at(.{ .statement = index }, .content), current.source.at(.{ .statement = index }, .content));
-        }
-        try std.testing.expect(current.source.last_repair.?.origin == null);
-    }
+    try std.testing.expectEqual(@as(usize, 0), ordinal);
+
+    try std.testing.expectEqual(left.len, right.len);
+    try std.testing.expectEqual(@as(usize, 2), left[0].claim_ids.len);
+    try std.testing.expectEqual(@as(usize, 1), right[0].claim_ids.len);
+    try std.testing.expectEqualDeep(left[0].content, right[0].content);
+    try std.testing.expectEqualDeep(left[1..], right[1..]);
+    try std.testing.expectEqualDeep(prior.source.at(.{ .statement = 0 }, .content), current.source.at(.{ .statement = 0 }, .content));
+    const identities = try @import("../application/pipeline_values.zig").read(after, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
+    try std.testing.expectEqual(identities.recordCount(), current.source.at(.{ .statement = 0 }, .selections).?.request.value);
+    try std.testing.expect(identities.latestRecord().?.model_request_id.purpose == .atomic_repair);
 }
 
 pub fn verify(driver: *@import("spec_generation_driver.zig").Driver, result: @import("../domain/run_outcome.zig").Outcome) !void {
     const runner = driver.runner;
     try std.testing.expectEqual(@as(usize, 1), driver.reconciliation_repair_calls);
-    try std.testing.expectEqual(@as(usize, 2), driver.reconciliation_merges);
+    try std.testing.expectEqual(@as(usize, 1), driver.reconciliation_merges);
     try std.testing.expectEqual(@as(usize, 0), driver.unchanged_reconciliation_merges);
     const ledger = runner.tokenLedger();
     try std.testing.expectEqual(driver.calls, ledger.accounted_operations.items.len);

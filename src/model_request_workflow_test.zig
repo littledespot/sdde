@@ -6621,7 +6621,7 @@ test "configured parts keep admitted siblings through protocol recovery and exha
                 try std.testing.expect(!view.contains(.json_composition));
                 const assembled = try composition_workflow.readValidated(&view);
                 try std.testing.expectEqualStrings("{\"address\":{\"street\":\"Main St\",\"zip\":\"3050\"},\"flags\":[true,false]}", assembled.body);
-                try std.testing.expectEqual(@as(usize, 1), assembled.origin.request.value);
+                try std.testing.expectEqual(@as(usize, 1), assembled.origin.?.request.value);
                 try std.testing.expectEqual(@as(usize, 3), assembled.producer(&.{ "address", "zip" }).?.request.value);
                 try std.testing.expectEqual(@as(u32, 3), assembled.producer(&.{ "address", "zip" }).?.attempt.value);
                 try std.testing.expectEqual(@as(usize, 2), assembled.producer(&.{"flags"}).?.request.value);

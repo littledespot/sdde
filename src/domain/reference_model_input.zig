@@ -38,9 +38,25 @@ pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.
     return reconciliationPacketFor(allocator, input, inputs, registry, .{ .shared = guidance_scope });
 }
 pub fn reconciliationCompositionPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry) ReconciliationError!*packets.Packet {
-    return reconciliationPacketFor(allocator, input, inputs, registry, .composed);
+    if (input.purpose != .summary) return error.InvalidReferenceReconciliation;
+    const ids = try @import("reference_reconciliation_projection.zig").semanticClaimIds(allocator, input.items);
+    defer allocator.free(ids);
+    return reconciliationPacketFor(allocator, input, inputs, registry, .{ .composed = .{ .assignment = .summary, .claim_ids = ids } });
 }
-const Presentation = union(enum) { shared: Constraint.Scope, composed };
+pub fn reconciliationPhasePacket(allocator: std.mem.Allocator, prior: @import("reference_reconciliation_stage.zig").Prior, inputs: evidence.Inputs, registry: literals.Registry) ReconciliationError!*packets.Packet {
+    const current = @import("reference_reconciliation_stage.zig").input(prior);
+    const ids = switch (prior) {
+        .dispositions => current.partition.group.claim_ids,
+        .signals => |value| try @import("reference_reconciliation_projection.zig").signalClaimIds(allocator, value),
+        .roles, .conflicts => &.{},
+    };
+    defer if (prior == .signals) allocator.free(ids);
+    const assignment: Constraint.Assignment = switch (prior) {
+        inline else => |_, tag| @field(Constraint.Assignment, @tagName(tag)),
+    };
+    return reconciliationPacketFor(allocator, current, inputs, registry, .{ .composed = .{ .assignment = assignment, .claim_ids = ids } });
+}
+const Presentation = union(enum) { shared: Constraint.Scope, composed: struct { assignment: Constraint.Assignment, claim_ids: []const reconciliation.ClaimId } };
 fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, presentation: Presentation) ReconciliationError!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
@@ -83,35 +99,34 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     const selected = try withTextChoices(allocator, packet, try passiveIds(scratch, common.passive_literals), &.{});
     if (presentation == .shared) return selected;
     defer packets.release(selected);
-    const assignments: []const Constraint.Assignment = if (input.purpose == .summary) &.{.summary} else &.{ .dispositions, .signals, .roles, .conflicts };
-    const contexts = try scratch.alloc(packets.AssignmentContext, assignments.len);
-    for (assignments, contexts) |assignment, *context| {
-        const constraints = try reconciliationGuidance(scratch, input.purpose, .{ .assignment = assignment });
-        const context_body = if (assignment == .roles) roles: {
-            const definitions = try scratch.alloc(RoleDefinition, std.meta.tags(reconciliation.GenerationRole).len);
-            for (std.meta.tags(reconciliation.GenerationRole), definitions) |role, *definition| definition.* = .{
-                .role = role,
-                .purpose = role.purpose(scratch) catch |err| return switch (err) {
-                    error.OutOfMemory => error.OutOfMemory,
-                    error.InvalidRequiredAuthority => error.InvalidReferenceReconciliation,
-                },
-            };
-            const role_context = .{ .constraints = constraints, .role_definitions = definitions };
-            break :roles try @import("model_candidate_json.zig").encode(@TypeOf(role_context), scratch, role_context);
-        } else other: {
-            const assignment_context = .{
-                .purpose = hierarchy.purpose,
-                .level = hierarchy.level,
-                .member_claim_ids = hierarchy.member_claim_ids,
-                .member_summary_ids = hierarchy.member_summary_ids,
-                .summaries = hierarchy.summaries,
-                .constraints = constraints,
-            };
-            break :other try @import("model_candidate_json.zig").encode(@TypeOf(assignment_context), scratch, assignment_context);
+    const assignment = presentation.composed.assignment;
+    const constraints = try reconciliationGuidance(scratch, input.purpose, .{ .assignment = assignment });
+    const context_body = if (assignment == .roles) roles: {
+        const definitions = try scratch.alloc(RoleDefinition, std.meta.tags(reconciliation.GenerationRole).len);
+        for (std.meta.tags(reconciliation.GenerationRole), definitions) |role, *definition| definition.* = .{
+            .role = role,
+            .purpose = role.purpose(scratch) catch |err| return switch (err) {
+                error.OutOfMemory => error.OutOfMemory,
+                error.InvalidRequiredAuthority => error.InvalidReferenceReconciliation,
+            },
         };
-        context.* = .{ .id = packets.AssignmentContextId.parse(@tagName(assignment)).?, .body = context_body };
-    }
-    return packets.withAssignmentContexts(allocator, selected, contexts);
+        const role_context = .{ .constraints = constraints, .role_definitions = definitions };
+        break :roles try @import("model_candidate_json.zig").encode(@TypeOf(role_context), scratch, role_context);
+    } else if (assignment == .conflicts) conflicts: {
+        const conflict_context = .{ .constraints = constraints };
+        break :conflicts try @import("model_candidate_json.zig").encode(@TypeOf(conflict_context), scratch, conflict_context);
+    } else other: {
+        const assignment_context = .{
+            .purpose = hierarchy.purpose,
+            .level = hierarchy.level,
+            .claim_ids = presentation.composed.claim_ids,
+            .member_summary_ids = hierarchy.member_summary_ids,
+            .summaries = hierarchy.summaries,
+            .constraints = constraints,
+        };
+        break :other try @import("model_candidate_json.zig").encode(@TypeOf(assignment_context), scratch, assignment_context);
+    };
+    return packets.withAssignmentContexts(allocator, selected, &.{.{ .id = packets.AssignmentContextId.parse(@tagName(assignment)).?, .body = context_body }});
 }
 const RoleDefinition = struct { role: reconciliation.GenerationRole, purpose: []const u8 };
 

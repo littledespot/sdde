@@ -2,7 +2,7 @@ const std = @import("std");
 const pipeline = @import("../../domain/pipeline.zig");
 const r = @import("../../domain/reference_reconciliation.zig");
 pub const Action = struct {
-    pub const contract: pipeline.NodeContract = .{ .id = "build-reference-reconciliation-summary", .kind = .action, .requires = &.{.reference_summary_identities}, .produces = &.{}, .replaces = &.{.reference_reconciliation_progress}, .invalidates = &.{ .reference_reconciliation_input, .raw_reference_reconciliation, .parsed_reference_reconciliation, .validated_reference_summary, .reference_summary_identities }, .side_effect = .none };
+    pub const contract: pipeline.NodeContract = .{ .id = "build-reference-reconciliation-summary", .kind = .action, .requires = &.{.reference_summary_identities}, .produces = &.{}, .replaces = &.{.reference_reconciliation_progress}, .invalidates = &.{ .reference_reconciliation_input, .parsed_reference_reconciliation, .validated_reference_summary, .reference_summary_identities }, .side_effect = .none };
     pub fn execute(_: Action, allocator: std.mem.Allocator, assignment: r.SummaryAssignment) r.Error!r.Progress {
         const checked = assignment.checked;
         if (assignment.statement_ids.len != checked.statements.len) return error.InvalidReferenceReconciliation;

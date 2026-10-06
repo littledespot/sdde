@@ -904,3 +904,16 @@ A parent subtree has one producer only when all present selected descendants sha
 that exact origin. Absent fields contribute none; an empty structural container or
 subtree with mixed origins has no single producer. Finer required-object selectors
 therefore preserve native consumer provenance without assigning a synthetic origin.
+
+
+[ADR 0022](../decisions/0022-native-reference-phase-handoffs.md) adds native part
+placement through a registered producer's `native-composition-part` parameter.
+The compiler verifies its configured part and prerequisites; YAML still chooses
+execution. The composition owner admits the projected value through that part's
+schema and binds exact prerequisite snapshots. Native values carry no provider
+origin; mixed assembly retains the actual model origins per selected subtree.
+Full candidate validation remains required. Reconciliation uses explicit native
+phase handoffs rather than composition to establish semantic prerequisites.
+Their current-phase assignment projections follow ADR 0022: complete evidence
+remains available, while semantic authoring receives only eligible claim IDs.
+Protocol corrections retain the same projection and acceptance rules.

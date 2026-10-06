@@ -43,6 +43,29 @@ reassessment remains a separate unapproved decision in FIX_002.
   construction, ledger validation and full-candidate publication.
 - Missing semantic support remains an authority gap, not a selection repair.
 
+**ADR 0022 reference handoff amendment (approved 6 October 2026):** use native
+occurrence-bound selections and group catalogues in initial and repaired
+reconciliation. Signal changes retire dependent roles; disposition changes retire
+affected signals while preserving independent groups. Rebuild through the same
+validated phases before canonical identity assignment and full-candidate checks.
+Mandatory exact-token content is reconstructed from the authorized source claim,
+without a model call. Summary ordering and retry occurrence identity are separate;
+removed local keys and token metadata reject on the model boundary. Conflict
+selection repairs return a group handle, and coupled group replacements declare
+semantic membership once. Exact old-value, revision, dependency snapshots and
+existing bounded retry accounting remain required. Outcome-changing extraction
+repairs retire forced classifications and re-enter classification validation.
+Initial summary/signal assignment selections follow ADR 0022's native projection;
+atomic and omission repairs continue to use their authorized target and exact
+dependencies, rather than borrowing a broader initial authoring selection.
+Completed specification units use the authorized repair target and current review
+evidence; their packets do not reuse a consumed authoring assignment. Pending
+authoring still binds and validates its current source group.
+Record omission insertion must retain one accepted group's complete ordered
+selection under ADR 0020, using the same binding check as canonical readback.
+Aggregate evidence from several groups cannot authorize an invented association
+or a cross-group insertion; it remains an unsafe candidate repair.
+
 ### 22.2 Repair classification
 
 Every diagnostic declares one class:

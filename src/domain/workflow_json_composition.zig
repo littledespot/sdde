@@ -53,11 +53,20 @@ pub fn apply(input: State, step: compilation.CompiledStep, resources: []const co
         state.request_completed = outcome == .ok and !request_lifecycle.terminates(step.requires) and !request_lifecycle.closesCount(step.requires);
     }
     if (contains(step.replaces, .json_composition)) {
-        if (state.plan == null or state.request_part == null or !state.request_completed or
-            !contains(step.requires, .prepared_model_request) or !contains(step.requires, .model_payload_schema_result)) return invalid();
-        // Repeating the same successful placement is idempotent. Starting a new
-        // request for that part above rejects instead of replacing its producer.
-        state.completed.set(state.request_part.?);
+        if (parameter(step.parameters, "native-composition-part")) |native| {
+            // A registered native producer declares one structural placement.
+            // Semantic eligibility and construction remain with that producer.
+            const plan = state.plan orelse return invalid();
+            if (native != .string or !contains(step.requires, .json_composition)) return invalid();
+            const index = plan.part(.{ .bytes = native.string }) orelse return invalid();
+            if (state.completed.isSet(index)) return invalid();
+            for (plan.parts()[index].requires) |required| if (!state.completed.isSet(required)) return invalid();
+            if (outcome == .ok) state.completed.set(index);
+        } else {
+            if (state.plan == null or state.request_part == null or !state.request_completed or
+                !contains(step.requires, .prepared_model_request) or !contains(step.requires, .model_payload_schema_result)) return invalid();
+            state.completed.set(state.request_part.?);
+        }
     }
     if (contains(step.invalidates, .json_composition)) {
         const plan = state.plan orelse return invalid();

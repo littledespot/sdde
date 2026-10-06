@@ -58,7 +58,6 @@ test "reconciliation repair definitions admit only the natively selected payload
     for ([_][2][]const u8{
         .{ "business_text", "{\"segments\":[\"Display a greeting.\"]}" },
         .{ "reference_text", "{\"nodes\":[{\"kind\":\"source\",\"source_id\":1}]}" },
-        .{ "token_reference", "{\"token_id\":1}" },
     }) |example| {
         const selected = schema.select(.{ .bytes = example[0] }).?;
         try checkDocument(selected.modelBytes(), .{ .bytes = example[1] });
@@ -251,8 +250,8 @@ test "correction locators resolve escaped names root alternatives and selected d
     const compiled = try parser.compiler().compile(a, bytes);
     const selected = compiled.select(.{ .bytes = "summary" }).?;
     const cases = [_]Case{
-        .{ .bytes = "{\"statements\":[{\"local_key\":1,\"claim_ids\":[1],\"content\":{\"model\":{\"kind\":\"business\",\"segments\":[]}}}]}", .rejection = .missing_required_property, .path = "/statements/0/content/kind" },
-        .{ .bytes = "{\"statements\":[{\"local_key\":1,\"claim_ids\":[1],\"kind\":\"model\",\"content\":{\"model\":{\"kind\":\"business\",\"segments\":[]}}}]}", .rejection = .unknown_property, .path = "/statements/0/kind" },
+        .{ .bytes = "{\"statements\":[{\"claim_ids\":[1],\"content\":{\"model\":{\"kind\":\"business\",\"segments\":[]}}}]}", .rejection = .missing_required_property, .path = "/statements/0/content/kind" },
+        .{ .bytes = "{\"statements\":[{\"claim_ids\":[1],\"kind\":\"model\",\"content\":{\"model\":{\"kind\":\"business\",\"segments\":[]}}}]}", .rejection = .unknown_property, .path = "/statements/0/kind" },
     };
     for (cases) |case| try checkDocument(selected.modelBytes(), case);
     const projection = @import("domain/model_schema_projection.zig");
@@ -261,12 +260,10 @@ test "correction locators resolve escaped names root alternatives and selected d
     const content = schema.findProperty(statement.object, "content").?.schema;
     try std.testing.expectEqualStrings("/properties/statements/items/properties/content", (try projection.locate(a, selected, content)).?);
     const shape = (try projection.outline(a, statement)).object;
-    try std.testing.expectEqual(@as(usize, 3), shape.get("fields").?.object.count());
-    try std.testing.expectEqual(@as(usize, 3), shape.get("required").?.array.items.len);
-    const tags = shape.get("fields").?.object.get("content").?.object.get("kind").?.array.items;
-    try std.testing.expectEqual(@as(usize, 2), tags.len);
-    try std.testing.expectEqualStrings("model", tags[0].string);
-    try std.testing.expectEqualStrings("preserved_token", tags[1].string);
+    try std.testing.expectEqual(@as(usize, 2), shape.get("fields").?.object.count());
+    try std.testing.expectEqual(@as(usize, 2), shape.get("required").?.array.items.len);
+    try std.testing.expectEqualStrings("object", shape.get("fields").?.object.get("content").?.object.get("type").?.string);
+    try std.testing.expect(compiled.select(.{ .bytes = "token_reference" }) == null);
     try std.testing.expect(!shape.get("fields").?.object.get("claim_ids").?.object.contains("items"));
     try std.testing.expect(try projection.locate(a, selected, compiled.root()) == null);
 }
@@ -293,7 +290,7 @@ test "selected protocol guidance explains duplicate property names and preserves
     for ([_][]const u8{
         "```json\n{}\n```",
         "{\n\"answer\":}",
-        "{\"statements\":[{\"local_key\":1,\"content\":\"first\",\"local_key\":2,\"content\":\"second\"}]}",
+        "{\"statements\":[{\"content\":\"first\",\"local_key\":2,\"content\":\"second\"}]}",
         "{\"groups\":[{\"items\":[{\"code\":\"a\",\"\\u0063ode\":\"b\"}]}]}",
     }) |bytes| {
         var fixture: Fixture = undefined;

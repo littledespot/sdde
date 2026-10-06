@@ -15,7 +15,8 @@ Every model node uses the shared request path in the third diagram.
 ## Reference processing
 
 The workflow extracts all reference chunks, rebuilds and validates extraction,
-then reconciles summary partitions and the global result. Composition assembly
+then reconciles summary partitions and validates each global phase before its
+descendant is requested. Composition assembly
 is deterministic and adds no model call.
 
 ```mermaid
@@ -23,7 +24,7 @@ flowchart LR
     ROOT["spec-generation<br/>Reference processing"]
     ROOT --> EX["extract-references<br/>Repeat for each reference chunk"]
     EX --> CONTENT["content-request<br/>extraction-content-prompt<br/>1 call per chunk"]
-    EX --> CLASSIFICATIONS["classifications<br/>extraction-classifications-prompt<br/>1 call per chunk, after content"]
+    EX --> CLASSIFICATIONS["classifications<br/>extraction-classifications-prompt<br/>Conditional call after content"]
     EX -. "Invalid extracted text" .-> TEXT_REPAIR["model-request-with-context<br/>repair-prompt<br/>Authorized text repair"]
 
     ROOT --> VALIDATE_EX["validate-extraction"]
@@ -31,7 +32,7 @@ flowchart LR
 
     ROOT --> RC["reconcile-references"]
     RC --> SUMMARY["summary<br/>reconciliation-prompt<br/>1 call per summary partition"]
-    RC --> GLOBAL["Global composition<br/>4 sequential calls"]
+    RC --> GLOBAL["Native global phase handoffs<br/>4 validated semantic assignments"]
     GLOBAL --> DISPOSITIONS["dispositions<br/>dispositions-prompt"]
     GLOBAL --> SIGNALS["signals<br/>signals-prompt"]
     GLOBAL --> ROLES["roles<br/>roles-prompt"]
@@ -53,10 +54,23 @@ flowchart LR
     class TEXT_REPAIR,EX_REPAIR,RC_REPAIR,SOURCE_EX,SOURCE_RC repair;
 ```
 
-Global calls execute in this order: **dispositions → signals → roles → conflicts**.
-Summary partitions are consumed before the global composition. The YAML sets
+Global calls execute in this order: **dispositions → validate → signals → validate
+→ roles → validate → conflicts → validate**. The next call receives native accepted
+facts, rather than unchecked response JSON. Repairs retire affected descendants
+and request pending assignments again. Roles select stable signal occurrence
+handles; conflicts select accepted group handles. Native code constructs token
+projections and reciprocal relationships. Summary partitions finish before the
+global phase handoffs. The YAML sets
 reconciliation `group-size: 8`; the resulting partition count depends on the
 extracted claims and hierarchy.
+
+Empty token collections and classifications forced by `no_feature_claim` are
+constructed natively; positive token-only extraction still needs semantic
+classification. Summary order follows semantic response order, then native token
+claim order. See [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md).
+Summary and signal `assignment.claim_ids` contain only eligible semantic claims;
+the full token/citation evidence remains visible. Conflict explanations receive
+native group handles without a separate claim-selection assignment.
 
 The [Hello World configuration](../../test/e2e/wf-001-hello-world/.sddtoolkit.json)
 sets `validation.sourcePreservationCheck: false`. This skips optional source

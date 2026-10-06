@@ -4,20 +4,17 @@ const schemas = @import("adapters/parsers/model_result_schemas.zig");
 const schema = @import("domain/model_result_schema.zig");
 const pointer = @import("domain/json_pointer.zig");
 
-test "spec reconciliation composition separates grouping and role assignment" {
+test "reference phase definitions share the captured shape owner" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const schema_bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .limited(schema.max_bytes));
-    const plan_bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation-global.composition.json", a, .limited(schema.max_bytes));
-    const plan = try compilePlan(a, plan_bytes, try compileSchema(a, schema_bytes));
-    try std.testing.expectEqual(@as(usize, 4), plan.parts().len);
-    const grouping = plan.part(.{ .bytes = "signals" }).?;
-    const roles = plan.part(.{ .bytes = "roles" }).?;
-    try std.testing.expect(plan.dependsOn(roles, grouping));
-    const signal_schema = try plan.selectSchema(grouping, &.{.{ .part = plan.part(.{ .bytes = "dispositions" }).?, .value = .{ .object = .{} } }});
-    try std.testing.expect(schema.findProperty(signal_schema.root().object, "signals") != null);
-    try std.testing.expect(schema.findProperty(signal_schema.root().object, "role_assignments") == null);
+    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .limited(schema.max_bytes));
+    const canonical = try compileSchema(a, bytes);
+    const grouping = canonical.select(.{ .bytes = "signals_assignment" }).?;
+    const roles = canonical.select(.{ .bytes = "roles_assignment" }).?;
+    try std.testing.expect(schema.findProperty(grouping.root().object, "signals") != null);
+    try std.testing.expect(schema.findProperty(grouping.root().object, "role_assignments") == null);
+    try std.testing.expect(schema.findProperty(roles.root().object, "role_assignments") != null);
 }
 
 fn compileSchema(allocator: std.mem.Allocator, bytes: []const u8) !*const schema.Schema {

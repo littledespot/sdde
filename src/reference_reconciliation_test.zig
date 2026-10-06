@@ -37,6 +37,37 @@ const text = @import("test_fixtures/reference_text.zig");
 const tokens = @import("test_fixtures/reference_tokens.zig");
 const extraction = @import("reference_extraction_test.zig");
 
+test "semantic summary authoring leaves exact tokens native and rejects model-authored token membership" {
+    const projection = @import("domain/reference_reconciliation_projection.zig");
+    const codec = @import("domain/model_candidate_json.zig");
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const origin: Origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 1 } };
+    for ([_][]const u8{ "Display `Hello, World!` and the UTC time.\n", "Renew the loan and display `Loan renewed!`.\n" }) |source| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try prepare(a, &.{source});
+        defer fixture.deinit();
+        const input = try f.build_input.execute(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2));
+        const semantic = try projection.semanticClaimIds(a, input.items);
+        var statements: std.ArrayList(projection.SemanticStatement) = .empty;
+        for (semantic) |id| try statements.append(a, .{ .claim_ids = try a.dupe(r.ClaimId, &.{id}), .content = .{ .model = f.content((try r.item(input.progress.plan.layout.items, id)).claim).model } });
+        const parsed = try f.parse.execute(a, .{ .input = input, .bytes = try codec.encode(projection.SemanticSummary, a, .{ .statements = statements.items }), .source = .{ .origin = origin } });
+        try std.testing.expectEqual(input.items.len, (try f.validate_summary.execute(a, parsed, fixture.context())).valid.statements.len);
+        const native = parsed.proposal.summary.statements[semantic.len];
+        try std.testing.expectEqual(.preserved_token, std.meta.activeTag(native.content));
+        try std.testing.expect(parsed.source.at(.{ .statement = semantic.len }, .record) == null);
+        const token = try r.item(input.progress.plan.layout.items, native.claim_ids[0]);
+        try statements.append(a, .{ .claim_ids = native.claim_ids, .content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = token.claim.content.preserved_token.value.raw_value.bytes } }} } } } });
+        const invalid = try f.parse.execute(a, .{ .input = input, .bytes = try codec.encode(projection.SemanticSummary, a, .{ .statements = statements.items }), .source = .{ .origin = origin } });
+        const rejected = (try f.validate_summary.execute(a, invalid, fixture.context())).invalid;
+        try std.testing.expectEqualDeep(r.diagnostic.Unit{ .statement = semantic.len }, rejected.unit);
+        try std.testing.expectEqual(.content, rejected.issue.rule);
+        try std.testing.expectEqual(.matching_claim_content, rejected.issue.expected.constraint);
+        try std.testing.expectEqualDeep(origin, rejected.origin.?);
+    }
+}
+
 test "authoring roles are assigned after grouping and reject duplicate or foreign groups" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -69,10 +100,10 @@ test "authoring roles are assigned after grouping and reject duplicate or foreig
     var changed = groups;
     changed.prior.proposal.role_assignments = bad;
     try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, changed)).invalid.issue.rule);
-    bad[bad.len - 1].claim_ids = &.{.{ .ordinal = 999 }};
+    bad[bad.len - 1].signal_id = .{ .ordinal = 999 };
     try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, changed)).invalid.issue.rule);
 }
-test "role assignment permits shared roles but rejects splitting or reordering a supplied group" {
+test "role assignment permits shared roles and rejects unknown native group selections" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -90,13 +121,13 @@ test "role assignment permits shared roles but rejects splitting or reordering a
     try std.testing.expectEqual(@as(usize, 2), record_groups);
     const ids = [_]r.ClaimId{ proposal.signals[0].claim_ids[0], proposal.signals[1].claim_ids[0] };
     proposal.signals = &.{.{ .claim_ids = &ids, .content = proposal.signals[0].content }};
-    proposal.role_assignments = &.{.{ .claim_ids = &ids, .generation_roles = &.{ .title, .records } }};
+    proposal.role_assignments = &.{.{ .signal_id = .{ .ordinal = 1 }, .generation_roles = &.{ .title, .records } }};
     parsed.proposal.global = proposal;
     const grouped = (try f.validate_signals.execute(a, (try f.validate_dispositions.execute(a, parsed)).valid, fixture.context())).valid;
     try std.testing.expectEqual(@as(usize, 2), (try f.validate_roles.execute(a, grouped)).valid.signals[0].generation_roles.len);
-    for ([_][]const r.ClaimId{ ids[0..1], &.{ ids[1], ids[0] } }) |bad| {
+    for ([_]u32{ 0, 2, 99 }) |bad| {
         var changed = grouped;
-        changed.prior.proposal.role_assignments = &.{.{ .claim_ids = bad, .generation_roles = &.{.records} }};
+        changed.prior.proposal.role_assignments = &.{.{ .signal_id = .{ .ordinal = bad }, .generation_roles = &.{.records} }};
         try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, changed)).invalid.issue.rule);
     }
 }
@@ -166,7 +197,8 @@ test "summary repair changes only a rejected field then inserts missing membersh
         try std.testing.expect(deletion.authorization.operation == .delete);
         try std.testing.expectError(error.InvalidAtomicRepair, repair.packet(a, duplicate, fixture.context(), deletion.authorization));
         const deduplicated = try repair.merge(a, duplicate, fixture.context(), deletion.authorization, null, null);
-        try std.testing.expectEqualDeep(good.statements, deduplicated.proposal.summary.statements);
+        try std.testing.expectEqualDeep(good.statements[1], deduplicated.proposal.summary.statements[0]);
+        try std.testing.expectEqualDeep(good.statements[0], deduplicated.proposal.summary.statements[1]);
         _ = (try f.validate_summary.execute(a, deduplicated, fixture.context())).valid;
     }
 }
@@ -227,14 +259,18 @@ test "disposition insertion ignores response metadata and preserves dependent va
             try std.testing.expectEqual(@as(u64, 2 + i), invalid.revision);
             try std.testing.expectEqualDeep(origin, invalid.origin.?);
             try std.testing.expect(rejected_candidate.source.last_repair.?.changed);
-            try std.testing.expectEqualDeep(missing.proposal.global.signals, rejected_candidate.proposal.global.signals);
+            try std.testing.expectEqual(@as(usize, 0), rejected_candidate.proposal.global.signals.len);
+            try std.testing.expectEqual(.dispositions, rejected_candidate.phase);
             try std.testing.expectEqualDeep(good.claim_dispositions[0], rejected_candidate.proposal.global.claim_dispositions[0]);
             selected = (try repair.authorize(a, rejected_candidate, fixture.context(), invalid)).model;
             try std.testing.expect(selected.rule.disposition_choices.?.retainedOnly());
         }
         const origin: Origin = .{ .request = .{ .value = 5 }, .attempt = .{ .value = 1 } };
-        const filled = try repair.merge(a, missing, fixture.context(), authorization, try repair.parse(a, authorization, packet, "{\"kind\":\"retained\"}"), origin);
-        try std.testing.expectEqualDeep(missing.proposal.global.signals, filled.proposal.global.signals);
+        var filled = try repair.merge(a, missing, fixture.context(), authorization, try repair.parse(a, authorization, packet, "{\"kind\":\"retained\"}"), origin);
+        try std.testing.expectEqual(@as(usize, 0), filled.proposal.global.signals.len);
+        filled.proposal.global.signals = missing.proposal.global.signals;
+        filled.source.signals = .{};
+        filled.phase = .signals;
         try std.testing.expectEqualDeep(missing.proposal.global.claim_dispositions, filled.proposal.global.claim_dispositions[0..1]);
         const dispositions = (try f.validate_dispositions.execute(a, filled)).valid;
         const mixed = (try f.validate_signals.execute(a, dispositions, fixture.context())).invalid;
@@ -365,12 +401,14 @@ test "global repair retains graph siblings and all dependent signal and conflict
     const authorization = (try repair.authorize(a, parsed, fixture.context(), rejection)).model;
     const merged = try repair.merge(a, parsed, fixture.context(), authorization, .{ .disposition = .{ .retained = .{} } }, null);
     try std.testing.expectEqualDeep(good.claim_dispositions[1..], merged.proposal.global.claim_dispositions[1..]);
-    try std.testing.expectEqualDeep(good.signals, merged.proposal.global.signals);
-    _ = (try f.finish(a, input, merged.proposal.global, fixture.context())).valid;
+    try std.testing.expectEqualDeep(good.signals[1..], merged.proposal.global.signals);
+    try std.testing.expectEqual(.dispositions, merged.phase);
+    try std.testing.expect((try f.validate_dispositions.execute(a, merged)) == .valid);
     const invalid = try repair.merge(a, parsed, fixture.context(), authorization, .{ .disposition = choices[0].disposition }, null);
     try std.testing.expect((try f.validate_dispositions.execute(a, invalid)) == .invalid);
 
     var missing = merged;
+    missing.phase = .signals;
     missing.proposal.global.signals = good.signals[1..];
     const dispositions = (try f.validate_dispositions.execute(a, missing)).valid;
     const coverage = (try f.validate_signals.execute(a, dispositions, fixture.context())).invalid;
@@ -383,6 +421,8 @@ test "global repair retains graph siblings and all dependent signal and conflict
     @memcpy(duplicate_choices[0..good.claim_dispositions.len], good.claim_dispositions);
     duplicate_choices[good.claim_dispositions.len] = good.claim_dispositions[0];
     var duplicate = merged;
+    duplicate.proposal.global.signals = good.signals;
+    duplicate.phase = .complete;
     duplicate.proposal.global.claim_dispositions = duplicate_choices;
     const duplicate_rejection = (try f.validate_dispositions.execute(a, duplicate)).invalid;
     const remove = (try repair.authorize(a, duplicate, fixture.context(), duplicate_rejection)).automatic;
@@ -498,6 +538,7 @@ fn textRejection(a: std.mem.Allocator, parsed: r.Parsed, ctx: f.Context) !?r.dia
         .valid => |value| value,
         .invalid => |issue| return issue,
     };
+    if (parsed.phase != .complete) return null;
     return switch (try f.validate_conflicts.execute(a, signals, ctx)) {
         .valid => null,
         .invalid => |issue| issue,
@@ -711,7 +752,7 @@ test "partition coverage rejects omissions duplicates foreign children ordering 
     try std.testing.expectError(error.InvalidReferenceReconciliation, f.build_items.execute(a, fixture.inputs, stale));
 }
 
-test "summaries reject missing duplicate foreign memberships forged keys kinds and token references" {
+test "summaries reject missing duplicate foreign memberships incompatible kinds and token references" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -719,7 +760,7 @@ test "summaries reject missing duplicate foreign memberships forged keys kinds a
     defer fixture.deinit();
     const input = try f.build_input.execute(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2));
     const valid = try f.summary(a, input);
-    for (0..9) |scenario| {
+    for (0..8) |scenario| {
         var proposal = valid;
         const statements = try a.dupe(r.StatementProposal, valid.statements);
         proposal.statements = statements;
@@ -730,18 +771,17 @@ test "summaries reject missing duplicate foreign memberships forged keys kinds a
             3 => proposal.statements = statements[0..1],
             4 => statements[1].claim_ids = statements[0].claim_ids,
             5 => statements[0].claim_ids = &.{.{ .ordinal = 999 }},
-            6 => statements[1].local_key = statements[0].local_key,
-            7 => statements[0].content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 1 } } },
-            8 => statements[1].content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 999 } } },
+            6 => statements[0].content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 1 } } },
+            7 => statements[1].content = .{ .preserved_token = .{ .token_id = .{ .ordinal = 999 } } },
             else => unreachable,
         }
         const rejected = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = proposal } }, fixture.context())).invalid;
-        try std.testing.expectEqual(([_]r.diagnostic.Rule{ .membership, .claim_selection, .claim_selection, .membership, .content, .claim_selection, .local_key, .content, .content })[scenario], rejected.issue.rule);
+        try std.testing.expectEqual(([_]r.diagnostic.Rule{ .membership, .claim_selection, .claim_selection, .membership, .content, .claim_selection, .content, .content })[scenario], rejected.issue.rule);
     }
     var reversed = valid;
     reversed.statements = &.{ valid.statements[1], valid.statements[0] };
     const checked = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = reversed } }, fixture.context())).valid;
-    try std.testing.expectEqual(@as(u32, 1), checked.statements[0].local_key);
+    try std.testing.expectEqualDeep(valid.statements[1].claim_ids, checked.statements[0].claim_ids);
 }
 
 test "closed reconciliation JSON rejects model identities unknown fields union variants and invented resolution" {
@@ -827,6 +867,7 @@ pub fn conflicting(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
     const conflicts = try allocator.alloc(r.ConflictProposal, 1);
     conflicts[0] = .{ .claim_ids = input.partition.group.claim_ids, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The references disagree about the required behavior." } }} } };
     proposal.conflicts = conflicts;
+    proposal.conflict_groups = try allocator.dupe(@import("domain/reference_conflict_groups.zig").Group, &.{.{ .claim_ids = input.partition.group.claim_ids }});
     return proposal;
 }
 
@@ -1420,7 +1461,8 @@ test "projection compatibility handles model kinds and indivisible exact tokens 
         }
         const rejected = if (global) (try f.validate_signals.execute(a, (try f.validate_dispositions.execute(a, parsed)).valid, fixture.context())).invalid else (try f.validate_summary.execute(a, parsed, fixture.context())).invalid;
         if (scenario == 4) try std.testing.expectEqual(.matching_claim_content, rejected.issue.expected.constraint);
-        const auth = (try repair.authorize(a, parsed, fixture.context(), rejected)).model;
+        const decision = try repair.authorize(a, parsed, fixture.context(), rejected);
+        const auth = if (decision == .automatic) decision.automatic.authorization else decision.model;
         if (scenario < 2) {
             try std.testing.expectEqual(index, if (global) auth.target.signal_selection else auth.target.statement_selection);
             try std.testing.expect(rejected.relations.content == null);
@@ -1428,10 +1470,16 @@ test "projection compatibility handles model kinds and indivisible exact tokens 
             try std.testing.expectEqual(index, if (global) auth.target.signal_content else auth.target.statement_content);
             try std.testing.expect(rejected.relations.content != null);
         }
-        const packet = try repair.packet(a, parsed, fixture.context(), auth);
-        defer @import("domain/model_input_packet.zig").release(packet);
         const replacement: repair.Replacement = if (scenario < 2) .{ .selection = .{ .claim_ids = original.claim_ids } } else .{ .content = original.content };
-        const merged = try repair.merge(a, parsed, fixture.context(), auth, try repair.parse(a, auth, packet, try f.repairResponse(a, replacement)), null);
+        const merged = if (decision == .automatic) automatic: {
+            try std.testing.expectEqualDeep(replacement, decision.automatic.replacement.?);
+            try std.testing.expectError(error.InvalidAtomicRepair, repair.packet(a, parsed, fixture.context(), auth));
+            break :automatic try repair.merge(a, parsed, fixture.context(), auth, decision.automatic.replacement, null);
+        } else model: {
+            const packet = try repair.packet(a, parsed, fixture.context(), auth);
+            defer @import("domain/model_input_packet.zig").release(packet);
+            break :model try repair.merge(a, parsed, fixture.context(), auth, try repair.parse(a, auth, packet, try f.repairResponse(a, replacement)), null);
+        };
         if (global) _ = (try f.finish(a, input, merged.proposal.global, fixture.context())).valid else _ = (try f.validate_summary.execute(a, merged, fixture.context())).valid;
     };
 }
@@ -1495,7 +1543,6 @@ test "canonical summary and signal redundancy preserves evidence and rejects com
             const values = try a.alloc(r.StatementProposal, old.len + 1);
             @memcpy(values[0..old.len], old);
             values[old.len] = old[0];
-            values[old.len].local_key = @intCast(old.len + 1);
             values[old.len].content = segmented;
             parsed.proposal.summary.statements = values;
         }
@@ -1544,7 +1591,7 @@ test "misbound extra projections recover by proven deletion with intact siblings
         } else {
             const values = try a.alloc(r.StatementProposal, count + 1);
             @memcpy(values[0..index], good.proposal.summary.statements[0..index]);
-            values[index] = .{ .local_key = @intCast(count + 1), .claim_ids = &.{token.id}, .content = f.content(business) };
+            values[index] = .{ .claim_ids = &.{token.id}, .content = f.content(business) };
             @memcpy(values[index + 1 ..], good.proposal.summary.statements[index..]);
             parsed.proposal.summary.statements = values;
         }
@@ -1641,19 +1688,20 @@ test "misbound projection deletion rejects missing coverage invalid survivors an
         } else {
             const proposal = try f.summary(a, input);
             var values: std.ArrayList(r.StatementProposal) = .empty;
-            try values.append(a, .{ .local_key = 3, .claim_ids = extra.claim_ids, .content = extra.content });
+            try values.append(a, .{ .claim_ids = extra.claim_ids, .content = extra.content });
             for (proposal.statements) |value| {
                 if (failure == .missing_token and value.content == .preserved_token) continue;
                 if (failure == .missing_business and value.content == .model) continue;
                 var sibling = value;
-                if (failure == .invalid_survivor and value.content == .preserved_token) sibling.local_key = 0;
+                if (failure == .invalid_survivor and value.content == .preserved_token) sibling.claim_ids = &.{};
                 try values.append(a, sibling);
             }
             parsed.proposal = .{ .summary = .{ .statements = try values.toOwnedSlice(a) } };
         }
         const rejected = (try textRejection(a, parsed, fixture.context())).?;
         try std.testing.expect(rejected.relations.redundant == null);
-        try std.testing.expect((try repair.authorize(a, parsed, fixture.context(), rejected)) != .automatic);
+        const decision = try repair.authorize(a, parsed, fixture.context(), rejected);
+        if (decision == .automatic) try std.testing.expect(decision.automatic.authorization.operation != .delete);
     };
 }
 
@@ -1707,7 +1755,6 @@ test "misbound redundancy handles aggregate summary diagnostics and distinct exa
     const statements = try a.alloc(r.StatementProposal, original.statements.len + 1);
     @memcpy(statements[0..original.statements.len], original.statements);
     statements[original.statements.len] = original.statements[0];
-    statements[original.statements.len].local_key = @intCast(statements.len);
     statements[original.statements.len].claim_ids = original.statements[1].claim_ids;
     // An extra individually valid statement still needs the entire membership
     // check, and no new per-statement acceptance path is introduced.
@@ -1743,7 +1790,8 @@ test "redundant signal deletion cannot discard a selected superseded claim" {
     const parsed: r.Parsed = .{ .input = input, .proposal = .{ .global = proposal } };
     const rejected = (try textRejection(a, parsed, fixture.context())).?;
     try std.testing.expect(rejected.relations.redundant == null);
-    try std.testing.expect((try repair.authorize(a, parsed, fixture.context(), rejected)) != .automatic);
+    const decision = try repair.authorize(a, parsed, fixture.context(), rejected);
+    if (decision == .automatic) try std.testing.expect(decision.automatic.authorization.operation != .delete);
 }
 
 test "occupied sibling membership blocks impossible summary and signal selections" {
@@ -1773,7 +1821,7 @@ test "occupied sibling membership blocks impossible summary and signal selection
             _ = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = good } }, fixture.context())).valid;
             const statements = try a.alloc(r.StatementProposal, good.statements.len + 1);
             @memcpy(statements[0..good.statements.len], good.statements);
-            statements[good.statements.len] = .{ .local_key = @intCast(statements.len), .claim_ids = &.{}, .content = extra };
+            statements[good.statements.len] = .{ .claim_ids = &.{}, .content = extra };
             parsed.proposal = .{ .summary = .{ .statements = statements } };
         }
         const rejection = (try textRejection(a, parsed, fixture.context())).?;
@@ -2031,8 +2079,9 @@ test "conflict selection respects occupied pairs without conflating conflict kin
             const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
             const pairs = body.value.object.get("repair").?.object.get("rule").?.object.get("conflicting_pairs").?.array.items;
             try std.testing.expectEqual(@as(usize, 1), pairs.len);
-            const pair = pairs[0].object;
-            const wire = try std.json.Stringify.valueAlloc(a, .{ .claim_ids = .{ pair.get("left").?, pair.get("right").? } }, .{});
+            try std.testing.expectEqualStrings("repair_conflict_selection", packet.resultDefinition().?.bytes);
+            try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, "{\"claim_ids\":[1,2]}"));
+            const wire = "{\"group_id\":1}";
             const merged = try repair.merge(a, parsed, fixture.context(), authorization, try repair.parse(a, authorization, packet, wire), null);
             try std.testing.expectEqualDeep(conflicts[0], merged.proposal.global.conflicts[0]);
             try std.testing.expectEqual(.blocked, (try f.finish(a, input, merged.proposal.global, fixture.context())).valid.outcome);
@@ -2096,4 +2145,132 @@ test "repair progress separates restored membership from invalid inserted conten
             _ = (try f.finish(a, input, repaired.proposal.global, fixture.context())).valid;
         } else try std.testing.expectEqualDeep(missing.proposal.summary.statements, repaired.proposal.summary.statements[0..missing.proposal.summary.statements.len]);
     };
+}
+
+test "semantic conflict groups expand direct pairs without inventing transitive conflicts" {
+    const groups = @import("domain/reference_conflict_groups.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choices = [_]groups.Choice{
+        .{ .claim_id = .{ .ordinal = 1 }, .disposition = .{ .conflicting = .{} } },
+        .{ .claim_id = .{ .ordinal = 2 }, .disposition = .{ .conflicting = .{} } },
+        .{ .claim_id = .{ .ordinal = 3 }, .disposition = .{ .conflicting = .{} } },
+    };
+    const ab = [_]r.ClaimId{ .{ .ordinal = 1 }, .{ .ordinal = 2 } };
+    const bc = [_]r.ClaimId{ .{ .ordinal = 2 }, .{ .ordinal = 3 } };
+    const chain = try groups.expand(a, .{ .claim_dispositions = &choices, .conflict_groups = &.{ .{ .claim_ids = &ab }, .{ .claim_ids = &bc } } });
+    try std.testing.expectEqualDeep(&[_]r.ClaimId{.{ .ordinal = 2 }}, chain[0].disposition.conflicting.related_claim_ids);
+    try std.testing.expectEqualDeep(&[_]r.ClaimId{ .{ .ordinal = 1 }, .{ .ordinal = 3 } }, chain[1].disposition.conflicting.related_claim_ids);
+    try std.testing.expectEqualDeep(&[_]r.ClaimId{.{ .ordinal = 2 }}, chain[2].disposition.conflicting.related_claim_ids);
+    const triangle = try groups.expand(a, .{ .claim_dispositions = &choices, .conflict_groups = &.{.{ .claim_ids = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 }, .{ .ordinal = 3 } } }} });
+    for (triangle) |value| try std.testing.expectEqual(@as(usize, 2), value.disposition.conflicting.related_claim_ids.len);
+    const explanations = try groups.explain(a, &.{.{ .claim_ids = &ab }}, &.{
+        .{ .group_id = .{ .ordinal = 1 }, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The values differ." } }} } },
+        .{ .group_id = .{ .ordinal = 1 }, .kind = .scope_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The scopes differ." } }} } },
+        .{ .group_id = .{ .ordinal = 999 }, .kind = .value_mismatch, .summary = .{ .nodes = &.{} } },
+    });
+    try std.testing.expectEqualDeep(ab[0..], explanations[0].claim_ids);
+    try std.testing.expectEqualDeep(ab[0..], explanations[1].claim_ids);
+    try std.testing.expectEqual(@as(usize, 0), explanations[2].claim_ids.len);
+}
+
+test "phase assignments reject premature and stale handoffs and retain role diagnostics without request data" {
+    const stage = @import("domain/reference_reconciliation_stage.zig");
+    const json = @import("domain/model_candidate_json.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{"Display the renewal date and `Loan renewed!`.\n"});
+    defer fixture.deinit();
+    const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+    const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 13 }, .attempt = .{ .value = 2 } };
+    const choices = try a.alloc(@import("domain/reference_conflict_groups.zig").Choice, input.items.len);
+    for (input.items, choices) |item, *choice| choice.* = .{ .claim_id = item.claim.id, .disposition = .{ .retained = .{} } };
+    const disposition_packet = try stage.packet(a, .{ .dispositions = input }, fixture.inputs, fixture.context().registry);
+    defer @import("domain/model_input_packet.zig").release(disposition_packet);
+    const admitted = try stage.collect(a, .{ .dispositions = input }, disposition_packet, try json.encodeSelected(stage.Response, a, .{ .dispositions = .{ .claim_dispositions = choices, .conflict_groups = &.{} } }), origin);
+    try std.testing.expect(admitted.source.origin == null);
+    try std.testing.expectEqualDeep(origin, admitted.source.at(.dispositions, .record).?);
+    var parsed: r.Parsed = .{ .phase = .dispositions, .input = input, .proposal = .{ .global = try globalWithoutSpecRoles(a, input) } };
+    const dispositions = (try f.validate_dispositions.execute(a, parsed)).valid;
+    try std.testing.expectError(error.InvalidReferenceReconciliation, f.validate_signals.execute(a, dispositions, fixture.context()));
+    parsed.phase = .signals;
+    const signals = (try f.validate_signals.execute(a, (try f.validate_dispositions.execute(a, parsed)).valid, fixture.context())).valid;
+    const packet = try stage.packet(a, .{ .roles = signals }, fixture.inputs, fixture.context().registry);
+    defer @import("domain/model_input_packet.zig").release(packet);
+    const invalid = try stage.collect(a, .{ .roles = signals }, packet, "{\"role_assignments\":[{\"signal_id\":999,\"generation_roles\":[\"records\"]}]}", origin);
+    const roles = try f.validate_roles.execute(a, (try f.validate_signals.execute(a, (try f.validate_dispositions.execute(a, invalid)).valid, fixture.context())).valid);
+    try std.testing.expectEqual(.role_assignment, roles.invalid.issue.rule);
+    try std.testing.expectEqualDeep(origin, roles.invalid.origin.?);
+    var stale = signals;
+    stale.prior.source.revision += 1;
+    try std.testing.expectError(error.InvalidReferenceReconciliation, stage.collect(a, .{ .roles = stale }, packet, "{\"role_assignments\":[]}", origin));
+    var changed = signals;
+    const changed_signals = try a.dupe(r.ValidatedSignal, signals.signals);
+    changed_signals[0].content = .{ .model = .{ .business = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "A different accepted meaning." } }} } } } };
+    changed.signals = changed_signals;
+    try std.testing.expectError(error.InvalidReferenceReconciliation, stage.collect(a, .{ .roles = changed }, packet, "{\"role_assignments\":[]}", origin));
+    const owner = try @import("domain/reference_candidate_value.zig").create(std.testing.allocator, null);
+    owner.payload = .{ .reconciliation_rejected = roles.invalid };
+    const descriptor = @import("application/reference_reconciliation_workflow.zig").roles_schema;
+    const published = try @import("application/reference_extraction_workflow.zig").publish(std.testing.allocator, descriptor, owner, .invalid);
+    const value = published.delta.data_writes[@intFromEnum(descriptor.key)].?;
+    defer @import("application/pipeline_values.zig").destroy(value);
+    var view: @import("domain/pipeline_data.zig").View = .{};
+    view.slots[@intFromEnum(descriptor.key)] = value;
+    const retained = (try @import("application/candidate_validation_diagnostics.zig").read(&view)).?;
+    try std.testing.expectEqualDeep(origin, retained.reconciliation.origin.?);
+    try std.testing.expectEqual(.role_assignment, retained.reconciliation.issue.rule);
+}
+
+test "checked phase facts retire resolved receipts and preserve repairs owned by later validators" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    const native = @import("application/reference_extraction_workflow.zig");
+    const workflow = @import("application/reference_reconciliation_workflow.zig");
+    const values = @import("application/pipeline_values.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "Renew the loan.\n", "Retain the receipt.\n" });
+    defer fixture.deinit();
+    const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+    for ([_]bool{ false, true }) |later| {
+        var parsed: r.Parsed = .{ .phase = .dispositions, .input = input, .proposal = .{ .global = try globalWithoutSpecRoles(a, input) } };
+        if (later) {
+            const signals = try a.dupe(r.SignalProposal, parsed.proposal.global.signals);
+            signals[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } };
+            parsed.proposal.global.signals = signals;
+            parsed.phase = .signals;
+            const rejection = (try f.validate_signals.execute(a, (try f.validate_dispositions.execute(a, parsed)).valid, fixture.context())).invalid;
+            const auth = (try repair.authorize(a, parsed, fixture.context(), rejection)).model;
+            parsed = try repair.merge(a, parsed, fixture.context(), auth, auth.operation.replace, null);
+        } else {
+            const dispositions = try a.alloc(r.ClaimDispositionProposal, parsed.proposal.global.claim_dispositions.len + 1);
+            @memcpy(dispositions[0 .. dispositions.len - 1], parsed.proposal.global.claim_dispositions);
+            dispositions[dispositions.len - 1] = dispositions[0];
+            parsed.proposal.global.claim_dispositions = dispositions;
+            const rejection = (try f.validate_dispositions.execute(a, parsed)).invalid;
+            const auth = (try repair.authorize(a, parsed, fixture.context(), rejection)).automatic;
+            parsed = try repair.merge(a, parsed, fixture.context(), auth.authorization, null, null);
+        }
+        try std.testing.expect(parsed.source.pending_repair != null);
+        const owner = try @import("domain/reference_candidate_value.zig").create(std.testing.allocator, null);
+        owner.payload = .{ .reconciliation_parsed = parsed };
+        const captured = try native.publish(std.testing.allocator, workflow.parsed_schema, owner, .ok);
+        const raw_value = captured.delta.data_writes[@intFromEnum(workflow.parsed_schema.key)].?;
+        defer values.destroy(raw_value);
+        var view: @import("domain/pipeline_data.zig").View = .{};
+        view.slots[@intFromEnum(workflow.parsed_schema.key)] = raw_value;
+        const step: @import("domain/workflow_compilation.zig").CompiledStep = .{ .id = .{ .bytes = "check-dispositions" }, .operation_id = .{ .bytes = workflow.ValidateDispositions.Action.contract.id }, .parameters = &.{}, .requires = workflow.ValidateDispositions.Action.contract.requires, .produces = workflow.ValidateDispositions.Action.contract.produces, .replaces = &.{}, .invalidates = &.{}, .outcomes = &.{ .ok, .invalid, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
+        var binding: workflow.ValidateDispositions = .{ .allocator = std.testing.allocator, .action = .{} };
+        const checked = try workflow.ValidateDispositions.invoke(&binding, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } });
+        const checked_value = checked.delta.data_writes[@intFromEnum(workflow.dispositions_schema.key)].?;
+        defer values.destroy(checked_value);
+        try std.testing.expectEqual(.ok, checked.outcome);
+        try std.testing.expectEqual(later, checked.delta.repair_transition == null);
+        const facts = (try native.read(&.{ .slots = checked.delta.data_writes }, workflow.dispositions_schema, .reconciliation_dispositions)).payload().reconciliation_dispositions;
+        try std.testing.expectEqual(later, facts.source.pending_repair != null);
+        if (!later) try std.testing.expectEqual(.resolved, checked.delta.repair_transition.?.validated.result);
+    }
 }
