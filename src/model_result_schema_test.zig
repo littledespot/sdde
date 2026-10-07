@@ -17,6 +17,118 @@ const variants =
     \\{"type":"object","properties":{"kind":{"const":"clarification_needed"},"question":{"type":"string","maxLength":128}},"required":["kind","question"],"additionalProperties":false}]}
 ;
 
+const selectionChoices =
+    \\{"$defs":{"review":{"type":"object","properties":{"source_ids":{"type":"array","maxItems":2,"items":{"type":"integer","minimum":1,"maximum":2048}},"claim_id":{"type":"integer","minimum":1,"maximum":2048}},"required":["source_ids","claim_id"],"additionalProperties":false},"selection":{"type":"object","properties":{"source_ids":{"type":"array","maxItems":2,"items":{"type":"integer","minimum":1,"maximum":2048}}},"required":["source_ids"],"additionalProperties":false},"nested":{"type":"object","properties":{"records":{"type":"array","maxItems":3,"items":{"type":"object","properties":{"handles":{"type":"array","minItems":1,"maxItems":2,"items":{"type":"integer","minimum":1,"maximum":2048}}},"required":["handles"],"additionalProperties":false}}},"required":["records"],"additionalProperties":false}},"$ref":"#/$defs/review"}
+;
+
+fn expectSelection(a: std.mem.Allocator, selected: *const schema.Schema, bytes: []const u8, accepted: bool) !void {
+    const parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{ .parse_numbers = false });
+    const check = @import("domain/model_payload_schema.zig");
+    try std.testing.expectEqual(accepted, check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), selected.root()) == null);
+    // The exact schema sent to the provider admits the same candidate locally.
+    const wire = try compile(a, selected.modelBytes());
+    try std.testing.expectEqual(accepted, check.validateValue(@import("domain/model_envelope.zig").value(&parsed.value), wire.root()) == null);
+}
+
+test "untagged ID collections and scalar choices bind distinct namespaces and preserve bounds" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const original = (try compile(a, selectionChoices)).select(.{ .bytes = "review" }).?;
+    const choices: []const schema.IntegerChoice = &.{
+        .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = "review" }, .allowed = &.{1} },
+        .{ .target = .{ .path = &.{.{ .property = "claim_id" }} }, .definition = .{ .bytes = "review" }, .allowed = &.{4} },
+    };
+    const narrowed = try schema.restrict(std.testing.allocator, original, &.{}, choices);
+    defer narrowed.release();
+    try expectSelection(a, narrowed.selected(), "{\"source_ids\":[1],\"claim_id\":4}", true);
+    try expectSelection(a, narrowed.selected(), "{\"source_ids\":[],\"claim_id\":4}", true);
+    for ([_][]const u8{ "{\"source_ids\":[4],\"claim_id\":4}", "{\"source_ids\":[1],\"claim_id\":1}", "{\"source_ids\":[1,1,1],\"claim_id\":4}" }) |bad| try expectSelection(a, narrowed.selected(), bad, false);
+    try expectSelection(a, original, "{\"source_ids\":[4],\"claim_id\":1}", true);
+    const only_source = try schema.restrict(std.testing.allocator, original, &.{}, choices[0..1]);
+    defer only_source.release();
+    try expectSelection(a, only_source.selected(), "{\"source_ids\":[1],\"claim_id\":999}", true);
+}
+
+test "integer collection choices preserve required minima and empty optional parent semantics" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const original = try compile(a, selectionChoices);
+    const optional = try schema.restrict(std.testing.allocator, original.select(.{ .bytes = "selection" }).?, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .allowed = &.{} }});
+    defer optional.release();
+    try expectSelection(a, optional.selected(), "{\"source_ids\":[]}", true);
+    try expectSelection(a, optional.selected(), "{\"source_ids\":[1]}", false);
+    const nested = original.select(.{ .bytes = "nested" }).?;
+    const path: []const schema.ChoiceStep = &.{ .{ .property = "records" }, .{ .items = {} }, .{ .property = "handles" } };
+    const populated = try schema.restrict(std.testing.allocator, nested, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 2, 7 } }});
+    defer populated.release();
+    try expectSelection(a, populated.selected(), "{\"records\":[{\"handles\":[2,7]}]}", true);
+    try expectSelection(a, populated.selected(), "{\"records\":[{\"handles\":[]}]}", false);
+    try expectSelection(a, populated.selected(), "{\"records\":[{\"handles\":[4]}]}", false);
+    const empty = try schema.restrict(std.testing.allocator, nested, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{} }});
+    defer empty.release();
+    try expectSelection(a, empty.selected(), "{\"records\":[]}", true);
+    try expectSelection(a, empty.selected(), "{\"records\":[{\"handles\":[2]}]}", false);
+    const required = try schema.project(a, nested, schema.findProperty(nested.root().object, "records").?.schema.array.items);
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, required, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "handles" }} }, .allowed = &.{} }}));
+}
+
+test "ID restrictions validate definition and selected part association before omitting sibling locations" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, selectedIdChoices, .{});
+}
+
+fn selectedIdChoices(allocator: std.mem.Allocator) !void {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const resource = try compile(a, selectionChoices);
+    const initial = resource.select(.{ .bytes = "review" }).?;
+    const choices: []const schema.IntegerChoice = &.{
+        .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = "review" }, .allowed = &.{1} },
+        .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = "selection" }, .allowed = &.{2} },
+    };
+    const selected = try schema.restrict(allocator, initial, &.{}, choices);
+    defer selected.release();
+    try expectSelection(a, selected.selected(), "{\"source_ids\":[1],\"claim_id\":2}", true);
+    try expectSelection(a, selected.selected(), "{\"source_ids\":[2],\"claim_id\":2}", false);
+    const part = try compile(a, "{\"type\":\"object\",\"properties\":{\"claim_id\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":2048}},\"required\":[\"claim_id\"],\"additionalProperties\":false}");
+    const projected = try schema.project(a, initial, part.root());
+    const cloned = try projected.clone(a);
+    const sibling = try schema.restrict(allocator, cloned, &.{}, choices);
+    defer sibling.release();
+    try expectSelection(a, sibling.selected(), "{\"claim_id\":4}", true);
+    const repair = try schema.restrict(allocator, resource.select(.{ .bytes = "selection" }).?, &.{}, choices);
+    defer repair.release();
+    try expectSelection(a, repair.selected(), "{\"source_ids\":[2]}", true);
+    for ([_]schema.IntegerChoice{
+        .{ .target = .{ .path = &.{.{ .property = "missing" }} }, .definition = .{ .bytes = "selection" }, .allowed = &.{1} },
+        .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = "unknown" }, .allowed = &.{1} },
+        .{ .target = .{ .path = &.{.{ .property = "missing" }} }, .allowed = &.{1} },
+    }) |bad| {
+        if (schema.restrict(allocator, cloned, &.{}, &.{bad})) |unexpected| {
+            unexpected.release();
+            return error.TestUnexpectedResult;
+        } else |err| if (err != error.InvalidModelResultSchema) return err;
+    }
+}
+
+test "ID choice declarations reject duplicate locations values bounds wrong shapes and oversized sets" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const original = try compile(a, selectionChoices);
+    var too_many: [schema.max_choices + 1]i64 = undefined;
+    for (&too_many, 1..) |*value, index| value.* = @intCast(index);
+    const at_bound = try schema.restrict(std.testing.allocator, original, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .allowed = too_many[0..schema.max_choices] }});
+    defer at_bound.release();
+    for ([_][]const i64{ &.{ 1, 1 }, &.{0}, &.{2049}, &too_many }) |bad| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, original, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .allowed = bad }}));
+    const same: schema.IntegerChoice = .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .allowed = &.{1} };
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, original, &.{}, &.{ same, same }));
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, original, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "claim_id" }} }, .allowed = &.{} }}));
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, try compile(a, replacement), &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "replacement" }} }, .allowed = &.{1} }}));
+}
+
 fn compile(allocator: std.mem.Allocator, bytes: []const u8) schema.Error!*const schema.Schema {
     var adapter: parser.Adapter = .{};
     return adapter.compiler().compile(allocator, bytes);
@@ -67,7 +179,7 @@ test "integer choice restrictions bind tagged fields without restricting unrelat
         \\{"type":"object","properties":{"value":{"type":"array","maxItems":2,"items":{"oneOf":[{"type":"string","maxLength":20},{"type":"object","properties":{"kind":{"const":"exact_copy"},"claim_id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","claim_id"],"additionalProperties":false}]}},"support":{"type":"array","maxItems":2,"items":{"type":"integer","minimum":1,"maximum":100}}},"required":["value","support"],"additionalProperties":false}
     ;
     const complete = try compile(a, source);
-    const selected = try schema.restrict(std.testing.allocator, complete, &.{}, &.{.{ .kind = "exact_copy", .field = "claim_id", .allowed = &.{ 2, 7 } }});
+    const selected = try schema.restrict(std.testing.allocator, complete, &.{}, &.{.{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = &.{ 2, 7 } }});
     defer selected.release();
     const value = schema.findProperty(selected.selected().root().object, "value").?.schema;
     const exact = schema.findProperty(value.array.items.one_of[1].object, "claim_id").?.schema;
@@ -85,14 +197,14 @@ test "integer choice restrictions bind tagged fields without restricting unrelat
         } else try std.testing.expect(std.mem.indexOf(u8, projection, "\"enum\":[2,7]") != null);
     }
     for ([_]schema.IntegerChoice{
-        .{ .kind = "exact_copy", .field = "other", .allowed = &.{2} },
-        .{ .kind = "exact_copy", .field = "claim_id", .allowed = &.{101} },
-        .{ .kind = "exact_copy", .field = "claim_id", .allowed = &.{} },
+        .{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "other" } }, .allowed = &.{2} },
+        .{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = &.{101} },
+        .{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = &.{} },
     }) |bad| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, complete, &.{}, &.{bad}));
     // A retained packet may carry text choices into a provenance-only repair.
     // With no text selector in that selected schema, there is nothing to narrow.
     const provenance_only = try compile(a, "{\"type\":\"object\",\"properties\":{\"claim_ids\":{\"type\":\"array\",\"maxItems\":2,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}}},\"required\":[\"claim_ids\"],\"additionalProperties\":false}");
-    const no_text = try schema.restrict(std.testing.allocator, provenance_only, &.{}, &.{.{ .kind = "exact_copy", .field = "claim_id", .allowed = &.{2} }});
+    const no_text = try schema.restrict(std.testing.allocator, provenance_only, &.{}, &.{.{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = &.{2} }});
     defer no_text.release();
     try std.testing.expectEqualDeep(provenance_only.root().*, no_text.selected().root().*);
 }
@@ -108,7 +220,7 @@ test "derived integer choice sets accept 1024 values and reject larger sets" {
     for ([_]usize{ 1024, 1025 }) |count| {
         const ids = try a.alloc(i64, count);
         for (ids, 0..) |*id, index| id.* = @intCast(index + 1);
-        const choices = &[_]schema.IntegerChoice{.{ .kind = "selected", .field = "id", .allowed = ids }};
+        const choices = &[_]schema.IntegerChoice{.{ .target = .{ .tagged = .{ .kind = "selected", .field = "id" } }, .allowed = ids }};
         if (count > schema.max_choices) {
             try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, complete, &.{}, choices));
         } else {

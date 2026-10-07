@@ -1,3 +1,3 @@
-Group supported claims into signals using prerequisite dispositions. Cover every
-retained claim. Keep business meaning separate from preserved tokens; each
-nonconflicting token needs its own exact-token signal.
+Group supported meaning from assignment.claim_ids. Cover retained semantic
+claims not already covered by accepted signals; do not repeat accepted signals.
+Native code adds nonconflicting token signals.

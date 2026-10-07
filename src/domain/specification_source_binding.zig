@@ -58,13 +58,7 @@ fn hasRole(signal: r.Signal, role: r.GenerationRole) bool {
 
 fn activeSignal(records: refs.Records, signal: r.Signal) Error!bool {
     if (signal.value.claim_ids.len == 0) return error.InvalidSpecificationBinding;
-    for (signal.value.claim_ids) |id| {
-        const disposition = for (records.dispositions) |value| {
-            if (value.claim_id.ordinal == id.ordinal) break value.disposition;
-        } else return error.InvalidSpecificationBinding;
-        if (disposition != .retained) return false;
-    }
-    return true;
+    return refs.eligibleSelection(records.dispositions, signal.value.claim_ids) catch return error.InvalidSpecificationBinding;
 }
 
 fn checked(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, claims: []const r.ClaimId) Error!spec.Selection {
@@ -75,13 +69,7 @@ fn checked(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs,
     };
     defer a.free(selected.citation_ids);
     defer a.free(selected.scopes);
-    for (selected.claim_ids) |id| {
-        for (records.dispositions) |disposition| {
-            if (disposition.claim_id.ordinal != id.ordinal) continue;
-            if (disposition.disposition != .retained) return error.InvalidSpecificationBinding;
-            break;
-        } else return error.InvalidSpecificationBinding;
-    }
+    if (!(refs.eligibleSelection(records.dispositions, selected.claim_ids) catch return error.InvalidSpecificationBinding)) return error.InvalidSpecificationBinding;
     return .{ .claim_ids = selected.claim_ids, .clarification_response_ids = &.{} };
 }
 
@@ -108,6 +96,19 @@ pub fn record(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inpu
         if (!hasRole(signal, .records) or !try activeSignal(records, signal)) continue;
         if (cursor == index) return .{ .records = .{ .signal = signal.id, .selection = try checked(a, records, inputs, signal.value.claim_ids) } };
         cursor += 1;
+    }
+    return error.InvalidSpecificationBinding;
+}
+
+/// A canonical record retains exactly one accepted group's ordered selection.
+/// An aggregate role selection does not authorize a new cross-group record.
+pub fn recordForClaims(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, claims: []const r.ClaimId) Error!Bound {
+    matching: for (0..try recordCount(records)) |index| {
+        const bound = try record(a, records, inputs, index);
+        const selected = bound.records.selection.claim_ids;
+        if (claims.len != selected.len) continue;
+        for (claims, selected) |left, right| if (left.ordinal != right.ordinal) continue :matching;
+        return bound;
     }
     return error.InvalidSpecificationBinding;
 }
@@ -144,12 +145,6 @@ pub fn validate(records: refs.Records, inputs: evidence.Inputs) Error!void {
         if (!try activeSignal(records, signal)) continue;
         for (signal.value.claim_ids) |id| {
             const item = try r.item(records.items, id);
-            var retained = false;
-            for (records.dispositions) |disposition| if (disposition.claim_id.ordinal == id.ordinal) {
-                retained = disposition.disposition == .retained;
-                break;
-            };
-            if (!retained) return error.InvalidSpecificationBinding;
             _ = evidence.resolve(inputs, .{ .state_id = records.items.state_id, .chunk_id = item.claim.chunk_id }) catch return error.InvalidSpecificationBinding;
         }
     }

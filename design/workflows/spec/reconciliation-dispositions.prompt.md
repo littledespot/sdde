@@ -1,4 +1,4 @@
-Return one disposition per claim. Retain compatible overlapping requirements;
-different content kinds do not imply conflict. Use conflicting only for incompatible
-meanings, with reciprocal relationships. Duplicate/superseded targets must share
-the claim's content kind. Never invent precedence authority.
+Assess each claim: retain independent meaning, select a duplicate or superseding
+claim, or mark incompatible meaning conflicting. Declare each mutually
+incompatible group once in conflict_groups; overlapping groups are allowed.
+Do not infer transitive conflicts or invent precedence authority.

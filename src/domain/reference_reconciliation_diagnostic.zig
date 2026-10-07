@@ -3,7 +3,7 @@
 const r = @import("reference_reconciliation.zig");
 const std = @import("std");
 const Origin = @import("model_candidate_origin.zig").Origin;
-pub const Field = enum { record, key, selections, content, relationship };
+pub const Field = enum { record, selections, content, relationship };
 pub const FieldOrigin = struct { unit: Unit, field: Field, origin: ?Origin };
 pub const Source = struct {
     revision: u64 = 1,
@@ -32,7 +32,7 @@ pub const Source = struct {
     }
 };
 pub const Unit = union(enum) { summary, statement: usize, dispositions, disposition: usize, signals, signal: usize, conflicts, conflict: usize };
-pub const Rule = enum { membership, local_key, claim_selection, content, cardinality, duplicate_disposition, relationship, cycle, signal_coverage, duplicate_signal, role_assignment, conflict_coverage, duplicate_conflict, typed_text };
+pub const Rule = enum { membership, claim_selection, content, cardinality, duplicate_disposition, relationship, cycle, signal_coverage, duplicate_signal, role_assignment, conflict_coverage, duplicate_conflict, typed_text };
 pub const Constraint = enum {
     unique_nonzero,
     nonempty_unique_allowed_claims,
@@ -57,7 +57,7 @@ pub const Constraint = enum {
 
     /// Presentation scope only; every merged candidate still runs all validators.
     pub const Assignment = enum { summary, dispositions, signals, roles, conflicts };
-    pub const Scope = union(enum) { all, key, selection, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail, assignment: Assignment };
+    pub const Scope = union(enum) { all, selection, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail, assignment: Assignment };
     pub fn appliesTo(self: Constraint, purpose: @FieldType(r.Input, "purpose"), scope: Scope) bool {
         const in_purpose = switch (self) {
             .unique_nonzero, .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token => true,
@@ -65,7 +65,6 @@ pub const Constraint = enum {
         };
         return in_purpose and switch (scope) {
             .all => true,
-            .key => self == .unique_nonzero,
             .content => |kind| self == .matching_claim_content or (kind == .preserved_token and self == .exact_selected_token),
             .disposition => |mode| mode == .rules and switch (self) {
                 .no_self_relation, .same_content_kind, .same_token_value, .nonconflicting_target, .reciprocal_conflict, .acyclic, .nonempty => true,
@@ -85,7 +84,7 @@ pub const Constraint = enum {
                 },
                 .roles => self == .supported_role_assignment,
                 .conflicts => switch (self) {
-                    .nonempty_unique_allowed_claims, .at_least_two, .conflicting_related_claims, .unique_members, .conflict_claim_covered, .conflict_pair_covered => true,
+                    .unique_members, .conflict_claim_covered, .conflict_pair_covered => true,
                     else => false,
                 },
             },
@@ -93,26 +92,26 @@ pub const Constraint = enum {
     }
     pub fn description(self: Constraint) []const u8 {
         return switch (self) {
-            .unique_nonzero => "IDs and local keys must be nonzero and unique within their collection.",
+            .unique_nonzero => "IDs must be nonzero and unique within their collection.",
             .nonempty_unique_allowed_claims => "Select a nonempty, unique subset of the supplied claim IDs.",
             .matching_claim_content => "Content must match the selected claims' content kind.",
-            .exact_selected_token => "Preserved-token content must select one claim and its exact token ID.",
+            .exact_selected_token => "Preserved-token identity and exact content must match the source; native code supplies them.",
             .no_self_relation => "A claim cannot relate to itself.",
             .same_content_kind => "Duplicate and superseded targets must have the same content kind.",
             .same_token_value => "Duplicate tokens must have the same token kind and exact value.",
             .nonconflicting_target => "Duplicate and superseded targets cannot be conflicting.",
-            .reciprocal_conflict => "Every conflicting relationship must be declared in both directions.",
+            .reciprocal_conflict => "Each selected conflict group represents mutually incompatible claims; native code expands reciprocal relationships.",
             .acyclic => "Duplicate and superseded chains must terminate without cycles.",
-            .nonempty => "Superseded and conflicting claims require at least one related claim.",
-            .at_least_two => "A conflict must select at least two claims.",
+            .nonempty => "Superseding selections and conflict groups must be nonempty.",
+            .at_least_two => "A conflict group must contain at least two claims.",
             .nonconflicting_claims => "Signals may select only nonconflicting claims.",
-            .conflicting_related_claims => "Conflict members must declare each other as conflicting.",
+            .conflicting_related_claims => "Conflict membership must match the accepted incompatible claim groups.",
             .unique_members => "Do not repeat an identical member set for the same projection kind.",
             .retained_claim_covered => "Every retained claim must appear in a signal.",
-            .token_projected => "Every nonconflicting preserved token needs an exact-token signal, including after supersession.",
-            .supported_role_assignment => "Copy one existing signal's complete claim_ids in their supplied order. Assign each group once. Roles must be unique within its assignment and may be shared across groups.",
+            .token_projected => "Native code projects every nonconflicting preserved token, including after supersession.",
+            .supported_role_assignment => "Select a native signal_id from accepted.signals; every claim in an authoring group must be retained. Assign each group once. Roles must be unique within its assignment and may be shared across groups.",
             .conflict_claim_covered => "Every conflicting claim must appear in a conflict.",
-            .conflict_pair_covered => "Every declared conflicting pair must appear together in a conflict.",
+            .conflict_pair_covered => "Explain every accepted conflict group; native code attaches its membership.",
         };
     }
 };
@@ -163,7 +162,6 @@ pub fn fieldFor(unit: Unit, rule: Rule) Field {
     if (rule == .role_assignment) return .relationship;
     if (rule == .relationship and (unit == .signal or unit == .conflict)) return .selections;
     return switch (rule) {
-        .local_key => .key,
         .claim_selection => .selections,
         .content, .typed_text => .content,
         .relationship, .cycle => .relationship,

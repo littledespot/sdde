@@ -134,7 +134,13 @@ pub fn authorizeOmission(a: std.mem.Allocator, validator: @import("typed_text.zi
             error.UnsafeSpecificationOmissionRepair => continue,
             else => return err,
         };
-        if (target.part == .record) return bindRetry(a, try atomic.authorizeInsert(a, try sessions.ownerFor(a, current, target.unit), current.revision, target, .record, facts, .{ .omission = evidence }));
+        if (target.part == .record) {
+            _ = @import("specification_source_binding.zig").recordForClaims(a, @import("reference_support.zig").records(context.references), context.inputs, evidence.review.?.provenance.claim_ids) catch |err| switch (err) {
+                error.InvalidSpecificationBinding => continue,
+                else => return err,
+            };
+            return bindRetry(a, try atomic.authorizeInsert(a, try sessions.ownerFor(a, current, target.unit), current.revision, target, .record, facts, .{ .omission = evidence }));
+        }
         const selected = target.part.value;
         const value = try candidates.attributedValue(.canonical, current.units[target.unit].?.response, selected.subject, selected.field);
         const provenance = evidence.review.?.provenance;
@@ -177,12 +183,7 @@ fn omissionTarget(content: g.spec.IdentifiedContent, id: authority.Id, current: 
         .record => |selected| {
             for (content.records) |record| {
                 if (std.meta.eql(record.id, selected)) {
-                    const field: candidates.ValueField = if (id.slot == .relationship) .{ .relationship = std.math.sub(usize, id.member, 1) catch return error.UnsafeSpecificationOmissionRepair } else field: {
-                        inline for (std.meta.fields(candidates.ValueField)) |value| {
-                            if (comptime value.type == void) if (std.mem.eql(u8, value.name, @tagName(id.slot))) break :field @unionInit(candidates.ValueField, value.name, {});
-                        }
-                        return error.UnsafeSpecificationOmissionRepair;
-                    };
+                    const field = @import("specification_authority.zig").valueField(id) catch return error.UnsafeSpecificationOmissionRepair;
                     return .{ .unit = sessions.records_index, .part = .{ .value = .{ .subject = .{ .record = try sessions.recordIndex(current, selected) }, .field = field } } };
                 }
             }

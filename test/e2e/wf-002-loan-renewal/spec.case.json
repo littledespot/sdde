@@ -1,0 +1,11 @@
+{
+  "schema": "evaluation-case/v1",
+  "id": "wf-002-loan-renewal-spec",
+  "sources": [
+    {
+      "id": "stories",
+      "path": "test/e2e/wf-002-loan-renewal/stories.md"
+    }
+  ],
+  "rubric": "test/e2e/wf-002-loan-renewal/rubric.json"
+}

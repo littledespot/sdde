@@ -164,7 +164,7 @@ pub fn diagnosticClaims(records: @import("reference_support.zig").Records, locat
 
 /// Verify all mechanical joins. Meaning and loss attribution remain explicitly
 /// model-assisted; absence of a unique location cannot authorize a repair.
-pub fn validate(inputs: authority.Inputs, sources: r.evidence.Inputs, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) Error!void {
+pub fn validate(inputs: authority.Inputs, sources: r.evidence.Inputs, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) (authority.Error || r.Error)!void {
     if (location == .unlocalized) return;
     if (finding != .candidate_omission or review.source_ids.len == 0) return error.InvalidRequiredAuthority;
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
@@ -216,7 +216,35 @@ pub fn validate(inputs: authority.Inputs, sources: r.evidence.Inputs, finding: a
         },
     }
 }
-fn sourceForClaim(items: r.Items, id: r.ClaimId, sources: []const r.extraction.identity.SourceId) Error!void {
+
+/// Mechanically eligible producer choices, not judgments that meaning was lost.
+/// The same validator governs presentation and admission in every review scope.
+pub fn available(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evidence.Inputs, review: authority.ReviewEvidence) (authority.Error || r.Error)![]const Location {
+    const records = inputs.references orelse return error.InvalidRequiredAuthority;
+    var candidates: std.ArrayList(Location) = .empty;
+    defer candidates.deinit(a);
+    try candidates.append(a, .{ .unlocalized = .{} });
+    for (records.items.extraction) |chunk| {
+        try candidates.append(a, .{ .extraction_claim = chunk.scope.chunk_id });
+        for (chunk.token_classifications) |classification| try candidates.append(a, .{ .token_classification = classification.id() });
+    }
+    for (records.dispositions) |disposition| try candidates.append(a, .{ .reconciliation_disposition = disposition.claim_id });
+    for (records.signals) |signal| try candidates.append(a, .{ .reconciliation_signal = signal.id });
+    for (records.conflicts) |conflict| try candidates.append(a, .{ .reconciliation_conflict = conflict.id });
+    var accepted: std.ArrayList(Location) = .empty;
+    errdefer accepted.deinit(a);
+    for (candidates.items) |location| {
+        var diagnostic = review;
+        if (location != .unlocalized) diagnostic.provenance.claim_ids = diagnosticClaims(records, location) orelse return error.InvalidRequiredAuthority;
+        validate(inputs, sources, .candidate_omission, diagnostic, location) catch |err| switch (err) {
+            error.InvalidRequiredAuthority => continue,
+            else => return err,
+        };
+        try accepted.append(a, location);
+    }
+    return accepted.toOwnedSlice(a);
+}
+fn sourceForClaim(items: r.Items, id: r.ClaimId, sources: []const r.extraction.identity.SourceId) (authority.Error || r.Error)!void {
     if (!r.contains(r.extraction.identity.SourceId, sources, (try r.item(items, id)).source_id)) return error.InvalidRequiredAuthority;
 }
 
@@ -239,6 +267,8 @@ pub const Scope = enum { references, specification };
 pub const specification_dependents = [_]@import("pipeline.zig").DataKey{ .specification_generation_session, .identified_specification_content, .specification_id_ledger, .specification_coverage };
 const merge_context = [_]@import("pipeline.zig").DataKey{ .citable_reference_inputs, .reference_passive_literals, .valid_toolchain, .required_authority_inputs, .required_authority_observations, .required_authority_result, .specification_support_review, .source_omission_repair };
 pub const extraction_requires = merge_context ++ [_]@import("pipeline.zig").DataKey{ .structured_token_candidates, .text_validated_reference_extraction };
-pub const extraction_dependents = [_]@import("pipeline.zig").DataKey{ .validated_reference_selections, .preserved_token_identities, .prepared_reference_claims, .validated_reference_claims, .reference_claim_identities, .reference_extraction_ledger, .accounted_reference_extraction, .reference_reconciliation_items, .reference_reconciliation_layout, .reference_reconciliation_plan, .reference_reconciliation_progress, .reference_reconciliation_input, .raw_reference_reconciliation, .parsed_reference_reconciliation, .validated_reference_dispositions, .validated_reference_signals, .validated_reference_roles, .validated_reference_conflicts, .reference_reconciliation_identities, .reference_reconciliation_records, .accounted_reference_reconciliation, .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate, .source_omission_repair };
+// Summary parsing consumes raw_reference_reconciliation before review. It is
+// already retired here, so the dependent set contains only surviving facts.
+pub const extraction_dependents = [_]@import("pipeline.zig").DataKey{ .validated_reference_selections, .preserved_token_identities, .prepared_reference_claims, .validated_reference_claims, .reference_claim_identities, .reference_extraction_ledger, .accounted_reference_extraction, .reference_reconciliation_items, .reference_reconciliation_layout, .reference_reconciliation_plan, .reference_reconciliation_progress, .reference_reconciliation_input, .parsed_reference_reconciliation, .validated_reference_dispositions, .validated_reference_signals, .validated_reference_roles, .validated_reference_conflicts, .reference_reconciliation_identities, .reference_reconciliation_records, .accounted_reference_reconciliation, .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate, .source_omission_repair };
 pub const reconciliation_requires = merge_context ++ [_]@import("pipeline.zig").DataKey{.parsed_reference_reconciliation};
 pub const reconciliation_dependents = [_]@import("pipeline.zig").DataKey{ .validated_reference_dispositions, .validated_reference_signals, .validated_reference_roles, .validated_reference_conflicts, .reference_reconciliation_identities, .reference_reconciliation_records, .accounted_reference_reconciliation, .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate, .source_omission_repair };

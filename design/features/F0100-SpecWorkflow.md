@@ -552,38 +552,43 @@ All operations are pure and individually registered in the generic YAML registry
 | Responsibility | Operations |
 | --- | --- |
 | Inputs and grouping | `build-reference-reconciliation-items`, `partition-reference-reconciliation-items` (`with: { group-size: 16 }`), `assign-reference-reconciliation-partitions`, `validate-reference-reconciliation-partitions` |
-| Each partition | `build-reference-reconciliation-input`, `parse-reference-reconciliation-result` |
+| Each partition | `build-reference-reconciliation-input`; summary collection and parsing |
 | Non-final summaries | `validate-reference-reconciliation-summary`, `assign-reference-summary-identities`, `build-reference-reconciliation-summary` |
-| Global proposal | `validate-reference-claim-dispositions`, `validate-reference-signal-proposals`, `validate-reference-conflict-proposals` |
+| Global phases | Build and collect dispositions, signals, roles and conflicts assignments; `check-reference-reconciliation-phase`; the disposition, signal, role and conflict validators |
 | Identified result | `assign-reference-reconciliation-identities`, `build-reference-reconciliation-records`, `validate-reference-reconciliation-completeness` |
 
-- The engine selects the summary or global response schema for its current partition.
-- A summary proposal contains only `statements`, with positive unique `local_key`,
-  selected `claim_ids` and typed `content`.
-- Statements represent every partition member claim exactly once.
+- The engine selects the current partition's summary or named phase schema.
+- A summary proposal contains only semantic `statements`, with selected `claim_ids`
+  and typed model `content`. Native code appends each exact-token statement.
+- Constructed statements represent every partition member claim exactly once.
 - The engine constructs canonical `member_claim_ids` from that partition and
   `member_summary_ids` from its validated child summaries; neither membership field is
   accepted in a model response.
 - Summary IDs are allocated only after validation; partition planning contains local
   group links, not future canonical summary IDs.
-- Statement IDs follow sorted local keys.
+- Statement IDs follow semantic response order, then native token claim order.
 - Accepted summaries retain their lineage in immutable execution-local history;
   advancing clears the consumed candidate keys rather than retaining stale parallel
   candidates.
 
-A global proposal contains `claim_dispositions`, `signals` and `conflicts`:
+Under [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md), global
+dispositions, signals, roles and conflicts are collected and natively validated
+before their dependent requests. Native phase facts bind state, partition,
+revision and exact accepted content; final full validation remains mandatory.
 
 - Exactly one disposition per original claim.
 
   - The nested `disposition.kind` selects `retained` with an empty struct payload,
-    `duplicate` with one `target_claim_id`, or `superseded`/`conflicting` with nonempty
-    `related_claim_ids`.
-  - The native validator derives the canonical enum/list.
+    `duplicate` with one `target_claim_id`, `superseded` with nonempty
+    `related_claim_ids`, or `conflicting` with an empty payload.
+  - Semantic `conflict_groups` supply membership once. Native code expands only
+    each group's reciprocal pairs; overlap does not imply transitive conflicts.
   - Related IDs must be current, unique and non-self.
   - Duplicate/supersession edges are acyclic and terminate at retained claims; conflict
     relationships are symmetric and must be represented by conflicts.
-- Signal content uses nested `kind` alternatives for typed model content or a selected
-  preserved-token ID.
+- Signal responses contain typed model content. Native code constructs eligible
+  exact-token signals from accepted dispositions. Roles select native occurrence
+  handles from the immutable signal assignment; no claim-list echo is accepted.
 
   - Kind, claim and token joins must agree.
   - One shared constructor derives canonical citations from selected claims in supplied
@@ -592,8 +597,8 @@ A global proposal contains `claim_dispositions`, `signals` and `conflicts`:
   - Every non-conflicting preserved token retains its own reference and obligation,
     including when its claim is superseded or duplicate.
   - Different exact scalars cannot be declared duplicates.
-- Conflicts select at least two current conflicting claims, a closed conflict kind,
-  typed `summary`, and `resolution: "unresolved"`.
+- Conflict explanations select an accepted native `group_id`, a closed conflict
+  kind and typed `summary`. Native code attaches membership and unresolved status.
 
   - Overlapping conflicts retain all relationship coverage; duplicate conflict groups of
     the same kind fail.
@@ -611,7 +616,8 @@ A global proposal contains `claim_dispositions`, `signals` and `conflicts`:
 - Native authorizers select one field, a missing member, or an exactly redundant entry.
 - Related claims, partition/history membership and text/evidence facts remain read
   dependencies.
-- Every merge repeats summary validation or all three global validators.
+- Every merge repeats summary validation or all global validators; changed
+  upstream facts retire dependent signals/roles and rebuild through the same gates.
 - Proven redundant deletions and determined token insertions require no model
   confirmation.
 - Non-equivalent competing entries remain blocked under FIX_001 G1; a repaired conflict
@@ -777,17 +783,21 @@ validators:
 
 - `initialize-reference-extraction`, `check-reference-extraction-progress`,
   `build-reference-extraction-model-input`,
-  `collect-reference-extraction-result`, `build-reference-extraction-results`.
+  `construct-forced-token-classifications`, `collect-reference-extraction-result`,
+  `build-reference-extraction-results`. An admitted no-feature outcome or absence
+  of token candidates forces a native classification collection without a model
+  call or fabricated origin. Outcome-changing repair retires obsolete choices.
 - `build-reference-reconciliation-model-input`,
   `check-reference-reconciliation-purpose`,
-  `collect-reference-reconciliation-result`.
+  `collect-reference-reconciliation-result` for summaries, and the four native
+  phase assignment builders and collectors for global reconciliation.
 
 - Each extraction packet contains the complete captured chunk as lossless `source_lines`
   with request-local IDs, scoped passive choices and token candidates.
 - Reconciliation packets retain all partition claim/summary membership and exact-token
   references.
-- Collection reads only a fully schema-validated assembly and checks its immutable
-  packet scope; models cannot select another chunk or partition. Reconciliation
+- Collection reads only schema-admitted phase candidates or summary assemblies
+  and checks their immutable packet scope; models cannot select another chunk or partition. Reconciliation
   records retain each collection's producer in the existing `Source.fields`; field
   repairs override only their target. Mixed-origin roots have no single producer.
   Retry identity includes the unchanged collection producers, so rebuilding an

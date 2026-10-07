@@ -99,11 +99,6 @@
           "items": {
             "type": "object",
             "properties": {
-              "local_key": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 4294967295
-              },
               "claim_ids": {
                 "type": "array",
                 "items": {
@@ -117,7 +112,6 @@
               }
             },
             "required": [
-              "local_key",
               "claim_ids",
               "content"
             ],
@@ -131,222 +125,134 @@
       ],
       "additionalProperties": false
     },
-    "global": {
+    "content": {
       "type": "object",
       "properties": {
-        "claim_dispositions": {
-          "$ref": "#/$defs/claim_dispositions"
+        "kind": {
+          "const": "model"
         },
-        "signals": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "claim_ids": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/ordinal"
+        "model": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "business"
                 },
-                "minItems": 1,
-                "maxItems": 4294967295
+                "segments": {
+                  "$ref": "#/$defs/business_segments"
+                }
               },
-              "content": {
-                "$ref": "#/$defs/content"
-              }
+              "required": [
+                "kind",
+                "segments"
+              ],
+              "additionalProperties": false
             },
-            "required": [
-              "claim_ids",
-              "content"
-            ],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
-        },
-        "role_assignments": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "claim_ids": {
-                "type": "array",
-                "items": {"$ref": "#/$defs/ordinal"},
-                "minItems": 1,
-                "maxItems": 4294967295
-              },
-              "generation_roles": {
-                "type": "array",
-                "items": {
-                  "enum": ["title", "description", "primary_goal", "primary_user_story", "entity_basis", "records"]
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "design"
                 },
-                "minItems": 1,
-                "maxItems": 6
-              }
+                "nodes": {
+                  "$ref": "#/$defs/reference_nodes"
+                }
+              },
+              "required": [
+                "kind",
+                "nodes"
+              ],
+              "additionalProperties": false
             },
-            "required": ["claim_ids", "generation_roles"],
-            "additionalProperties": false
-          },
-          "maxItems": 4294967295
-        },
-        "conflicts": {
-          "$ref": "#/$defs/conflicts"
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "technical"
+                },
+                "nodes": {
+                  "$ref": "#/$defs/reference_nodes"
+                }
+              },
+              "required": [
+                "kind",
+                "nodes"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "validation"
+                },
+                "nodes": {
+                  "$ref": "#/$defs/reference_nodes"
+                }
+              },
+              "required": [
+                "kind",
+                "nodes"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "implementation_assumption"
+                },
+                "nodes": {
+                  "$ref": "#/$defs/reference_nodes"
+                }
+              },
+              "required": [
+                "kind",
+                "nodes"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "open_question"
+                },
+                "nodes": {
+                  "$ref": "#/$defs/reference_nodes"
+                }
+              },
+              "required": [
+                "kind",
+                "nodes"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "scope_guard"
+                },
+                "segments": {
+                  "$ref": "#/$defs/business_segments"
+                }
+              },
+              "required": [
+                "kind",
+                "segments"
+              ],
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "required": [
-        "claim_dispositions",
-        "signals",
-        "role_assignments",
-        "conflicts"
+        "kind",
+        "model"
       ],
       "additionalProperties": false
-    },
-    "content": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "model"
-            },
-            "model": {
-              "oneOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "business"
-                    },
-                    "segments": {
-                      "$ref": "#/$defs/business_segments"
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "segments"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "design"
-                    },
-                    "nodes": {
-                      "$ref": "#/$defs/reference_nodes"
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "nodes"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "technical"
-                    },
-                    "nodes": {
-                      "$ref": "#/$defs/reference_nodes"
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "nodes"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "validation"
-                    },
-                    "nodes": {
-                      "$ref": "#/$defs/reference_nodes"
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "nodes"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "implementation_assumption"
-                    },
-                    "nodes": {
-                      "$ref": "#/$defs/reference_nodes"
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "nodes"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "open_question"
-                    },
-                    "nodes": {
-                      "$ref": "#/$defs/reference_nodes"
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "nodes"
-                  ],
-                  "additionalProperties": false
-                },
-                {
-                  "type": "object",
-                  "properties": {
-                    "kind": {
-                      "const": "scope_guard"
-                    },
-                    "segments": {
-                      "$ref": "#/$defs/business_segments"
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "segments"
-                  ],
-                  "additionalProperties": false
-                }
-              ]
-            }
-          },
-          "required": [
-            "kind",
-            "model"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "preserved_token"
-            },
-            "token_id": {
-              "$ref": "#/$defs/ordinal"
-            }
-          },
-          "required": [
-            "kind",
-            "token_id"
-          ],
-          "additionalProperties": false
-        }
-      ]
     },
     "disposition": {
       "oneOf": [
@@ -404,19 +310,10 @@
           "properties": {
             "kind": {
               "const": "conflicting"
-            },
-            "related_claim_ids": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/ordinal"
-              },
-              "minItems": 1,
-              "maxItems": 4294967295
             }
           },
           "required": [
-            "kind",
-            "related_claim_ids"
+            "kind"
           ],
           "additionalProperties": false
         }
@@ -454,20 +351,6 @@
       },
       "required": [
         "claim_ids"
-      ],
-      "additionalProperties": false
-    },
-    "repair_key": {
-      "type": "object",
-      "properties": {
-        "local_key": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 4294967295
-        }
-      },
-      "required": [
-        "local_key"
       ],
       "additionalProperties": false
     },
@@ -520,19 +403,136 @@
       ],
       "additionalProperties": false
     },
-    "token_reference": {
+    "repair_conflict_group": {
       "type": "object",
       "properties": {
-        "token_id": {
-          "$ref": "#/$defs/ordinal"
+        "claim_dispositions": {
+          "$ref": "#/$defs/semantic_dispositions"
+        },
+        "conflict_groups": {
+          "$ref": "#/$defs/conflict_groups"
+        },
+        "conflicts": {
+          "$ref": "#/$defs/conflict_explanations"
         }
       },
       "required": [
-        "token_id"
+        "claim_dispositions",
+        "conflict_groups",
+        "conflicts"
       ],
       "additionalProperties": false
     },
-    "claim_dispositions": {
+    "dispositions_assignment": {
+      "type": "object",
+      "properties": {
+        "claim_dispositions": {
+          "$ref": "#/$defs/semantic_dispositions"
+        },
+        "conflict_groups": {
+          "$ref": "#/$defs/conflict_groups"
+        }
+      },
+      "required": [
+        "claim_dispositions",
+        "conflict_groups"
+      ],
+      "additionalProperties": false
+    },
+    "signals_assignment": {
+      "type": "object",
+      "properties": {
+        "signals": {
+          "$ref": "#/$defs/signals"
+        }
+      },
+      "required": [
+        "signals"
+      ],
+      "additionalProperties": false
+    },
+    "roles_assignment": {
+      "type": "object",
+      "properties": {
+        "role_assignments": {
+          "$ref": "#/$defs/role_assignments"
+        }
+      },
+      "required": [
+        "role_assignments"
+      ],
+      "additionalProperties": false
+    },
+    "conflicts_assignment": {
+      "type": "object",
+      "properties": {
+        "conflicts": {
+          "$ref": "#/$defs/conflict_explanations"
+        }
+      },
+      "required": [
+        "conflicts"
+      ],
+      "additionalProperties": false
+    },
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "claim_ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ordinal"
+            },
+            "minItems": 1,
+            "maxItems": 4294967295
+          },
+          "content": {
+            "$ref": "#/$defs/content"
+          }
+        },
+        "required": [
+          "claim_ids",
+          "content"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 4294967295
+    },
+    "role_assignments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "generation_roles": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "title",
+                "description",
+                "primary_goal",
+                "primary_user_story",
+                "entity_basis",
+                "records"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 6
+          },
+          "signal_id": {
+            "$ref": "#/$defs/ordinal"
+          }
+        },
+        "required": [
+          "signal_id",
+          "generation_roles"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 4294967295
+    },
+    "semantic_dispositions": {
       "type": "array",
       "items": {
         "type": "object",
@@ -552,7 +552,7 @@
       },
       "maxItems": 4294967295
     },
-    "conflicts": {
+    "conflict_groups": {
       "type": "array",
       "items": {
         "type": "object",
@@ -562,7 +562,24 @@
             "items": {
               "$ref": "#/$defs/ordinal"
             },
+            "minItems": 2,
             "maxItems": 4294967295
+          }
+        },
+        "required": [
+          "claim_ids"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 4294967295
+    },
+    "conflict_explanations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "group_id": {
+            "$ref": "#/$defs/ordinal"
           },
           "kind": {
             "enum": [
@@ -577,7 +594,7 @@
           }
         },
         "required": [
-          "claim_ids",
+          "group_id",
           "kind",
           "summary"
         ],
@@ -585,19 +602,15 @@
       },
       "maxItems": 4294967295
     },
-    "repair_conflict_group": {
+    "repair_conflict_selection": {
       "type": "object",
       "properties": {
-        "claim_dispositions": {
-          "$ref": "#/$defs/claim_dispositions"
-        },
-        "conflicts": {
-          "$ref": "#/$defs/conflicts"
+        "group_id": {
+          "$ref": "#/$defs/ordinal"
         }
       },
       "required": [
-        "claim_dispositions",
-        "conflicts"
+        "group_id"
       ],
       "additionalProperties": false
     }

@@ -38,9 +38,25 @@ pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.
     return reconciliationPacketFor(allocator, input, inputs, registry, .{ .shared = guidance_scope });
 }
 pub fn reconciliationCompositionPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry) ReconciliationError!*packets.Packet {
-    return reconciliationPacketFor(allocator, input, inputs, registry, .composed);
+    if (input.purpose != .summary) return error.InvalidReferenceReconciliation;
+    const ids = try @import("reference_reconciliation_projection.zig").semanticClaimIds(allocator, input.items);
+    defer allocator.free(ids);
+    return reconciliationPacketFor(allocator, input, inputs, registry, .{ .composed = .{ .assignment = .summary, .claim_ids = ids } });
 }
-const Presentation = union(enum) { shared: Constraint.Scope, composed };
+pub fn reconciliationPhasePacket(allocator: std.mem.Allocator, prior: @import("reference_reconciliation_stage.zig").Prior, inputs: evidence.Inputs, registry: literals.Registry) ReconciliationError!*packets.Packet {
+    const current = @import("reference_reconciliation_stage.zig").input(prior);
+    const ids = switch (prior) {
+        .dispositions => current.partition.group.claim_ids,
+        .signals => |value| try @import("reference_reconciliation_projection.zig").signalClaimIds(allocator, value),
+        .roles, .conflicts => &.{},
+    };
+    defer if (prior == .signals) allocator.free(ids);
+    const assignment: Constraint.Assignment = switch (prior) {
+        inline else => |_, tag| @field(Constraint.Assignment, @tagName(tag)),
+    };
+    return reconciliationPacketFor(allocator, current, inputs, registry, .{ .composed = .{ .assignment = assignment, .claim_ids = ids } });
+}
+const Presentation = union(enum) { shared: Constraint.Scope, composed: struct { assignment: Constraint.Assignment, claim_ids: []const reconciliation.ClaimId } };
 fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, presentation: Presentation) ReconciliationError!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
@@ -83,35 +99,41 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     const selected = try withTextChoices(allocator, packet, try passiveIds(scratch, common.passive_literals), &.{});
     if (presentation == .shared) return selected;
     defer packets.release(selected);
-    const assignments: []const Constraint.Assignment = if (input.purpose == .summary) &.{.summary} else &.{ .dispositions, .signals, .roles, .conflicts };
-    const contexts = try scratch.alloc(packets.AssignmentContext, assignments.len);
-    for (assignments, contexts) |assignment, *context| {
-        const constraints = try reconciliationGuidance(scratch, input.purpose, .{ .assignment = assignment });
-        const context_body = if (assignment == .roles) roles: {
-            const definitions = try scratch.alloc(RoleDefinition, std.meta.tags(reconciliation.GenerationRole).len);
-            for (std.meta.tags(reconciliation.GenerationRole), definitions) |role, *definition| definition.* = .{
-                .role = role,
-                .purpose = role.purpose(scratch) catch |err| return switch (err) {
-                    error.OutOfMemory => error.OutOfMemory,
-                    error.InvalidRequiredAuthority => error.InvalidReferenceReconciliation,
-                },
-            };
-            const role_context = .{ .constraints = constraints, .role_definitions = definitions };
-            break :roles try @import("model_candidate_json.zig").encode(@TypeOf(role_context), scratch, role_context);
-        } else other: {
-            const assignment_context = .{
-                .purpose = hierarchy.purpose,
-                .level = hierarchy.level,
-                .member_claim_ids = hierarchy.member_claim_ids,
-                .member_summary_ids = hierarchy.member_summary_ids,
-                .summaries = hierarchy.summaries,
-                .constraints = constraints,
-            };
-            break :other try @import("model_candidate_json.zig").encode(@TypeOf(assignment_context), scratch, assignment_context);
+    const assignment = presentation.composed.assignment;
+    const constraints = try reconciliationGuidance(scratch, input.purpose, .{ .assignment = assignment });
+    const context_body = if (assignment == .roles) roles: {
+        const definitions = try scratch.alloc(RoleDefinition, std.meta.tags(reconciliation.GenerationRole).len);
+        for (std.meta.tags(reconciliation.GenerationRole), definitions) |role, *definition| definition.* = .{
+            .role = role,
+            .purpose = role.purpose(scratch) catch |err| return switch (err) {
+                error.OutOfMemory => error.OutOfMemory,
+                error.InvalidRequiredAuthority => error.InvalidReferenceReconciliation,
+            },
         };
-        context.* = .{ .id = packets.AssignmentContextId.parse(@tagName(assignment)).?, .body = context_body };
-    }
-    return packets.withAssignmentContexts(allocator, selected, contexts);
+        const role_context = .{ .constraints = constraints, .role_definitions = definitions };
+        break :roles try @import("model_candidate_json.zig").encode(@TypeOf(role_context), scratch, role_context);
+    } else if (assignment == .conflicts) conflicts: {
+        const conflict_context = .{ .constraints = constraints };
+        break :conflicts try @import("model_candidate_json.zig").encode(@TypeOf(conflict_context), scratch, conflict_context);
+    } else other: {
+        const assignment_context = .{
+            .purpose = hierarchy.purpose,
+            .level = hierarchy.level,
+            .claim_ids = presentation.composed.claim_ids,
+            .member_summary_ids = hierarchy.member_summary_ids,
+            .summaries = hierarchy.summaries,
+            .constraints = constraints,
+        };
+        break :other try @import("model_candidate_json.zig").encode(@TypeOf(assignment_context), scratch, assignment_context);
+    };
+    const contextual = try packets.withAssignmentContexts(allocator, selected, &.{.{ .id = packets.AssignmentContextId.parse(@tagName(assignment)).?, .body = context_body }});
+    if (assignment != .summary and assignment != .signals) return contextual;
+    defer packets.release(contextual);
+    const ids = try scratch.alloc(i64, presentation.composed.claim_ids.len);
+    for (ids, presentation.composed.claim_ids) |*id, claim| id.* = claim.ordinal;
+    const field = if (assignment == .summary) "statements" else "signals";
+    const definition_id: @import("model_result_schema.zig").DefinitionId = .{ .bytes = if (assignment == .summary) "summary" else "signals_assignment" };
+    return packets.withIntegerChoices(allocator, contextual, &.{.{ .target = .{ .path = &.{ .{ .property = field }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = definition_id, .allowed = ids }});
 }
 const RoleDefinition = struct { role: reconciliation.GenerationRole, purpose: []const u8 };
 
@@ -133,17 +155,54 @@ pub fn withTextChoices(a: std.mem.Allocator, packet: *const packets.Packet, pass
     if (exact_copy.len == 0) {
         try excluded.append(a, .{ .kind = "exact_copy" });
     }
-    var choices: [2]@import("model_result_schema.zig").IntegerChoice = undefined;
-    var selected: usize = 0;
+    var choices: std.ArrayList(schema.IntegerChoice) = .empty;
+    defer choices.deinit(a);
+    for (packet.integerChoices()) |entry| {
+        if (entry.target == .tagged and (std.mem.eql(u8, entry.target.tagged.kind, "passive") or std.mem.eql(u8, entry.target.tagged.kind, "exact_copy"))) continue;
+        try choices.append(a, entry);
+    }
     if (passive.len != 0) {
-        choices[selected] = .{ .kind = "passive", .field = "passive_literal_id", .allowed = passive };
-        selected += 1;
+        try choices.append(a, .{ .target = .{ .tagged = .{ .kind = "passive", .field = "passive_literal_id" } }, .allowed = passive });
     }
     if (exact_copy.len != 0) {
-        choices[selected] = .{ .kind = "exact_copy", .field = "claim_id", .allowed = exact_copy };
-        selected += 1;
+        try choices.append(a, .{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = exact_copy });
     }
-    return packets.withRestrictions(a, packet, excluded.items, choices[0..selected]);
+    return packets.withRestrictions(a, packet, excluded.items, choices.items);
+}
+
+/// Project the native disposition scope into its selected response shape.
+/// Repair eligibility comes from the canonical checker, never another policy.
+pub fn withDispositionChoices(a: std.mem.Allocator, packet: *const packets.Packet, members: []const reconciliation.ClaimId, selected: ?@import("reference_disposition_validation.zig").RepairChoices, grouped: bool) packets.Error!*packets.Packet {
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    const schema = @import("model_result_schema.zig");
+    var excluded: std.ArrayList(schema.ExcludedVariant) = .empty;
+    try excluded.appendSlice(scratch, packet.excludedVariants());
+    var choices: std.ArrayList(schema.IntegerChoice) = .empty;
+    try choices.appendSlice(scratch, packet.integerChoices());
+    if (grouped) for ([_][]const schema.ChoiceStep{
+        &.{ .{ .property = "claim_dispositions" }, .{ .items = {} }, .{ .property = "claim_id" } },
+        &.{ .{ .property = "conflict_groups" }, .{ .items = {} }, .{ .property = "claim_ids" } },
+    }) |path| try choices.append(scratch, .{ .target = .{ .path = path }, .definition = packet.resultDefinition(), .allowed = try claimOrdinals(scratch, members) });
+    for ([_]struct { tag: []const u8, field: []const u8, ids: []const reconciliation.ClaimId }{
+        .{ .tag = "duplicate", .field = "target_claim_id", .ids = if (selected) |value| value.duplicate_targets else members },
+        .{ .tag = "superseded", .field = "related_claim_ids", .ids = if (selected) |value| value.superseded_targets else members },
+    }) |value| {
+        if (value.ids.len == 0) {
+            try excluded.append(scratch, .{ .kind = value.tag });
+        } else try choices.append(scratch, .{ .target = .{ .tagged = .{ .kind = value.tag, .field = value.field } }, .definition = packet.resultDefinition(), .allowed = try claimOrdinals(scratch, value.ids) });
+    }
+    if (selected) |value| {
+        if (!value.retained) try excluded.append(scratch, .{ .kind = "retained" });
+        if (value.conflicting_with_all.len == 0) try excluded.append(scratch, .{ .kind = "conflicting" });
+    }
+    return packets.withRestrictions(a, packet, excluded.items, choices.items);
+}
+fn claimOrdinals(a: std.mem.Allocator, ids: []const reconciliation.ClaimId) std.mem.Allocator.Error![]const i64 {
+    const result = try a.alloc(i64, ids.len);
+    for (result, ids) |*value, id| value.* = id.ordinal;
+    return result;
 }
 
 pub fn passiveIds(a: std.mem.Allocator, records: []const literals.Record) std.mem.Allocator.Error![]const i64 {

@@ -7,6 +7,21 @@ pub const Records = struct {
     signals: []const r.Signal,
     conflicts: []const r.Conflict,
 };
+
+/// Positive business support for generation roles and their consumers. Historical
+/// and diagnostic evidence remains available independently of this eligibility.
+pub fn eligibleClaim(disposition: ?r.Disposition) bool {
+    return disposition != null and disposition.? == .retained;
+}
+
+pub fn eligibleSelection(dispositions: []const r.ClaimDisposition, claims: []const r.ClaimId) r.Error!bool {
+    if (claims.len == 0) return false;
+    for (claims) |id| {
+        const value = try @import("reference_reconciliation_validation.zig").disposition(dispositions, id);
+        if (!eligibleClaim(value.disposition)) return false;
+    }
+    return true;
+}
 pub fn records(value: r.Accounted) Records {
     const global = value.records.assignments.checked.prior.prior;
     return .{ .items = global.input.progress.plan.layout.items, .dispositions = global.dispositions, .signals = value.records.signals, .conflicts = value.records.conflicts };

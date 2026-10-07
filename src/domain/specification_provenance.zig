@@ -4,6 +4,7 @@ const spec = @import("specification.zig");
 const r = @import("reference_reconciliation.zig");
 const evidence = @import("reference_evidence.zig");
 const text = @import("typed_text.zig");
+const refs = @import("reference_support.zig");
 pub const Error = r.Error || spec.Error;
 pub const Context = struct {
     inputs: evidence.Inputs,
@@ -32,18 +33,12 @@ pub fn items(context: Context) Error!r.Items {
     return result;
 }
 
-/// Business-provenance eligibility, shared by generation and coverage.
-/// Missing disposition accounts cannot authorize a claim.
-pub fn eligibleClaim(disposition: ?r.Disposition) bool {
-    return disposition != null and disposition.? == .retained;
-}
-
 /// A draft needs at least one possible positive evidence selection. This is
 /// structural readiness, not a judgment that the source supports every field.
 pub fn generationReady(references: r.Accounted) bool {
     if (references.outcome != .complete) return false;
     for (references.records.assignments.checked.prior.prior.dispositions) |disposition| {
-        if (eligibleClaim(disposition.disposition)) return true;
+        if (refs.eligibleClaim(disposition.disposition)) return true;
     }
     return false;
 }
@@ -97,7 +92,7 @@ fn resolveUnitRecords(comptime boundary: spec.Boundary, allocator: std.mem.Alloc
             if (boundary == .canonical) return error.InvalidTypedText;
             continue;
         };
-        if (!permitsExactKind(token.value.kind) or !eligibleClaim(dispositionFor(references, id))) {
+        if (!permitsExactKind(token.value.kind) or !refs.eligibleClaim(dispositionFor(references, id))) {
             if (boundary == .canonical) return error.InvalidTypedText;
             continue;
         }
@@ -109,7 +104,7 @@ fn resolveUnitRecords(comptime boundary: spec.Boundary, allocator: std.mem.Alloc
         error.InvalidReferenceState => return error.InvalidSpecification,
         else => |other| return other,
     };
-    for (provenance.claim_ids) |id| if (!eligibleClaim(dispositionFor(references, id))) return error.InvalidSpecification;
+    if (provenance.claim_ids.len != 0 and !(refs.eligibleSelection(references.dispositions, provenance.claim_ids) catch return error.InvalidSpecification)) return error.InvalidSpecification;
     // Stable unique union in selected-claim order, not an arbitrary superset.
     const citations = selected.citation_ids;
     if (boundary == .canonical) {

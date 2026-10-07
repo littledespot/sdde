@@ -50,7 +50,7 @@ pub const Content = union(enum) {
     model: extraction.Content,
     preserved_token: TokenReference,
 };
-pub const StatementProposal = struct { local_key: u32, claim_ids: []const ClaimId, content: ContentProposal };
+pub const StatementProposal = struct { claim_ids: []const ClaimId, content: ContentProposal };
 pub fn equivalentContent(left: Content, right: Content) bool {
     if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
     return switch (left) {
@@ -64,7 +64,7 @@ pub fn equivalentContent(left: Content, right: Content) bool {
         },
     };
 }
-pub const ValidatedStatement = struct { local_key: u32, claim_ids: []const ClaimId, content: Content };
+pub const ValidatedStatement = struct { claim_ids: []const ClaimId, content: Content };
 pub const Statement = struct { id: StatementId, claim_ids: []const ClaimId, content: Content };
 pub const SummaryProposal = struct { statements: []const StatementProposal };
 pub const Summary = struct { id: SummaryId, partition_id: PartitionId, member_claim_ids: []const ClaimId, member_summary_ids: []const SummaryId, statements: []const Statement };
@@ -125,7 +125,11 @@ pub const GenerationRole = enum {
     }
 };
 pub const SignalProposal = struct { claim_ids: []const ClaimId, content: ContentProposal };
-pub const RoleAssignment = struct { claim_ids: []const ClaimId, generation_roles: []const GenerationRole };
+pub const SignalSelectionId = struct {
+    ordinal: u32,
+    pub const model_scalar = "ordinal";
+};
+pub const RoleAssignment = struct { signal_id: SignalSelectionId, generation_roles: []const GenerationRole };
 pub const ValidatedSignal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: Content, generation_roles: []const GenerationRole };
 pub const ConflictKind = enum { mutually_exclusive, precedence_missing, value_mismatch, scope_mismatch };
 pub const ConflictProposal = struct {
@@ -134,13 +138,14 @@ pub const ConflictProposal = struct {
     summary: text.ReferenceSemanticText,
 };
 pub const ValidatedConflict = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, kind: ConflictKind, summary: text.ValidatedReferenceSemanticText, resolution: enum { unresolved } };
-pub const Proposal = struct { claim_dispositions: []const ClaimDispositionProposal, signals: []const SignalProposal, role_assignments: []const RoleAssignment = &.{}, conflicts: []const ConflictProposal };
+pub const Proposal = struct { conflict_groups: []const @import("reference_conflict_groups.zig").Group = &.{}, claim_dispositions: []const ClaimDispositionProposal, signals: []const SignalProposal, role_assignments: []const RoleAssignment = &.{}, conflicts: []const ConflictProposal };
 pub const diagnostic = @import("reference_reconciliation_diagnostic.zig");
 pub const Raw = struct { source: diagnostic.Source = .{}, input: Input, bytes: []const u8 };
-pub const Parsed = struct { source: diagnostic.Source = .{}, input: Input, proposal: union(enum) { summary: SummaryProposal, global: Proposal } };
+pub const Phase = enum { dispositions, signals, signals_with_conflicts, roles, complete };
+pub const Parsed = struct { phase: Phase = .complete, source: diagnostic.Source = .{}, input: Input, proposal: union(enum) { summary: SummaryProposal, global: Proposal } };
 pub const CheckedSummary = struct { input: Input, statements: []const ValidatedStatement };
 pub const SummaryAssignment = struct { checked: CheckedSummary, id: SummaryId, statement_ids: []const StatementId, next_statement_ordinal: u32 };
-pub const CheckedDispositions = struct { source: diagnostic.Source = .{}, input: Input, proposal: Proposal, dispositions: []const ClaimDisposition };
+pub const CheckedDispositions = struct { phase: Phase = .complete, source: diagnostic.Source = .{}, input: Input, proposal: Proposal, dispositions: []const ClaimDisposition };
 pub const CheckedSignals = struct { prior: CheckedDispositions, signals: []const ValidatedSignal };
 pub const CheckedConflicts = struct { prior: CheckedSignals, conflicts: []const ValidatedConflict };
 pub const RecordAssignments = struct { checked: CheckedConflicts, signal_ids: []const SignalId, conflict_ids: []const ConflictId };

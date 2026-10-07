@@ -39,7 +39,7 @@ fn assignmentContexts(allocator: std.mem.Allocator) !void {
     };
     const native = try packets.withAssignmentContexts(allocator, base, &contexts);
     defer packets.release(native);
-    const restricted = try packets.withRestrictions(allocator, native, &.{.{ .kind = "unavailable" }}, &.{.{ .kind = "exact_copy", .field = "claim_id", .allowed = &.{7} }});
+    const restricted = try packets.withRestrictions(allocator, native, &.{.{ .kind = "unavailable" }}, &.{.{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = &.{7} }});
     defer packets.release(restricted);
     const state = try runtime.State.init(a, plan, restricted, identity.ledger(ledger).stageRunEpochId());
     const bound = try state.select(a, 0);
@@ -276,10 +276,10 @@ test "named schema assembly preserves sibling placement and rejects stale prereq
     const after = try std.json.Stringify.valueAlloc(a, try repeated.inputs(a, dependent_binding), .{});
     try std.testing.expectEqualStrings(before, after);
     try std.testing.expectEqualStrings("{\"first\":{\"left\":\"original\"}}", after);
-    try std.testing.expect(second_state.entries[0].?.proof == first_state.entries[0].?.proof);
+    try std.testing.expect(second_state.entries[0].?.source.model.proof == first_state.entries[0].?.source.model.proof);
     var stale = dependent_binding;
     const stale_prerequisites = try a.dupe(runtime.Prerequisite, stale.prerequisites);
-    stale_prerequisites[0].origin.attempt.value += 1;
+    stale_prerequisites[0].origin.?.attempt.value += 1;
     stale.prerequisites = stale_prerequisites;
     try std.testing.expectError(error.InvalidCompositionBinding, second_state.inputs(a, stale));
     var sibling_request = try nextRequest(&fixture, dependent_binding.schema, "dependent");
@@ -406,4 +406,75 @@ fn nextRequest(fixture: *Fixture, selected: *const @import("domain/model_result_
     fixture.authorized = try fixture.base.startInference();
     fixture.call = .{ .request = fixture.prepared.request, .provider_binding = &fixture.base.provider_binding, .operations = fixture.base.ledger(), .operation_id = fixture.authorized.invoked.id };
     return previous;
+}
+
+test "native composition binds exact prerequisites and reports no provider origin" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var adapter: schema_adapter.Adapter = .{};
+    const canonical = try adapter.compiler().compile(a,
+        \\{"type":"object","properties":{"left":{"type":"boolean"},"right":{"type":"boolean"}},"required":["left","right"],"additionalProperties":false}
+    );
+    const plan = try adapter.compiler().compileComposition(a,
+        \\{"schema":"json-composition/v1","result":"result","parts":{"first":{"paths":["/left"]},"second":{"paths":["/right"],"requires":["first"]}}}
+    , canonical);
+    var fixture: Fixture = undefined;
+    try fixture.initWithCompiledSchema(try plan.selectSchema(0, &.{}));
+    defer fixture.deinit();
+    const id = fixture.base.model_request_id;
+    const packet = try packets.create(std.testing.allocator, "{}", id.immutable_unit_owner_id, id.purpose, null);
+    defer packets.release(packet);
+    const initial = try runtime.State.init(a, plan, packet, id.stage_run_epoch_id);
+    try std.testing.expectError(error.IncompleteComposition, initial.select(a, 1));
+    const left = (try std.json.parseFromSlice(std.json.Value, a, "{\"left\":true}", .{})).value;
+    const wrong = (try std.json.parseFromSlice(std.json.Value, a, "{\"left\":\"true\"}", .{})).value;
+    try std.testing.expectError(error.InvalidAssembledCandidate, initial.retainNative(a, try initial.select(a, 0), wrong));
+    const first = try initial.retainNative(a, try initial.select(a, 0), left);
+    const dependent = try first.select(a, 1);
+    try std.testing.expect(dependent.prerequisites[0].origin == null);
+    try std.testing.expect(dependent.prerequisites[0].native_snapshot != null);
+    const changed = try initial.retainNative(a, try initial.select(a, 0), (try std.json.parseFromSlice(std.json.Value, a, "{\"left\":false}", .{})).value);
+    try std.testing.expectError(error.InvalidCompositionBinding, changed.inputs(a, dependent));
+    const complete = try first.retainNative(a, dependent, (try std.json.parseFromSlice(std.json.Value, a, "{\"right\":false}", .{})).value);
+    const candidate = try complete.assemble(a);
+    try std.testing.expect(candidate.validate() == null);
+    try std.testing.expect(candidate.origin == null);
+    try std.testing.expect(candidate.producer(&.{"left"}) == null);
+    try std.testing.expectEqualStrings("{\"left\":true,\"right\":false}", candidate.body);
+}
+
+test "native composition normalizes nested numeric values through the shared closed schema boundary" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var adapter: schema_adapter.Adapter = .{};
+    const canonical = try adapter.compiler().compile(a,
+        \\{"type":"object","properties":{"values":{"type":"array","minItems":1,"maxItems":3,"items":{"type":"object","properties":{"id":{"type":"integer","minimum":1,"maximum":100}},"required":["id"],"additionalProperties":false}}},"required":["values"],"additionalProperties":false}
+    );
+    const plan = try adapter.compiler().compileComposition(a,
+        \\{"schema":"json-composition/v1","result":"result","parts":{"items":{"paths":["/values"]}}}
+    , canonical);
+    var fixture: Fixture = undefined;
+    try fixture.initWithCompiledSchema(try plan.selectSchema(0, &.{}));
+    defer fixture.deinit();
+    const id = fixture.base.model_request_id;
+    const packet = try packets.create(std.testing.allocator, "{}", id.immutable_unit_owner_id, id.purpose, null);
+    defer packets.release(packet);
+    const initial = try runtime.State.init(a, plan, packet, id.stage_run_epoch_id);
+    const binding = try initial.select(a, 0);
+    const retained = retained: {
+        var source = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, "{\"values\":[{\"id\":42}]}", .{});
+        defer source.deinit();
+        try std.testing.expect(source.value.object.get("values").?.array.items[0].object.get("id").? == .integer);
+        break :retained try initial.retainNative(a, binding, source.value);
+    };
+    const candidate = try retained.assemble(a);
+    try std.testing.expect(candidate.validate() == null);
+    try std.testing.expect(candidate.origin == null);
+    try std.testing.expectEqualStrings("{\"values\":[{\"id\":42}]}", candidate.body);
+    for ([_][]const u8{ "{\"values\":[{\"id\":1.25}]}", "{\"values\":[{\"id\":0}]}", "{\"values\":[{\"id\":101}]}", "{\"values\":[{\"id\":\"42\"}]}", "{\"values\":[{\"id\":42,\"extra\":true}]}" }) |body| {
+        const invalid = (try std.json.parseFromSlice(std.json.Value, a, body, .{})).value;
+        try std.testing.expectError(error.InvalidAssembledCandidate, initial.retainNative(a, binding, invalid));
+    }
 }

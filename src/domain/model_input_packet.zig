@@ -126,6 +126,14 @@ pub fn withExcludedVariants(allocator: std.mem.Allocator, base: *const Packet, e
 pub fn withRestrictions(allocator: std.mem.Allocator, base: *const Packet, excluded: []const schema.ExcludedVariant, choices: []const schema.IntegerChoice) Error!*Packet {
     return cloneWith(allocator, base, base.body(), excluded, choices, storage(base).assignment_contexts);
 }
+/// Add one owner's facts without replacing another owner's restrictions.
+pub fn withIntegerChoices(allocator: std.mem.Allocator, base: *const Packet, added: []const schema.IntegerChoice) Error!*Packet {
+    const choices = try allocator.alloc(schema.IntegerChoice, base.integerChoices().len + added.len);
+    defer allocator.free(choices);
+    @memcpy(choices[0..base.integerChoices().len], base.integerChoices());
+    @memcpy(choices[base.integerChoices().len..], added);
+    return withRestrictions(allocator, base, base.excludedVariants(), choices);
+}
 /// All projections copy native metadata once, into the resulting packet's owner.
 fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8, excluded: []const schema.ExcludedVariant, choices: []const schema.IntegerChoice, contexts: []const AssignmentContext) Error!*Packet {
     const result = try createBound(allocator, body, base.unit(), base.purpose(), base.resultDefinition(), base.repairPermit(), base.repairOrigin());
@@ -137,8 +145,17 @@ fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8
     const selected = try a.alloc(schema.IntegerChoice, choices.len);
     for (choices, selected) |entry, *destination| {
         destination.* = .{
-            .kind = try a.dupe(u8, entry.kind),
-            .field = try a.dupe(u8, entry.field),
+            .target = switch (entry.target) {
+                .tagged => |tag| .{ .tagged = .{ .kind = try a.dupe(u8, tag.kind), .field = try a.dupe(u8, tag.field) } },
+                .path => |path| blk: {
+                    const copy_path = try a.dupe(schema.ChoiceStep, path);
+                    for (copy_path) |*step| {
+                        if (step.* == .property) step.property = try a.dupe(u8, step.property);
+                    }
+                    break :blk .{ .path = copy_path };
+                },
+            },
+            .definition = if (entry.definition) |id| .{ .bytes = try a.dupe(u8, id.bytes) } else null,
             .allowed = try a.dupe(i64, entry.allowed),
         };
     }

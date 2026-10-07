@@ -2,6 +2,10 @@
 
 Run one live case from the repository root:
 
+The checked-in [greeting](../../test/e2e/wf-001-hello-world/node-vitest/workflow.case.json)
+and [loan-renewal](../../test/e2e/wf-002-loan-renewal/workflow.case.json) cases have
+separate sources and rubrics and reference the same workflow/model configuration.
+
 1. Configure credentials and judge selection under [Environment setup](#environment-setup).
 2. Obtain explicit user approval for this E2E run under
    [AGENTS.md](../../AGENTS.md#testing-expectations).

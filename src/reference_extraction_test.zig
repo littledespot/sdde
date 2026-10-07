@@ -709,3 +709,27 @@ test "token-only extraction preserves exact claims without weakening no-feature 
         try std.testing.expectEqualSlices(std.meta.Tag(extraction.tokens.Classification), &.{.irrelevant}, rejected.choices.decisions);
     }
 }
+
+test "forced classifications distinguish empty chunks, no-feature outcomes and positive token-only claims" {
+    const forced = @import("actions/reference/construct_forced_token_classifications.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "A librarian can renew a loan.\n", "Display `Loan renewed!`.\n" }) |source| {
+        var ids: fixture.IdSource = .{};
+        const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", source));
+        const candidates = try token_fixture.candidates(a, inputs);
+        const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id };
+        const negative = (try forced.classifications(a, scope, candidates, .no_feature_claim)).?;
+        try std.testing.expectEqual(candidates.entries.len, negative.len);
+        for (negative, candidates.entries) |classification, candidate| try std.testing.expectEqualDeep(candidate.id, classification.irrelevant);
+        const positive = try forced.classifications(a, scope, candidates, .claims);
+        if (candidates.entries.len == 0) {
+            try std.testing.expectEqual(@as(usize, 0), positive.?.len);
+        } else {
+            try std.testing.expect(positive == null);
+        }
+        const foreign: evidence.Scope = .{ .state_id = scope.state_id, .chunk_id = .{ .bytes = "another-chunk" } };
+        try std.testing.expectEqual(@as(usize, 0), (try forced.classifications(a, foreign, candidates, .claims)).?.len);
+    }
+}

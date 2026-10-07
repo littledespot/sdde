@@ -128,11 +128,15 @@ Typed content covers these concerns; each concern does not require a separate ca
   contains the semantic finding, explanation, required question and genuinely
   selectable source evidence. Independent feature fields carry only the assigned
   field's resolved text and provenance, its purpose and complete original source
-  evidence. Exact and passive references resolve through the canonical text
-  projector. Review display and evidence admission share native feature-field
-  selection; admission alone determines the permitted evidence binding.
-  Record and coverage assessments retain surrounding candidate context;
-  separate loss localization also retains upstream reconstruction context.
+  evidence. Record-field review selects through the canonical value lens and
+  retains that record's siblings; its task explains the selected field's purpose.
+  Signal review presents the selected native signal and any resolved exact value.
+  Exact and passive references resolve through the canonical text projector.
+  These read-only assignments do not certify support or alter evidence eligibility.
+  Coverage assessments retain surrounding candidate context. Separate loss
+  localization retains the target, candidate and upstream reconstruction context
+  without a support-assessment instruction; it compares a fixed alleged loss with
+  captured producers and may report `unlocalized` when meaning survives.
   Initial findings and authorized review corrections reuse this projection.
   A candidate-omission finding triggers a separate
   loss-location call with the finding fixed; that call cannot revise the verdict.
@@ -161,6 +165,14 @@ only its exact-group rule and role purposes projected from the shared requiremen
 descriptions; summary, disposition, signal and conflict rules remain with their
 own assignments. A group may support several roles and a role several groups;
 unsupported roles remain unassigned and mandatory coverage still blocks authoring.
+Role packets and admission use the same retained-claim support rule as source
+binding and canonical readback. A historical or mixed inactive group cannot
+acquire authoring roles; native choice projection retains original group handles
+and complete source evidence under [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md).
+Shared field purposes describe derivation from source-backed behavior, not a
+requirement for a ready-made title, goal or story in the source. Role assignment
+assesses each purpose using explicit or necessarily implied meaning; it cannot
+invent an actor, benefit or entity merely to fill coverage.
 No context-only literal is promoted to behavior merely to fill a role.
 Record authoring runs per bound group and may
 return several requirements. Each generation and repair packet presents the

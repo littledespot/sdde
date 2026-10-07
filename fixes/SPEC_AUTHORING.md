@@ -1,5 +1,12 @@
 # Field-purpose authoring comparison — 30 September 2026
 
+**6 October implementation update:** [FIX_003](FIX_003.md#12-implementation-record)
+and [ADR 0022](../design/decisions/0022-native-reference-phase-handoffs.md) replace
+global JSON composition with validated native phase handoffs, role/group handles,
+native token projection and forced classifications. Earlier measurements below
+remain historical evidence; the new implementation has no live reliability or
+rubric result yet.
+
 The shared generation request now presents each field's purpose beside its bound
 claim IDs. It reuses `required_authority_description.task`; claim meaning, citations
 and exact literals retain their existing owners. Generation and selected repair

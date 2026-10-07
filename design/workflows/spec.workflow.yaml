@@ -15,7 +15,6 @@ resources:
   reconciliation-prompt: spec/reconciliation.prompt.md
   reconciliation-schema: spec/reconciliation.schema.json
   reconciliation-summary: spec/reconciliation-summary.composition.json
-  reconciliation-global: spec/reconciliation-global.composition.json
   dispositions-prompt: spec/reconciliation-dispositions.prompt.md
   signals-prompt: spec/reconciliation-signals.prompt.md
   roles-prompt: spec/reconciliation-roles.prompt.md
@@ -332,25 +331,26 @@ subgraphs:
       content-request:
         call: composition-request-body
         with: {retry-limit: 2}
-        on: {ok: release-content, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: force-classifications, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       release-content:
         use: retire-model-request
         on: {ok: classifications, failed: end.failed}
+      force-classifications:
+        use: construct-forced-token-classifications
+        with: {source-part: content, native-composition-part: classifications}
+        on: {ok: finish-native, more: release-content, failed: end.failed}
       classifications:
         call: composition-request
         with:
           prompt: extraction-classifications-prompt
           composition-part: classifications
           retry-limit: 2
-        on: {ok: assemble, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      assemble:
-        call: assemble-response
-        on: {ok: collect-extraction, failed: end.failed}
-      collect-extraction:
-        use: collect-reference-extraction-result
-        on: {ok: ex-release, failed: end.failed}
-      ex-release:
-        call: release-request
+        on: {ok: finish-model, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      finish-native:
+        call: finish-extraction-response
+        on: {ok: check-extraction, failed: end.failed}
+      finish-model:
+        call: finish-extraction-response
         on: {ok: check-extraction, failed: end.failed}
       finish-extraction:
         use: build-reference-extraction-results
@@ -380,6 +380,18 @@ subgraphs:
       text-repair-release:
         call: release-request
         on: {ok: validate-extraction-text, failed: end.failed}
+  finish-extraction-response:
+    start: assemble
+    steps:
+      assemble:
+        call: assemble-response
+        on: {ok: collect-extraction, failed: end.failed}
+      collect-extraction:
+        use: collect-reference-extraction-result
+        on: {ok: release, failed: end.failed}
+      release:
+        call: release-request
+        on: {ok: end.ok, failed: end.failed}
   validate-extraction:
     start: selections
     steps:
@@ -445,13 +457,13 @@ subgraphs:
         on: {ok: reconciliation-input, failed: end.failed}
       reconciliation-input:
         use: build-reference-reconciliation-input
-        on: {ok: reconciliation-packet, failed: end.failed}
+        on: {ok: select-composition, failed: end.failed}
       reconciliation-packet:
         use: build-reference-reconciliation-model-input
-        on: {ok: select-composition, failed: end.failed}
+        on: {ok: initialize-summary, failed: end.failed}
       select-composition:
         use: check-reference-reconciliation-purpose
-        on: {ok: initialize-global, more: initialize-summary, failed: end.failed}
+        on: {ok: initialize-global, more: reconciliation-packet, failed: end.failed}
       initialize-summary:
         use: initialize-json-composition
         with: {composition: reconciliation-summary}
@@ -464,50 +476,19 @@ subgraphs:
           retry-limit: 2
         on: {ok: assemble-summary, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       initialize-global:
-        use: initialize-json-composition
-        with: {composition: reconciliation-global}
+        use: build-reference-dispositions-assignment
         on: {ok: dispositions, failed: end.failed}
       dispositions:
-        call: composition-request
-        with:
-          prompt: dispositions-prompt
-          composition-part: dispositions
-          retry-limit: 2
-        on: {ok: release-dispositions, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        call: model-request
+        with: {slot: spec_generation, prompt: dispositions-prompt, schema: reconciliation-schema, selection: input, retry-limit: 2}
+        on: {ok: collect-dispositions, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      collect-dispositions:
+        use: collect-reference-dispositions-candidate
+        on: {ok: release-dispositions, failed: end.failed}
       release-dispositions:
-        use: retire-model-request
-        on: {ok: signals, failed: end.failed}
-      signals:
-        call: composition-request
-        with:
-          prompt: signals-prompt
-          composition-part: signals
-          retry-limit: 2
-        on: {ok: release-signals, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      release-signals:
-        use: retire-model-request
-        on: {ok: roles, failed: end.failed}
-      roles:
-        call: composition-request
-        with:
-          prompt: roles-prompt
-          composition-part: roles
-          retry-limit: 2
-        on: {ok: release-roles, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      release-roles:
-        use: retire-model-request
-        on: {ok: conflicts, failed: end.failed}
-      conflicts:
-        call: composition-request
-        with:
-          prompt: conflicts-prompt
-          composition-part: conflicts
-          retry-limit: 2
-        on: {ok: assemble-global, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+        call: release-request
+        on: {ok: end.ok, failed: end.failed}
       assemble-summary:
-        call: assemble-response
-        on: {ok: collect-reconciliation, failed: end.failed}
-      assemble-global:
         call: assemble-response
         on: {ok: collect-reconciliation, failed: end.failed}
       collect-reconciliation:
@@ -538,20 +519,72 @@ subgraphs:
         call: repair-reconciliation-candidate
         on: {ok: check-reconciliation, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       merge:
-        call: merge-reconciliation-candidate
+        use: merge-reference-reconciliation-repair
+        with: {retry-limit: 128}
         on: {ok: check-reconciliation, failed: end.failed}
   validate-reconciliation:
     start: validate-dispositions
     steps:
       validate-dispositions:
         use: validate-reference-claim-dispositions
-        on: {ok: validate-signals, invalid: authorize-dispositions-repair, failed: end.failed}
+        on: {ok: check-signals, invalid: authorize-dispositions-repair, failed: end.failed}
+      check-signals:
+        use: check-reference-reconciliation-phase
+        with: {phase: dispositions}
+        on: {ok: build-signals, more: validate-signals, failed: end.failed}
+      build-signals:
+        use: build-reference-signals-assignment
+        on: {ok: request-signals, failed: end.failed}
+      request-signals:
+        call: model-request
+        with: {slot: spec_generation, prompt: signals-prompt, schema: reconciliation-schema, selection: input, retry-limit: 2}
+        on: {ok: collect-signals, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      collect-signals:
+        use: collect-reference-signals-candidate
+        on: {ok: release-signals, failed: end.failed}
+      release-signals:
+        call: release-request
+        on: {ok: validate-dispositions, failed: end.failed}
       validate-signals:
         use: validate-reference-signal-proposals
-        on: {ok: validate-roles, invalid: authorize-signals-repair, failed: end.failed}
+        on: {ok: check-roles, invalid: authorize-signals-repair, failed: end.failed}
+      check-roles:
+        use: check-reference-reconciliation-phase
+        with: {phase: signals}
+        on: {ok: build-roles, more: validate-roles, failed: end.failed}
+      build-roles:
+        use: build-reference-roles-assignment
+        on: {ok: request-roles, failed: end.failed}
+      request-roles:
+        call: model-request
+        with: {slot: spec_generation, prompt: roles-prompt, schema: reconciliation-schema, selection: input, retry-limit: 2}
+        on: {ok: collect-roles, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      collect-roles:
+        use: collect-reference-roles-candidate
+        on: {ok: release-roles, failed: end.failed}
+      release-roles:
+        call: release-request
+        on: {ok: validate-dispositions, failed: end.failed}
       validate-roles:
         use: validate-reference-role-assignments
-        on: {ok: validate-conflicts, invalid: end.invalid, failed: end.failed}
+        on: {ok: check-conflicts, invalid: end.invalid, failed: end.failed}
+      check-conflicts:
+        use: check-reference-reconciliation-phase
+        with: {phase: roles}
+        on: {ok: build-conflicts, more: validate-conflicts, failed: end.failed}
+      build-conflicts:
+        use: build-reference-conflicts-assignment
+        on: {ok: request-conflicts, failed: end.failed}
+      request-conflicts:
+        call: model-request
+        with: {slot: spec_generation, prompt: conflicts-prompt, schema: reconciliation-schema, selection: input, retry-limit: 2}
+        on: {ok: collect-conflicts, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      collect-conflicts:
+        use: collect-reference-conflicts-candidate
+        on: {ok: release-conflicts, failed: end.failed}
+      release-conflicts:
+        call: release-request
+        on: {ok: validate-dispositions, failed: end.failed}
       validate-conflicts:
         use: validate-reference-conflict-proposals
         on: {ok: assign-records, invalid: authorize-conflicts-repair, failed: end.failed}
@@ -574,16 +607,9 @@ subgraphs:
         call: repair-reconciliation-candidate
         on: {ok: validate-dispositions, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
       merge:
-        call: merge-reconciliation-candidate
-        on: {ok: validate-dispositions, failed: end.failed}
-  merge-reconciliation-candidate:
-    start: merge
-    steps:
-      merge:
         use: merge-reference-reconciliation-repair
-        with:
-          retry-limit: 128
-        on: {ok: end.ok, failed: end.failed}
+        with: {retry-limit: 128}
+        on: {ok: validate-dispositions, failed: end.failed}
   repair-reconciliation-candidate:
     start: repair-input
     steps:
@@ -606,7 +632,8 @@ subgraphs:
         call: release-request
         on: {ok: merge, failed: end.failed}
       merge:
-        call: merge-reconciliation-candidate
+        use: merge-reference-reconciliation-repair
+        with: {retry-limit: 128}
         on: {ok: end.ok, failed: end.failed}
   review-source:
     start: initialize

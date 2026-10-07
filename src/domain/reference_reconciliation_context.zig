@@ -22,6 +22,7 @@ pub fn lineage(a: std.mem.Allocator, progress: r.Progress) r.Error!Lineage {
     return .{ .plan = progress.plan, .history = history, .next_statement = progress.next_statement_ordinal };
 }
 pub const Facts = struct {
+    phase: r.Phase,
     source: r.diagnostic.Source,
     lineage: Lineage,
     partition: r.Partition,
@@ -36,7 +37,7 @@ pub fn capture(a: std.mem.Allocator, parsed: r.Parsed, context: ?v.TextContext) 
     const input = parsed.input;
     const retained = try lineage(a, input.progress);
     errdefer a.free(retained.history);
-    return .{ .source = parsed.source, .lineage = retained, .partition = input.partition, .purpose = input.purpose, .items = input.items, .summaries = input.summaries, .member_summary_ids = input.member_summary_ids, .proposal = parsed.proposal, .text = if (context) |ctx| try r.text.dependencies(ctx.inputs, ctx.registry, ctx.current) else null };
+    return .{ .phase = parsed.phase, .source = parsed.source, .lineage = retained, .partition = input.partition, .purpose = input.purpose, .items = input.items, .summaries = input.summaries, .member_summary_ids = input.member_summary_ids, .proposal = parsed.proposal, .text = if (context) |ctx| try r.text.dependencies(ctx.inputs, ctx.registry, ctx.current) else null };
 }
 pub fn snapshot(a: std.mem.Allocator, parsed: r.Parsed, context: ?v.TextContext) r.Error!@import("atomic_repair.zig").Snapshot {
     const facts = try capture(a, parsed, context);

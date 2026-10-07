@@ -9,7 +9,7 @@ pub const Action = struct {
     pub fn execute(self: Action, allocator: std.mem.Allocator, prior: r.CheckedDispositions, context: v.TextContext) r.Error!d.Result(r.CheckedSignals) {
         var result = try v.checkSignals(allocator, self.validator, prior, context);
         if (result == .invalid) {
-            const parsed: r.Parsed = .{ .source = prior.source, .input = prior.input, .proposal = .{ .global = prior.proposal } };
+            const parsed: r.Parsed = .{ .phase = prior.phase, .source = prior.source, .input = prior.input, .proposal = .{ .global = prior.proposal } };
             result.invalid.relations = try v.relations(allocator, self.validator, context, parsed, prior.dispositions, result.invalid);
             result.invalid.dependencies = try @import("../../domain/reference_reconciliation_context.zig").snapshot(allocator, parsed, context);
         }

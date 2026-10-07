@@ -17,6 +17,27 @@ pub fn featureField(inputs: authority.Inputs, id: authority.Id) ?spec.Attributed
     };
 }
 
+/// The requirement ID and canonical value lens share one field association.
+pub fn valueField(id: authority.Id) authority.Error!@import("specification_candidate.zig").ValueField {
+    const candidates = @import("specification_candidate.zig");
+    if (id.unit != .record) return error.InvalidRequiredAuthority;
+    if (id.slot == .relationship) return .{ .relationship = std.math.sub(usize, id.member, 1) catch return error.InvalidRequiredAuthority };
+    if (id.member != 0) return error.InvalidRequiredAuthority;
+    inline for (std.meta.fields(candidates.ValueField)) |field| {
+        if (comptime field.type == void) if (std.mem.eql(u8, field.name, @tagName(id.slot))) return @unionInit(candidates.ValueField, field.name, {});
+    }
+    return error.InvalidRequiredAuthority;
+}
+pub fn recordField(inputs: authority.Inputs, id: authority.Id) authority.Error!?struct { record: spec.IdentifiedRecord, field: spec.AttributedValue } {
+    if (id.unit != .record) return null;
+    const content = inputs.specification orelse return error.InvalidRequiredAuthority;
+    for (content.records) |record| if (std.meta.eql(record.id, id.unit.record)) {
+        const selected = @import("specification_candidate.zig").attributedValue(.canonical, .{ .content = .{ .records = &.{record.proposal} } }, .{ .record = 0 }, try valueField(id)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
+        return .{ .record = record, .field = selected };
+    };
+    return error.InvalidRequiredAuthority;
+}
+
 pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: reference.Accounted, content: ?spec.IdentifiedContent, brief: ?spec.Brief) authority.Error!authority.Inputs {
     return projectRecords(allocator, feature, @import("reference_support.zig").records(references), content, brief);
 }

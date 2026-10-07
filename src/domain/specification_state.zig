@@ -143,10 +143,7 @@ fn validateAssociations(backing: std.mem.Allocator, state: State) !void {
         !sameClaims(state.content.primary_user_story.provenance.claim_ids, story.primary_user_story.claim_ids) or
         !sameClaims(state.content.entities.basis.provenance.claim_ids, entities.entities.claim_ids)) return error.InvalidSpecificationState;
     for (state.content.records) |record| {
-        for (0..try binding.recordCount(records)) |index| {
-            const source = try binding.record(allocator, records, state.reference.inputs, index);
-            if (sameClaims(record.proposal.provenance.claim_ids, source.records.selection.claim_ids)) break;
-        } else return error.InvalidSpecificationState;
+        _ = try binding.recordForClaims(allocator, records, state.reference.inputs, record.proposal.provenance.claim_ids);
     }
     try @import("specification_provenance.zig").validateStored(allocator, state.reference.inputs, .{ .records = state.reference.passive_records, .occurrences = state.reference.passive_occurrences }, records, state.brief, state.content);
     const coverage = @import("specification_coverage.zig");

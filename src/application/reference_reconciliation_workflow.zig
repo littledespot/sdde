@@ -135,7 +135,9 @@ fn Unary(comptime A: type, comptime from: data.Schema, comptime from_tag: Tag, c
             const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
             errdefer owned.destroy(owner);
             owner.payload = @unionInit(owned.Payload, @tagName(to_tag), self.action.execute(owner.arena.allocator(), @field(prior.payload(), @tagName(from_tag))) catch return error.OperationExecutionFailed);
-            return extraction.publish(self.allocator, to, owner, .ok);
+            var result = try extraction.publish(self.allocator, to, owner, .ok);
+            for (A.contract.invalidates) |key| result.delta.data_invalidations.insert(key);
+            return result;
         }
     };
 }
@@ -160,9 +162,9 @@ fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: d
             const repair = @import("../domain/reference_reconciliation_repair.zig");
             const parsed: r.Parsed = switch (from_tag) {
                 .reconciliation_parsed => prior.payload().reconciliation_parsed,
-                .reconciliation_dispositions => .{ .source = prior.payload().reconciliation_dispositions.source, .input = prior.payload().reconciliation_dispositions.input, .proposal = .{ .global = prior.payload().reconciliation_dispositions.proposal } },
-                .reconciliation_signals => .{ .source = prior.payload().reconciliation_signals.prior.source, .input = prior.payload().reconciliation_signals.prior.input, .proposal = .{ .global = prior.payload().reconciliation_signals.prior.proposal } },
-                .reconciliation_roles => .{ .source = prior.payload().reconciliation_roles.prior.source, .input = prior.payload().reconciliation_roles.prior.input, .proposal = .{ .global = prior.payload().reconciliation_roles.prior.proposal } },
+                .reconciliation_dispositions => .{ .phase = prior.payload().reconciliation_dispositions.phase, .source = prior.payload().reconciliation_dispositions.source, .input = prior.payload().reconciliation_dispositions.input, .proposal = .{ .global = prior.payload().reconciliation_dispositions.proposal } },
+                .reconciliation_signals => .{ .phase = prior.payload().reconciliation_signals.prior.phase, .source = prior.payload().reconciliation_signals.prior.source, .input = prior.payload().reconciliation_signals.prior.input, .proposal = .{ .global = prior.payload().reconciliation_signals.prior.proposal } },
+                .reconciliation_roles => .{ .phase = prior.payload().reconciliation_roles.prior.phase, .source = prior.payload().reconciliation_roles.prior.source, .input = prior.payload().reconciliation_roles.prior.input, .proposal = .{ .global = prior.payload().reconciliation_roles.prior.proposal } },
                 else => unreachable,
             };
             const transition = if (!needs_text)
@@ -179,6 +181,17 @@ fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: d
                     .reconciliation_roles => prior.payload().reconciliation_roles.prior.dispositions,
                     else => &.{},
                 }) catch return error.OperationExecutionFailed;
+            if (result == .valid) if (transition) |receipt| {
+                // The runner applies this receipt with the checked facts. Later
+                // phase handoffs must not acknowledge the same repair again.
+                if (receipt.validated.result == .resolved) switch (to_tag) {
+                    .reconciliation_dispositions => owner.payload.reconciliation_dispositions.source.pending_repair = null,
+                    .reconciliation_signals => owner.payload.reconciliation_signals.prior.source.pending_repair = null,
+                    .reconciliation_conflicts => owner.payload.reconciliation_conflicts.prior.prior.source.pending_repair = null,
+                    .reconciliation_summary => {},
+                    else => unreachable,
+                };
+            };
             var published = try extraction.publish(self.allocator, to, owner, if (result == .valid) .ok else .invalid);
             published.delta.repair_transition = transition;
             return published;

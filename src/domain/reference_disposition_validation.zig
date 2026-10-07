@@ -6,10 +6,11 @@ const v = @import("reference_reconciliation_validation.zig");
 const d = r.diagnostic;
 
 pub fn validate(allocator: std.mem.Allocator, parsed: r.Parsed) r.Error!d.Result(r.CheckedDispositions) {
+    if (@import("reference_conflict_groups.zig").issue(parsed.input.progress.plan.layout.items, parsed.proposal.global)) |group_issue| return r.diagnostic.reject(r.CheckedDispositions, parsed.input, parsed.source, .dispositions, group_issue);
     const supplied = try allocator.alloc(r.ClaimDisposition, parsed.proposal.global.claim_dispositions.len);
     for (parsed.proposal.global.claim_dispositions, supplied) |proposal, *value| value.* = try proposal.canonical(allocator);
     return switch (try check(allocator, parsed.input.progress.plan.layout.items, supplied)) {
-        .valid => |values| .{ .valid = .{ .source = parsed.source, .input = parsed.input, .proposal = parsed.proposal.global, .dispositions = values } },
+        .valid => |values| .{ .valid = .{ .phase = parsed.phase, .source = parsed.source, .input = parsed.input, .proposal = parsed.proposal.global, .dispositions = values } },
         .invalid => |rejection| d.reject(r.CheckedDispositions, parsed.input, parsed.source, rejection.unit, rejection.issue),
     };
 }

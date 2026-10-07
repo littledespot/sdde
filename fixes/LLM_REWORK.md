@@ -1,5 +1,12 @@
 # LLM_REWORK — Derive mechanical facts; ask models for semantic choices
 
+**6 October implementation update:** [FIX_003](FIX_003.md#12-implementation-record)
+and [ADR 0022](../design/decisions/0022-native-reference-phase-handoffs.md) replace
+global JSON composition with validated native phase handoffs, role/group handles,
+native token projection and forced classifications. Earlier measurements below
+remain historical evidence; the new implementation has no live reliability or
+rubric result yet.
+
 **Reviewed:** 27 September 2026 against the current worktree. **Status:** Phases 0–3 and the Phase 4.1 diagnostic batch complete. §6.9 C0, C1's bounded presence conformance, C2a and C2b are implemented offline; §15.7 records the coordinated provenance-free C2c cutover and its verification status. The remaining architecture-wide deterministic-field audit, C3 and live Phase 4.2/C4 outcome gates remain open. §14 reviews feasibility; §15 defines the expanded mandatory scope and completion evidence.
 **Current scope — user direction, 27 September:** move **all deterministic work**
 out of model responsibility across the architecture. This includes every current

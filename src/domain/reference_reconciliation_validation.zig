@@ -85,21 +85,12 @@ pub fn content(allocator: std.mem.Allocator, validator: r.text.Validator, contex
 pub fn checkStatement(a: std.mem.Allocator, validator: r.text.Validator, context: TextContext, current: r.Input, values: []const r.StatementProposal, index: usize) r.Error!d.Check(r.ValidatedStatement) {
     if (index >= values.len) return error.InvalidReferenceReconciliation;
     const proposed = values[index];
-    if (statementKey(values, index)) |issue| return .{ .invalid = issue };
     const items = current.progress.plan.layout.items;
     if (claims(items, proposed.claim_ids, current.partition.group.claim_ids)) |issue| return .{ .invalid = issue };
     return switch (try content(a, validator, context, items, proposed.claim_ids, proposed.content)) {
-        .valid => |accepted| .{ .valid = .{ .local_key = proposed.local_key, .claim_ids = proposed.claim_ids, .content = accepted } },
+        .valid => |accepted| .{ .valid = .{ .claim_ids = proposed.claim_ids, .content = accepted } },
         .invalid => |issue| .{ .invalid = issue },
     };
-}
-
-pub fn statementKey(values: []const r.StatementProposal, index: usize) ?d.Issue {
-    const proposed = values[index];
-    const issue: d.Issue = .{ .rule = .local_key, .observed = .{ .count = proposed.local_key }, .expected = .{ .constraint = .unique_nonzero } };
-    if (proposed.local_key == 0) return issue;
-    for (values[0..index]) |prior| if (prior.local_key == proposed.local_key) return issue;
-    return null;
 }
 
 pub fn checkSignal(a: std.mem.Allocator, validator: r.text.Validator, context: TextContext, prior: r.CheckedDispositions, index: usize) r.Error!d.Check(r.ValidatedSignal) {
@@ -497,15 +488,11 @@ pub fn checkSummary(allocator: std.mem.Allocator, validator: r.text.Validator, p
         try represented.appendSlice(allocator, statement.claim_ids);
     }
     r.sameSet(r.ClaimId, represented.items, parsed.input.partition.group.claim_ids) catch return d.reject(r.CheckedSummary, parsed.input, parsed.source, .summary, .{ .rule = .membership, .observed = .{ .claims = represented.items }, .expected = .{ .claims = parsed.input.partition.group.claim_ids } });
-    std.mem.sort(r.ValidatedStatement, statements, {}, struct {
-        fn less(_: void, a: r.ValidatedStatement, b: r.ValidatedStatement) bool {
-            return a.local_key < b.local_key;
-        }
-    }.less);
     return .{ .valid = .{ .input = parsed.input, .statements = statements } };
 }
 
 pub fn checkSignals(allocator: std.mem.Allocator, validator: r.text.Validator, prior: r.CheckedDispositions, context: TextContext) r.Error!d.Result(r.CheckedSignals) {
+    if (prior.phase == .dispositions) return error.InvalidReferenceReconciliation;
     const items = prior.input.progress.plan.layout.items;
     try input(allocator, prior.input);
     try bind(allocator, items, context, validator);
@@ -525,25 +512,20 @@ pub fn checkRoles(allocator: std.mem.Allocator, prior: r.CheckedSignals) r.Error
     const input_value = prior.prior.input;
     const assignments = prior.prior.proposal.role_assignments;
     const signals = try allocator.dupe(r.ValidatedSignal, prior.signals);
+    if (prior.prior.phase == .dispositions or prior.prior.phase == .signals or prior.prior.phase == .signals_with_conflicts) return error.InvalidReferenceReconciliation;
     for (assignments, 0..) |assignment, assignment_index| {
-        const invalid: d.Issue = .{ .rule = .role_assignment, .observed = .{ .claims = assignment.claim_ids }, .expected = .{ .constraint = .supported_role_assignment } };
-        if (assignment.generation_roles.len == 0 or assignment.claim_ids.len == 0) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
-        r.unique(r.ClaimId, assignment.claim_ids) catch return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
-        for (assignments[0..assignment_index]) |earlier| if (sameClaimIds(earlier.claim_ids, assignment.claim_ids)) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
+        const invalid: d.Issue = .{ .rule = .role_assignment, .observed = .{ .count = assignment.signal_id.ordinal }, .expected = .{ .constraint = .supported_role_assignment } };
+        const id = assignment.signal_id.ordinal;
+        const selected = for (0..signals.len) |index| {
+            if ((source.signals.at(index, signals.len) catch return error.InvalidReferenceReconciliation).ordinal == id) break index;
+        } else null;
+        if (assignment.generation_roles.len == 0 or selected == null) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
+        if (!try @import("reference_support.zig").eligibleSelection(prior.prior.dispositions, signals[selected.?].claim_ids)) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
+        for (assignments[0..assignment_index]) |earlier| if (earlier.signal_id.ordinal == id) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
         for (assignment.generation_roles, 0..) |role, index| for (assignment.generation_roles[0..index]) |earlier| {
             if (role == earlier) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
         };
-        for (signals, 0..) |signal, index| {
-            if (!sameClaimIds(signal.claim_ids, assignment.claim_ids)) continue;
-            signals[index].generation_roles = assignment.generation_roles;
-            break;
-        } else return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
+        signals[selected.?].generation_roles = assignment.generation_roles;
     }
     return .{ .valid = .{ .prior = prior.prior, .signals = signals } };
-}
-
-fn sameClaimIds(left: []const r.ClaimId, right: []const r.ClaimId) bool {
-    if (left.len != right.len) return false;
-    for (left, right) |a, b| if (a.ordinal != b.ordinal) return false;
-    return true;
 }
