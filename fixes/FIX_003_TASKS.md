@@ -15,7 +15,7 @@ remaining-work scope and acceptance are defined in [§13.3](FIX_003.md#133-remai
 | FIX3-05 | D1/D5 decision | Forced-classification action, extraction repair, shared composition runtime/compiler, YAML | Distinguish forced/empty collections from semantic token-only claims; no fabricated origin or malformed-output fallback. | Implemented |
 | FIX3-06 | D4 decision, FIX3-02 | Conflict-group owner, disposition/conflict validators, atomic/omission repair, schema | Preserve chain/triangle/overlap semantics; select groups once; reject foreign handles and grouped repair scope expansion. | Implemented |
 | FIX3-07 | FIX3-01–06 | Prompts, packaged resources, contracts §§12/16/22, diagrams, implementation records | Remove superseded global composition and wire shapes. Separate semantic authoring selections from complete source evidence at the shared packet owner. Clarify shared field derivation without requiring finished wording in sources. Run owning tests, full offline verification, native packaging and diff review. | Implemented and verified, including the loss-evidence follow-up: 1306/1306 tests; 129/129 build steps (§12.10). |
-| FIX3-08 | FIX3-07, FIX3-09/10, separate approval for each run | Existing live E2E harness and explicit cases | Actual production publication and rubric evaluation; repeated cases establish semantic reliability separately from mechanical acceptance. See §13.3. | Four recent approved live runs failed before publication or rubric evaluation (§§12.9, 12.11). Successful publication, rubric and repeated live evidence remain outstanding; those approvals are consumed. |
+| FIX3-08 | FIX3-07, FIX3-09/10, separate approval for each run | Existing live E2E harness and explicit cases | Actual production publication and rubric evaluation; repeated cases establish semantic reliability separately from mechanical acceptance. See §13.3. | The three approved post-implementation live runs also failed (§14.5): both greetings had reasoning-only responses; loan rebuilding exceeded the token budget after a misdirected omission repair. No publication or rubric; all listed approvals are consumed. |
 | FIX3-09 | Scoped §12.2 amendment during implementation | Shared compiled result-schema and packet restriction owners; native eligibility producers | Shared scalar/collection and selected-schema restrictions; complete acceptance in §12.12 and §13.3. | Implemented and offline verified: 1314/1314 tests; 129/129 build steps (§14). Live acceptance remains FIX3-08. |
 | FIX3-10 | Existing semantic/native boundary; independent of FIX3-09 | Review subject, requirement-description and packet projection owners | Focused target/purpose and distinct localization assignment; complete acceptance in §13.3. | Implemented and offline verified (§14). Live semantic benefit unverified. |
 
@@ -56,3 +56,7 @@ The critical review and current remaining-work plan are in
 [§13](FIX_003.md#13-critical-review-of-remaining-work--7-october-2026).
 The shared ID and semantic-assignment implementation and current evidence are in
 [§14](FIX_003.md#14-remaining-implementation--7-october-2026).
+The three approved post-implementation live attempts and their unresolved content,
+attribution and budget failures are in
+[§14.5](FIX_003.md#145-three-approved-live-executions-after-fix3-0910).
+Code/offline completion is distinct from FIX3-08's unmet live acceptance.
