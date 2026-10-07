@@ -87,6 +87,23 @@ fn preparedOutput(allocator: std.mem.Allocator, paths: artifacts.FeaturePaths) !
     };
 }
 
+test "explicit loan renewal case binds generation and rubric to the same source bytes" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-002-loan-renewal/workflow.case.json"));
+    const captured = try fixture.capture(std.testing.io, a, .cwd(), choice);
+    try fixture.validateEvaluationSources(a, captured, "references", choice.reference);
+    try std.testing.expectEqualStrings(choice.id, captured.evaluation.case.id);
+    for (captured.evaluation.case.sources, captured.evaluation.sources) |source, document| {
+        const file = for (captured.files) |file| {
+            if (std.mem.eql(u8, file.mapping.source, source.path)) break file;
+        } else return error.MissingEvaluationSource;
+        try std.testing.expectEqualStrings(file.bytes, document.text);
+        try std.testing.expect(captured.evaluation.rubric.criteria.len > 0);
+    }
+}
+
 test "shipped workflow conforms to native registrations and rejects contract drift before invocation" {
     const Runtime = @import("../../../src/composition/root.zig").Runtime;
     const io = std.testing.io;

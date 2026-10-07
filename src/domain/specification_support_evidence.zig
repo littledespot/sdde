@@ -86,10 +86,10 @@ pub const Requirements = struct {
     pub fn rule(self: Requirements, finding: a.Finding, loss: @import("source_omission.zig").Location) Rule {
         const diagnostic = if (finding == .candidate_omission and loss != .unlocalized) @import("source_omission.zig").diagnosticClaims(self.records, loss) else null;
         return .{
-            .minimum = if (diagnostic != null and diagnostic.?.len != 0 and loss != .reconciliation_disposition) .claim_required else if (self.source_preservation and finding == .supported) .claim_or_source_required else minimum(finding),
-            .claims = if (diagnostic) |claims| (if (loss == .reconciliation_disposition) .{ .eligible = claims } else .{ .exact = claims }) else if (self.positive_claims == .exact_set) .{ .exact = self.eligible_claim_ids } else .{ .eligible = self.eligible_claim_ids },
+            .minimum = if (diagnostic != null and diagnostic.?.len != 0) .claim_required else if (self.source_preservation and finding == .supported) .claim_or_source_required else minimum(finding),
+            .claims = if (diagnostic) |claims| .{ .exact = claims } else if (self.positive_claims == .exact_set) .{ .exact = self.eligible_claim_ids } else .{ .eligible = self.eligible_claim_ids },
             .eligible_source_ids = self.eligible_source_ids,
-            .provenance = if (finding == .candidate_omission and diagnostic != null and loss != .reconciliation_disposition) null else if (finding != .supported and self.positive_claims == .eligible_subset and !self.candidate_bound) .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} } else if (self.supported_provenance) |value| value else if (finding == .candidate_omission and self.positive_claims == .exact_set) null else null,
+            .provenance = if (finding == .candidate_omission and diagnostic != null) null else if (finding != .supported and self.positive_claims == .eligible_subset and !self.candidate_bound) .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} } else if (self.supported_provenance) |value| value else if (finding == .candidate_omission and self.positive_claims == .exact_set) null else null,
         };
     }
     pub const Guidance = struct { eligible_claim_ids: []const r.ClaimId, positive_claims: @FieldType(Requirements, "positive_claims"), supported_provenance: ?spec.Selection };

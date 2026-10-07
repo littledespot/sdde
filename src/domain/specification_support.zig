@@ -134,7 +134,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             const projected = try @import("model_evidence.zig").project(scratch, all.entries);
             const sources = try @import("model_evidence.zig").sources(scratch, context.inputs);
             const subject = try subjects.project(scratch, inputs, context, target, subject_scope);
-            const reconstruction = subject != .candidate_field;
+            const reconstruction = subject != .candidate_field and subject != .reference_signal;
             const payload = .{ .subject = subject, .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
             const encoded = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
             var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
@@ -158,7 +158,11 @@ pub fn Contract(comptime purpose: Purpose) type {
             const body = try std.json.Stringify.valueAlloc(scratch, projected_input, .{});
             const slot = try reviewSlot(scratch, inputs, target);
             const definition: ?@import("model_result_schema.zig").DefinitionId = .{ .bytes = if (inputs.projection == .source_preservation) "preservation_finding" else if (required == .review) "applicability_finding" else "finding" };
-            return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = all.state_id.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = slot } } }, .{ .semantic_review = .{ .bytes = slot } }, definition);
+            const packet = try packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = all.state_id.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = slot } } }, .{ .semantic_review = .{ .bytes = slot } }, definition);
+            defer packets.release(packet);
+            const ids = try scratch.alloc(i64, evidence_rule.eligible_source_ids.len);
+            for (ids, evidence_rule.eligible_source_ids) |*id, source| id.* = source.ordinal;
+            return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = definition, .allowed = ids }});
         }
 
         /// A source omission's producer is a separate semantic assignment.
@@ -179,10 +183,47 @@ pub fn Contract(comptime purpose: Purpose) type {
             const fixed = .{ .finding = .{ .kind = finding.value.kind, .detail = finding.value.detail, .source_ids = finding.value.source_ids } };
             const contextual = try packets.withContext(@TypeOf(fixed), allocator, base, "fixed_review", fixed);
             defer packets.release(contextual);
+            const loss = @import("source_omission.zig");
+            const locations = try loss.available(scratch, inputs, context.inputs, .{ .detail = finding.value.detail, .source_ids = finding.value.source_ids, .provenance = .{ .claim_ids = finding.value.provenance.claim_ids, .citation_ids = &.{}, .clarification_response_ids = finding.value.provenance.clarification_response_ids } });
+            const available = try packets.withContext([]const loss.Location, allocator, contextual, "available_loss_locations", locations);
+            defer packets.release(available);
+            const schema = @import("model_result_schema.zig");
+            var excluded: std.ArrayList(schema.ExcludedVariant) = .empty;
+            try excluded.appendSlice(scratch, contextual.excludedVariants());
+            var choices: std.ArrayList(schema.IntegerChoice) = .empty;
+            try choices.appendSlice(scratch, contextual.integerChoices());
+            for (std.enums.values(std.meta.Tag(loss.Location))) |kind| {
+                var ordinals: std.ArrayList(i64) = .empty;
+                var sources: std.ArrayList(i64) = .empty;
+                var count: usize = 0;
+                for (locations) |location| {
+                    if (std.meta.activeTag(location) != kind) continue;
+                    count += 1;
+                    const selected_id: ?i64 = switch (location) {
+                        .unlocalized, .extraction_claim => null,
+                        .token_classification => |id| token: {
+                            if (std.mem.indexOfScalar(i64, sources.items, id.source_id.ordinal) == null) try sources.append(scratch, id.source_id.ordinal);
+                            break :token id.ordinal;
+                        },
+                        .reconciliation_signal => |id| id.ordinal,
+                        .reconciliation_disposition => |id| id.ordinal,
+                        .reconciliation_conflict => |id| id.ordinal,
+                    };
+                    if (selected_id) |id| if (std.mem.indexOfScalar(i64, ordinals.items, id) == null) try ordinals.append(scratch, id);
+                }
+                if (count == 0) {
+                    try excluded.append(scratch, .{ .kind = @tagName(kind) });
+                    continue;
+                }
+                if (ordinals.items.len != 0) try choices.append(scratch, .{ .target = .{ .tagged = .{ .kind = @tagName(kind), .field = "ordinal" } }, .allowed = ordinals.items });
+                if (sources.items.len != 0) try choices.append(scratch, .{ .target = .{ .tagged = .{ .kind = @tagName(kind), .field = "source_id" } }, .allowed = sources.items });
+            }
             const slot = try std.fmt.allocPrint(scratch, "{s}-loss", .{base.unit().semantic_review.review_slot_id.bytes});
             var unit = base.unit();
             unit.semantic_review.review_slot_id.bytes = slot;
-            return packets.create(allocator, contextual.body(), unit, .{ .semantic_review = .{ .bytes = slot } }, .{ .bytes = "loss" });
+            const result = try packets.create(allocator, available.body(), unit, .{ .semantic_review = .{ .bytes = slot } }, .{ .bytes = "loss" });
+            defer packets.release(result);
+            return packets.withRestrictions(allocator, result, excluded.items, choices.items);
         }
 
         pub fn collectLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: Collection, packet: *const packets.Packet, bytes: []const u8) Error!Collection {

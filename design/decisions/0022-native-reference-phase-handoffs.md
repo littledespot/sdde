@@ -42,6 +42,15 @@ repairs retain their existing exact target and dependency contracts. Native
 candidate validation still rejects unsupported selections; presentation never
 normalizes a rejected token selection into acceptance.
 
+Authoring-role choices use the same positive-support eligibility as their Spec
+consumers: every claim in a selected group must be retained. The shared reference
+support owner supplies this rule to phase packets, role validation, generation,
+review, coverage and canonical readback. Historical duplicate/superseded signals
+remain valid evidence without authoring roles. Filtering role choices preserves
+their original occurrence IDs and complete claim evidence; it neither removes
+members from a mixed group nor assigns missing roles. An ineligible model
+selection rejects at its producing phase before dependent dispatch.
+
 Conflict groups are semantic choices. Each supplied group declares all its pairs;
 native code constructs reciprocal relationships only within that group. Overlap is
 allowed; A–B and B–C never imply A–C. Explanations select accepted native group IDs,

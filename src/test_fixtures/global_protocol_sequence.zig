@@ -9,16 +9,15 @@ pub const Mode = enum { recover, exhaust };
 
 pub fn mixed(a: std.mem.Allocator, input: r.Input, proposal: r.Proposal) !r.Proposal {
     var result = proposal;
-    const token = for (input.items) |item| {
-        if (item.claim.content == .preserved_token) break item.claim.id;
-    } else return error.MissingFixtureToken;
-    var signals: std.ArrayList(r.SignalProposal) = .empty;
-    for (proposal.signals) |signal| {
-        if (signal.content == .preserved_token and signal.claim_ids[0].ordinal == token.ordinal) continue;
-        try signals.append(a, signal);
-    }
-    signals.items[0].claim_ids = try a.dupe(r.ClaimId, &.{ signals.items[0].claim_ids[0], token });
-    result.signals = try signals.toOwnedSlice(a);
+    // Both IDs are eligible semantic claims; their incompatible kinds still
+    // require native content validation after protocol admission.
+    const first = proposal.signals[0];
+    const other = for (input.items) |item| {
+        if (item.claim.content == .model and std.meta.activeTag(item.claim.content.model) != std.meta.activeTag(first.content.model)) break item.claim.id;
+    } else return error.MissingFixtureSemanticKind;
+    const signals = try a.dupe(r.SignalProposal, proposal.signals);
+    signals[0].claim_ids = try a.dupe(r.ClaimId, &.{ first.claim_ids[0], other });
+    result.signals = signals;
     return result;
 }
 

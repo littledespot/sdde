@@ -39,7 +39,7 @@ fn assignmentContexts(allocator: std.mem.Allocator) !void {
     };
     const native = try packets.withAssignmentContexts(allocator, base, &contexts);
     defer packets.release(native);
-    const restricted = try packets.withRestrictions(allocator, native, &.{.{ .kind = "unavailable" }}, &.{.{ .kind = "exact_copy", .field = "claim_id", .allowed = &.{7} }});
+    const restricted = try packets.withRestrictions(allocator, native, &.{.{ .kind = "unavailable" }}, &.{.{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = &.{7} }});
     defer packets.release(restricted);
     const state = try runtime.State.init(a, plan, restricted, identity.ledger(ledger).stageRunEpochId());
     const bound = try state.select(a, 0);

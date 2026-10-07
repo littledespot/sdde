@@ -53,7 +53,34 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     const slot = try slotId(scratch, prior);
     const result = try packets.create(a, with_facts.body(), .{ .reference_global = .{ .reference_state_id = .{ .bytes = current.progress.plan.layout.items.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, .{ .bytes = definition(stage) });
     defer packets.release(result);
-    return packets.withRestrictions(a, result, selected.excludedVariants(), selected.integerChoices());
+    const inherited = try packets.withRestrictions(a, result, selected.excludedVariants(), selected.integerChoices());
+    if (prior == .signals) return inherited;
+    defer packets.release(inherited);
+    if (prior == .dispositions) return @import("reference_model_input.zig").withDispositionChoices(a, inherited, current.partition.group.claim_ids, null, true);
+    const schema = @import("model_result_schema.zig");
+    const ids = try scratch.alloc(i64, switch (prior) {
+        .dispositions => unreachable,
+        .roles => groups.items.len,
+        .conflicts => conflict_catalogue.len,
+        .signals => unreachable,
+    });
+    switch (prior) {
+        .dispositions => unreachable,
+        .roles => for (ids, groups.items) |*id, group| {
+            id.* = group.signal_id.ordinal;
+        },
+        .conflicts => for (ids, conflict_catalogue) |*id, group| {
+            id.* = group.group_id.ordinal;
+        },
+        .signals => unreachable,
+    }
+    const choices: []const schema.IntegerChoice = switch (prior) {
+        .dispositions => unreachable,
+        .roles => &.{.{ .target = .{ .path = &.{ .{ .property = "role_assignments" }, .{ .items = {} }, .{ .property = "signal_id" } } }, .definition = result.resultDefinition(), .allowed = ids }},
+        .conflicts => &.{.{ .target = .{ .path = &.{ .{ .property = "conflicts" }, .{ .items = {} }, .{ .property = "group_id" } } }, .definition = result.resultDefinition(), .allowed = ids }},
+        .signals => unreachable,
+    };
+    return packets.withIntegerChoices(a, inherited, choices);
 }
 pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet, body: []const u8, origin: @import("model_candidate_origin.zig").Origin) r.Error!r.Parsed {
     const current = input(prior);

@@ -66,6 +66,17 @@ selection under ADR 0020, using the same binding check as canonical readback.
 Aggregate evidence from several groups cannot authorize an invented association
 or a cross-group insertion; it remains an unsafe candidate repair.
 
+Loss localization retains the fixed review verdict. The existing loss validator
+derives mechanically available producer locations from captured sources and
+reference records; packet guidance and the existing schema restrictions reuse
+those facts. Availability does not establish a semantic defect or grant repair
+authority. Localization has its own producer-comparison assignment, without a
+support-assessment instruction. It cannot reopen the fixed finding and may report
+`unlocalized` when the alleged meaning survives. A localized producer supplies its
+exact diagnostic claims, including the one discarded claim of a disposition,
+independently of positive field provenance. Collection and persisted review
+readback enforce the same rule.
+
 ### 22.2 Repair classification
 
 Every diagnostic declares one class:
@@ -179,6 +190,13 @@ validation run before reconciliation, publication or clarification. The existing
 runner owns request retirement, per-assignment and native-defect retry allowances,
 and global actual-token accounting; successful independent work does not reset an
 unresolved target or replenish the finite budget.
+
+Source-ID selection repairs project the diagnostic's native eligibility rule
+through the shared [§12.2 schema restrictions](12-model-boundary.md#122-initial-guidance-packet).
+Reference selection/disposition and grouped omission repairs likewise use their
+current authorized claim/group scope. A broader initial catalogue cannot widen
+that scope. Initial findings, correction and repair retain native provenance,
+correlation and readback checks; a membership enum alone cannot authorize a merge.
 
 Selected source-review and generation repair responses reject `provenance`,
 including record insertion and coupled record repair. The engine reconstructs

@@ -1,5 +1,7 @@
-The fixed_review finding is final. Identify only the first defective producer of
-the source meaning it reports lost. Return one loss location; do not reassess the
-finding or propose a replacement. Use unlocalized when no unique producer is
-supported by the supplied evidence. For extraction_claim, bytes is an extraction
-chunk ID, not source text; an existing extracted claim is not a missing claim.
+Keep fixed_review unchanged. Select from available_loss_locations. Check the
+alleged loss against original sources and captured extraction, dispositions and
+signals. Select the first defective producer
+supported by captured outputs. Poorly authored fields do not establish extraction
+loss. Use unlocalized when meaning survives these producers or no unique defect
+is established. For extraction_claim, bytes selects a chunk ID; never insert
+already extracted meaning. Do not draft a replacement.

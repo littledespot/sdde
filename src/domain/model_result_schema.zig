@@ -51,13 +51,37 @@ pub const Node = union(enum) {
 /// Native evidence can exclude unavailable tagged alternatives, never add a
 /// shape or select content. Tags have the compiler's existing `kind` meaning.
 pub const ExcludedVariant = struct { kind: []const u8 };
-/// A packet declares the tagged object's integer field; evidence supplies the
-/// complete permitted set. The selected schema validates that declaration.
+/// Native schema selections: typed atoms retain their shared tag identity;
+/// other selectors name an exact property/items location in one definition.
+pub const ChoiceStep = union(enum) { property: []const u8, items: void };
+pub const ChoiceTarget = union(enum) {
+    tagged: struct { kind: []const u8, field: []const u8 },
+    path: []const ChoiceStep,
+};
 pub const IntegerChoice = struct {
-    kind: []const u8,
-    field: []const u8,
+    target: ChoiceTarget,
+    definition: ?DefinitionId = null,
     allowed: []const i64,
 };
+
+fn sameDefinition(left: ?DefinitionId, right: ?DefinitionId) bool {
+    if (left == null or right == null) return left == null and right == null;
+    return std.mem.eql(u8, left.?.bytes, right.?.bytes);
+}
+fn sameTarget(left: ChoiceTarget, right: ChoiceTarget) bool {
+    if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
+    return switch (left) {
+        .tagged => |tag| std.mem.eql(u8, tag.kind, right.tagged.kind) and std.mem.eql(u8, tag.field, right.tagged.field),
+        .path => |path| blk: {
+            if (path.len != right.path.len) break :blk false;
+            for (path, right.path) |l, r| {
+                if (std.meta.activeTag(l) != std.meta.activeTag(r)) break :blk false;
+                if (l == .property and !std.mem.eql(u8, l.property, r.property)) break :blk false;
+            }
+            break :blk true;
+        },
+    };
+}
 
 pub const Restricted = opaque {
     pub fn canonical(self: *const Restricted) *const Schema {
@@ -97,19 +121,45 @@ pub fn restrict(allocator: std.mem.Allocator, canonical: *const Schema, excluded
     var arena: std.heap.ArenaAllocator = .init(allocator);
     errdefer arena.deinit();
     for (integer_choices, 0..) |entry, index| {
-        if (entry.kind.len == 0 or entry.field.len == 0 or entry.allowed.len == 0 or entry.allowed.len > max_choices) return invalid();
-        for (integer_choices[0..index]) |prior| if (std.mem.eql(u8, prior.kind, entry.kind) and std.mem.eql(u8, prior.field, entry.field)) return invalid();
+        if (entry.allowed.len > max_choices) return invalid();
+        if (entry.definition) |id| _ = DefinitionId.parse(id.bytes) orelse return invalid();
+        switch (entry.target) {
+            .tagged => |tag| if (tag.kind.len == 0 or tag.field.len == 0) return invalid(),
+            .path => |path| {
+                if (path.len == 0 or path.len > max_depth) return invalid();
+                for (path) |step| if (step == .property and step.property.len == 0) return invalid();
+            },
+        }
+        for (integer_choices[0..index]) |prior| if (sameDefinition(prior.definition, entry.definition) and sameTarget(prior.target, entry.target)) return invalid();
         for (entry.allowed, 0..) |choice, choice_index| for (entry.allowed[0..choice_index]) |prior| {
             if (choice == prior) return invalid();
         };
     }
-    const root = try restrictNode(arena.allocator(), canonical.root(), excluded, integer_choices);
-    const selected = try createSchema(arena.allocator(), root, canonical.bytes(), &.{}, canonical);
+    var root = try restrictNode(arena.allocator(), canonical.root(), excluded);
+    for (integer_choices) |entry| {
+        if (entry.definition) |id| {
+            const current = storage(canonical).definition_id orelse return invalid();
+            if (!std.mem.eql(u8, id.bytes, current.bytes)) {
+                const other = for (storage(canonical).choice_definitions) |definition| {
+                    if (std.mem.eql(u8, id.bytes, definition.id.bytes)) break definition.root;
+                } else return invalid();
+                if (!(try narrowChoice(arena.allocator(), other, entry.target, entry.allowed)).matched) return invalid();
+                continue;
+            }
+        }
+        const narrowed = try narrowChoice(arena.allocator(), root, entry.target, entry.allowed);
+        if (!narrowed.matched and entry.target == .path) {
+            const parent = storage(canonical).projection_of orelse return invalid();
+            if (!(try narrowChoice(arena.allocator(), parent.root(), entry.target, entry.allowed)).matched) return invalid();
+        }
+        root = narrowed.node;
+    }
+    const selected = try createSchema(arena.allocator(), root, canonical.bytes(), &.{}, .{ .restriction_of = canonical, .definition_id = storage(canonical).definition_id, .projection_of = storage(canonical).projection_of, .choice_definitions = storage(canonical).choice_definitions });
     owned.* = .{ .allocator = allocator, .arena = arena, .canonical = canonical, .selected = selected, .handle = .{ .owner = owned } };
     return @ptrCast(&owned.handle);
 }
 
-fn restrictNode(a: std.mem.Allocator, node: *const Node, excluded: []const ExcludedVariant, integer_choices: []const IntegerChoice) Error!*const Node {
+fn restrictNode(a: std.mem.Allocator, node: *const Node, excluded: []const ExcludedVariant) Error!*const Node {
     const result = try a.create(Node);
     result.* = node.*;
     switch (node.*) {
@@ -117,40 +167,106 @@ fn restrictNode(a: std.mem.Allocator, node: *const Node, excluded: []const Exclu
             var remaining: std.ArrayList(*const Node) = .empty;
             for (choices) |choice| {
                 if (excludedVariant(choice, excluded)) continue;
-                try remaining.append(a, try restrictNode(a, choice, excluded, integer_choices));
+                try remaining.append(a, try restrictNode(a, choice, excluded));
             }
-            if (remaining.items.len == 0) return error.InvalidModelResultSchema;
+            if (remaining.items.len == 0) return invalid();
             result.* = if (remaining.items.len == 1) remaining.items[0].* else .{ .one_of = try remaining.toOwnedSlice(a) };
         },
         .object => |properties| {
-            // A required standalone object cannot be removed safely.
-            if (excludedVariant(node, excluded)) return error.InvalidModelResultSchema;
+            if (excludedVariant(node, excluded)) return invalid();
             const copy = try a.dupe(Property, properties);
-            const kind = findProperty(properties, "kind");
-            if (kind) |tag| if (tag.schema.* == .constant and tag.schema.constant == .string) {
-                for (integer_choices) |entry| if (std.mem.eql(u8, tag.schema.constant.string, entry.kind)) {
-                    const target = findProperty(properties, entry.field) orelse return invalid();
-                    if (target.schema.* != .integer) return invalid();
-                };
-            };
-            for (copy) |*property| {
-                property.schema = try restrictNode(a, property.schema, excluded, integer_choices);
-                if (kind) |tag| if (tag.schema.* == .constant and tag.schema.constant == .string) {
-                    for (integer_choices) |entry| if (std.mem.eql(u8, tag.schema.constant.string, entry.kind) and std.mem.eql(u8, property.name, entry.field)) {
-                        if (property.schema.* != .integer) return invalid();
-                        const bounds = property.schema.integer;
-                        for (entry.allowed) |choice| if (choice < bounds.minimum or choice > bounds.maximum) return invalid();
-                        const selected = try a.create(Node);
-                        selected.* = .{ .integer_enumeration = try a.dupe(i64, entry.allowed) };
-                        property.schema = selected;
-                    };
-                };
-            }
+            for (copy) |*property| property.schema = try restrictNode(a, property.schema, excluded);
             result.* = .{ .object = copy };
         },
-        .array => |items| result.array.items = try restrictNode(a, items.items, excluded, integer_choices),
+        .array => |items| result.array.items = try restrictNode(a, items.items, excluded),
         else => {},
     }
+    return result;
+}
+
+const Narrowed = struct { node: *const Node, matched: bool };
+fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, allowed: ?[]const i64) Error!Narrowed {
+    if (target == .path and target.path.len == 0) {
+        if (node.* != .integer and node.* != .integer_enumeration and (node.* != .array or (node.array.items.* != .integer and node.array.items.* != .integer_enumeration))) return invalid();
+        const values = allowed orelse return .{ .node = node, .matched = true };
+        const result = try a.create(Node);
+        result.* = node.*;
+        if (node.* == .array) {
+            if (values.len == 0) {
+                if (node.array.minimum != 0) return invalid();
+                result.array.maximum = 0;
+            } else result.array.items = try narrowInteger(a, node.array.items, values);
+        } else result.* = (try narrowInteger(a, node, values)).*;
+        return .{ .node = result, .matched = true };
+    }
+    switch (node.*) {
+        .one_of => |variants| {
+            const copy = try a.dupe(*const Node, variants);
+            var matched = false;
+            for (copy) |*variant| {
+                const selected = try narrowChoice(a, variant.*, target, allowed);
+                variant.* = selected.node;
+                matched = selected.matched or matched;
+            }
+            const result = try a.create(Node);
+            result.* = .{ .one_of = copy };
+            return .{ .node = result, .matched = matched };
+        },
+        .object => |properties| {
+            if (target == .tagged) {
+                const tag = findProperty(properties, "kind");
+                if (tag != null and tag.?.schema.* == .constant and tag.?.schema.constant == .string and std.mem.eql(u8, tag.?.schema.constant.string, target.tagged.kind)) {
+                    if (findProperty(properties, target.tagged.field) == null) return invalid();
+                    return narrowChoice(a, node, .{ .path = &.{.{ .property = target.tagged.field }} }, allowed);
+                }
+            }
+            const copy = try a.dupe(Property, properties);
+            var matched = false;
+            for (copy) |*property| {
+                const next: ChoiceTarget = if (target == .tagged) target else blk: {
+                    if (target.path[0] != .property or !std.mem.eql(u8, target.path[0].property, property.name)) continue;
+                    break :blk .{ .path = target.path[1..] };
+                };
+                const selected = try narrowChoice(a, property.schema, next, allowed);
+                property.schema = selected.node;
+                matched = selected.matched or matched;
+            }
+            const result = try a.create(Node);
+            result.* = .{ .object = copy };
+            return .{ .node = result, .matched = matched };
+        },
+        .array => |items| {
+            const next: ChoiceTarget = if (target == .tagged) target else blk: {
+                if (target.path[0] != .items) return .{ .node = node, .matched = false };
+                break :blk .{ .path = target.path[1..] };
+            };
+            if (target == .path and allowed != null and allowed.?.len == 0 and items.minimum == 0) {
+                const checked = try narrowChoice(a, items.items, next, null);
+                if (checked.matched) {
+                    const empty = try a.create(Node);
+                    empty.* = node.*;
+                    empty.array.maximum = 0;
+                    return .{ .node = empty, .matched = true };
+                }
+            }
+            const selected = try narrowChoice(a, items.items, next, allowed);
+            const result = try a.create(Node);
+            result.* = node.*;
+            result.array.items = selected.node;
+            return .{ .node = result, .matched = selected.matched };
+        },
+        else => return .{ .node = node, .matched = false },
+    }
+}
+fn narrowInteger(a: std.mem.Allocator, node: *const Node, allowed: []const i64) Error!*const Node {
+    if (allowed.len == 0) return invalid();
+    for (allowed) |choice| switch (node.*) {
+        .integer => |bounds| if (choice < bounds.minimum or choice > bounds.maximum) return invalid(),
+        .integer_enumeration => |values| if (std.mem.indexOfScalar(i64, values, choice) == null) return invalid(),
+        else => return invalid(),
+    };
+    const result = try a.create(Node);
+    result.* = .{ .integer_enumeration = try a.dupe(i64, allowed) };
     return result;
 }
 
@@ -194,7 +310,8 @@ pub const Schema = opaque {
 };
 
 const Definition = struct { id: DefinitionId, result: ?*const Schema };
-const Storage = struct { bytes: []const u8, model_bytes: []const u8, root: Node, definitions: []const Definition = &.{}, restriction_of: ?*const Schema = null };
+const DefinitionShape = struct { id: DefinitionId, root: *const Node };
+const Storage = struct { bytes: []const u8, model_bytes: []const u8, root: Node, definitions: []const Definition = &.{}, restriction_of: ?*const Schema = null, definition_id: ?DefinitionId = null, projection_of: ?*const Schema = null, choice_definitions: []const DefinitionShape = &.{} };
 
 fn cloneSchema(allocator: std.mem.Allocator, source: *const Schema, bytes: []const u8) std.mem.Allocator.Error!*const Schema {
     const copy = try allocator.create(Storage);
@@ -205,7 +322,13 @@ fn cloneSchema(allocator: std.mem.Allocator, source: *const Schema, bytes: []con
             .result = if (entry.result) |value| try cloneSchema(allocator, value, bytes) else null,
         };
     }
-    copy.* = .{ .bytes = bytes, .model_bytes = try allocator.dupe(u8, source.modelBytes()), .root = try cloneNode(allocator, source.root().*), .definitions = definitions };
+    const shapes = try allocator.alloc(DefinitionShape, storage(source).choice_definitions.len);
+    for (storage(source).choice_definitions, shapes) |shape, *destination| {
+        const root = try allocator.create(Node);
+        root.* = try cloneNode(allocator, shape.root.*);
+        destination.* = .{ .id = .{ .bytes = try allocator.dupe(u8, shape.id.bytes) }, .root = root };
+    }
+    copy.* = .{ .bytes = bytes, .model_bytes = try allocator.dupe(u8, source.modelBytes()), .root = try cloneNode(allocator, source.root().*), .definitions = definitions, .definition_id = if (storage(source).definition_id) |id| .{ .bytes = try allocator.dupe(u8, id.bytes) } else null, .projection_of = if (storage(source).projection_of) |parent| try cloneSchema(allocator, parent, bytes) else null, .choice_definitions = shapes };
     return @ptrCast(copy);
 }
 
@@ -239,17 +362,25 @@ fn compileResult(allocator: std.mem.Allocator, raw: std.json.Value, bytes: []con
     }
     const captured = try allocator.dupe(u8, bytes);
     const definitions = try allocator.alloc(Definition, compiler.definitions.count());
+    var shapes: std.ArrayList(DefinitionShape) = .empty;
     var iterator = compiler.definitions.iterator();
     var index: usize = 0;
     while (iterator.next()) |entry| : (index += 1) {
         const id = DefinitionId.parse(entry.key_ptr.*) orelse return invalid();
         compiler.node_count = 0;
         const node = try compiler.reference(id, 1);
+        if (isResult(node)) try shapes.append(allocator, .{ .id = .{ .bytes = try allocator.dupe(u8, id.bytes) }, .root = node });
         definitions[index] = .{
             .id = .{ .bytes = try allocator.dupe(u8, id.bytes) },
-            .result = if (isResult(node)) try createSchema(allocator, node, captured, &.{}, null) else null,
+            .result = null,
         };
     }
+    const choice_definitions = try shapes.toOwnedSlice(allocator);
+    for (definitions) |*entry| for (choice_definitions) |shape| {
+        if (!std.mem.eql(u8, entry.id.bytes, shape.id.bytes)) continue;
+        entry.result = try createSchema(allocator, shape.root, captured, &.{}, .{ .definition_id = entry.id, .choice_definitions = choice_definitions });
+        break;
+    };
     // The existing expansion bound applies independently to the selected root.
     compiler.node_count = 0;
     const root = try compiler.node(root_value, 1);
@@ -257,7 +388,7 @@ fn compileResult(allocator: std.mem.Allocator, raw: std.json.Value, bytes: []con
         .complete => if (!isResult(root)) return invalid(),
         .selected => if (!objectResult(root)) return invalid(),
     }
-    return createSchema(allocator, root, captured, definitions, null);
+    return createSchema(allocator, root, captured, definitions, .{});
 }
 
 fn isResult(root: *const Node) bool {
@@ -276,12 +407,13 @@ fn isResult(root: *const Node) bool {
     };
 }
 
-fn createSchema(allocator: std.mem.Allocator, root: *const Node, bytes: []const u8, definitions: []const Definition, restriction_of: ?*const Schema) std.mem.Allocator.Error!*const Schema {
+const Association = struct { restriction_of: ?*const Schema = null, definition_id: ?DefinitionId = null, projection_of: ?*const Schema = null, choice_definitions: []const DefinitionShape = &.{} };
+fn createSchema(allocator: std.mem.Allocator, root: *const Node, bytes: []const u8, definitions: []const Definition, association: Association) std.mem.Allocator.Error!*const Schema {
     const result = try allocator.create(Storage);
     var scratch: std.heap.ArenaAllocator = .init(allocator);
     defer scratch.deinit();
     const model_bytes = try std.json.Stringify.valueAlloc(allocator, try @import("model_schema_projection.zig").value(scratch.allocator(), root, .complete), .{});
-    result.* = .{ .bytes = bytes, .model_bytes = model_bytes, .root = root.*, .definitions = definitions, .restriction_of = restriction_of };
+    result.* = .{ .bytes = bytes, .model_bytes = model_bytes, .root = root.*, .definitions = definitions, .restriction_of = association.restriction_of, .definition_id = association.definition_id, .projection_of = association.projection_of, .choice_definitions = association.choice_definitions };
     return @ptrCast(result);
 }
 
@@ -289,7 +421,7 @@ fn createSchema(allocator: std.mem.Allocator, root: *const Node, bytes: []const 
 /// It preserves closed objects and variant tags, including a selected constant
 /// tag that is intentionally not accepted as an independent external result.
 pub fn project(allocator: std.mem.Allocator, canonical: *const Schema, root: *const Node) std.mem.Allocator.Error!*const Schema {
-    return createSchema(allocator, root, canonical.bytes(), &.{}, null);
+    return createSchema(allocator, root, canonical.bytes(), &.{}, .{ .definition_id = storage(canonical).definition_id, .projection_of = canonical, .choice_definitions = storage(canonical).choice_definitions });
 }
 
 const Compiler = struct {

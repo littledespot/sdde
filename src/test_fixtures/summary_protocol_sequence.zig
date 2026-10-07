@@ -11,15 +11,12 @@ pub fn response(a: std.mem.Allocator, input: r.Input, attempt: u32, mode: Mode) 
     var proposal = try @import("reference_reconciliation.zig").summary(a, input);
     const first = input.progress.summary_count == 0;
     if (first) {
-        // Native validation rejects a semantic selection mixing source kinds;
+        // Native validation rejects eligible semantic IDs mixing content kinds;
         // mandatory token projections are constructed independently.
         try std.testing.expect(proposal.statements.len >= 2);
         const statements = try a.dupe(r.StatementProposal, proposal.statements);
         statements[0].claim_ids = try a.dupe(r.ClaimId, &.{ input.items[0].claim.id, input.items[1].claim.id });
-        const retained = try a.alloc(r.StatementProposal, statements.len - 1);
-        retained[0] = statements[0];
-        @memcpy(retained[1..], statements[2..]);
-        proposal.statements = retained;
+        proposal.statements = statements;
     }
     const body = try @import("reference_reconciliation.zig").modelWire(a, .{ .summary = proposal });
     if (input.progress.summary_count > 1 or (attempt == 3 and (first or mode == .recover))) return body;

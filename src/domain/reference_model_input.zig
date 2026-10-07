@@ -126,7 +126,14 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
         };
         break :other try @import("model_candidate_json.zig").encode(@TypeOf(assignment_context), scratch, assignment_context);
     };
-    return packets.withAssignmentContexts(allocator, selected, &.{.{ .id = packets.AssignmentContextId.parse(@tagName(assignment)).?, .body = context_body }});
+    const contextual = try packets.withAssignmentContexts(allocator, selected, &.{.{ .id = packets.AssignmentContextId.parse(@tagName(assignment)).?, .body = context_body }});
+    if (assignment != .summary and assignment != .signals) return contextual;
+    defer packets.release(contextual);
+    const ids = try scratch.alloc(i64, presentation.composed.claim_ids.len);
+    for (ids, presentation.composed.claim_ids) |*id, claim| id.* = claim.ordinal;
+    const field = if (assignment == .summary) "statements" else "signals";
+    const definition_id: @import("model_result_schema.zig").DefinitionId = .{ .bytes = if (assignment == .summary) "summary" else "signals_assignment" };
+    return packets.withIntegerChoices(allocator, contextual, &.{.{ .target = .{ .path = &.{ .{ .property = field }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = definition_id, .allowed = ids }});
 }
 const RoleDefinition = struct { role: reconciliation.GenerationRole, purpose: []const u8 };
 
@@ -148,17 +155,54 @@ pub fn withTextChoices(a: std.mem.Allocator, packet: *const packets.Packet, pass
     if (exact_copy.len == 0) {
         try excluded.append(a, .{ .kind = "exact_copy" });
     }
-    var choices: [2]@import("model_result_schema.zig").IntegerChoice = undefined;
-    var selected: usize = 0;
+    var choices: std.ArrayList(schema.IntegerChoice) = .empty;
+    defer choices.deinit(a);
+    for (packet.integerChoices()) |entry| {
+        if (entry.target == .tagged and (std.mem.eql(u8, entry.target.tagged.kind, "passive") or std.mem.eql(u8, entry.target.tagged.kind, "exact_copy"))) continue;
+        try choices.append(a, entry);
+    }
     if (passive.len != 0) {
-        choices[selected] = .{ .kind = "passive", .field = "passive_literal_id", .allowed = passive };
-        selected += 1;
+        try choices.append(a, .{ .target = .{ .tagged = .{ .kind = "passive", .field = "passive_literal_id" } }, .allowed = passive });
     }
     if (exact_copy.len != 0) {
-        choices[selected] = .{ .kind = "exact_copy", .field = "claim_id", .allowed = exact_copy };
-        selected += 1;
+        try choices.append(a, .{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = exact_copy });
     }
-    return packets.withRestrictions(a, packet, excluded.items, choices[0..selected]);
+    return packets.withRestrictions(a, packet, excluded.items, choices.items);
+}
+
+/// Project the native disposition scope into its selected response shape.
+/// Repair eligibility comes from the canonical checker, never another policy.
+pub fn withDispositionChoices(a: std.mem.Allocator, packet: *const packets.Packet, members: []const reconciliation.ClaimId, selected: ?@import("reference_disposition_validation.zig").RepairChoices, grouped: bool) packets.Error!*packets.Packet {
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    const schema = @import("model_result_schema.zig");
+    var excluded: std.ArrayList(schema.ExcludedVariant) = .empty;
+    try excluded.appendSlice(scratch, packet.excludedVariants());
+    var choices: std.ArrayList(schema.IntegerChoice) = .empty;
+    try choices.appendSlice(scratch, packet.integerChoices());
+    if (grouped) for ([_][]const schema.ChoiceStep{
+        &.{ .{ .property = "claim_dispositions" }, .{ .items = {} }, .{ .property = "claim_id" } },
+        &.{ .{ .property = "conflict_groups" }, .{ .items = {} }, .{ .property = "claim_ids" } },
+    }) |path| try choices.append(scratch, .{ .target = .{ .path = path }, .definition = packet.resultDefinition(), .allowed = try claimOrdinals(scratch, members) });
+    for ([_]struct { tag: []const u8, field: []const u8, ids: []const reconciliation.ClaimId }{
+        .{ .tag = "duplicate", .field = "target_claim_id", .ids = if (selected) |value| value.duplicate_targets else members },
+        .{ .tag = "superseded", .field = "related_claim_ids", .ids = if (selected) |value| value.superseded_targets else members },
+    }) |value| {
+        if (value.ids.len == 0) {
+            try excluded.append(scratch, .{ .kind = value.tag });
+        } else try choices.append(scratch, .{ .target = .{ .tagged = .{ .kind = value.tag, .field = value.field } }, .definition = packet.resultDefinition(), .allowed = try claimOrdinals(scratch, value.ids) });
+    }
+    if (selected) |value| {
+        if (!value.retained) try excluded.append(scratch, .{ .kind = "retained" });
+        if (value.conflicting_with_all.len == 0) try excluded.append(scratch, .{ .kind = "conflicting" });
+    }
+    return packets.withRestrictions(a, packet, excluded.items, choices.items);
+}
+fn claimOrdinals(a: std.mem.Allocator, ids: []const reconciliation.ClaimId) std.mem.Allocator.Error![]const i64 {
+    const result = try a.alloc(i64, ids.len);
+    for (result, ids) |*value, id| value.* = id.ordinal;
+    return result;
 }
 
 pub fn passiveIds(a: std.mem.Allocator, records: []const literals.Record) std.mem.Allocator.Error![]const i64 {

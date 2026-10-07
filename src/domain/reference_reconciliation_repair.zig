@@ -334,7 +334,25 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         },
         .preserved_token => return error.InvalidAtomicRepair,
     } else try std.fmt.allocPrint(scratch, "repair_{s}", .{@tagName(kind)});
-    return atomic.packet(a, authorization, contextual, .{ .bytes = definition }, parsed.source.at(targetOrigin(authorization.target).unit, targetOrigin(authorization.target).field));
+    const prepared_input = try atomic.packet(a, authorization, contextual, .{ .bytes = definition }, parsed.source.at(targetOrigin(authorization.target).unit, targetOrigin(authorization.target).field));
+    if (kind == .disposition) {
+        defer packets.release(prepared_input);
+        return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, parsed.input.partition.group.claim_ids, authorization.rule.disposition_choices, false);
+    }
+    if (kind != .selection) return prepared_input;
+    defer packets.release(prepared_input);
+    const groups = @import("reference_conflict_groups.zig");
+    const ids = if (authorization.target == .conflict_selection) group_ids: {
+        const catalogue = try groups.catalogue(scratch, parsed.proposal.global.conflict_groups);
+        const values = try scratch.alloc(i64, catalogue.len);
+        for (values, catalogue) |*id, group| id.* = group.group_id.ordinal;
+        break :group_ids values;
+    } else selections: {
+        const values = try scratch.alloc(i64, authorization.rule.rejection.relations.selection.len);
+        for (values, authorization.rule.rejection.relations.selection) |*id, claim| id.* = claim.ordinal;
+        break :selections values;
+    };
+    return packets.withIntegerChoices(a, prepared_input, &.{.{ .target = .{ .path = &.{.{ .property = if (authorization.target == .conflict_selection) "group_id" else "claim_ids" }} }, .definition = .{ .bytes = definition }, .allowed = ids }});
 }
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
     const kind = try atomic.checkRequest(authorization, input);
@@ -731,13 +749,16 @@ pub const Omission = struct {
         const kind = if (auth.target == .unit and auth.target.unit == .signal_content) (try v.selectedKind(parsed.input.progress.plan.layout.items, parsed.proposal.global.signals[auth.target.unit.signal_content].claim_ids)) orelse return error.InvalidAtomicRepair else null;
         const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, if (kind) |value| .{ .content = value } else if (auth.target == .conflict_group) .all else .{ .disposition = if (auth.rule.disposition_choices == null) .rules else .choices });
         defer packets.release(base);
-        return Atomic.packet(a, auth, base, .{ .bytes = if (kind) |value| switch (value) {
+        const prepared_input = try Atomic.packet(a, auth, base, .{ .bytes = if (kind) |value| switch (value) {
             .preserved_token => return error.InvalidAtomicRepair,
             .model => |model| switch (model) {
                 .business, .scope_guard => "business_text",
                 else => "reference_text",
             },
         } else if (auth.target == .conflict_group) "repair_conflict_group" else "repair_disposition" }, if (auth.target == .unit) parsed.source.at(targetOrigin(auth.target.unit).unit, targetOrigin(auth.target.unit).field) else parsed.source.at(.conflicts, .record));
+        if (kind != null) return prepared_input;
+        defer packets.release(prepared_input);
+        return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, if (auth.target == .conflict_group) auth.target.conflict_group else parsed.input.partition.group.claim_ids, auth.rule.disposition_choices, auth.target == .conflict_group);
     }
     pub fn parse(a: std.mem.Allocator, auth: OmissionAuthorization, input: *const packets.Packet, bytes: []const u8) OmissionError!Replacement {
         const json = @import("model_candidate_json.zig");

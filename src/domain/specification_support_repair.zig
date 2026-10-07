@@ -134,7 +134,14 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 .detail => if (purpose == .source and @import("specification_support_evidence.zig").questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
                 .selection => if (purpose == .principles) "principle_selection" else "selection",
             };
-            return atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index]);
+            const prepared_input = try atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index]);
+            if (purpose != .source or kind != .selection) return prepared_input;
+            defer packets.release(prepared_input);
+            const rule = (authorization.rule.rejection.evidence orelse return error.InvalidAtomicRepair).rule;
+            const ids = try a.alloc(i64, rule.eligible_source_ids.len);
+            defer a.free(ids);
+            for (ids, rule.eligible_source_ids) |*id, source| id.* = source.ordinal;
+            return packets.withIntegerChoices(a, prepared_input, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = definition }, .allowed = ids }});
         }
         pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
             if (purpose == .principles) return atomic.parse(a, authorization, input, bytes);

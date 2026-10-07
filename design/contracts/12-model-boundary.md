@@ -124,15 +124,26 @@ Each generation request contains only what the current unit needs:
   is available; fixed-evidence repairs use their bound choices, not unrelated
   sibling evidence. Nonempty sets still require native ID, scope and occurrence
   validation through the same reference owner that projects request choices.
-- The integer-choice amendment approved on 26 September 2026 narrows declared
-  tagged integer selectors to the eligible IDs supplied by their native evidence
-  owner. The packet retains those IDs out of band; request preparation checks
-  the tag, field and canonical integer bounds, then derives one selected schema
-  for provider and local validation. Empty required choices and sets above
-  ADR 0006's bound reject before invocation. Spec repairs narrow their visible
-  display catalogues to the same evidence scope. A selected repair schema with
-  no matching text selector leaves carried text-choice facts unused. Native
-  validation still checks provenance, source scope and semantics.
+- The integer-choice amendment approved on 26 September 2026, extended by the
+  approved FIX_003 follow-up on 7 October 2026, narrows scalar and collection ID
+  selectors to their native owner's eligible set. Typed atoms use their declared
+  tag/field; other selectors use an exact property/items path bound to a compiled
+  response definition. Request preparation validates locations, definition/part
+  association and canonical integer bounds, then derives one schema for provider
+  and local validation. Unknown locations or definitions reject; a carried sibling
+  restriction may be unused only after validation against its compiled definition
+  or the composition part's complete parent. Unused typed text atoms retain their
+  existing behavior. No field-name search crosses unrelated ID namespaces.
+- Empty eligible sets admit only an empty collection where the canonical shape
+  permits it (including an optional enclosing record collection). Scalar or
+  required collection choices reject. Nonempty restrictions preserve canonical
+  cardinality; sets above ADR 0006's 1,024-choice bound reject before invocation.
+  Source review and its selection repairs use actual source IDs; reference
+  authoring and repairs use their current native claim, signal or group scope.
+  Visible display catalogues use the same scope. Refreshing text choices preserves
+  other owners' restrictions. Membership enums do not prove correlation,
+  provenance, uniqueness, source support or semantic correctness; native admission
+  and canonical readback remain mandatory.
 - Packet context/repair projections retain these facts out of band. Request preparation binds
   the derived schema once; provider serialization, payload validation and protocol corrections
   use that same view. Composition accepts only its exact part schema or a restriction derived

@@ -48,7 +48,7 @@ pub const Options = struct {
     principle_fault: ?PrincipleFault = null,
     principle_repair_calls: usize = 0,
     source_gaps: bool = false,
-    evidence_fault: ?enum { recover, empty_replacement } = null,
+    evidence_fault: ?enum { recover, empty_correction } = null,
     candidate_omissions: ?enum { functional, acceptance_and_functional } = null,
     extraction_omission: bool = false,
     text_fault: bool = false,
@@ -121,10 +121,13 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             }
             const claim = if (options.script) |script| (try @import("specification_script.zig").extraction(script, selected_chunk.bytes)).claim else if (options.brief_text) |texts| texts[1] else try extractedClaim(allocator, chunk.id);
             const citation: @import("../domain/source_selections.zig").Selection = if (options.citation_fault == .unknown) .{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } else @import("../reference_extraction_test.zig").wholeChunk(chunk);
+            const mixed_kinds = options.summary_sequence != null or options.global_sequence != null or options.reconciliation_fault == .mixed_selection;
             // Empty citations now fail the complete response schema. A protocol
             // correction must provide the full claim again before native repair.
             const body = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = if (options.text_fault) "Invalid\x01text" else claim } }} } }, .citations = if (options.citation_fault == .missing and options.attempt == 1) &.{} else &.{citation} }}, .token_classifications = &.{} } });
-            if (falseConflict(options.source_loss)) {
+            // Native correlation faults need two eligible semantic kinds;
+            // selecting an exact-token ID is now rejected by the wire schema.
+            if (falseConflict(options.source_loss) or (mixed_kinds and chunk.id.eql(inputs.chunks.entries[0].id))) {
                 const response_type = @import("../domain/reference_extraction_parser.zig").Response;
                 var response = try @import("../domain/model_candidate_json.zig").decode(response_type, allocator, body);
                 const claims = try allocator.alloc(r.extraction.Proposal, 2);
@@ -167,7 +170,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 if (options.reconciliation_repair_fault) |fault| {
                     if (fault == .unchanged_text) return @import("reference_reconciliation.zig").repairResponse(allocator, authorization.operation.replace);
                     const target = authorization.target.disposition;
-                    const replacement: repair.Replacement = if (fault == .alternating and authorization.revision % 2 == 0)
+                    const replacement: repair.Replacement = if (fault == .alternating and options.attempt % 2 == 0)
                         .{ .disposition = .{ .duplicate = .{ .target_claim_id = .{ .ordinal = 999999 } } } }
                     else
                         .{ .disposition = .{ .superseded = .{ .related_claim_ids = &.{target.claim} } } };
@@ -200,7 +203,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 if (options.global_sequence != null) return @import("summary_protocol_sequence.zig").response(allocator, input, if (input.progress.summary_count == 0 or options.attempt > 1) 3 else 1, .recover);
                 if (options.summary_sequence) |mode| return @import("summary_protocol_sequence.zig").response(allocator, input, options.attempt, mode);
                 var proposal = try @import("reference_reconciliation.zig").summary(allocator, input);
-                if (options.reconciliation_fault == .misbound_summary and input.progress.summary_count == 0) {
+                if (options.reconciliation_fault == .misbound_summary and input.progress.summary_count == 0 and options.attempt == 1) {
                     const statements = try allocator.alloc(r.StatementProposal, proposal.statements.len + 1);
                     @memcpy(statements[0..proposal.statements.len], proposal.statements);
                     const extra = try misboundProjection(r.StatementProposal, proposal.statements);
@@ -249,7 +252,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             if (options.global_sequence != null) proposal = try @import("global_protocol_sequence.zig").mixed(allocator, input, proposal);
             if (options.disposition_sequence != null) {
                 const signals = try allocator.dupe(r.SignalProposal, proposal.signals[0..1]);
-                signals[0].claim_ids = try allocator.dupe(r.ClaimId, &.{ input.items[0].claim.id, input.items[1].claim.id });
+                signals[0].claim_ids = try allocator.dupe(r.ClaimId, if (options.attempt == 1) &.{ input.items[0].claim.id, input.items[1].claim.id } else &.{input.items[0].claim.id});
                 proposal.signals = signals;
                 if (options.attempt > 1) proposal.claim_dispositions = proposal.claim_dispositions[0..1];
                 return @import("reference_reconciliation.zig").modelWire(allocator, .{ .global = proposal });
@@ -264,7 +267,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 proposal.claim_dispositions = dispositions;
                 switch (fault) {
                     .summary_membership, .summary_text, .occupied_summary, .misbound_summary => {},
-                    .misbound_signals => {
+                    .misbound_signals => if (options.attempt == 1) {
                         const signals = try allocator.alloc(r.SignalProposal, proposal.signals.len + 1);
                         @memcpy(signals[0..proposal.signals.len], proposal.signals);
                         signals[proposal.signals.len] = try misboundProjection(r.SignalProposal, proposal.signals);
@@ -295,14 +298,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         if (fault == .permuted_conflict_disposition) duplicate[dispositions.len].disposition.conflicting.related_claim_ids = reversed else duplicate[dispositions.len].disposition.superseded.related_claim_ids = reversed;
                         proposal.claim_dispositions = duplicate;
                     },
-                    .mixed_selection => {
-                        const signals = try allocator.dupe(r.SignalProposal, proposal.signals);
-                        const token = for (input.items) |item| {
-                            if (item.claim.content == .preserved_token) break item.claim.id;
-                        } else return error.UnexpectedScriptedRepair;
-                        signals[0].claim_ids = try allocator.dupe(r.ClaimId, &.{ signals[0].claim_ids[0], token });
-                        proposal.signals = signals;
-                    },
+                    .mixed_selection => proposal = try @import("global_protocol_sequence.zig").mixed(allocator, input, proposal),
                     .signal_text => {
                         const signals = try allocator.dupe(r.SignalProposal, proposal.signals);
                         signals[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } };
@@ -487,6 +483,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             const ledger = try a.build(allocator, inputs);
             const context = try @import("../application/specification_workflow.zig").readContext(&view);
             const packet = try values.read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet);
+            if (options.evidence_fault == .empty_correction and options.attempt > 1) return "{}";
             if (packet.resultDefinition()) |definition| if (std.mem.eql(u8, definition.bytes, "loss")) {
                 const prior = try workflow.prior(.source, progress);
                 const candidate = switch (prior.?) {
@@ -598,20 +595,8 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 if (options.support_fault) |fault| switch (fault) {
                     .question_evidence_recover, .question_evidence_exhaust, .question_evidence_alternating => {
                         var replacement = authorized.operation.replace;
-                        switch (replacement) {
-                            .detail => replacement.detail.question = "What duration applies? State the duration and starting event.",
-                            .selection => {
-                                if (authorized.rule.rejection.evidence.?.rule.fixedClaims() != null) {
-                                    if (fault == .question_evidence_exhaust or (fault == .question_evidence_recover and options.attempt == 1) or (fault == .question_evidence_alternating and options.support_merges > 4)) return "{}";
-                                    replacement.selection.source_ids = if (fault == .question_evidence_recover) &.{context.inputs.corpus.sources[0].id} else &.{.{ .ordinal = @intCast(all.entries.len + 1) }};
-                                } else if (fault == .question_evidence_alternating and options.support_merges == 4) {
-                                    replacement.selection.provenance.claim_ids = &.{.{ .ordinal = @intCast(all.entries.len + 1) }};
-                                } else if (fault == .question_evidence_recover and options.attempt > 1) {
-                                    replacement.selection.provenance = findings[authorized.target.ordinal - 1].value.provenance;
-                                } else replacement.selection.provenance.claim_ids = &.{};
-                            },
-                            .finding => return error.InvalidFixture,
-                        }
+                        if (replacement != .detail) return error.InvalidFixture;
+                        replacement.detail.question = "What duration applies? State the duration and starting event.";
                         return sourceRepairWire(allocator, inputs, context, authorized, replacement);
                     },
                     .question_recover, .question_exhaust, .question_native_exhaust, .question_mixed_exhaust => {
@@ -636,15 +621,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     },
                     else => {},
                 };
-                if (options.evidence_fault == .empty_replacement) {
-                    // A missing selectable source list fails the selected schema
-                    // before native merge, even when claims are fixed by the rule.
-                    return "{}";
-                }
-                if (options.support_fault == .foreign_sources and options.support_merges == 0) return sourceRepairWire(allocator, inputs, context, authorized, authorized.operation.replace);
-                var value = findings[authorized.target.ordinal - 1].value;
-                if (options.support_fault == .foreign_sources) value.source_ids = &.{context.inputs.corpus.sources[0].id};
-                if (options.evidence_fault != null) value.source_ids = &.{context.inputs.corpus.sources[0].id};
+                const value = findings[authorized.target.ordinal - 1].value;
                 const kind = switch (authorized.operation) {
                     .replace => |replacement| std.meta.activeTag(replacement),
                     .insert => |kind| kind,
@@ -660,9 +637,9 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             if (options.evidence_fault != null) for (ledger.requirements, findings) |requirement, *finding| {
                 if (requirement.seed.id.kind == .entity_applicability) {
                     if (inputs.specification == null) finding.value.kind = .not_applicable;
-                    finding.value.source_ids = &.{.{ .ordinal = 999999 }};
+                    finding.value.source_ids = if (options.attempt == 1) &.{.{ .ordinal = 999999 }} else &.{context.inputs.corpus.sources[0].id};
                 } else if (requirement.seed.id.unit == .token) {
-                    finding.value.source_ids = &.{.{ .ordinal = 999999 }};
+                    finding.value.source_ids = if (options.attempt == 1) &.{.{ .ordinal = 999999 }} else &.{context.inputs.corpus.sources[0].id};
                 } else {
                     finding.value.kind = .unsupported;
                     finding.value.question = "Which renewal rule should apply? Specify the duration and starting event.";
@@ -686,7 +663,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         }
                         for (ledger.requirements, findings) |requirement, *finding| if (requirement.seed.id.kind == .entity_applicability) {
                             if (inputs.specification == null) finding.value.kind = .not_applicable;
-                            finding.value.source_ids = &.{.{ .ordinal = 999999 }};
+                            finding.value.source_ids = if (options.attempt == 1 or fault == .question_evidence_exhaust or fault == .question_evidence_alternating) &.{.{ .ordinal = if (fault == .question_evidence_alternating) 999999 + options.attempt else 999999 }} else &.{context.inputs.corpus.sources[0].id};
                         };
                     },
                     .question_recover, .question_exhaust, .question_native_exhaust, .question_mixed_exhaust => {
@@ -701,11 +678,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         findings[0].value.question = "Which renewal deadline applies? Supply a duration and starting event.";
                         findings[0].value.detail = if (options.attempt == 1) "" else "The source leaves the renewal deadline unspecified.";
                     },
-                    .foreign_source_single => findings[0].value.source_ids = &.{.{ .ordinal = 999999 }},
+                    .foreign_source_single => if (options.attempt == 1) {
+                        findings[0].value.source_ids = &.{.{ .ordinal = 999999 }};
+                    },
                     .foreign_sources => {
-                        // R29's seven findings confuse the source namespace with
-                        // claim ordinals. The first repair repeats that mistake.
-                        for ([_]usize{ 1, 4, 5, 6, 7, 8, 10 }) |index| findings[index].value.source_ids = &.{.{ .ordinal = 2 }};
+                        // Foreign source IDs now fail protocol admission. The
+                        // immutable correction supplies eligible source evidence.
+                        if (options.attempt == 1) for ([_]usize{ 1, 4, 5, 6, 7, 8, 10 }) |index| {
+                            findings[index].value.source_ids = &.{.{ .ordinal = 2 }};
+                        };
                     },
                 }
             }

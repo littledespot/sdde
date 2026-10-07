@@ -1,0 +1,213 @@
+{
+  "schema": "evaluation-rubric/v1",
+  "id": "loan-renewal-spec",
+  "revision": 1,
+  "minimum_score": 0,
+  "maximum_score": 4,
+  "pass_threshold_percent": null,
+  "criteria": [
+    {
+      "id": "renewal-eligibility",
+      "description": "Preserve renewal for active loans that have not previously been renewed, and the one-renewal limit. Do not invent eligibility conditions.",
+      "evidence": "Quote the eligibility and one-renewal source statements and corresponding specification behavior, or identify omissions.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        {
+          "score": 0,
+          "description": "Eligibility and the renewal limit are absent or contradicted."
+        },
+        {
+          "score": 1,
+          "description": "Renewal is mentioned but its eligibility and limit are mostly lost."
+        },
+        {
+          "score": 2,
+          "description": "Some conditions survive, but at least one material eligibility or limit condition is wrong or missing."
+        },
+        {
+          "score": 3,
+          "description": "Eligibility and the limit are preserved with minor ambiguity."
+        },
+        {
+          "score": 4,
+          "description": "Eligibility and the one-renewal limit are clearly preserved without unsupported conditions."
+        }
+      ]
+    },
+    {
+      "id": "successful-renewal",
+      "description": "Preserve extension of the existing due date by fourteen calendar days and display of Loan renewed! with the new due date after success. Do not require an invented date format.",
+      "evidence": "Quote the extension, confirmation and displayed date in the source and specification, or identify missing parts.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        {
+          "score": 0,
+          "description": "Successful renewal behavior is absent or contradicted."
+        },
+        {
+          "score": 1,
+          "description": "A generic successful outcome is present but the extension and confirmation are mostly lost."
+        },
+        {
+          "score": 2,
+          "description": "At least one required part of the extension, exact confirmation or displayed new date is wrong or missing."
+        },
+        {
+          "score": 3,
+          "description": "All required successful-renewal outcomes survive with minor ambiguity."
+        },
+        {
+          "score": 4,
+          "description": "The extension from the existing due date, fourteen calendar days, exact confirmation and displayed new due date are clearly preserved."
+        }
+      ]
+    },
+    {
+      "id": "refusal-behavior",
+      "description": "Preserve refusal for inactive or previously renewed loans, unchanged due date and exact Renewal refused. message. Do not add other refusal reasons.",
+      "evidence": "Quote refusal conditions and outcomes from source and specification, or report their absence.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        {
+          "score": 0,
+          "description": "Refusal behavior is absent or contradicted."
+        },
+        {
+          "score": 1,
+          "description": "Refusal is mentioned but its conditions and outcomes are mostly lost."
+        },
+        {
+          "score": 2,
+          "description": "At least one refusal condition, unchanged date or exact message is wrong or missing."
+        },
+        {
+          "score": 3,
+          "description": "Refusal conditions and outcomes survive with minor ambiguity."
+        },
+        {
+          "score": 4,
+          "description": "Both refusal conditions, unchanged due date and exact refusal message are clearly preserved without new refusal reasons."
+        }
+      ]
+    },
+    {
+      "id": "source-grounding",
+      "description": "Keep business and technical commitments supported by the source. Do not invent accounts, fees, notifications, storage, UI controls or operational policies, including as assumptions or non-goals.",
+      "evidence": "Compare representative specification commitments with source statements and identify unsupported additions, if any.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        {
+          "score": 0,
+          "description": "Unsupported functionality substantially replaces the requested feature."
+        },
+        {
+          "score": 1,
+          "description": "Several consequential unsupported commitments are added."
+        },
+        {
+          "score": 2,
+          "description": "Core intent survives but at least one material unsupported commitment is added."
+        },
+        {
+          "score": 3,
+          "description": "The specification is grounded overall with a minor unsupported implication."
+        },
+        {
+          "score": 4,
+          "description": "All behavior and scope commitments remain supported; no unsupported business or technical commitments are introduced."
+        }
+      ]
+    },
+    {
+      "id": "clarity-testability",
+      "description": "Express borrower actions, eligibility, success and refusal outcomes clearly and consistently enough to check. Judge observable meaning rather than executable tests or prescribed phrasing.",
+      "evidence": "Quote acceptance conditions and explain what a reviewer could observe or what remains unclear.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        {
+          "score": 0,
+          "description": "The behavior cannot be understood or checked."
+        },
+        {
+          "score": 1,
+          "description": "Most behavior is vague, contradictory or unresolved."
+        },
+        {
+          "score": 2,
+          "description": "Some behavior is checkable but important conditions or outcomes remain unclear."
+        },
+        {
+          "score": 3,
+          "description": "Behavior is understandable and checkable with minor imprecision."
+        },
+        {
+          "score": 4,
+          "description": "Eligibility, successful renewal and refusal are clear, consistent and testable."
+        }
+      ]
+    },
+    {
+      "id": "organization",
+      "description": "Provide a coherent, readable business specification. Empty optional sections do not need filler; unresolved template placeholders, repetition and contradictory sections impair usefulness.",
+      "evidence": "Quote representative story and requirement organization or unresolved content and explain its effect.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        {
+          "score": 0,
+          "description": "No usable specification is provided or template content dominates."
+        },
+        {
+          "score": 1,
+          "description": "Organization seriously obscures the behavior."
+        },
+        {
+          "score": 2,
+          "description": "The document is usable but has substantial inconsistency or unresolved content."
+        },
+        {
+          "score": 3,
+          "description": "Organization is clear overall with minor duplication or inconsistency."
+        },
+        {
+          "score": 4,
+          "description": "The story and requirements are coherent and easy to follow without unresolved filler or unnecessary repetition."
+        }
+      ]
+    },
+    {
+      "id": "proportionate-business-scope",
+      "description": "Keep the specification proportionate and business-facing. Reused Node/Vitest principles do not authorize implementation prescriptions; entities and business rules must be grounded in loan-renewal behavior.",
+      "evidence": "Compare scope and detail with the supplied source and quote representative choices.",
+      "weight": 1,
+      "allow_not_applicable": false,
+      "anchors": [
+        {
+          "score": 0,
+          "description": "Unrelated or implementation material overwhelms the feature."
+        },
+        {
+          "score": 1,
+          "description": "Substantial unnecessary scope or technical prescription dominates."
+        },
+        {
+          "score": 2,
+          "description": "The goal survives but excess detail or technical prescription is material."
+        },
+        {
+          "score": 3,
+          "description": "Scope is proportionate with minor excess detail."
+        },
+        {
+          "score": 4,
+          "description": "The specification is proportionate and business-facing without invented filler or technical commitments."
+        }
+      ]
+    }
+  ]
+}

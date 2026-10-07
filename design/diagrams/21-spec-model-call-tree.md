@@ -58,7 +58,9 @@ Global calls execute in this order: **dispositions → validate → signals → 
 → roles → validate → conflicts → validate**. The next call receives native accepted
 facts, rather than unchecked response JSON. Repairs retire affected descendants
 and request pending assignments again. Roles select stable signal occurrence
-handles; conflicts select accepted group handles. Native code constructs token
+handles whose complete claim selections are retained; historical groups remain
+evidence without authoring roles. Admission and readback use that same eligibility
+rule. Conflicts select accepted group handles. Native code constructs token
 projections and reciprocal relationships. Summary partitions finish before the
 global phase handoffs. The YAML sets
 reconciliation `group-size: 8`; the resulting partition count depends on the
@@ -132,6 +134,13 @@ the response shape. Story purpose comes from the shared native requirement descr
 Brief and story packets contain source evidence without sibling drafts; entities
 receive the brief, and record requests receive the brief and entity decision.
 Corrections retain their selected context, purpose prompt and dynamic input.
+
+Source review resolves the selected feature/record field or native signal while
+retaining original-source evidence. Producer localization carries the fixed
+finding and reconstruction evidence under its separate assignment. Native ID
+eligibility narrows initial, composition and repair schemas at the shared result
+schema owner; protocol corrections retain the same selected schema. Membership
+restriction does not replace semantic judgment or native evidence validation.
 
 Coverage repair, authority gates, clarification forms, rendering and publication
 are deterministic in this YAML and do not add model requests.

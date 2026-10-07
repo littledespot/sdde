@@ -164,7 +164,7 @@ pub fn diagnosticClaims(records: @import("reference_support.zig").Records, locat
 
 /// Verify all mechanical joins. Meaning and loss attribution remain explicitly
 /// model-assisted; absence of a unique location cannot authorize a repair.
-pub fn validate(inputs: authority.Inputs, sources: r.evidence.Inputs, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) Error!void {
+pub fn validate(inputs: authority.Inputs, sources: r.evidence.Inputs, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) (authority.Error || r.Error)!void {
     if (location == .unlocalized) return;
     if (finding != .candidate_omission or review.source_ids.len == 0) return error.InvalidRequiredAuthority;
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
@@ -216,7 +216,35 @@ pub fn validate(inputs: authority.Inputs, sources: r.evidence.Inputs, finding: a
         },
     }
 }
-fn sourceForClaim(items: r.Items, id: r.ClaimId, sources: []const r.extraction.identity.SourceId) Error!void {
+
+/// Mechanically eligible producer choices, not judgments that meaning was lost.
+/// The same validator governs presentation and admission in every review scope.
+pub fn available(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evidence.Inputs, review: authority.ReviewEvidence) (authority.Error || r.Error)![]const Location {
+    const records = inputs.references orelse return error.InvalidRequiredAuthority;
+    var candidates: std.ArrayList(Location) = .empty;
+    defer candidates.deinit(a);
+    try candidates.append(a, .{ .unlocalized = .{} });
+    for (records.items.extraction) |chunk| {
+        try candidates.append(a, .{ .extraction_claim = chunk.scope.chunk_id });
+        for (chunk.token_classifications) |classification| try candidates.append(a, .{ .token_classification = classification.id() });
+    }
+    for (records.dispositions) |disposition| try candidates.append(a, .{ .reconciliation_disposition = disposition.claim_id });
+    for (records.signals) |signal| try candidates.append(a, .{ .reconciliation_signal = signal.id });
+    for (records.conflicts) |conflict| try candidates.append(a, .{ .reconciliation_conflict = conflict.id });
+    var accepted: std.ArrayList(Location) = .empty;
+    errdefer accepted.deinit(a);
+    for (candidates.items) |location| {
+        var diagnostic = review;
+        if (location != .unlocalized) diagnostic.provenance.claim_ids = diagnosticClaims(records, location) orelse return error.InvalidRequiredAuthority;
+        validate(inputs, sources, .candidate_omission, diagnostic, location) catch |err| switch (err) {
+            error.InvalidRequiredAuthority => continue,
+            else => return err,
+        };
+        try accepted.append(a, location);
+    }
+    return accepted.toOwnedSlice(a);
+}
+fn sourceForClaim(items: r.Items, id: r.ClaimId, sources: []const r.extraction.identity.SourceId) (authority.Error || r.Error)!void {
     if (!r.contains(r.extraction.identity.SourceId, sources, (try r.item(items, id)).source_id)) return error.InvalidRequiredAuthority;
 }
 
