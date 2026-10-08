@@ -145,7 +145,7 @@ pub fn build(b: *std.Build) void {
     const integration_module = b.createModule(.{
         .root_source_file = b.path("integration.zig"),
         .target = target,
-        .optimize = optimize,
+        .optimize = .ReleaseSafe,
         .imports = &.{
             .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
             .{ .name = "unicode_normalization", .module = unicode_module },
@@ -153,12 +153,13 @@ pub fn build(b: *std.Build) void {
     });
     integration_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
     // Imported engine modules retain their own tests in the repository suite.
-    const integration_tests = b.addTest(.{ .root_module = integration_module, .filters = &.{"test.harness.integration.tests."} });
+    const integration_tests = b.addTest(.{ .root_module = integration_module, .filters = &.{ "test.integration.", "test.harness.integration.tests." } });
     const run_integration_tests = b.addRunArtifact(integration_tests);
+    run_integration_tests.setCwd(b.path("."));
     const launcher_tests = b.addSystemCommand(&.{"sh"});
     launcher_tests.addFileArg(b.path("test/harness/integration/launcher_test.sh"));
     launcher_tests.addFileArg(b.path("scripts/e2e-spec.sh"));
-    const integration_step = b.step("test-integration", "Run fixed offline harness and launcher integration tests");
+    const integration_step = b.step("test-integration", "Run offline workflow, harness and launcher integration tests");
     integration_step.dependOn(&run_integration_tests.step);
     integration_step.dependOn(&launcher_tests.step);
     const e2e_executable = b.addExecutable(.{ .name = "sdde-e2e-spec", .root_module = e2e_module });
@@ -608,6 +609,7 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("harness.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));
     lint_command.addFileArg(b.path("tests.zig"));
+    lint_command.addFileArg(b.path("integration.zig"));
     lint_command.addDirectoryArg(b.path("build"));
     lint_command.addDirectoryArg(b.path("src"));
     lint_command.addDirectoryArg(b.path("test"));

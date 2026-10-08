@@ -251,7 +251,7 @@ index, rejected chunk/line field and value, using the existing selection for all
 IDs and the captured span for inclusive line bounds. These same facts reach repair
 and reports; they are not a second persisted authority. JSON/schema correction (§22.6) does not replace
 native evidence repair. The diagnostic and optional repeat-feedback work in
-[FIX_002 §25](../../fixes/FIX_002.md#25-principle-citation-conformance--architecture-review)
+[FIX_002 §25](../../fixes/archive/FIX_002.md#25-principle-citation-conformance--architecture-review)
 is not authority to change retry limits, reconsider verdicts or persist new policy.
 
 Example:
@@ -431,7 +431,7 @@ or selecting additional diagnostics. Reuse the existing required-field projectio
 All other §22.6 behavior remains unchanged, including complete-response correction,
 schema/native validation, request ownership, accounting and terminal rejection.
 The [feasibility trace](../reference-notes/model-request-guidance.md#nested-correction-feasibility)
-and [Chunk 18 plan](../../fixes/IMP_001.md#focused-226-decision--child-object-requirements)
+and [historical Chunk 18 plan](../../fixes/archive/IMP_001.md#focused-226-decision--child-object-requirements)
 record evidence, limits and required verification. This amendment grants no new
 repair capability and does not claim improved model compliance.
 
@@ -480,7 +480,7 @@ user clarifications, transport failures, invalid associations or runner failures
 eligible for protocol correction. Existing authorization, full validation, retry
 identities/limits, token accounting and terminal no-publication rules remain in
 force. See [request-level tests](28-testing.md#284-model-fault-injection-tests) and
-the [R45 implementation plan](../../fixes/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance).
+the [historical R45 implementation plan](../../fixes/archive/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance).
 Improved model compliance still requires separately approved live measurement.
 
 ### 22.7 Repair retry limit and escalation

@@ -371,4 +371,4 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
 - Earlier reports based on scripted generation or golden comparison are not live E2E
   evidence.
 
-Active corrective work and its evidence remain in [FIX_001](../../fixes/IMP_001.md).
+Active corrective work and required evidence are tracked in [FIX01](../../fixes/FIX01.md).

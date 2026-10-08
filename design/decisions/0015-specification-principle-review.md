@@ -37,7 +37,7 @@ Multi-subject answer authority and H-011 authentication remain separate decision
 
 ## Selection-policy input amendment — 18 September 2026
 
-**Explicitly approved:** the user approved the [selection-authority proposal](../../fixes/IMP_001.md#chunk-13-selection-authority-decision)
+**Explicitly approved:** the user approved the [selection-authority proposal](../../fixes/archive/IMP_001.md#chunk-13-selection-authority-decision)
 and instructed implementation. This amends §9.1 and F0001's closed config
 shape: one optional `principles` section in the existing `.sddtoolkit.json` owns
 `filenameHints` and `selections`. No separate policy file or registry owns a copy.
@@ -62,7 +62,7 @@ capture and assessment operations. This amendment does not change project princi
 approve a live run or amend the pending shared-lineage repair decision.
 
 [§28](../contracts/28-testing.md) owns conformance requirements;
-[FIX_001 implementation](../../fixes/IMP_001.md#spec-principle-review--approved-design-and-native-delivery)
-tracks missing bindings, integration, measurements and verification. Better conflict
+[historical delivery record](../../fixes/archive/IMP_001.md#spec-principle-review--approved-design-and-native-delivery)
+retains implementation evidence, and [FIX01](../../fixes/FIX01.md) tracks remaining work. Better conflict
 detection is the intended improvement; fewer clarifications or live success is not
 guaranteed.

@@ -1,7 +1,12 @@
 # Field-purpose authoring comparison — 30 September 2026
 
+> **Historical record — archived 9 October 2026.** Superseded as an active
+> work tracker by [FIX01](../FIX01.md). Dated statuses, proposals and approvals
+> apply to their recorded scope; archiving does not establish completion or grant
+> new authorization.
+
 **6 October implementation update:** [FIX_003](FIX_003.md#12-implementation-record)
-and [ADR 0022](../design/decisions/0022-native-reference-phase-handoffs.md) replace
+and [ADR 0022](../../design/decisions/0022-native-reference-phase-handoffs.md) replace
 global JSON composition with validated native phase handoffs, role/group handles,
 native token projection and forced classifications. Earlier measurements below
 remain historical evidence; the new implementation has no live reliability or
@@ -22,13 +27,13 @@ and also lost required role coverage. Those producer prompt experiments were not
 retained. Lost meaning must be repaired at its producer, without changing valid
 generation bindings or treating missing generated prose as a user decision.
 
-**Earlier 3 October guidance update:** the [canonical extraction prompt](../design/workflows/spec/extraction-content.prompt.md)
+**Earlier 3 October guidance update:** the [canonical extraction prompt](../../design/workflows/spec/extraction-content.prompt.md)
 was revised to include identity, goals, obligations, conditions and constraints,
 while shrinking from 75 to 67 words. Citation rules, separate token classification
 and the response contract remain intact. This revision has no live comparison or
 E2E quality evidence yet; the observations below describe earlier prompt variants.
 
-**3 October JSON context update:** [extraction.context.json](../design/workflows/spec/extraction.context.json)
+**3 October JSON context update:** [extraction.context.json](../../design/workflows/spec/extraction.context.json)
 defines the meanings of `kind`, `claims`, `content`, `segments`, `nodes` and
 `citations`. In particular, independent facts belong in separate claims;
 segments concatenate into one claim. The concise task prompt and this static
@@ -135,9 +140,9 @@ failed. Two **unsent** reviewable requests are prepared in the comparison folder
 except `reasoning_effort`. No model/configuration default has been changed.
 
 The existing replay contract cannot dispatch those variants:
-[ADR 0019](../design/decisions/0019-single-request-debugger.md#replay) says
+[ADR 0019](../../design/decisions/0019-single-request-debugger.md#replay) says
 “Provider, model and settings remain those of the selected call”.
-[§28.8](../design/contracts/28-testing.md#288-model-conformance-comparisons)
+[§28.8](../../design/contracts/28-testing.md#288-model-conformance-comparisons)
 requires the existing request/replay owners. Forging captured metadata, weakening
 authorization or adding a separate sender would evade those boundaries.
 
@@ -179,7 +184,7 @@ assertions are enforced. Temporary debugger instrumentation was fully removed.
 
 ## Optional source-preservation review — 3 October 2026
 
-[ADR 0021](../design/decisions/0021-optional-source-preservation-review.md)
+[ADR 0021](../../design/decisions/0021-optional-source-preservation-review.md)
 records the implemented opt-in `validation.sourcePreservationCheck` and shared
 `models.slots.repair` entry. The early check compares captured sources with
 extraction/reconciliation, using the existing authority, localization and bounded

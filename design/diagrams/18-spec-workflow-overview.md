@@ -42,7 +42,7 @@ flowchart TD
   relative to `paths.references`.
 - Model output remains a candidate. Semantic review is model-assisted; the engine
   owns validation, repair authorization, rendering and publication.
-- Upstream omission repair uses [shared dependency renewal](../../fixes/IMP_001.md#r32-follow-up--shared-protocol-progress-and-recurrence)
+- Upstream omission repair uses [shared dependency renewal](../../fixes/archive/IMP_001.md#r32-follow-up--shared-protocol-progress-and-recurrence)
   and complete rebuilding. Progress requires a stable semantic-subject join;
   regenerated ordinals alone cannot establish recovery.
 - Clarifications persist across runs, but each rerun starts from the beginning.

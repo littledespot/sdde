@@ -1,4 +1,4 @@
-//! Full verification owns one repository test run plus dependency-module roots.
+//! Full verification owns separate unit/integration runs and dependency-module roots.
 const std = @import("std");
 
 pub fn check(allocator: std.mem.Allocator, root: *std.Build.Step, registered: []const *std.Build.Step.Run) !void {

@@ -293,9 +293,9 @@ specific to their existing typed purposes; the same shared review orchestration
 and each purpose's guidance serve initial review, insertion and selected repair.
 A policy finding explains the relation between business behavior and a cited policy
 passage. A source-comparison concern alone does not establish a policy conflict,
-and a citation's existence does not prove semantic support. Implementation and
-remaining live semantic validation are tracked in
-[FIX_002 §25](../../fixes/FIX_002.md#25-principle-citation-conformance--architecture-review).
+and a citation's existence does not prove semantic support. Historical implementation
+is recorded in [FIX_002 §25](../../fixes/archive/FIX_002.md#25-principle-citation-conformance--architecture-review);
+[FIX01](../../fixes/FIX01.md) tracks remaining semantic validation.
 
 - Source-preservation review remains independent: it distinguishes missing source
   authority from extraction/reconciliation loss. Principles are policy evidence,

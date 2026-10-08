@@ -1,7 +1,12 @@
 # LLM_REWORK — Derive mechanical facts; ask models for semantic choices
 
+> **Historical record — archived 9 October 2026.** Superseded as an active
+> work tracker by [FIX01](../FIX01.md). Dated statuses, proposals and approvals
+> apply to their recorded scope; archiving does not establish completion or grant
+> new authorization.
+
 **6 October implementation update:** [FIX_003](FIX_003.md#12-implementation-record)
-and [ADR 0022](../design/decisions/0022-native-reference-phase-handoffs.md) replace
+and [ADR 0022](../../design/decisions/0022-native-reference-phase-handoffs.md) replace
 global JSON composition with validated native phase handoffs, role/group handles,
 native token projection and forced classifications. Earlier measurements below
 remain historical evidence; the new implementation has no live reliability or
@@ -15,7 +20,7 @@ plus the ownership contracts for Plan, Tasks, Implement and unrelated workflows.
 §15 defines the required completion gate; provenance is the first implementation,
 not the scope limit. Determined fields must be constructed in code, not left in
 responses merely because schemas or validators can check them.
-**Historical delivery:** Phase 0 baseline tests, approved [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md),
+**Historical delivery:** Phase 0 baseline tests, approved [ADR 0020](../../design/decisions/0020-derived-exact-reference-lineage.md),
 Phase 1's reference-owner refactor, Phase 2's coordinated format cutover,
 Phase 3's offline integration/measurements and Phase 4's approved live measurements
 are recorded below. Those completed scopes do not complete the broader mandate.
@@ -75,7 +80,7 @@ and passing tests are not evidence that every current response field is necessar
 The concept is sound: when validated input and an accepted rule determine one
 answer, the engine must construct that answer. Asking the model to reproduce it,
 then validating and repairing disagreements, introduces avoidable failure paths.
-This already follows [design §4](../design/design.md#4-deterministic-and-llm-responsibility-boundary).
+This already follows [design §4](../../design/design.md#4-deterministic-and-llm-responsibility-boundary).
 
 **Success means transferring responsibility, not just rejecting more answers.**
 Apply this distinction at every request and repair boundary:
@@ -164,7 +169,7 @@ that change, not later hardening work.
 ## 2. Evidence: the retained failure
 
 Reviewed execution:
-[`2026-09-25T08-21-44Z-b16638b5493910a4b1d29436213dcde9`](../zig-out/e2e-spec/2026-09-25T08-21-44Z-b16638b5493910a4b1d29436213dcde9/report.md).
+[`2026-09-25T08-21-44Z-b16638b5493910a4b1d29436213dcde9`](../../zig-out/e2e-spec/2026-09-25T08-21-44Z-b16638b5493910a4b1d29436213dcde9/report.md).
 Its executed source fingerprint matches the preceding approved §36 run documented
 in [FIX_002](FIX_002.md#36-preserve-field-purpose-through-repair-and-recover-misbound-exact-content).
 
@@ -196,7 +201,7 @@ in this document establishes the proposed contract's effectiveness yet.
 ### Phase 0 run — the same reference join fails during brief generation
 
 Execution
-[`2026-09-25T21-53-09Z-74d618e36d74294723f5ca72d7a90347`](../zig-out/e2e-spec/2026-09-25T21-53-09Z-74d618e36d74294723f5ca72d7a90347/report.md)
+[`2026-09-25T21-53-09Z-74d618e36d74294723f5ca72d7a90347`](../../zig-out/e2e-spec/2026-09-25T21-53-09Z-74d618e36d74294723f5ca72d7a90347/report.md)
 used clean revision `58b0917` (`Phase 0`). Its captured requests still use the
 current token/citation tuple, not ADR 0020's claim-handle contract.
 
@@ -209,7 +214,7 @@ current token/citation tuple, not ADR 0020's claim-handle contract.
 | Terminal result | The same native assignment exhausted its two allowed repair executions (one initial attempt plus one retry): `RetryLimitExhausted`. All 10 calls returned final text; all 14,133 tokens were accounted against 100,000. |
 | Later gates | Story, records, semantic/principle assessment, publication/readback and rubric grading were not reached. No specification or clarification was published; publication and grading are `not_run`. |
 
-The [first repair request](../zig-out/e2e-spec/2026-09-25T21-53-09Z-74d618e36d74294723f5ca72d7a90347/evidence/generation/call-000009/request.json)
+The [first repair request](../../zig-out/e2e-spec/2026-09-25T21-53-09Z-74d618e36d74294723f5ca72d7a90347/evidence/generation/call-000009/request.json)
 included source text, both claims, the rejected tuple and an instruction to correct
 content and claim selection together. It still required the model to join the token
 to its supporting claim. Calls 9 and 10 sent byte-identical 5,107-byte requests;
@@ -237,7 +242,7 @@ distinction through the runner and no-publication boundary.
 ### Pre-cutover run — earlier repairs recover, record repair exhausts
 
 Execution
-[`2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377`](../zig-out/e2e-spec/2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377/report.md)
+[`2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377`](../../zig-out/e2e-spec/2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377/report.md)
 recorded modified revision `58b0917`, source fingerprint
 `129b92c3c395bf79df8a485de4594e6d7e53409d3304e3d551a4dfff830408bb`.
 Its requests still use the pre-cutover token/citation tuple.
@@ -250,7 +255,7 @@ Its requests still use the pre-cutover token/citation tuple.
 | Records, calls 15–17 | Record 0's functional requirement again selected token 1/citation 2 with only claim 1. Both authorized record replacements returned it unchanged. The same assignment exhausted two repair executions: `RetryLimitExhausted`. |
 | Terminal boundary | 17 provider calls, 25,996/100,000 tokens, complete usage accounting. No specification or clarification was published; semantic/principle assessment, persisted publication/readback and rubric grading were not reached. |
 
-The [records response](../zig-out/e2e-spec/2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377/evidence/generation/call-000015/model_output.txt)
+The [records response](../../zig-out/e2e-spec/2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377/evidence/generation/call-000015/model_output.txt)
 also repeats the greeting as Given/When/Then and includes an entity despite the
 fixed `not_applicable` decision. These are additional candidate problems; native
 validation stopped at record 0's join before entity membership or semantic review
@@ -258,7 +263,7 @@ could assess the rest. The supplied prompt already described required behavior,
 precondition, trigger and outcome, and instructed the model to follow the entity
 decision. This is not evidence that purpose guidance or source requirements were absent.
 
-The [record repair request](../zig-out/e2e-spec/2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377/evidence/generation/call-000016/request.json)
+The [record repair request](../../zig-out/e2e-spec/2026-09-25T22-18-57Z-dadf1076a7fcde7bd0710c1f047ab377/evidence/generation/call-000016/request.json)
 included the rejected value, source evidence and permission to correct content and
 claims together. Calls 16–17 sent identical 6,786-byte requests and received the
 same invalid record. Earlier successful work continued; missing-answer recovery
@@ -277,7 +282,7 @@ specification quality. No new retry or repair authority is justified by this run
 ### Earlier post-cutover run — wrong-kind exact selection, then missing-answer exhaustion
 
 Execution
-[`2026-09-26T00-13-51Z-8c9c22b2f48057252273f4bf6d7dfd73`](../zig-out/e2e-spec/2026-09-26T00-13-51Z-8c9c22b2f48057252273f4bf6d7dfd73/report.md)
+[`2026-09-26T00-13-51Z-8c9c22b2f48057252273f4bf6d7dfd73`](../../zig-out/e2e-spec/2026-09-26T00-13-51Z-8c9c22b2f48057252273f4bf6d7dfd73/report.md)
 recorded modified revision `a71afaa`, source fingerprint
 `2acaaf88cc0af1a406f9e2506d88c7adc775c44ff66680311b402a8b9e64f981`.
 The captured requests use the initial Phase 2 `exact_copy.claim_id` contract,
@@ -294,14 +299,14 @@ before the subsequent purpose-guidance conformance correction.
 Eight leading-prefix normalizations were logged for calls 1–8. No JSON/schema
 validation rejection was recorded after admission. The final stop was missing
 answer exhaustion, not authentication, budget exhaustion or a repeated native
-merge. [Raw call 12](../zig-out/e2e-spec/2026-09-26T00-13-51Z-8c9c22b2f48057252273f4bf6d7dfd73/evidence/generation/call-000012/response.json)
-and the [existing decoder](../src/adapters/provider/bedrock_response.zig)
+merge. [Raw call 12](../../zig-out/e2e-spec/2026-09-26T00-13-51Z-8c9c22b2f48057252273f4bf6d7dfd73/evidence/generation/call-000012/response.json)
+and the [existing decoder](../../src/adapters/provider/bedrock_response.zig)
 agree: no final answer follows the reasoning block. Reasoning must remain excluded
 from candidate data. The requests included native `response_format.type="json_schema"`.
 
 **Confirmed request defect:** the common purpose instruction says
 “Embed exact_copy claim IDs within prose,” including in
-[call 11's repair request](../zig-out/e2e-spec/2026-09-26T00-13-51Z-8c9c22b2f48057252273f4bf6d7dfd73/evidence/generation/call-000011/request.json).
+[call 11's repair request](../../zig-out/e2e-spec/2026-09-26T00-13-51Z-8c9c22b2f48057252273f4bf6d7dfd73/evidence/generation/call-000011/request.json).
 That request correctly has `preserved_tokens:[]`, a string-only selected schema,
 and a diagnostic expressly prohibiting exact-copy values. The unconditional
 instruction conflicts with those permitted choices and does not distinguish
@@ -353,7 +358,7 @@ request-guidance and code findings in §6.5, but does not change this live resul
 ### Earlier corrected-guidance run — eight recovered targets, then no final answer
 
 Execution
-[`2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8`](../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8/report.md)
+[`2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8`](../../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8/report.md)
 recorded modified revision `a71afaa`, source fingerprint
 `b6688a68a8b7ffa65b0abba4112874218592accfec3dc5aa81f335d0216b2b23`.
 Captured brief/story, entity and record guidance matches the current corrected
@@ -371,13 +376,13 @@ the route remains Bedrock `openai.gpt-oss-20b-1:0`, temperature 0, low reasoning
 | Outcome repair, calls 28–29 | Both responses contain only a reasoning block, ending at `</reasoning>` with `finish_reason:"stop"`. Request 20 exhausts its two allowed attempts at `generate-records-repair-request-account`: `RetryLimitExhausted`, provider diagnostic `missing_final_text`. No replacement is merged for `records[2].text`. |
 | Terminal boundary | 29 calls, 37,596/100,000 tokens, complete usage accounting. Coverage completion, source/principle review, publication/readback and grading are not reached. No specification or clarification is published; publication and grading are `not_run`. |
 
-The [last repair request](../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8/evidence/generation/call-000028/request.json)
+The [last repair request](../../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8/evidence/generation/call-000028/request.json)
 explicitly rejects exact claim 1, states that no exact/passive choices are permitted,
 and requires source-backed strings while preserving fixed evidence. Its native
 schema is only an object containing a string array. The correction adds
 `missing_final_text`, “Final-answer admission failed: no final answer was received,”
 and the complete-corrected-response instruction. It is not an identical retry.
-[Raw call 29](../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8/evidence/generation/call-000029/response.json)
+[Raw call 29](../../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8/evidence/generation/call-000029/response.json)
 contains no final text for the adapter to admit. The evidence establishes the
 missing answer, not why the provider/model omitted it. Do not substitute reasoning,
 increase retries, infer an adapter defect or widen the repair's `B=[1]`.
@@ -409,7 +414,7 @@ this run review. No new evidence, retry or semantic-review authority is justifie
 ### Pre-Phase-4 run — identical requests, first repair receives no final answer
 
 Execution
-[`2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793`](../zig-out/e2e-spec/2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793/report.md)
+[`2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793`](../../zig-out/e2e-spec/2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793/report.md)
 recorded modified revision `1c56234`, source fingerprint
 `f970b687ca8f2c1db92368788c94e02647983d8ce9d2aafb400d80fa7abdbca4`.
 
@@ -421,13 +426,13 @@ recorded modified revision `1c56234`, source fingerprint
 | Protocol correction, call 10 | Request **9**, attempt **2**, retains the original assignment, selected schema and evidence. It adds `missing_final_text`, “Final-answer admission failed: no final answer was received.” and the complete-corrected-response instruction. The raw response again contains only reasoning. No replacement reaches JSON/schema/native validation or a merge. |
 | Terminal boundary | `RetryLimitExhausted` at `generate-brief-repair-request-account`: limit 1, two executions. All **10 calls / 13,375 tokens** are accounted against 100,000. No specification, clarification or completed state was published. Story/records, source/principle assessment, publication/readback and rubric grading were not reached. |
 
-The [repair request](../zig-out/e2e-spec/2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793/evidence/generation/call-000009/request.json),
-[correction request](../zig-out/e2e-spec/2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793/evidence/generation/call-000010/request.json)
+The [repair request](../../zig-out/e2e-spec/2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793/evidence/generation/call-000009/request.json),
+[correction request](../../zig-out/e2e-spec/2026-09-26T02-40-05Z-d1afebc8a7c1bd09810bf1593a96b793/evidence/generation/call-000010/request.json)
 and their raw responses establish two separate problems: incorrect semantic
 selection starts repair; missing final text prevents that repair from producing
 a candidate. This is not missing user information. Earlier malformed prefixes
 were admitted through the existing normalization path; JSON/schema exhaustion
-was not the terminal cause. The [adapter](../src/adapters/provider/bedrock_response.zig)
+was not the terminal cause. The [adapter](../../src/adapters/provider/bedrock_response.zig)
 correctly rejects an empty final portion rather than using reasoning as the answer.
 The captures do not establish why the provider/model omitted that answer.
 
@@ -447,7 +452,7 @@ observed request remained the same and the provider response changed.
 | Title protocol correction, call 10 | 3,984 | 805 / 953 |
 
 **Rollout impact:** keep Phases 0–3 complete as offline contract/integration work;
-Phase 4 remains open. The existing [Spec runner regression](../src/composition/root.zig)
+Phase 4 remains open. The existing [Spec runner regression](../../src/composition/root.zig)
 already covers a misbound exact reference followed by two missing-answer attempts,
 exact accounting and no publication. Prioritize this first-title assignment in
 Phase 4.1, retaining the previous identical request's final answer as comparison
@@ -462,19 +467,19 @@ wrong-kind choice but cannot itself repair an absent final answer.
 
 | Information/work | Current owner/status | Assessment |
 | --- | --- | --- |
-| Source inventory, lines, coordinates and verbatim spans | [source_selections](../src/domain/source_selections.zig), native readers | Already deterministic. Models select offered ranges; they do not compute coordinates or reproduce quotations. |
-| Exact-token candidate identity and raw bytes | [structured_tokens](../src/domain/structured_tokens.zig), extraction identity actions | Already deterministic. Relevance and classification remain semantic where not fixed by policy. |
-| Canonical claim/citation/token identities | [reference_extraction](../src/domain/reference_extraction.zig), [reference_claim_items](../src/domain/reference_claim_items.zig) | Already native, assigned after validation. Do not add another identity system. |
-| Exact-copy choice | [typed_text.ExactCopy](../src/domain/typed_text.zig), [generation schema](../design/workflows/spec/generation.schema.json) | Phase 2 uses one preserved-token claim handle and derives lineage. Purpose guidance distinguishes eligible exact choices from general evidence claims and respects narrowed repair schemas. |
-| Citation union | [reference_support.select](../src/domain/reference_support.zig), [specification_provenance](../src/domain/specification_provenance.zig) | Already derived. Phase 1 removed the shared owner's Spec-type dependency; Spec eligibility remains in its own consumer (§6.1). |
-| Summary statement `local_key` | [reconciliation validation](../src/domain/reference_reconciliation_validation.zig), schema and key repair | Model-generated uniqueness/order bookkeeping remains. Separate candidate for removal after defining ordering semantics. |
-| Preserved-token reconciliation content | [reconciliation validation](../src/domain/reference_reconciliation_validation.zig), [repair](../src/domain/reference_reconciliation_repair.zig) | The sole selected preserved-token claim determines its token. Audit/removal of the repeated token field is feasible separately. |
-| Review assignment ordinals | [specification_support](../src/domain/specification_support.zig) | C2a–C2b implements native assignment progress and identity for initial review and repair. Working validation defers only unvisited subjects; complete-set validation remains. Cost and live quality are open. |
-| FR/AC IDs and numbering | [specification_identity](../src/domain/specification_identity.zig) | Already deterministic. The number of meaningful requirements is a semantic question, not an array-count calculation. |
-| Coverage membership/counts | [specification_coverage](../src/domain/specification_coverage.zig) | Already computed. Counting a cited claim is not proving its meaning survived. |
-| Exact-copy reconstruction after coverage failure | [specification_coverage_repair](../src/domain/specification_coverage_repair.zig) | Already native when the entire field equals a known literal and already cites its claim. Preserve this bounded behavior; do not replace it with a model call or expand it to guessed embedded matches. |
-| JSON part assembly | [json_composition_runtime](../src/domain/json_composition_runtime.zig) | Already native and prompt-free. Preserve full assembled validation and exact producer dependencies. |
-| Markdown, headings, escaping and literal expansion | [specification_projection](../src/domain/specification_projection.zig), [renderer](../src/domain/specification_markdown.zig) | Already deterministic. Do not ask a model to fix the rendered document. |
+| Source inventory, lines, coordinates and verbatim spans | [source_selections](../../src/domain/source_selections.zig), native readers | Already deterministic. Models select offered ranges; they do not compute coordinates or reproduce quotations. |
+| Exact-token candidate identity and raw bytes | [structured_tokens](../../src/domain/structured_tokens.zig), extraction identity actions | Already deterministic. Relevance and classification remain semantic where not fixed by policy. |
+| Canonical claim/citation/token identities | [reference_extraction](../../src/domain/reference_extraction.zig), [reference_claim_items](../../src/domain/reference_claim_items.zig) | Already native, assigned after validation. Do not add another identity system. |
+| Exact-copy choice | [typed_text.ExactCopy](../../src/domain/typed_text.zig), [generation schema](../../design/workflows/spec/generation.schema.json) | Phase 2 uses one preserved-token claim handle and derives lineage. Purpose guidance distinguishes eligible exact choices from general evidence claims and respects narrowed repair schemas. |
+| Citation union | [reference_support.select](../../src/domain/reference_support.zig), [specification_provenance](../../src/domain/specification_provenance.zig) | Already derived. Phase 1 removed the shared owner's Spec-type dependency; Spec eligibility remains in its own consumer (§6.1). |
+| Summary statement `local_key` | [reconciliation validation](../../src/domain/reference_reconciliation_validation.zig), schema and key repair | Model-generated uniqueness/order bookkeeping remains. Separate candidate for removal after defining ordering semantics. |
+| Preserved-token reconciliation content | [reconciliation validation](../../src/domain/reference_reconciliation_validation.zig), [repair](../../src/domain/reference_reconciliation_repair.zig) | The sole selected preserved-token claim determines its token. Audit/removal of the repeated token field is feasible separately. |
+| Review assignment ordinals | [specification_support](../../src/domain/specification_support.zig) | C2a–C2b implements native assignment progress and identity for initial review and repair. Working validation defers only unvisited subjects; complete-set validation remains. Cost and live quality are open. |
+| FR/AC IDs and numbering | [specification_identity](../../src/domain/specification_identity.zig) | Already deterministic. The number of meaningful requirements is a semantic question, not an array-count calculation. |
+| Coverage membership/counts | [specification_coverage](../../src/domain/specification_coverage.zig) | Already computed. Counting a cited claim is not proving its meaning survived. |
+| Exact-copy reconstruction after coverage failure | [specification_coverage_repair](../../src/domain/specification_coverage_repair.zig) | Already native when the entire field equals a known literal and already cites its claim. Preserve this bounded behavior; do not replace it with a model call or expand it to guessed embedded matches. |
+| JSON part assembly | [json_composition_runtime](../../src/domain/json_composition_runtime.zig) | Already native and prompt-free. Preserve full assembled validation and exact producer dependencies. |
+| Markdown, headings, escaping and literal expansion | [specification_projection](../../src/domain/specification_projection.zig), [renderer](../../src/domain/specification_markdown.zig) | Already deterministic. Do not ask a model to fix the rendered document. |
 | Retry limits, usage, freshness and publication status | Existing runner, lifecycle, accounting and publication owners | Already engine authority. Focused requests must integrate their identities and retirement with these owners; no new policy, counter or publication authority. |
 
 An important distinction: deterministic validation is not always deterministic
@@ -520,14 +525,14 @@ The existing reference ledger can resolve that preserved-token claim into:
 captured source occurrence → token 1 → citation 2 → exact bytes
 ```
 
-[reference_claim_items.build](../src/domain/reference_claim_items.zig) already
+[reference_claim_items.build](../../src/domain/reference_claim_items.zig) already
 checks a preserved-token claim's one citation, source occurrence and raw bytes.
-[reference_support.exact](../src/domain/reference_support.zig) now resolves the
+[reference_support.exact](../../src/domain/reference_support.zig) now resolves the
 selected claim directly. The tuple-specific reverse lookup and §36 repair trigger
 were removed; native token/citation identities remain valid elsewhere.
 
 **The request must also remove the join.**
-[model_evidence.Token/project](../src/domain/model_evidence.zig) now includes the
+[model_evidence.Token/project](../../src/domain/model_evidence.zig) now includes the
 owning `claim_id`, trusted value and source context. Do not add a second lookup
 table or strip evidence needed to choose meaningfully. Request choices, schema
 exclusions and native eligibility must use the same owning facts; an arbitrary
@@ -551,7 +556,7 @@ different occurrences. Never resolve by literal text or by the first matching va
 
 The pre-cutover canonical representation could not distinguish the required roles
 if automatic derivation overwrote the explicit claim list. These two cases explain
-why [specification.Provenance](../src/domain/specification.zig) now stores explicit
+why [specification.Provenance](../../src/domain/specification.zig) now stores explicit
 selection separately from the derived view:
 
 | Explicit support `S` | Exact dependencies `E` | Effective claims `L` | After removing the exact reference |
@@ -630,14 +635,14 @@ model contract removes redundant fields, validates one selection, then construct
 canonical data according to an explicit rule. Reject superseded model formats;
 do not add compatibility readers, guessing, or an optional fallback to old tuples.
 
-The current [Values(boundary)](../src/domain/specification.zig) distinguishes model
+The current [Values(boundary)](../../src/domain/specification.zig) distinguishes model
 and canonical evidence but shares business-text structure. Prefer a claim handle
 in both model and canonical exact segments, with validity established at the native
 boundary. The ledger owns the token/citation/bytes; duplicating the pair in every
 canonical segment is not required to preserve exactness. Renderers and coverage
 resolve it through the shared owner. Model data remains untrusted until admission.
 
-This also avoids a real API obstacle: [atomic_repair.Contract](../src/domain/atomic_repair.zig)
+This also avoids a real API obstacle: [atomic_repair.Contract](../../src/domain/atomic_repair.zig)
 uses one replacement type for expected values, `current_value`, response parsing,
 comparison and merge. Keeping model handles but canonical pairs would require a
 separate presentation/conversion contract. That alternative is feasible in principle,
@@ -650,8 +655,8 @@ conformance; the owning-unit tests in §10 provide the additional evidence.
 
 ### 5.5 Specify fixed repair and review semantics before coding
 
-The existing [native repair](../src/domain/specification_repair.zig) pins selection;
-[omission repair](../src/domain/specification_coverage_repair.zig) compares canonical
+The existing [native repair](../../src/domain/specification_repair.zig) pins selection;
+[omission repair](../../src/domain/specification_coverage_repair.zig) compares canonical
 claim/citation sets, and insertion matches reviewed evidence. Fixed explicit `S`
 is not equivalent to fixed effective `L`: removing a sole exact segment can remove
 a claim from `L` without changing `S`.
@@ -718,7 +723,7 @@ corrupt or stale engine-owned ledger/choice bindings follow their existing termi
 authority or runner rejection; they are not requests for the model to invent a
 replacement reference and never become user clarifications.
 
-[Spec source-review evidence](../src/domain/specification_support_evidence.zig) currently
+[Spec source-review evidence](../../src/domain/specification_support_evidence.zig) currently
 requires supported findings to match the candidate's effective provenance and
 replays that rule on readback. Preserve that comparison against derived `L`, while
 presenting explicit support and exact-reference content accurately to review.
@@ -767,10 +772,10 @@ boundary determines recovery: §6.7's selected enums now reject some unavailable
 handles during schema validation, before native admission. Those use complete-response
 protocol correction; remaining native defects use the authorized atomic repair.
 
-[Completed state](../src/domain/specification_state.zig) validates content,
-coverage and review associations. [Pending state](../src/domain/incomplete_specification.zig)
+[Completed state](../../src/domain/specification_state.zig) validates content,
+coverage and review associations. [Pending state](../../src/domain/incomplete_specification.zig)
 stores references and clarification identities; generation questions are flattened
-to text by [the existing question builder](../src/actions/clarification/build_specification_clarification_need.zig).
+to text by [the existing question builder](../../src/actions/clarification/build_specification_clarification_need.zig).
 These are different contracts. ADR 0020's `specification/v2` and
 `specification-state/v6` cutover is active, including old-version rejection.
 Phase 2 closed the owning-unit readback discrepancies recorded in §6.5. Preserve
@@ -781,7 +786,7 @@ evidence store is justified. Live completed readback remains unproven in Phase 4
 
 Cross-workflow reuse cannot simply call `specification_provenance` from Plan or
 Tasks. Phase 1 moved selection mechanics to reference-owned inputs and results in
-[reference_support](../src/domain/reference_support.zig). Spec still requires
+[reference_support](../../src/domain/reference_support.zig). Spec still requires
 completed reconciliation, retained claims and business-appropriate token kinds,
 and rejects clarification-response support. Those are not universal reference
 rules. Phase 2 extended the same owner to exact-handle lineage.
@@ -809,7 +814,7 @@ existing text boundary, reusing normalization and rejecting unavailable referenc
 Do not fabricate source scopes or weaken Spec validation to enable it.
 
 Keep the dependency direction acyclic: `typed_text` should name the low-level
-[reference_identity](../src/domain/reference_identity.zig) type, not import the
+[reference_identity](../../src/domain/reference_identity.zig) type, not import the
 extraction/resolution layer that already consumes typed text. Shared reference
 mechanics must not import Spec generation/session/policy types. Existing actions
 call the pure owner; orchestrators only coordinate declared runner bindings. If a
@@ -824,21 +829,21 @@ superseded declarations; preserve one implementation of each join and policy.
 
 ### 6.2 Configured shapes and identity bindings
 
-[ADR 0003](../design/decisions/0003-generic-workflow-engine.md) allows any workflow
+[ADR 0003](../../design/decisions/0003-generic-workflow-engine.md) allows any workflow
 identity composed from registered contracts. A response schema supplies shape;
 the registered native operation supplies semantic interpretation. Plan's existing
-[typed-leaf design](../design/contracts/07-domain-representations.md) already
+[typed-leaf design](../../design/contracts/07-domain-representations.md) already
 distinguishes business text, semantic text and operational references.
 
 - Apply this contract to declared typed fields, including nested records, arrays
   and optional containers supported by that native contract. Do not recursively
   interpret arbitrary objects named `claim_id`, `kind` or `provenance`.
-- Keep JSON decoding and [composition](../src/domain/json_composition_runtime.zig)
+- Keep JSON decoding and [composition](../../src/domain/json_composition_runtime.zig)
   structural and prompt-free. Assembly does not resolve references or certify
   semantic support; typed admission and full validation follow it.
 - Keep one configured complete schema per response binding; derive selected/part
   schemas from it and verify conformance with the registered shared text contract.
-  The [schema compiler](../src/domain/model_result_schema.zig) supports local
+  The [schema compiler](../../src/domain/model_result_schema.zig) supports local
   `#/$defs/` references, not external schema imports. Do not invent a second schema
   registry or assume cross-file imports. Existing schema/partition limits still apply.
 - No-reference workflows remain unchanged. A new JSON shape is usable only when its
@@ -856,8 +861,8 @@ before a request can treat those ordinals as available choices.
 The corpus `StateId` alone is not a freshness proof. A rebuilt extraction can retain
 that source namespace while changing claim order or meaning. Bind the actual
 captured ledger and current producer/dependency generations, as existing
-[native dependency capture](../src/domain/specification_candidate_context.zig) and
-[reference lineage](../src/domain/reference_reconciliation_context.zig) already do.
+[native dependency capture](../../src/domain/specification_candidate_context.zig) and
+[reference lineage](../../src/domain/reference_reconciliation_context.zig) already do.
 Persisted readback resolves against its exact captured ledger/contract. Do not
 substitute `(StateId, ClaimId)` equality for these checks or create a new hash/ID
 registry to duplicate them.
@@ -878,9 +883,9 @@ persisted reference namespaces, predecessor freshness or contract validation.
 | Another registered workflow | The same typed reference mechanism, without a workflow-name branch, when its operations supply the required evidence. | Its own registered evidence, review and publication contract; no automatic SDD predecessor sequence. |
 | Workflow without reference-backed content | Existing JSON/schema, runner and other deterministic operations. | No fabricated claims, source capture, additional prompts or mandatory reference stage. |
 
-`L` is only the reference-claim component. [Plan](../design/contracts/18-plan.md)
-also admits authenticated edits and other evidence; [Tasks](../design/contracts/19-tasks.md)
-selects obligation/file/command IDs; [Implement](../design/contracts/20-implement.md)
+`L` is only the reference-claim component. [Plan](../../design/contracts/18-plan.md)
+also admits authenticated edits and other evidence; [Tasks](../../design/contracts/19-tasks.md)
+selects obligation/file/command IDs; [Implement](../../design/contracts/20-implement.md)
 uses authorized operation and copy-source contracts. Keep those namespaces and
 accepted support. An exact display reference never grants read, write, copy, command
 or approval authority and must not replace an operational ID.
@@ -911,9 +916,9 @@ are recorded in §10. The text below retains each causal finding and required
 boundary so a future change does not recreate it.
 
 **High — full-record admission and per-field rendering disagree (2.4).**
-[inspectRecord/validateStored](../src/domain/specification_provenance.zig) collect
+[inspectRecord/validateStored](../../src/domain/specification_provenance.zig) collect
 all record fields before deriving `L`. In contrast,
-[project](../src/domain/specification_projection.zig) passes each field with the
+[project](../../src/domain/specification_projection.zig) passes each field with the
 record's complete provenance to `scalar`; `scopesFor` derives lineage from that
 field alone and compares its citations with the record-wide union.
 
@@ -930,15 +935,15 @@ arrays and unrelated source examples. Tampered persisted citations must still re
 
 **High — repair paths do not consistently use the same owning unit (2.3).**
 
-- [Omission authorization](../src/domain/specification_coverage_repair.zig)
+- [Omission authorization](../../src/domain/specification_coverage_repair.zig)
   computes effective claims from only the selected record field, whereas
-  [source-review evidence](../src/domain/specification_support_evidence.zig)
+  [source-review evidence](../../src/domain/specification_support_evidence.zig)
   computes record-wide support. It can refuse an otherwise eligible field repair
   whose sibling contains the exact dependency. `omissionPacket` also restricts
   schema alternatives using `S` instead of the effective bound: an exact-only
   field with `S=[]` can authorize but fail packet construction, and `S=[1]` with
   exact claim `2` can receive a prose-only schema despite needing to preserve `2`.
-- [Native retry progress](../src/domain/specification_repair.zig) validates a
+- [Native retry progress](../../src/domain/specification_repair.zig) validates a
   provenance target through explicit-only `p.select`, and a record value through
   single-field `checkAttributed`. Accepted `S=[]` with valid exact support, or
   support contributed by a sibling, can therefore be classified as unresolved.
@@ -946,7 +951,7 @@ arrays and unrelated source examples. Tampered persisted citations must still re
   checking the whole record would also be wrong: an unrelated sibling failure must
   not keep a successfully repaired target's retry counter recurring.
 - Completed-value replacement changes text while retaining old materialized
-  citations, then [replaceCompleted](../src/domain/specification_session.zig)
+  citations, then [replaceCompleted](../../src/domain/specification_session.zig)
   performs canonical revalidation. Reordering exact references can preserve the
   authorized claim/citation sets but change their required canonical order and
   reject. Recompute the affected unit's projection **after an authorized merge**,
@@ -994,7 +999,7 @@ failure test; preserve the already tested `select` implementation. Do not make t
 shared API arena-only merely to avoid testing ownership.
 
 **Medium — resource and reuse claims need direct evidence (3.1–3.2).**
-[Coverage](../src/domain/specification_coverage.zig) currently allocates effective
+[Coverage](../../src/domain/specification_coverage.zig) currently allocates effective
 lineage for each candidate unit inside the retained-claim loop. The same unit is
 thus traversed/allocated repeatedly. Measure this independently of provider tokens,
 including repeated validation and larger ledgers. If material, derive each unit's
@@ -1002,8 +1007,8 @@ view once per validation pass using the existing owner; no persistent cache, sec
 coverage index or process-wide authority store is justified.
 
 Independent reuse is feasible through the existing
-[operation registry](../src/ports/workflow_operation_registry.zig) and test-owned
-schemas/bindings already demonstrated by [runner tests](../src/workflow_execution_test.zig).
+[operation registry](../../src/ports/workflow_operation_registry.zig) and test-owned
+schemas/bindings already demonstrated by [runner tests](../../src/workflow_execution_test.zig).
 Use an isolated test registry and declared typed input/output; no production data
 key, capability or demonstration workflow is needed. Prove different native
 eligibility with a second typed consumer, and test structural composition separately.
@@ -1115,7 +1120,7 @@ mixed-type enums and general JSON Schema keyword combinations are unnecessary.
 
 **Shared ownership and scope:**
 
-- Extend the existing [schema owner](../src/domain/model_result_schema.zig) and
+- Extend the existing [schema owner](../../src/domain/model_result_schema.zig) and
   compiler/validator/serializer for integer enums and restrictions. Reuse its
   canonical-to-selected schema relationship; derive a view of the one configured
   schema, never another provider-only schema or eligibility registry.
@@ -1240,19 +1245,19 @@ request-bound facts, cross-field relationships and semantic judgments.
 
 | Area | Confirmed exposure and existing owner | Required distinction / conformance check |
 | --- | --- | --- |
-| Required text across stages | Extraction, reconciliation and generation schemas allow empty text arrays/strings that [typed-text validation](../src/domain/typed_text.zig) rejects. Some extraction text-repair schemas already require an element; sibling initial/repair definitions differ. | Cover descriptions, stories, entity explanations, record fields, reference reasons and replacements together. Require content only where the native contract does; whitespace/control-character checks still need the native text owner. |
-| Generation provenance — resolved in §15.7 | The earlier response schema accepted arbitrary claim selections and clarification-response IDs. The current [generation schema](../design/workflows/spec/generation.schema.json) forbids `provenance`; the engine binds support from validated reconciliation assignments and derives exact dependencies under ADR 0020. | Keep the closed response rejection and canonical/readback checks. An exact segment may add effective evidence without a repeated model selection; an unbound or stale assignment cannot be filled from the eligible catalogue. |
-| Mandatory record families | The generation `records` array can be empty or omit FR/AC families. [Specification](../src/domain/specification.zig) declares both mandatory; [authority admission](../src/domain/specification_authority.zig) treats their absence as a candidate gap. | This is a completion obligation, not permission to invent content. A heterogeneous array minimum cannot establish both families. Preserve `needs_user`/`inconclusive`; the existing missing-entity insertion authority does not authorize general FR/AC insertion. |
-| Entity decision versus records | Initial record schemas still offer all kinds although the entity decision is already fixed in the packet. [Session membership validation](../src/domain/specification_session.zig) rejects entities under `not_applicable` and missing entities under `required`. | Project the fixed decision through the existing schema/selection owner; preserve conditional insertion/replacement authority and sibling records. Entity meaning remains semantic. |
-| Extraction citations | Initial and citation-replacement collections can be empty; line IDs are broad integers. [Source selections](../src/domain/source_selections.zig) requires citations, existing scope-local IDs and ordered ranges. | Cover initial, missing-citation and selected-range repair together. Supplied line choices are native facts; choosing which lines support a claim remains semantic. |
-| Token-classification membership | The array permits missing, duplicate and foreign token candidates, plus choices incompatible with the extraction outcome. [Classification validation](../src/domain/token_classification_validation.zig) already knows the candidate set and permitted decisions. | Test zero and nonzero candidate sets, complete membership, scope isolation and outcome-dependent choices. An empty collection can be legitimate; classification decisions must not be fabricated. |
-| Summary/signal selections and keys | [Reconciliation schema](../design/workflows/spec/reconciliation.schema.json) permits empty claim selections, arbitrary IDs and repeated local keys. [Reconciliation validation](../src/domain/reference_reconciliation_validation.zig) checks selection, key uniqueness, content kind and coverage. | Reuse current claim facts for offered choices. Full coverage and kind consistency span entries; IDs alone do not prove them. Removing summary keys is the separate ordering decision in §7B. |
-| Dispositions and conflicts | Broad collections permit absent/duplicate dispositions, invalid targets and conflict records with fewer than two claims. [Disposition validation](../src/domain/reference_disposition_validation.zig) and reconciliation validation enforce membership, valid targets, reciprocity, cycles and coverage. | Preserve legitimate empty conflict sets. A present conflict needs valid related members. Existing feasibility guidance must remain derived from the relationship owner; this review does not authorize automatic disposition selection. |
-| Source/principle review membership | **Closed in C2b:** model-facing batch collections are gone. [Shared collection validation](../src/domain/specification_support.zig) binds one native subject per response, validates produced findings and checks the final complete set. | Preserve focused repair, origins, freshness and whole-review routing. Extend resource and live evidence; do not restore batch slots or remove defensive canonical membership checks. |
-| Source-review evidence/applicability — response cutover in §15.7 | [Evidence admission](../src/domain/specification_support_evidence.zig) enforces subject-specific eligibility and exact candidate evidence. The packet fixes `finding` or `applicability_finding`; the response has no `provenance`. | Keep semantic verdict and loss-location choices, source-only negatives and distinct principle citations. Reject an unbound positive instead of deriving support from eligible claims. |
-| Review detail/question text | Shared `detail_value` allows empty negative explanations. `question_value` rejects empty strings locally but permits whitespace. Schema length counts characters; [clarification text](../src/domain/clarification_inputs.zig) limits UTF-8 bytes and controls. | Preserve existing required/forbidden question variants and permitted empty positive detail. Test empty, blank, control-containing and multibyte text; do not claim a character minimum proves usefulness or byte-bound conformance. |
-| Principle citation conditions | [Principle admission](../src/domain/principle_assessment.zig) requires citations for negative decisions and validates selected chunks, line bounds and uniqueness. Initial and evidence-repair schemas still permit empty citations and broad IDs/ranges. | Derive retained-decision requirements and eligible chunks from the same owner. Compatible findings may legitimately omit citations. Valid coordinates do not prove that cited policy supports the verdict. |
-| Rubric evaluation | [Packet schema](../test/harness/packet.zig) derives structural fields from the judgment type but is not specialized to the captured rubric. It permits empty results, arbitrary criterion/document IDs, invalid score/disposition combinations and insufficient evidence. [Judgment validation](../test/harness/judgment.zig) rejects them. | Exercise the grading boundary even while production generation is blocked. Preserve rubric-owned scoring, applicability, exact-quotation checks and native totals. Invalid judgment currently terminates evaluation; this review grants no new evaluator retry or authority over workflow completion. |
+| Required text across stages | Extraction, reconciliation and generation schemas allow empty text arrays/strings that [typed-text validation](../../src/domain/typed_text.zig) rejects. Some extraction text-repair schemas already require an element; sibling initial/repair definitions differ. | Cover descriptions, stories, entity explanations, record fields, reference reasons and replacements together. Require content only where the native contract does; whitespace/control-character checks still need the native text owner. |
+| Generation provenance — resolved in §15.7 | The earlier response schema accepted arbitrary claim selections and clarification-response IDs. The current [generation schema](../../design/workflows/spec/generation.schema.json) forbids `provenance`; the engine binds support from validated reconciliation assignments and derives exact dependencies under ADR 0020. | Keep the closed response rejection and canonical/readback checks. An exact segment may add effective evidence without a repeated model selection; an unbound or stale assignment cannot be filled from the eligible catalogue. |
+| Mandatory record families | The generation `records` array can be empty or omit FR/AC families. [Specification](../../src/domain/specification.zig) declares both mandatory; [authority admission](../../src/domain/specification_authority.zig) treats their absence as a candidate gap. | This is a completion obligation, not permission to invent content. A heterogeneous array minimum cannot establish both families. Preserve `needs_user`/`inconclusive`; the existing missing-entity insertion authority does not authorize general FR/AC insertion. |
+| Entity decision versus records | Initial record schemas still offer all kinds although the entity decision is already fixed in the packet. [Session membership validation](../../src/domain/specification_session.zig) rejects entities under `not_applicable` and missing entities under `required`. | Project the fixed decision through the existing schema/selection owner; preserve conditional insertion/replacement authority and sibling records. Entity meaning remains semantic. |
+| Extraction citations | Initial and citation-replacement collections can be empty; line IDs are broad integers. [Source selections](../../src/domain/source_selections.zig) requires citations, existing scope-local IDs and ordered ranges. | Cover initial, missing-citation and selected-range repair together. Supplied line choices are native facts; choosing which lines support a claim remains semantic. |
+| Token-classification membership | The array permits missing, duplicate and foreign token candidates, plus choices incompatible with the extraction outcome. [Classification validation](../../src/domain/token_classification_validation.zig) already knows the candidate set and permitted decisions. | Test zero and nonzero candidate sets, complete membership, scope isolation and outcome-dependent choices. An empty collection can be legitimate; classification decisions must not be fabricated. |
+| Summary/signal selections and keys | [Reconciliation schema](../../design/workflows/spec/reconciliation.schema.json) permits empty claim selections, arbitrary IDs and repeated local keys. [Reconciliation validation](../../src/domain/reference_reconciliation_validation.zig) checks selection, key uniqueness, content kind and coverage. | Reuse current claim facts for offered choices. Full coverage and kind consistency span entries; IDs alone do not prove them. Removing summary keys is the separate ordering decision in §7B. |
+| Dispositions and conflicts | Broad collections permit absent/duplicate dispositions, invalid targets and conflict records with fewer than two claims. [Disposition validation](../../src/domain/reference_disposition_validation.zig) and reconciliation validation enforce membership, valid targets, reciprocity, cycles and coverage. | Preserve legitimate empty conflict sets. A present conflict needs valid related members. Existing feasibility guidance must remain derived from the relationship owner; this review does not authorize automatic disposition selection. |
+| Source/principle review membership | **Closed in C2b:** model-facing batch collections are gone. [Shared collection validation](../../src/domain/specification_support.zig) binds one native subject per response, validates produced findings and checks the final complete set. | Preserve focused repair, origins, freshness and whole-review routing. Extend resource and live evidence; do not restore batch slots or remove defensive canonical membership checks. |
+| Source-review evidence/applicability — response cutover in §15.7 | [Evidence admission](../../src/domain/specification_support_evidence.zig) enforces subject-specific eligibility and exact candidate evidence. The packet fixes `finding` or `applicability_finding`; the response has no `provenance`. | Keep semantic verdict and loss-location choices, source-only negatives and distinct principle citations. Reject an unbound positive instead of deriving support from eligible claims. |
+| Review detail/question text | Shared `detail_value` allows empty negative explanations. `question_value` rejects empty strings locally but permits whitespace. Schema length counts characters; [clarification text](../../src/domain/clarification_inputs.zig) limits UTF-8 bytes and controls. | Preserve existing required/forbidden question variants and permitted empty positive detail. Test empty, blank, control-containing and multibyte text; do not claim a character minimum proves usefulness or byte-bound conformance. |
+| Principle citation conditions | [Principle admission](../../src/domain/principle_assessment.zig) requires citations for negative decisions and validates selected chunks, line bounds and uniqueness. Initial and evidence-repair schemas still permit empty citations and broad IDs/ranges. | Derive retained-decision requirements and eligible chunks from the same owner. Compatible findings may legitimately omit citations. Valid coordinates do not prove that cited policy supports the verdict. |
+| Rubric evaluation | [Packet schema](../../test/harness/packet.zig) derives structural fields from the judgment type but is not specialized to the captured rubric. It permits empty results, arbitrary criterion/document IDs, invalid score/disposition combinations and insufficient evidence. [Judgment validation](../../test/harness/judgment.zig) rejects them. | Exercise the grading boundary even while production generation is blocked. Preserve rubric-owned scoring, applicability, exact-quotation checks and native totals. Invalid judgment currently terminates evaluation; this review grants no new evaluator retry or authority over workflow completion. |
 
 **Repairs are part of each row.** A selected repair knows its target, retained
 decision and permitted evidence before calling the model. Use those facts through
@@ -1262,7 +1267,7 @@ restriction, claim-required source selection and question variants are useful
 conformance examples to preserve, not reasons to create another repair path.
 
 **Provider constraint fidelity is a separate boundary.** The current
-[Bedrock projection](../src/domain/model_schema_projection.zig) omits string-length
+[Bedrock projection](../../src/domain/model_schema_projection.zig) omits string-length
 and numeric-range bounds and array maxima; a positive array minimum becomes `1`.
 Enums and required object properties remain. The complete selected schema stays in
 guidance and local validation. Therefore a local schema fix does not automatically
@@ -1305,8 +1310,8 @@ The user-selected direction replaces the expanded batch-slot proposal. Native
 binding and assembly use existing owners; live cost and semantic effectiveness
 remain unproven. C2a specifies the closed response/progress contract used by C2b.
 The approved focused amendment touches
-[§12.7](../design/contracts/12-model-boundary.md#127-workflow-defined-model-operations)
-and [§22](../design/contracts/22-repair.md), including partial-review validation and
+[§12.7](../../design/contracts/12-model-boundary.md#127-workflow-defined-model-operations)
+and [§22](../../design/contracts/22-repair.md), including partial-review validation and
 stable retry scope. It must preserve §12.8.1's complete-findings routing and the
 §§6–7 action/runner boundary; this document does not amend them implicitly.
 
@@ -1366,8 +1371,8 @@ legitimate native repair. It does **not** permit verdict reassessment, invented
 citations, partial publication, new retry authority, or a budget reset.
 The selected schema changes the initial response contract; working-review repair
 changes when the §22 authorization is valid. Both amendments were approved and
-applied with the coordinated cutover in [§12.7](../design/contracts/12-model-boundary.md#127-workflow-defined-model-operations)
-and [§22](../design/contracts/22-repair.md).
+applied with the coordinated cutover in [§12.7](../../design/contracts/12-model-boundary.md#127-workflow-defined-model-operations)
+and [§22](../../design/contracts/22-repair.md).
 
 **C2b implementation checkpoint — preserve these mechanisms:**
 
@@ -1400,14 +1405,14 @@ Keep dependent-rebuild requests bound to their pending native parent defect key;
 new assignment IDs cannot create extra retries for that defect.
 
 Retention is not permission to carry every intermediate allocation indefinitely.
-[`retained_candidate.Storage`](../src/application/retained_candidate.zig) retains
+[`retained_candidate.Storage`](../../src/application/retained_candidate.zig) retains
 declared parent values; repeated full-array rebuilds can retain growing histories.
 Measure live retained memory and teardown, and test allocation failure/cancellation
 after several findings. Reuse ownership and envelope freshness checks; do not
 weaken captured lineage or add a second cache to make the loop work.
 
 Derive assignments from the existing authority projection. With no selected
-principle chunks, [`principle_assessment.project`](../src/domain/principle_assessment.zig)
+principle chunks, [`principle_assessment.project`](../../src/domain/principle_assessment.zig)
 creates no policy requirements and native review advancement skips the call.
 Preserve this zero-work path. Never replace a required semantic assessment with a
 manufactured compatible verdict, even if its identity/evidence can be calculated.
@@ -1424,8 +1429,8 @@ and their existing finding subtrees gives:
 
 | Captured review | Subjects | Existing array schema | Existing single finding value | Superseded inlined batch slots |
 | --- | ---: | ---: | ---: | ---: |
-| [Source, call 14](../zig-out/e2e-spec/2026-09-26T07-08-12Z-d5ea99a5e3ff77dc8adf92dd7c58e810/evidence/generation/call-000014/request.json) | 18 | 9,686 | 9,412 | 169,945 |
-| [Principles, call 15](../zig-out/e2e-spec/2026-09-26T07-08-12Z-d5ea99a5e3ff77dc8adf92dd7c58e810/evidence/generation/call-000015/request.json) | 15 | 703 | 429 | 6,901 |
+| [Source, call 14](../../zig-out/e2e-spec/2026-09-26T07-08-12Z-d5ea99a5e3ff77dc8adf92dd7c58e810/evidence/generation/call-000014/request.json) | 18 | 9,686 | 9,412 | 169,945 |
+| [Principles, call 15](../../zig-out/e2e-spec/2026-09-26T07-08-12Z-d5ea99a5e3ff77dc8adf92dd7c58e810/evidence/generation/call-000015/request.json) | 15 | 703 | 429 | 6,901 |
 
 The single-finding column is the pre-cutover `entries.items.properties.value`
 projection; the implemented request measurement follows below. The superseded experiment repeated that shape under required
@@ -1488,7 +1493,7 @@ repair poor semantic decisions. Regress those decisions independently. Report
 quality and cost together, identifying any budget difference in comparisons.
 
 **Stop unproductive repetition through the existing progress owner.**
-[§22.7](../design/contracts/22-repair.md#227-repair-retry-limit-and-escalation)
+[§22.7](../../design/contracts/22-repair.md#227-repair-retry-limit-and-escalation)
 already separates per-assignment protocol failure, per-defect native repair and
 global usage. Preserve that separation:
 
@@ -1540,19 +1545,19 @@ when their concrete model contracts exist, not claimed from Spec alone.
 
 Two downstream integration boundaries need precise treatment:
 
-- **Evaluator projection:** [`bedrock.request`](../test/harness/bedrock.zig) currently
+- **Evaluator projection:** [`bedrock.request`](../../test/harness/bedrock.zig) currently
   sends the reflected judgment schema as both guidance and native structure; it
   does not use the workflow's provider projection. C3 must prove compatibility
   before reusing that projection. Adding unsupported score/string bounds directly
   to this wire schema, or copying a provider-keyword filter, is not a safe fix.
   Retain rubric-owned native checks where the existing profile cannot express them.
 - **Readback already has a composed safeguard:**
-  [`prepare_specification_output`](../src/actions/specification/prepare_specification_output.zig)
-  encodes canonical state and calls [`specification_state.parse`](../src/domain/specification_state.zig)
+  [`prepare_specification_output`](../../src/actions/specification/prepare_specification_output.zig)
+  encodes canonical state and calls [`specification_state.parse`](../../src/domain/specification_state.zig)
   with the current contract source before publication. The
-  [oracle](../test/harness/e2e/oracle.zig) rereads disk bytes and requires exact equality
+  [oracle](../../test/harness/e2e/oracle.zig) rereads disk bytes and requires exact equality
   with the prepared files; `workflow_state` is mandatory in every valid
-  [E2E case](../test/harness/e2e/contracts.zig). Together these prove persisted bytes
+  [E2E case](../../test/harness/e2e/contracts.zig). Together these prove persisted bytes
   match the state validated under that same contract. The earlier recommendation
   for an additional unconditional parse gate duplicated this check and is withdrawn.
   Fresh-runtime/current-contract revalidation, corruption and changed-authority
@@ -1691,7 +1696,7 @@ explicitly empty legacy field; construct only the empty native value authorized 
 the new contract. Canonical `Provenance` remains separately validated. Do not strip
 a nonempty stored value during a model-shaped projection and thereby accept it.
 
-For F, [the evidence owner](../src/domain/specification_support_evidence.zig) already
+For F, [the evidence owner](../../src/domain/specification_support_evidence.zig) already
 expresses derivability through `Requirements.rule(...).provenance` and `.claims.exact`.
 Reuse those facts rather than a second table keyed by finding names. Some supported
 aggregate subjects have no fixed provenance; independently selected `source_ids`
@@ -1700,7 +1705,7 @@ all its values, including Given/When/Then; do not invent a narrower per-field sc
 Invalid loss attribution, stale producers and invalid supplied selections still
 reject. Fixed-evidence derivation cannot make a verdict deterministic or repair it.
 
-[`validateStored`](../src/domain/specification_support.zig) currently reconstructs
+[`validateStored`](../../src/domain/specification_support.zig) currently reconstructs
 model-shaped findings from canonical evidence. E/F must preserve its native
 validation and complete-evidence comparison: recompute expected facts to detect
 corruption, never overwrite persisted evidence to make it valid. Retain repairs for
@@ -1752,7 +1757,7 @@ failures. Native membership checks and bounded recovery remain necessary.
 
 ## 9. Approved Phase 0.2 decision
 
-The user approved the focused contract on 26 September 2026. [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md)
+The user approved the focused contract on 26 September 2026. [ADR 0020](../../design/decisions/0020-derived-exact-reference-lineage.md)
 is the governing authority for the exact claim handle, explicit versus derived
 lineage, bounded value-only repair, version cutover, readback and failure
 precedence. §§5–8 record the analysis behind that decision; they are not a
@@ -1827,7 +1832,7 @@ restriction contract is recorded in §6.7 and design §§12.2/22.6.
 **Phase 0 complete (26 September 2026):** 0.1 has the baseline regression and
 measurements below. The user approved 0.2; ADR 0020 records the decision and
 accepted/rejected repair examples. The retained
-[failed run](../zig-out/e2e-spec/2026-09-25T08-21-44Z-b16638b5493910a4b1d29436213dcde9/report.md)
+[failed run](../../zig-out/e2e-spec/2026-09-25T08-21-44Z-b16638b5493910a4b1d29436213dcde9/report.md)
 has 13 accounted calls, 18,512 actual tokens, two story-repair executions and no
 publication or rubric grade. Its requests measure:
 
@@ -1841,11 +1846,11 @@ publication or rubric grade. Its requests measure:
 These are retained-run measurements, not model predictions or before/after
 improvement claims. The failed run had no separate protocol-correction call; its
 prefix normalizations stayed in the existing decoder. Existing fake-provider
-[protocol correction tests](../src/model_request_workflow_test.zig) retain the
+[protocol correction tests](../../src/model_request_workflow_test.zig) retain the
 selected schema and original request identity. The current Spec graph has 717
-compiled operations under the [root compilation test](../src/composition/root.zig);
+compiled operations under the [root compilation test](../../src/composition/root.zig);
 the retained run does not separately report a compiled graph count. The new
-[generation regression](../src/specification_generation_test.zig) exercises the
+[generation regression](../../src/specification_generation_test.zig) exercises the
 same invalid exact join, unchanged repair response and exhaustion for two unrelated
 requirements; it also checks bounded native recovery and keeps mechanical text
 acceptance distinct from semantic adequacy. The existing meaningful-content test
@@ -2072,8 +2077,8 @@ requirements, acceptance criteria, source/principle review, publication and
 completed readback. A correct exact handle with inadequate business text remains
 a semantic concern, not proof of quality from native validation.
 
-Retained [Phase 0 baseline](../zig-out/e2e-spec/2026-09-25T08-21-44Z-b16638b5493910a4b1d29436213dcde9/)
-and [post-cutover run](../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8/)
+Retained [Phase 0 baseline](../../zig-out/e2e-spec/2026-09-25T08-21-44Z-b16638b5493910a4b1d29436213dcde9)
+and [post-cutover run](../../zig-out/e2e-spec/2026-09-26T01-21-50Z-aa8fda0613a0159cf267a5c7f8ff35c8)
 were measured from their generation evidence. Schema bytes below are the compact
 UTF-8 serialization of `response_format.json_schema.schema`; output bytes are
 the retained final-text file, or zero when no final text was returned.
@@ -2107,11 +2112,11 @@ test-reference-reconciliation --summary failures`, full `zig build verify
 **4.1 — Controlled assignments: done, adverse results.** Depends on 3.2 and explicit call approval.
 
 **Approved diagnostic batch completed (26 September 2026):** all eight calls in
-the [proposal](../zig-out/llm-rework-phase4/diagnostics-2026-09-26/proposal.md)
+the [proposal](../../zig-out/llm-rework-phase4/diagnostics-2026-09-26/proposal.md)
 were dispatched once, consuming **12,034/100,000 tokens**. Six exact replays matched
 the captured wire bytes; two loan-brief observations reused the existing offline
 request projection with unchanged prompt/schema/model settings.
-The [results and raw-evidence links](../zig-out/llm-rework-phase4/diagnostics-2026-09-26/report.md)
+The [results and raw-evidence links](../../zig-out/llm-rework-phase4/diagnostics-2026-09-26/report.md)
 retain all attempts, token counts and exchange timings.
 
 - Title repair, title correction and outcome repair returned no final answer.
@@ -2162,7 +2167,7 @@ before dispatch and consumed no provider call; it is recorded separately.
 **4.2 — Whole-workflow publication and rubric: attempted, gate failed.** Depends on 4.1 and a separate E2E approval.
 
 The separately approved execution
-[`2026-09-26T03-01-57Z-a456e351f0bfbb82dc123b4f18f97860`](../zig-out/e2e-spec/2026-09-26T03-01-57Z-a456e351f0bfbb82dc123b4f18f97860/report.md)
+[`2026-09-26T03-01-57Z-a456e351f0bfbb82dc123b4f18f97860`](../../zig-out/e2e-spec/2026-09-26T03-01-57Z-a456e351f0bfbb82dc123b4f18f97860/report.md)
 failed after **18 calls and 21,985/100,000 tokens**, with complete usage accounting.
 It used the configured Bedrock `openai.gpt-oss-20b-1:0` route in `ap-southeast-2`,
 a fresh isolated target and unchanged production sources (`0911cb7`, captured
@@ -2179,7 +2184,7 @@ No automatic rerun occurred. The first ten wire requests match the preceding
 | Repair/correction, calls 17–18 | The schema allowed only prose strings and the diagnostic explicitly prohibited the unavailable handle. The correction added `missing_final_text`. Both raw HTTP 200 responses contained only reasoning, ended with `finish_reason:stop`, and provided no final candidate. Request 14 exhausted its two executions: `RetryLimitExhausted`. |
 | Later gates | Records/acceptance criteria, full coverage, source/principle assessment, publication, persisted readback and grading were not reached. Principles were present in the isolated project; their presence is not assessment. No specification or clarification Markdown was published. |
 
-The [events](../zig-out/e2e-spec/2026-09-26T03-01-57Z-a456e351f0bfbb82dc123b4f18f97860/events.jsonl)
+The [events](../../zig-out/e2e-spec/2026-09-26T03-01-57Z-a456e351f0bfbb82dc123b4f18f97860/events.jsonl)
 contain 366 recorded step outcomes. No JSON/schema rejection exhausted; existing
 logged prefix normalization handled affected final texts. The stop was missing
 final answers during native-defect repair, not malformed JSON, lost source input,
@@ -2202,7 +2207,7 @@ not a substitute for this failed live gate.
 #### Subsequent user run — empty principle review exhausts the token budget
 
 Reviewed execution
-[`2026-09-26T07-08-12Z-d5ea99a5e3ff77dc8adf92dd7c58e810`](../zig-out/e2e-spec/2026-09-26T07-08-12Z-d5ea99a5e3ff77dc8adf92dd7c58e810/report.md)
+[`2026-09-26T07-08-12Z-d5ea99a5e3ff77dc8adf92dd7c58e810`](../../zig-out/e2e-spec/2026-09-26T07-08-12Z-d5ea99a5e3ff77dc8adf92dd7c58e810/report.md)
 used modified revision `0911cb7`, source fingerprint
 `e178ef3e2406f582204d7f3033470598f18b6758126caa12ca831fa966876f81`.
 The captured Bedrock `InvokeModel` requests contain native
@@ -2222,10 +2227,10 @@ but neither useful output nor Phase 4 completion is established.
 | Call 25 — terminal failure | Actual usage increased from **98,352 to 105,547/100,000 tokens**. The runner returned **`WorkflowTokenBudgetExceeded`** at the model-call boundary. Raw response contains a final finding for ordinal 9, but budget rejection prevented its admission/merge. It must not be counted as a missing-answer failure or successful repair. |
 | Publication and evaluation | No specification or clarification Markdown was published. Persisted readback and rubric grading were `not_run`; there is no score. All 25 calls have actual usage. |
 
-The [event stream](../zig-out/e2e-spec/2026-09-26T07-08-12Z-d5ea99a5e3ff77dc8adf92dd7c58e810/events.jsonl)
+The [event stream](../../zig-out/e2e-spec/2026-09-26T07-08-12Z-d5ea99a5e3ff77dc8adf92dd7c58e810/events.jsonl)
 contains 504 step outcomes. Fourteen responses received the existing logged prefix
 normalization; no JSON/schema correction exhausted. A final-call overshoot followed
-by immediate termination is the accepted [ADR 0011](../design/decisions/0011-provider-owned-request-limits.md)
+by immediate termination is the accepted [ADR 0011](../../design/decisions/0011-provider-owned-request-limits.md)
 behavior. No subsequent call, automatic in-run budget increase or discarded usage
 is justified. A fresh approved test may use a larger recorded budget under §6.9's
 quality-led direction; it does not change this run's failure or accounting.
@@ -2261,10 +2266,10 @@ it must not be implemented as an isolated principle-review exception.
    retained findings/provenance, freshness, exact accounting and no publication on
    exhaustion. Safe termination alone does not close the useful-generation gate.
 2. **Move review association into focused native assignments (§7C).**
-   [`principle_assessment.subjects/project`](../src/domain/principle_assessment.zig)
-   already derives the assignment set; [`specification_support.Contract`](../src/domain/specification_support.zig)
+   [`principle_assessment.subjects/project`](../../src/domain/principle_assessment.zig)
+   already derives the assignment set; [`specification_support.Contract`](../../src/domain/specification_support.zig)
    validates missing/duplicate/foreign findings for source and principle reviews.
-   The current [`principle_review` schema](../design/workflows/spec/support.schema.json)
+   The current [`principle_review` schema](../../design/workflows/spec/support.schema.json)
    leaves batch membership to the model. §6.9 C2a supersedes required-slot expansion:
    native progress selects a subject, the model returns a compact semantic finding,
    and code binds/retains it. Specify the §§12.7/22 response and execution amendments
@@ -2272,8 +2277,8 @@ it must not be implemented as an isolated principle-review exception.
    duties distinct; no auto-filled verdicts, unchecked positional association,
    second schema authority or extra reviewer.
 3. **Keep context reduction and semantic quality separate.**
-   [`principle_assessment.packet`](../src/domain/principle_assessment.zig) and
-   [`specification_support_repair.packet`](../src/domain/specification_support_repair.zig)
+   [`principle_assessment.packet`](../../src/domain/principle_assessment.zig) and
+   [`specification_support_repair.packet`](../../src/domain/specification_support_repair.zig)
    already own selection and repair projection. Assess a narrower presentation
    there only when dependencies show which evidence can safely be omitted;
    do not delete policy chunks or change policy selection merely to cut tokens.
@@ -2314,7 +2319,7 @@ owners inspected; `git diff --check` passed for the documentation change.
 
 ### Registered verification commands
 
-These are existing [build.zig](../build.zig) steps to extend/use during implementation;
+These are existing [build.zig](../../build.zig) steps to extend/use during implementation;
 §14 separately records which ran during this review. New tests must be registered in
 the complete suite; do not use standalone `zig test` as a parallel build path.
 
@@ -2452,17 +2457,17 @@ acceptance of it remain semantic failures. Publication/readback and scoring rema
 `not_run`. Phase 4 cannot be
 marked complete. §9 records the original approval; §6.9 records C2a's later accepted
 focused amendment. §14 distinguishes remaining decisions from those approvals.
-Existing regression owners include [specification generation tests](../src/specification_generation_test.zig),
-[typed-text tests](../src/typed_text_test.zig), [request workflow tests](../src/model_request_workflow_test.zig)
-and [native packaging smoke](../test/packaging/smoke.zig); implementation must extend
+Existing regression owners include [specification generation tests](../../src/specification_generation_test.zig),
+[typed-text tests](../../src/typed_text_test.zig), [request workflow tests](../../src/model_request_workflow_test.zig)
+and [native packaging smoke](../../test/packaging/smoke.zig); implementation must extend
 them with the matrix above rather than count existing containment tests as recovery evidence.
 
 ## 13. Remaining provenance and requirement-source traceability plan
 
 **Reviewed 27 September 2026 against the current worktree, including existing
 uncommitted changes. Documentation only; no implementation or live calls.**
-Authority: [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md),
-[design §§1, 3–4](../design/design.md#3-goals-non-goals-and-invariants),
+Authority: [ADR 0020](../../design/decisions/0020-derived-exact-reference-lineage.md),
+[design §§1, 3–4](../../design/design.md#3-goals-non-goals-and-invariants),
 invariants 1, 5–7, 12, 15–16, 19–23 and 30,
 §§7.1, 12, 16–17, 21–24, and §31's reference, repair, view-integrity and
 offline-integration criteria. The governing design remains Proposed. Decisions
@@ -2470,9 +2475,9 @@ identified below must be settled before their implementation; this plan does not
 amend accepted schemas or authorize a live test.
 
 **Completed — retain:** `{"kind":"exact_copy","claim_id":N}` selects one recorded
-occurrence. [reference_support](../src/domain/reference_support.zig) owns exact
+occurrence. [reference_support](../../src/domain/reference_support.zig) owns exact
 resolution, stable lineage and citation selection without importing Spec types.
-[specification_provenance](../src/domain/specification_provenance.zig) supplies
+[specification_provenance](../../src/domain/specification_provenance.zig) supplies
 Spec eligibility and traverses the attributed field or complete shared-provenance
 record. Canonical `provenance.claim_ids` retains explicit `S`; effective support is
 `stableUnique(S + eligible exact claims E)`, including valid `S=[]` cases. Citations
@@ -2482,10 +2487,10 @@ this contract. Do not rename the field to `support` or reimplement the cutover.
 Retaining these canonical mechanics does not require retaining every model-facing
 selector: §§15.4–15.5 distinguish that remaining response-contract work.
 
-Existing [generation tests](../src/specification_generation_test.zig) cover derived
+Existing [generation tests](../../src/specification_generation_test.zig) cover derived
 field/record lineage, repeated text in different sources, shared-record repair and
 corrupt completed readback. The registered audit consumer in
-[request-workflow tests](../src/model_request_workflow_test.zig) already proves
+[request-workflow tests](../../src/model_request_workflow_test.zig) already proves
 non-Spec reuse with different eligibility, optional/array fields and stale-binding
 rejection. §§10–11 record earlier offline results; §14 records the additional
 targeted test runs for this review. Full live publication/readback and quality remain open.
@@ -2500,13 +2505,13 @@ evidence that ADR 0020's union or repair implementation is missing.
 
 | Remaining change | Existing owner/file | Reason | Required test | Contract decision needing approval |
 | --- | --- | --- | --- | --- |
-| **P1 — Implemented offline 27 September:** construct fixed review evidence; retain semantic selections. | [specification_support_evidence](../src/domain/specification_support_evidence.zig), [specification_support](../src/domain/specification_support.zig), [support repair](../src/domain/specification_support_repair.zig), [support schema](../design/workflows/spec/support.schema.json). Reuse §6.9 C2c / §7F. | `Requirements.rule(...).provenance` and `.claims.exact` determine some required lists; the engine now constructs them. Aggregate subjects without fixed provenance, independently chosen `source_ids`, selectable negative/loss evidence and principle citations retain their own rules. The verdict remains model-assisted. | Focused tests cover equivalent native findings, forbidden echoes, selectable evidence, localized loss, selected repair and corrupt readback. §15.6 records the controlled byte comparison. Full suite and live outcome evidence remain separate. | Focused §§12/17.3/22 review-response amendment recorded. Generation's `provenance.claim_ids` naming and ADR 0020 evidence bounds remain unchanged. |
-| **P2 — New derived projection:** expose each generated requirement → effective claims → recorded occurrences through the existing owners. | [reference_support](../src/domain/reference_support.zig), [reference_claim_items](../src/domain/reference_claim_items.zig), [specification_provenance](../src/domain/specification_provenance.zig), [specification_projection](../src/domain/specification_projection.zig); existing [coverage](../src/domain/specification_coverage.zig) supplies checked reverse mappings. | Join each admitted unit's resolved `L` to its validated `Item.citations`, source identity and captured location. `effectiveClaims` alone enumerates handles; it is not an admission/freshness check. Chunk-level `scopes` alone are not precise citation spans. Keep claim-to-occurrence edges even when citation display deduplicates; never union support across requirements. Use an ephemeral typed projection, not another persisted/writable mapping. | In one candidate, requirement A with `S=[1]`, exact `2` yields `[1,2]`; B with `S=[3]` stays `[3]`. Cover one claim with several citations, one source supporting several requirements, several sources supporting one requirement, and equal text at different locations in one file and different files. Repeat through rendering/readback. | No new selection or persistence authority. Define the output representation with P3; any shared occurrence projection remains independent of Spec types and eligibility. |
-| **P3 — New visible traceability:** render requirement-keyed links and occurrence anchors in the existing `reference-context.md` output. | [reference_context](../src/domain/reference_context.zig), [render-reference-context action](../src/actions/reference/render_reference_context.zig), [specification_projection](../src/domain/specification_projection.zig), existing rendering/publication workflow, and [pending-output preparation](../src/actions/specification/prepare_incomplete_specification_output.zig), a direct sibling caller of the renderer. Completed state contains content and references; pending state does not contain generated requirements. | Recommended placement preserves the editable business document's current grammar. Display generated IDs, effective claims, citations, captured reference-state identity, document path and precise spans. Links must use validated artifact/source locations and renderer escaping; a current file link alone is not evidence of the captured version. | Deterministic ordering, valid local anchors/relative links, escaped paths, repeated occurrences and complete record coverage; rerender from parsed canonical state is byte-identical. Editing the sidecar cannot alter authority. Pending rendering receives no generated-requirement projection and retains its existing reference view; test this sibling path explicitly. | Approve the reference-view Markdown layout under §§17.6/23.1 and its rendering-contract binding. This placement needs no `spec.md` parser change or new state field. Storing partial generated requirements in pending state would be a separate ADR 0017/state amendment and is excluded. If links must appear inline in `spec.md`, first amend its F0100 §5 grammar, projection/parser and round-trip contract; do not append unrecognized metadata. |
-| **P4 — Conditional capture extension:** preserve original requirement IDs only where an explicit, validated source association exists. Otherwise display capture/document/span anchors. | [reference ingestion](../src/domain/reference_ingestion.zig), [Markdown reader](../src/adapters/parsers/markdown_reference.zig), [reference_evidence](../src/domain/reference_evidence.zig), [source selections](../src/domain/source_selections.zig), [reference_snapshot](../src/domain/reference_snapshot.zig). | Current source bytes may contain labels, but no structured ID-to-claim association is captured. Neither claim ordinals, source blocks nor generated `FR-*` IDs are original requirement IDs. The captured reference state identifies the source snapshot; it must not be labelled an author-supplied document version. Do not guess boundaries from nearby labels or similar prose. | With an approved capture format: one original ID → several generated IDs and the reverse; same label in different documents/versions remains distinct; absent IDs use spans; malformed, ambiguous, foreign and stale associations reject. No fabricated IDs from headings or prose. | Before adding fields, approve the explicit source-ID/version/association contract in §§7/16, reader/extraction binding, closed snapshot validation and any affected §24 state-version change. Keep associations inside the existing source ledger; no separate traceability store, migration or dual reader. Span-based P2–P3 can proceed without this optional capture extension. |
-| **P5 — Verification extension:** carry the new projection through authorized repair, dependency renewal and strict persisted loading. Fix code only if these regressions expose a defect. | [specification_repair](../src/domain/specification_repair.zig), [coverage repair](../src/domain/specification_coverage_repair.zig), [specification_session](../src/domain/specification_session.zig), [specification_state](../src/domain/specification_state.zig); existing atomic/runner owners. | Preserve old-value/revision/generation checks, explicit `S`, original invalid-handle bound `B`, effective claim/citation sets, siblings and retry identity. Recompute after authorized merges; on load recompute and compare, never silently repair corrupt stored evidence. | Unknown, wrong-kind, out-of-scope and stale selections; reordered segments; add/remove outside the bound; invalid `S`; retries cannot enlarge `B`. An unrelated requirement stays unchanged. Stale trusted bindings terminate; unresolved model/engine defects produce neither missing-user questions nor successful publication. Field repair still may fail exact coverage or semantic review. | None for ADR 0020 conformance. Any new coupled evidence-change authority is out of scope and requires a separate decision. P4 may require persistence amendment. |
-| **P6 — Extend existing reuse proof:** exercise occurrence projection in the registered non-Spec audit consumer. | [reference_support](../src/domain/reference_support.zig), existing audit fixture in [model_request_workflow_test](../src/model_request_workflow_test.zig), [architecture tests](../src/architecture_test.zig). | Reuse is already demonstrated offline; extend its assertions instead of creating a workflow/framework. Each registered consumer supplies validated references and its own eligibility, coverage and approval policy. Clarification answers, policy evidence and operational capabilities remain distinct. | Separate audit units retain separate links; its forbidden-field and stale-binding cases still reject; nested/optional fields work. Shared code imports no Spec types, unrelated workflows inherit no SDD gates, and no-reference operations need no ledger. | None for test-owned reuse. A production workflow's new admission policy would need its own scoped contract, not a global Spec rule. |
-| **P7 — Measure, reconcile documentation and verify:** baseline before implementation; compare equivalent compiled requests after each cutover. | Existing [schema selection](../src/domain/model_result_schema.zig), [request preparation tests](../src/model_request_preparation_test.zig), request-workflow tests, §10 measurements and [build.zig](../build.zig). | Measure compiled selected schemas, provider projections and whole request/output bytes for initial, repair and correction assignments, plus aggregate calls and native allocation cost. Rendering-only changes should add no model bookkeeping. Documentation defects include F0100 §§5.6–5.7's old token/citation shape and design §32's still-pending cutover claim. | Same ledger/assignment/repair scope before/after; closed schemas exclude determined returned fields while genuine choices remain. Use §10's targeted checks, then `zig build verify` (including clean-directory native smoke) and `git diff --check`. Retain independent semantic/coverage/publication gates. | No approval for offline measurements. Update affected §§7/12/16/17/22/23/24, F0100 and these notes only for the agreed changes; preserve ADR 0020 and Proposed status. Each live model/E2E run needs separate approval. Bytes/offline fixtures prove neither token savings nor live reliability or semantic quality. |
+| **P1 — Implemented offline 27 September:** construct fixed review evidence; retain semantic selections. | [specification_support_evidence](../../src/domain/specification_support_evidence.zig), [specification_support](../../src/domain/specification_support.zig), [support repair](../../src/domain/specification_support_repair.zig), [support schema](../../design/workflows/spec/support.schema.json). Reuse §6.9 C2c / §7F. | `Requirements.rule(...).provenance` and `.claims.exact` determine some required lists; the engine now constructs them. Aggregate subjects without fixed provenance, independently chosen `source_ids`, selectable negative/loss evidence and principle citations retain their own rules. The verdict remains model-assisted. | Focused tests cover equivalent native findings, forbidden echoes, selectable evidence, localized loss, selected repair and corrupt readback. §15.6 records the controlled byte comparison. Full suite and live outcome evidence remain separate. | Focused §§12/17.3/22 review-response amendment recorded. Generation's `provenance.claim_ids` naming and ADR 0020 evidence bounds remain unchanged. |
+| **P2 — New derived projection:** expose each generated requirement → effective claims → recorded occurrences through the existing owners. | [reference_support](../../src/domain/reference_support.zig), [reference_claim_items](../../src/domain/reference_claim_items.zig), [specification_provenance](../../src/domain/specification_provenance.zig), [specification_projection](../../src/domain/specification_projection.zig); existing [coverage](../../src/domain/specification_coverage.zig) supplies checked reverse mappings. | Join each admitted unit's resolved `L` to its validated `Item.citations`, source identity and captured location. `effectiveClaims` alone enumerates handles; it is not an admission/freshness check. Chunk-level `scopes` alone are not precise citation spans. Keep claim-to-occurrence edges even when citation display deduplicates; never union support across requirements. Use an ephemeral typed projection, not another persisted/writable mapping. | In one candidate, requirement A with `S=[1]`, exact `2` yields `[1,2]`; B with `S=[3]` stays `[3]`. Cover one claim with several citations, one source supporting several requirements, several sources supporting one requirement, and equal text at different locations in one file and different files. Repeat through rendering/readback. | No new selection or persistence authority. Define the output representation with P3; any shared occurrence projection remains independent of Spec types and eligibility. |
+| **P3 — New visible traceability:** render requirement-keyed links and occurrence anchors in the existing `reference-context.md` output. | [reference_context](../../src/domain/reference_context.zig), [render-reference-context action](../../src/actions/reference/render_reference_context.zig), [specification_projection](../../src/domain/specification_projection.zig), existing rendering/publication workflow, and [pending-output preparation](../../src/actions/specification/prepare_incomplete_specification_output.zig), a direct sibling caller of the renderer. Completed state contains content and references; pending state does not contain generated requirements. | Recommended placement preserves the editable business document's current grammar. Display generated IDs, effective claims, citations, captured reference-state identity, document path and precise spans. Links must use validated artifact/source locations and renderer escaping; a current file link alone is not evidence of the captured version. | Deterministic ordering, valid local anchors/relative links, escaped paths, repeated occurrences and complete record coverage; rerender from parsed canonical state is byte-identical. Editing the sidecar cannot alter authority. Pending rendering receives no generated-requirement projection and retains its existing reference view; test this sibling path explicitly. | Approve the reference-view Markdown layout under §§17.6/23.1 and its rendering-contract binding. This placement needs no `spec.md` parser change or new state field. Storing partial generated requirements in pending state would be a separate ADR 0017/state amendment and is excluded. If links must appear inline in `spec.md`, first amend its F0100 §5 grammar, projection/parser and round-trip contract; do not append unrecognized metadata. |
+| **P4 — Conditional capture extension:** preserve original requirement IDs only where an explicit, validated source association exists. Otherwise display capture/document/span anchors. | [reference ingestion](../../src/domain/reference_ingestion.zig), [Markdown reader](../../src/adapters/parsers/markdown_reference.zig), [reference_evidence](../../src/domain/reference_evidence.zig), [source selections](../../src/domain/source_selections.zig), [reference_snapshot](../../src/domain/reference_snapshot.zig). | Current source bytes may contain labels, but no structured ID-to-claim association is captured. Neither claim ordinals, source blocks nor generated `FR-*` IDs are original requirement IDs. The captured reference state identifies the source snapshot; it must not be labelled an author-supplied document version. Do not guess boundaries from nearby labels or similar prose. | With an approved capture format: one original ID → several generated IDs and the reverse; same label in different documents/versions remains distinct; absent IDs use spans; malformed, ambiguous, foreign and stale associations reject. No fabricated IDs from headings or prose. | Before adding fields, approve the explicit source-ID/version/association contract in §§7/16, reader/extraction binding, closed snapshot validation and any affected §24 state-version change. Keep associations inside the existing source ledger; no separate traceability store, migration or dual reader. Span-based P2–P3 can proceed without this optional capture extension. |
+| **P5 — Verification extension:** carry the new projection through authorized repair, dependency renewal and strict persisted loading. Fix code only if these regressions expose a defect. | [specification_repair](../../src/domain/specification_repair.zig), [coverage repair](../../src/domain/specification_coverage_repair.zig), [specification_session](../../src/domain/specification_session.zig), [specification_state](../../src/domain/specification_state.zig); existing atomic/runner owners. | Preserve old-value/revision/generation checks, explicit `S`, original invalid-handle bound `B`, effective claim/citation sets, siblings and retry identity. Recompute after authorized merges; on load recompute and compare, never silently repair corrupt stored evidence. | Unknown, wrong-kind, out-of-scope and stale selections; reordered segments; add/remove outside the bound; invalid `S`; retries cannot enlarge `B`. An unrelated requirement stays unchanged. Stale trusted bindings terminate; unresolved model/engine defects produce neither missing-user questions nor successful publication. Field repair still may fail exact coverage or semantic review. | None for ADR 0020 conformance. Any new coupled evidence-change authority is out of scope and requires a separate decision. P4 may require persistence amendment. |
+| **P6 — Extend existing reuse proof:** exercise occurrence projection in the registered non-Spec audit consumer. | [reference_support](../../src/domain/reference_support.zig), existing audit fixture in [model_request_workflow_test](../../src/model_request_workflow_test.zig), [architecture tests](../../src/architecture_test.zig). | Reuse is already demonstrated offline; extend its assertions instead of creating a workflow/framework. Each registered consumer supplies validated references and its own eligibility, coverage and approval policy. Clarification answers, policy evidence and operational capabilities remain distinct. | Separate audit units retain separate links; its forbidden-field and stale-binding cases still reject; nested/optional fields work. Shared code imports no Spec types, unrelated workflows inherit no SDD gates, and no-reference operations need no ledger. | None for test-owned reuse. A production workflow's new admission policy would need its own scoped contract, not a global Spec rule. |
+| **P7 — Measure, reconcile documentation and verify:** baseline before implementation; compare equivalent compiled requests after each cutover. | Existing [schema selection](../../src/domain/model_result_schema.zig), [request preparation tests](../../src/model_request_preparation_test.zig), request-workflow tests, §10 measurements and [build.zig](../../build.zig). | Measure compiled selected schemas, provider projections and whole request/output bytes for initial, repair and correction assignments, plus aggregate calls and native allocation cost. Rendering-only changes should add no model bookkeeping. Documentation defects include F0100 §§5.6–5.7's old token/citation shape and design §32's still-pending cutover claim. | Same ledger/assignment/repair scope before/after; closed schemas exclude determined returned fields while genuine choices remain. Use §10's targeted checks, then `zig build verify` (including clean-directory native smoke) and `git diff --check`. Retain independent semantic/coverage/publication gates. | No approval for offline measurements. Update affected §§7/12/16/17/22/23/24, F0100 and these notes only for the agreed changes; preserve ADR 0020 and Proposed status. Each live model/E2E run needs separate approval. Bytes/offline fixtures prove neither token savings nor live reliability or semantic quality. |
 
 Sequence after P1: implement P2–P3 through their existing owners; extend P5–P6
 and complete P7.
@@ -2525,7 +2530,7 @@ evidence. A native rejection with intact containment is not evidence of an
 authority bypass. Historical live failures and measurements above remain historical;
 they did not run the current focused-review format.
 
-The authority route is [AGENTS.md](../AGENTS.md), design §§1, 3–7, 12–13,
+The authority route is [AGENTS.md](../../AGENTS.md), design §§1, 3–7, 12–13,
 16–17, 21–24, 28 and 30–31, and accepted ADRs 0003, 0009, 0011, 0017, 0019
 and 0020. Reviewed boundaries include ingestion, schema compilation, selected
 requests, provider serialization, runner identities/accounting, admission, atomic
@@ -2545,10 +2550,10 @@ does not authorize a live call, automatic budget replenishment or weaker gates.
 
 **Completed:** Phases 0–3, §6.5, O2's restrictions, C0, C2a/C2b and §7C/D's
 identified changes. `nextSubject`, `collectFocused`, `validateWorking` and
-`reviewSlot` in [specification_support](../src/domain/specification_support.zig)
+`reviewSlot` in [specification_support](../../src/domain/specification_support.zig)
 implement focused assignment. The existing
-[application binding](../src/application/specification_support_workflow.zig)
-publishes typed progress, and the [workflow](../design/workflows/spec.workflow.yaml)
+[application binding](../../src/application/specification_support_workflow.zig)
+publishes typed progress, and the [workflow](../../design/workflows/spec.workflow.yaml)
 retires requests before continuing. `validateWorking` reuses the complete validator
 and suppresses only future-subject omissions; final authority still requires a
 complete accepted collection. Fixed applicability selects the appropriate named
@@ -2562,23 +2567,23 @@ to approve this documentation update.
 
 | Remaining change / classification | Existing owner/file | Feasibility and reason | Required evidence | Contract decision |
 | --- | --- | --- | --- | --- |
-| **1. C1 required text — implemented offline** | [Extraction](../design/workflows/spec/extraction.schema.json), [reconciliation](../design/workflows/spec/reconciliation.schema.json), [generation](../design/workflows/spec/generation.schema.json), [typed_text](../src/domain/typed_text.zig) | Required typed-text arrays and literal strings now expose their unconditional native minima in initial and selected definitions. Exact/passive-only content remains valid; blank/control/UTF-8 and relational rules remain native. | Schema rejection and valid-empty siblings are covered in candidate-schema tests; provider projection retains collection minima. Full native, correction, retry and accounting checks remain required with each later contract cutover. | No new semantic authority was needed. A change to what counts as valid text requires its own decision. |
-| **2. Generation provenance — C2c bookkeeping/choice gap and §7E** | [specification_session](../src/domain/specification_session.zig), [specification_provenance](../src/domain/specification_provenance.zig), generation schema | §§15.4–15.5 remove fixed `S` echoes, invariant empty fields and determined exact selectors. Reassess source-bound assignments before retaining `provenance.claim_ids` for genuinely unbound support choices. Current tagged scalar restrictions cannot narrow its array items (§14.2), and restricting an ID to one value is not responsibility transfer. Never fill `S` from the eligible catalogue or `E`. | Fixed `[3]` without echo; singleton exact marker and wholly native exact field; `S=[]` plus exact evidence; `S=[1]` plus exact `2`; a separate record stays `[3]`; forbidden echoes, multiple-choice ambiguity, initial/repair/correction and corrupt readback. | §§15.4–15.5 model/canonical and per-unit assignment amendment, including ADR 0020 wording; §7E and any narrow choice-projection extension. No changed evidence bounds or global restriction on other workflows' clarification evidence. |
-| **3. Required FR/AC membership — native completion gate retained** | [specification](../src/domain/specification.zig), [specification_authority](../src/domain/specification_authority.zig), [specification_session](../src/domain/specification_session.zig) | A minimum on the heterogeneous record array cannot require both families. The closed profile has no `contains`/tuple membership mechanism. Keep native rejection; do not fabricate records. Family-partitioned responses or missing-family insertion are larger changes than C1. | Missing FR, missing AC, both absent, legitimate `needs_user`/`inconclusive`, and correct multi-family output; no publication or false clarification from candidate defects. | Required before reshaping/partitioning generation or adding insertion authority. Existing missing-entity authority does not cover FR/AC. Native containment needs no replacement. |
-| **4. Fixed entity decision — implemented request choice** | [Session packet construction](../src/domain/specification_session.zig) and [shared text projection](../src/domain/reference_model_input.zig) | The captured `not_applicable` decision excludes tagged `entity` in records generation; narrowed packets retain the exclusion. `required` leaves the choice available, while native membership still requires at least one entity. | Both decisions, initial/narrowed schema, missing decision, required omission, stale repair and siblings have owning tests. | Existing admission rule supplied authority; no new decision was needed. |
-| **5. Extraction citations — C1 minimum done; scoped choice open** | [source_selections](../src/domain/source_selections.zig), extraction schema and packet/repair owners | Nonempty citations are now expressed in the shared schema. First/last line IDs are untagged sibling fields, outside today's O2 selector API. Ordered, scope-local ranges remain native relationships even if finite line choices are projected. | Empty citations and selected replacement have schema tests; range, scope and repeated-location tests remain native. | A precise selector contract if narrowing untagged IDs; no need for a new source locator or regex matching. |
-| **6. Token classification — required native association and set construction** | [token_classification_validation](../src/domain/token_classification_validation.zig), [reference_extraction_parser](../src/domain/reference_extraction_parser.zig) | The owner already knows candidates and outcome-compatible decisions. Counts/unique whole objects cannot enforce one decision per candidate. Candidate identity is pre-ledger source/extractor/ordinal identity, not `ClaimId`. Fixed association removal is required: define native assignment/binding and assembly, retaining semantic classification. An accepted outcome that forces one result must also be constructed natively. Review cost without making lower cost a gate; do not copy Spec's call granularity indiscriminately. | Zero/nonzero candidates, duplicates/missing/foreign candidates, scope isolation, claims versus no-feature-claim outcomes and contradictions. No native fabrication of preserve/irrelevant decisions. | Required for changed extraction response/assignment shape. Keep current complete-set and outcome validation until then. |
-| **7. Reconciliation selections/keys — C1 minima done; C2c and §7A/B open** | [reference_reconciliation_validation](../src/domain/reference_reconciliation_validation.zig), [repair](../src/domain/reference_reconciliation_repair.zig), reconciliation schema | Required statement, signal and selected-repair selections now have `minItems: 1`; array eligibility still needs the selector decision. Kind consistency and coverage span entries and stay native. Token metadata is uniquely derivable after selecting one preserved-token claim; `local_key` additionally determines order, so its removal is not merely deleting an ID. | Business/preserved-token summaries and signals, initial/replacement paths, duplicate/shuffled keys, coverage, insertion/deletion retry identity and canonical readback. | Separate token-response cutover (§7A) and ordering choice (§7B). Do not change either simply to fix a presence constraint. |
-| **8. Dispositions/conflicts — partial shape opportunity, native graph rules retained** | [reference_disposition_validation](../src/domain/reference_disposition_validation.zig), reconciliation schema | Require at least two members for each conflict in the complete schema; preserve an empty conflict collection. Bedrock projects positive minima to one, so native cardinality remains necessary. Reuse `repairChoices` for choices valid with fixed siblings. Reciprocity, duplicate/superseded relationships, cycles and full coverage cannot be reduced to an enum. | One-member conflict, valid no-conflict state, duplicate dispositions, invalid targets, reciprocal/cycle failures and repairs with no independent legal choice. | No new authority for shape conformance; semantic disposition/default selection or grouped repair expansion requires a decision. |
+| **1. C1 required text — implemented offline** | [Extraction](../../design/workflows/spec/extraction.schema.json), [reconciliation](../../design/workflows/spec/reconciliation.schema.json), [generation](../../design/workflows/spec/generation.schema.json), [typed_text](../../src/domain/typed_text.zig) | Required typed-text arrays and literal strings now expose their unconditional native minima in initial and selected definitions. Exact/passive-only content remains valid; blank/control/UTF-8 and relational rules remain native. | Schema rejection and valid-empty siblings are covered in candidate-schema tests; provider projection retains collection minima. Full native, correction, retry and accounting checks remain required with each later contract cutover. | No new semantic authority was needed. A change to what counts as valid text requires its own decision. |
+| **2. Generation provenance — C2c bookkeeping/choice gap and §7E** | [specification_session](../../src/domain/specification_session.zig), [specification_provenance](../../src/domain/specification_provenance.zig), generation schema | §§15.4–15.5 remove fixed `S` echoes, invariant empty fields and determined exact selectors. Reassess source-bound assignments before retaining `provenance.claim_ids` for genuinely unbound support choices. Current tagged scalar restrictions cannot narrow its array items (§14.2), and restricting an ID to one value is not responsibility transfer. Never fill `S` from the eligible catalogue or `E`. | Fixed `[3]` without echo; singleton exact marker and wholly native exact field; `S=[]` plus exact evidence; `S=[1]` plus exact `2`; a separate record stays `[3]`; forbidden echoes, multiple-choice ambiguity, initial/repair/correction and corrupt readback. | §§15.4–15.5 model/canonical and per-unit assignment amendment, including ADR 0020 wording; §7E and any narrow choice-projection extension. No changed evidence bounds or global restriction on other workflows' clarification evidence. |
+| **3. Required FR/AC membership — native completion gate retained** | [specification](../../src/domain/specification.zig), [specification_authority](../../src/domain/specification_authority.zig), [specification_session](../../src/domain/specification_session.zig) | A minimum on the heterogeneous record array cannot require both families. The closed profile has no `contains`/tuple membership mechanism. Keep native rejection; do not fabricate records. Family-partitioned responses or missing-family insertion are larger changes than C1. | Missing FR, missing AC, both absent, legitimate `needs_user`/`inconclusive`, and correct multi-family output; no publication or false clarification from candidate defects. | Required before reshaping/partitioning generation or adding insertion authority. Existing missing-entity authority does not cover FR/AC. Native containment needs no replacement. |
+| **4. Fixed entity decision — implemented request choice** | [Session packet construction](../../src/domain/specification_session.zig) and [shared text projection](../../src/domain/reference_model_input.zig) | The captured `not_applicable` decision excludes tagged `entity` in records generation; narrowed packets retain the exclusion. `required` leaves the choice available, while native membership still requires at least one entity. | Both decisions, initial/narrowed schema, missing decision, required omission, stale repair and siblings have owning tests. | Existing admission rule supplied authority; no new decision was needed. |
+| **5. Extraction citations — C1 minimum done; scoped choice open** | [source_selections](../../src/domain/source_selections.zig), extraction schema and packet/repair owners | Nonempty citations are now expressed in the shared schema. First/last line IDs are untagged sibling fields, outside today's O2 selector API. Ordered, scope-local ranges remain native relationships even if finite line choices are projected. | Empty citations and selected replacement have schema tests; range, scope and repeated-location tests remain native. | A precise selector contract if narrowing untagged IDs; no need for a new source locator or regex matching. |
+| **6. Token classification — required native association and set construction** | [token_classification_validation](../../src/domain/token_classification_validation.zig), [reference_extraction_parser](../../src/domain/reference_extraction_parser.zig) | The owner already knows candidates and outcome-compatible decisions. Counts/unique whole objects cannot enforce one decision per candidate. Candidate identity is pre-ledger source/extractor/ordinal identity, not `ClaimId`. Fixed association removal is required: define native assignment/binding and assembly, retaining semantic classification. An accepted outcome that forces one result must also be constructed natively. Review cost without making lower cost a gate; do not copy Spec's call granularity indiscriminately. | Zero/nonzero candidates, duplicates/missing/foreign candidates, scope isolation, claims versus no-feature-claim outcomes and contradictions. No native fabrication of preserve/irrelevant decisions. | Required for changed extraction response/assignment shape. Keep current complete-set and outcome validation until then. |
+| **7. Reconciliation selections/keys — C1 minima done; C2c and §7A/B open** | [reference_reconciliation_validation](../../src/domain/reference_reconciliation_validation.zig), [repair](../../src/domain/reference_reconciliation_repair.zig), reconciliation schema | Required statement, signal and selected-repair selections now have `minItems: 1`; array eligibility still needs the selector decision. Kind consistency and coverage span entries and stay native. Token metadata is uniquely derivable after selecting one preserved-token claim; `local_key` additionally determines order, so its removal is not merely deleting an ID. | Business/preserved-token summaries and signals, initial/replacement paths, duplicate/shuffled keys, coverage, insertion/deletion retry identity and canonical readback. | Separate token-response cutover (§7A) and ordering choice (§7B). Do not change either simply to fix a presence constraint. |
+| **8. Dispositions/conflicts — partial shape opportunity, native graph rules retained** | [reference_disposition_validation](../../src/domain/reference_disposition_validation.zig), reconciliation schema | Require at least two members for each conflict in the complete schema; preserve an empty conflict collection. Bedrock projects positive minima to one, so native cardinality remains necessary. Reuse `repairChoices` for choices valid with fixed siblings. Reciprocity, duplicate/superseded relationships, cycles and full coverage cannot be reduced to an enum. | One-member conflict, valid no-conflict state, duplicate dispositions, invalid targets, reciprocal/cycle failures and repairs with no independent legal choice. | No new authority for shape conformance; semantic disposition/default selection or grouped repair expansion requires a decision. |
 | **9. Review membership — implementation closed, evidence open** | Support contract, review application binding, shared workflow and existing runner | C2b already removes response ordinals/batch completeness. Preserve origins, native collection order and current parent binding. Remaining feasibility concern is aggregate work and lifecycle coverage (§14.3), not another review scheduler. | Multiple source/principle subjects; invalid finding repaired before advancing; zero-policy-work path; stale/repeated delivery; cancellation, exhaustion and no partial publication. | C2a already approved; no repeat approval for that contract. Different grouping/parallelism would be new scope. |
-| **10. Source-review evidence — §7F/P1 responsibility gap** | [specification_support_evidence](../src/domain/specification_support_evidence.zig), support parsing/schema and [repair](../src/domain/specification_support_repair.zig) | Derive only what `Rule.provenance` or `.claims.exact` determines. Fixed applicability is already handled. Aggregate subjects without fixed provenance, eligible subsets, independent `source_ids` and localized loss are not universally derivable. More schema constraints alone retain the redundant work. | Equivalent accepted native evidence; positive and loss/negative cases; selectable extra sources; retained-verdict repair; stored corruption rejected before model-shaped reconstruction. | P1/§7F model-versus-canonical contract amendment. No change to semantic verdict ownership or generation's explicit selections. |
-| **11. Review detail/questions — C1 conditional detail done; native rules retained** | Support schema, [evidence admission](../src/domain/specification_support_evidence.zig), [clarification_inputs](../src/domain/clarification_inputs.zig) | Negative source findings and selected gap-detail repairs now require a nonempty detail; positive detail may be empty. The shared `detail` repair remains permissive because it also serves valid positive findings. Character minima cannot establish nonblank text, allowed controls or byte limits. | Empty valid positive versus empty invalid negative detail and selected gap repair have schema tests; whitespace, question, verdict and evidence rules retain native tests. | No new authority for existing text rules. Avoid a schema-language expansion just to replace native byte/control checks. |
-| **12. Principle citations — C1/C2c conditional-choice gap** | [principle_assessment](../src/domain/principle_assessment.zig), support schema and principle repair packets | Negative decisions require citations; compatible may omit them. Current `principle_finding` is an object with a `decision` enum, not distinct constant `kind` tags. Initial decision-conditioned minima cannot be added as arbitrary `if/then` to this compiler. Retained-decision repairs can select an appropriate canonical shape after a scoped change. Line order, chunk membership and quote relevance stay separate. | Compatible empty citations, negative empty rejection, valid negative evidence, foreign/duplicate chunks, reversed/out-of-range lines, repair/readback retaining the original verdict. | Named selected-repair shapes or a coordinated response change if needed; no automatic policy citations or Spec-source-claim conversion. |
-| **13. Evaluator — C3 open conformance gap** | [packet](../test/harness/packet.zig), [judgment](../test/harness/judgment.zig), existing OpenAI/Bedrock harness adapters | Bind rubric criterion assignments in code and construct their complete collection; enums alone leave deterministic association in the model. Select evidence occurrences once and reconstruct exact quotes. Current reflection is not directly compatible with the workflow compiler (§14.2). Scores/relevance remain semantic; fixed score-null cases and totals are native (§15). | Both providers' actual prepared schemas; valid scored/uncertain/not-applicable judgments; duplicate/missing/foreign IDs, illegal scores, missing/false quotations, invalid applicability and no grade on rejection. | Decide the bounded schema integration before using shared projection. Response-format/retry changes need separate authority; no per-criterion call loop is implied. |
+| **10. Source-review evidence — §7F/P1 responsibility gap** | [specification_support_evidence](../../src/domain/specification_support_evidence.zig), support parsing/schema and [repair](../../src/domain/specification_support_repair.zig) | Derive only what `Rule.provenance` or `.claims.exact` determines. Fixed applicability is already handled. Aggregate subjects without fixed provenance, eligible subsets, independent `source_ids` and localized loss are not universally derivable. More schema constraints alone retain the redundant work. | Equivalent accepted native evidence; positive and loss/negative cases; selectable extra sources; retained-verdict repair; stored corruption rejected before model-shaped reconstruction. | P1/§7F model-versus-canonical contract amendment. No change to semantic verdict ownership or generation's explicit selections. |
+| **11. Review detail/questions — C1 conditional detail done; native rules retained** | Support schema, [evidence admission](../../src/domain/specification_support_evidence.zig), [clarification_inputs](../../src/domain/clarification_inputs.zig) | Negative source findings and selected gap-detail repairs now require a nonempty detail; positive detail may be empty. The shared `detail` repair remains permissive because it also serves valid positive findings. Character minima cannot establish nonblank text, allowed controls or byte limits. | Empty valid positive versus empty invalid negative detail and selected gap repair have schema tests; whitespace, question, verdict and evidence rules retain native tests. | No new authority for existing text rules. Avoid a schema-language expansion just to replace native byte/control checks. |
+| **12. Principle citations — C1/C2c conditional-choice gap** | [principle_assessment](../../src/domain/principle_assessment.zig), support schema and principle repair packets | Negative decisions require citations; compatible may omit them. Current `principle_finding` is an object with a `decision` enum, not distinct constant `kind` tags. Initial decision-conditioned minima cannot be added as arbitrary `if/then` to this compiler. Retained-decision repairs can select an appropriate canonical shape after a scoped change. Line order, chunk membership and quote relevance stay separate. | Compatible empty citations, negative empty rejection, valid negative evidence, foreign/duplicate chunks, reversed/out-of-range lines, repair/readback retaining the original verdict. | Named selected-repair shapes or a coordinated response change if needed; no automatic policy citations or Spec-source-claim conversion. |
+| **13. Evaluator — C3 open conformance gap** | [packet](../../test/harness/packet.zig), [judgment](../../test/harness/judgment.zig), existing OpenAI/Bedrock harness adapters | Bind rubric criterion assignments in code and construct their complete collection; enums alone leave deterministic association in the model. Select evidence occurrences once and reconstruct exact quotes. Current reflection is not directly compatible with the workflow compiler (§14.2). Scores/relevance remain semantic; fixed score-null cases and totals are native (§15). | Both providers' actual prepared schemas; valid scored/uncertain/not-applicable judgments; duplicate/missing/foreign IDs, illegal scores, missing/false quotations, invalid applicability and no grade on rejection. | Decide the bounded schema integration before using shared projection. Response-format/retry changes need separate authority; no per-criterion call loop is implied. |
 
 ### 14.2 Schema and provider feasibility limits
 
-The shared [schema restriction API](../src/domain/model_result_schema.zig) currently
+The shared [schema restriction API](../../src/domain/model_result_schema.zig) currently
 supports exclusion of constant `kind` variants and eligible integer values for a
 direct property of such a tagged object. It does not identify arbitrary paths,
 array-item selections, untagged line IDs or sibling-dependent relationships.
@@ -2643,13 +2648,13 @@ singleton-enum echo. §§15.4–15.5 distinguish this from deciding whether to u
 
 | Remaining change / classification | Existing owner/file | Reason and feasible boundary | Required evidence | Contract decision |
 | --- | --- | --- | --- | --- |
-| **C2b retained-memory/scale — evidence gap with code-supported risk** | `collectFocused`/`validateWorking`, [retained_candidate](../src/application/retained_candidate.zig), review binding | Each append allocates the full entry/origin prefix, reruns full validation and retains declared input parents. Retained prefix copies can total `N(N+1)/2`; complete validation also rescans prior entries/required subjects. Cleanup exists; this is not a demonstrated leak. Measure before changing ownership. | Source/principle sets at increasing sizes; peak retained bytes, allocation count, validation time, teardown, OOM/cancellation after several findings and dependent rebuilding. Distinguish shared source bytes from repeated projections. | None to measure or correct an established ownership defect within current contracts. Do not remove required parents, cache stale results or introduce another retained store merely for speed. |
+| **C2b retained-memory/scale — evidence gap with code-supported risk** | `collectFocused`/`validateWorking`, [retained_candidate](../../src/application/retained_candidate.zig), review binding | Each append allocates the full entry/origin prefix, reruns full validation and retains declared input parents. Retained prefix copies can total `N(N+1)/2`; complete validation also rescans prior entries/required subjects. Cleanup exists; this is not a demonstrated leak. Measure before changing ownership. | Source/principle sets at increasing sizes; peak retained bytes, allocation count, validation time, teardown, OOM/cancellation after several findings and dependent rebuilding. Distinguish shared source bytes from repeated projections. | None to measure or correct an established ownership defect within current contracts. Do not remove required parents, cache stale results or introduce another retained store merely for speed. |
 | **C2b request/context cost — evidence gap, no savings requirement** | Review packets, selected-schema/request owners, existing capture/accounting | The recorded 29-request fixture and projected 33-request historical case use different inputs and are not a before/after comparison. Focused source packets retain broad reference/candidate context; principle packets retain policies and candidate context. Context removal may harm cross-requirement review. | Match ledger, candidate, policies and repair scope for comparisons. Record compiled graph/schema sizes, provider/guidance schemas, full initial/repair/correction bytes, calls, native resources; obtain actual tokens/latency only from approved calls. | Larger finite preconfigured budgets are permitted for improved outcomes. Changing the semantic assignment or omitting required context requires an explicit contract assessment, not silent truncation. |
-| **P2–P3 occurrence links — new output extension, high feasibility** | Reference support/items, specification provenance/projection, [reference_context](../src/domain/reference_context.zig), completed and pending output actions | §13 supplies the implementation plan. Use admitted per-unit lineage, not raw handle enumeration or coverage as alternate authority. Completed records can project links; pending state retains no generated records and must supply no such map. Derived sidecar data requires no persistence field. | Separate `[1,2]`/`[3]` requirements, repeated text occurrences, both many-to-many directions, stable anchors/escaping, canonical rerender and pending-output sibling path. | Approve reference-view layout/binding. Inline `spec.md` metadata would additionally amend its parser grammar. Storing pending records is excluded, not an implicit traceability requirement. |
+| **P2–P3 occurrence links — new output extension, high feasibility** | Reference support/items, specification provenance/projection, [reference_context](../../src/domain/reference_context.zig), completed and pending output actions | §13 supplies the implementation plan. Use admitted per-unit lineage, not raw handle enumeration or coverage as alternate authority. Completed records can project links; pending state retains no generated records and must supply no such map. Derived sidecar data requires no persistence field. | Separate `[1,2]`/`[3]` requirements, repeated text occurrences, both many-to-many directions, stable anchors/escaping, canonical rerender and pending-output sibling path. | Approve reference-view layout/binding. Inline `spec.md` metadata would additionally amend its parser grammar. Storing pending records is excluded, not an implicit traceability requirement. |
 | **P4 original IDs — conditional capture extension** | Existing source reader, ingestion, evidence and snapshot owners | Current snapshots have captured bytes/locations but no structured source-requirement association. Span links can ship first. Explicit original labels require a specified source format and association boundary; nearby headings, claim ordinals or prose similarity cannot supply them. | Qualified document/version/ID associations, ambiguity and stale rejection, multiple generated requirements per original and multiple originals per generated; missing IDs use captured spans. | Source contract plus any closed snapshot/state-version amendment. No independent mapping, invented version or compatibility reader. |
 | **P5–P6 repair/readback/reuse — verification extension** | Existing ADR 0020 repair and state owners; non-Spec registered audit fixture | The single-claim contract, owning-unit unions, invalid-handle bound `B`, sibling protection and non-Spec resolution already exist. Extend tests for the new projection. The audit fixture proves reference reuse, not arbitrary focused-review scheduling; test that separately through existing generic runner operations as part of the architecture-wide completion evidence in §15. | Same trace after authorized repair/load; changed authority rejects; no cross-record support. Unrelated policy and nested/optional fields remain distinct; focused assignments cannot reset an unrelated consumer's retry allowance. | No new authority for existing invariants. New production consumers retain their own eligibility, coverage, approval and evidence types. |
 | **C4 semantic usefulness and Phase 4.2 — open live acceptance** | Generation/review owners, existing E2E harness and rubric evaluator | Current offline success proves containment/assembly, not model detection of literal-only stories, false positive support or false conflicts. Require better outcomes even if tokens rise. Preserve independent exact coverage, semantic review and publication gates. | Approved paired review probes with valid and well-linked-but-wrong candidates, then whole production generation/publication/readback and criterion-level rubric results. Include unrelated obligations, false acceptance/rejection, necessary versus spurious clarification and recorded budgets/usage. A null grade threshold is not a quality pass. | Separate approval for each live/E2E run; no live approval inferred from this review or budget direction. No new reviewer, fallback route or retry system. |
-| **Missing final answers/settings — unresolved cause, bounded diagnostic option** | Existing provider decoder, request retry/accounting and [ADR 0019 debugger](../design/decisions/0019-single-request-debugger.md) | No evidence establishes that schema cleanup or a setting fixes absent final content. Existing debugger permits prompt/context/schema edits at captured settings. A settings-controlled replay cannot be implemented by bypassing that boundary. | Retained raw response, decoded final text, finish reason, actual usage and exact request identity. Separate protocol validity, semantic quality and workflow results. | Prompt/schema replay still needs live approval. Provider/model/reasoning-setting replay needs a scoped ADR 0019 amendment; alternate configured E2E runs are not identical-request comparisons. |
+| **Missing final answers/settings — unresolved cause, bounded diagnostic option** | Existing provider decoder, request retry/accounting and [ADR 0019 debugger](../../design/decisions/0019-single-request-debugger.md) | No evidence establishes that schema cleanup or a setting fixes absent final content. Existing debugger permits prompt/context/schema edits at captured settings. A settings-controlled replay cannot be implemented by bypassing that boundary. | Retained raw response, decoded final text, finish reason, actual usage and exact request identity. Separate protocol validity, semantic quality and workflow results. | Prompt/schema replay still needs live approval. Provider/model/reasoning-setting replay needs a scoped ADR 0019 amendment; alternate configured E2E runs are not identical-request comparisons. |
 | **P7 documentation/validation — required follow-through** | Affected design contracts, F0100, existing test owners and build steps | Correct stale token/citation examples and still-pending cutover descriptions with the agreed implementation, preserving accepted ADRs and Proposed design status. Remove only superseded response/repair branches; defensive canonical checks remain. | Closed removed-field rejection, accepted/rejected fixtures, targeted tests, architecture/schema checks, full `zig build verify` and relevant clean-environment smoke when implementing cross-cutting changes. | Amend only the owning contracts approved for that chunk. This documentation review does not modify them. |
 
 Two contracts merit explicit protection during §7E/F:
@@ -2815,17 +2820,17 @@ accounted for, including configured composition parts and selected repairs.
 
 | Surface / status | Deterministic responsibility and existing owner | Remaining model work | Required change and evidence / decision |
 | --- | --- | --- | --- |
-| **Ingestion, source occurrences and extraction — existing mechanics plus confirmed association gap** | [reference_ingestion](../src/domain/reference_ingestion.zig), [source_selections](../src/domain/source_selections.zig), [structured_tokens](../src/domain/structured_tokens.zig), [classification validation](../src/domain/token_classification_validation.zig): inventory, scope/span resolution, token bytes, candidate identity and complete known-candidate accounting. | Claim meaning, relevant ranges and preserve/irrelevant classification where policy allows a choice. | Remove classification identity echoes through native assignment/binding and collection construction; keep pre-ledger candidate identity distinct from `ClaimId`. `choices(.no_feature_claim)` permits only irrelevant: once that outcome is valid, construct the forced result rather than asking for repeated decisions. Define the coordinated extraction/composition response contract and validate all candidates/outcomes, stale scopes, zero work and repair identity. No automatic irrelevant classification where genuine choice remains. |
-| **Reconciliation — required §7A/B and additional association/constants** | [reconciliation validation](../src/domain/reference_reconciliation_validation.zig), [disposition validation](../src/domain/reference_disposition_validation.zig), [repair](../src/domain/reference_reconciliation_repair.zig): selected token join, citation unions, IDs, keys/order, known disposition subjects, graph checks and canonical unresolved status. | Summary/signal meaning, claim grouping, retained/duplicate/superseded/conflicting choices, directional targets and conflict interpretation. | Remove redundant `token_id`, mechanical `local_key`, assigned disposition `claim_id` echoes and `conflicts[].resolution` (currently only `unresolved`). Native binding must associate each decision; retain selected relationship IDs. Define ordering and response shape first. Derive duplicate relationship facts only where accepted semantics determine them; never invent reciprocal meaning to repair an invalid graph. Cover summaries/signals, coupled conflict repair, insertion/deletion, retry identity and snapshots. |
-| **Generation and provenance — §15.7 runtime cutover in worktree** | [specification_generation](../src/domain/specification_generation.zig), [session](../src/domain/specification_session.zig), [provenance](../src/domain/specification_provenance.zig), [reference_support](../src/domain/reference_support.zig): unit binding, record IDs, exact occurrence expansion, `S + E`, citations and source links. | Business text, applicability and record meaning; reconciliation chooses the semantic signal grouping and generation roles. | Model responses reject `provenance` and fixed ID/citation echoes. Retain closed response, cross-batch, repair, stale-input and readback tests, full offline verification and separately approved live quality evidence. Structured original requirement IDs remain conditional on captured associations. |
-| **Source/principle review — source response cutover in §15.7; principle audit open** | [specification_support](../src/domain/specification_support.zig), [evidence rules](../src/domain/specification_support_evidence.zig), [source_omission](../src/domain/source_omission.zig), [principle_assessment](../src/domain/principle_assessment.zig): assignment, membership, native applicability, origins and fixed evidence. | Source verdict, useful explanation/question, additional source choices and loss location; policy citation selection remains a separate semantic choice. | Source responses omit `provenance`, fixed loss and claim echoes; the engine constructs canonical evidence through the bound subject. Preserve source-only evidence and stored-evidence validation. Audit principle-specific conditional citations without converting them into source claims. |
-| **Clarification and required-authority reconciliation — existing native ownership; audit every producer** | [required_authority](../src/domain/required_authority.zig), [required_authority_clarifications](../src/domain/required_authority_clarifications.zig), [clarification_preparation](../src/domain/clarification_preparation.zig), [refresh](../src/domain/clarification_refresh.zig), existing clarification actions: owner/subject/slot, requiredness, IDs, deduplication, answer schema, admission, status transitions and protected-form rendering. | Wording and explanation of a genuine semantic gap; human answers/approvals retain their own authority. | Do not ask for owner-stage choice, generated clarification IDs, answer-schema echoes or status/completion claims. Preserve candidate/engine-failure precedence, earliest-stage routing, current answer binding and closed-file protection. If a model selects a genuinely unresolved family/subject among alternatives, retain that semantic selector and derive its consequences. Test mixed defects/gaps and cross-stage routing. |
-| **Generic model execution, composition and repair — existing owners; complete boundary audit required** | [model_request_preparation](../src/domain/model_request_preparation.zig), [identity](../src/domain/model_request_identity.zig), [schema](../src/domain/model_result_schema.zig), [json_composition_runtime](../src/domain/json_composition_runtime.zig), [atomic_repair](../src/domain/atomic_repair.zig), existing runner/request/progress bindings: selection, assignment identity, schema projection, assembly, dependencies, preconditions, diagnostics, retirement, usage and retry accounting. | Only the remaining semantic result or authorized replacement. | No model merge pass, target/revision echo, retry plan, derived diagnostic, success flag or final collection bookkeeping. Use native reconstruction when one authorized replacement is uniquely determined; native failure still needs model repair when its solution is semantic. Keep structural composition free of evidence policy. Audit initial, selected, composed, correction, repair and dependent-rebuild shapes; no extra scheduler, retry engine or writable state. |
-| **Plan — proposed production contract, included in this audit** | [§18](../design/contracts/18-plan.md), [§7 representations](../design/contracts/07-domain-representations.md), [§33 migration](../design/contracts/33-prompt-migration.md): repository facts, file/path candidate identities, artifact paths, known obligations, coverage, approvals and view construction. | Architecture, relevant fact/file selection, semantic name-source/path-candidate choices, design tradeoffs and justified proposals. | Audit downstream proposal keys and repeated project/environment/kind/template facts against their selected options; assign identity and expand bound facts in code. Resolve any unknown-proposal association contract explicitly. No model-generated registry facts, derived filenames, artifact manifests or approval state. Do not claim an implementation exists merely because the design names an action. |
-| **Tasks and Implement — proposed production contracts, included in this audit** | [§19](../design/contracts/19-tasks.md), [§20](../design/contracts/20-implement.md), existing generic execution/authority owners: obligation ledger, canonical IDs, graph construction/topological order, required commands/evidence, resource locks, safe parallel markers, authorization, copy bytes, expected target state and completion. | Work decomposition, non-obvious dependencies, allowed optional command/file/source selections, code and semantic repair. | Audit `internalKey`/proposal identity, repeated assigned file/task/source IDs, edge endpoints and operation preconditions. Native-assigned handles must support later genuine dependency choices; do not guess semantic edges from order or similarity. Preserve approvals, write sets, command evidence and whole-workflow publication. Record required design amendments without implementing missing workflows as an incidental provenance patch. |
-| **Rendering, traceability, state loading and publication — existing owners plus P2–P4 extensions** | [specification_projection](../src/domain/specification_projection.zig), [reference_context](../src/domain/reference_context.zig), [specification_state](../src/domain/specification_state.zig), [workflow_output](../src/domain/workflow_output.zig), existing output actions: headings, links, IDs, status, manifests, serialization, validation and publication ordering. | None for mechanical presentation or persistence. Summaries may contain semantic prose but cannot establish status or evidence. | Derive requirement → effective claims → captured occurrences from the sole ledger. Preserve original requirement IDs only through validated captured associations. Do not add writable provenance, infer boundaries, populate pending records or import generated sidecars as authority. Recompute/compare on load; tampering must fail rather than be overwritten by reconstructed values. |
-| **Rubric evaluator — required broader C3 transfer** | [capture/contracts](../test/harness/contracts.zig), [packet](../test/harness/packet.zig), [judgment](../test/harness/judgment.zig), current harness execution/reporting: rubric subjects, result association/order/count, exact evidence bytes, null score for unscored decisions, weights, totals, thresholds and report status. | Score, applicability/uncertainty, explanation, evidence relevance and whether meaning is missing from the specification. | Replace echoed `criterion_id`/complete-list bookkeeping with native assignments and assembly. Replace reproduced `quote` bytes with one exact captured occurrence selection; derive the document identity when the selector already binds it. Define occurrence/range and assignment contracts, including Unicode/repeated text and score-conditional shapes. Do not use similar-text matching or infer semantic absence from missing quotes. Keep harness authority separate and use its existing execution/accounting owner; no new evaluator retry system. |
-| **Other registered workflows, provider adapters and diagnostics — required shared proof** | Generic registry/runner, existing provider serializers, [request-workflow tests](../src/model_request_workflow_test.zig), architecture tests and captured-request/debugger owners. | Each registered domain's actual semantic choices; provider observations remain external input. | Exercise native assignment/reconstruction with an unrelated registered consumer as well as existing reference reuse. No workflow-name branches, Spec eligibility leakage, hand-written provider acceptance policy or models calculating usage. Capture/replay derives exact schema/request metadata without granting workflow authority. Unknown workflow shapes are not interpreted by property names; the registered native contract owns their meaning. |
+| **Ingestion, source occurrences and extraction — existing mechanics plus confirmed association gap** | [reference_ingestion](../../src/domain/reference_ingestion.zig), [source_selections](../../src/domain/source_selections.zig), [structured_tokens](../../src/domain/structured_tokens.zig), [classification validation](../../src/domain/token_classification_validation.zig): inventory, scope/span resolution, token bytes, candidate identity and complete known-candidate accounting. | Claim meaning, relevant ranges and preserve/irrelevant classification where policy allows a choice. | Remove classification identity echoes through native assignment/binding and collection construction; keep pre-ledger candidate identity distinct from `ClaimId`. `choices(.no_feature_claim)` permits only irrelevant: once that outcome is valid, construct the forced result rather than asking for repeated decisions. Define the coordinated extraction/composition response contract and validate all candidates/outcomes, stale scopes, zero work and repair identity. No automatic irrelevant classification where genuine choice remains. |
+| **Reconciliation — required §7A/B and additional association/constants** | [reconciliation validation](../../src/domain/reference_reconciliation_validation.zig), [disposition validation](../../src/domain/reference_disposition_validation.zig), [repair](../../src/domain/reference_reconciliation_repair.zig): selected token join, citation unions, IDs, keys/order, known disposition subjects, graph checks and canonical unresolved status. | Summary/signal meaning, claim grouping, retained/duplicate/superseded/conflicting choices, directional targets and conflict interpretation. | Remove redundant `token_id`, mechanical `local_key`, assigned disposition `claim_id` echoes and `conflicts[].resolution` (currently only `unresolved`). Native binding must associate each decision; retain selected relationship IDs. Define ordering and response shape first. Derive duplicate relationship facts only where accepted semantics determine them; never invent reciprocal meaning to repair an invalid graph. Cover summaries/signals, coupled conflict repair, insertion/deletion, retry identity and snapshots. |
+| **Generation and provenance — §15.7 runtime cutover in worktree** | [specification_generation](../../src/domain/specification_generation.zig), [session](../../src/domain/specification_session.zig), [provenance](../../src/domain/specification_provenance.zig), [reference_support](../../src/domain/reference_support.zig): unit binding, record IDs, exact occurrence expansion, `S + E`, citations and source links. | Business text, applicability and record meaning; reconciliation chooses the semantic signal grouping and generation roles. | Model responses reject `provenance` and fixed ID/citation echoes. Retain closed response, cross-batch, repair, stale-input and readback tests, full offline verification and separately approved live quality evidence. Structured original requirement IDs remain conditional on captured associations. |
+| **Source/principle review — source response cutover in §15.7; principle audit open** | [specification_support](../../src/domain/specification_support.zig), [evidence rules](../../src/domain/specification_support_evidence.zig), [source_omission](../../src/domain/source_omission.zig), [principle_assessment](../../src/domain/principle_assessment.zig): assignment, membership, native applicability, origins and fixed evidence. | Source verdict, useful explanation/question, additional source choices and loss location; policy citation selection remains a separate semantic choice. | Source responses omit `provenance`, fixed loss and claim echoes; the engine constructs canonical evidence through the bound subject. Preserve source-only evidence and stored-evidence validation. Audit principle-specific conditional citations without converting them into source claims. |
+| **Clarification and required-authority reconciliation — existing native ownership; audit every producer** | [required_authority](../../src/domain/required_authority.zig), [required_authority_clarifications](../../src/domain/required_authority_clarifications.zig), [clarification_preparation](../../src/domain/clarification_preparation.zig), [refresh](../../src/domain/clarification_refresh.zig), existing clarification actions: owner/subject/slot, requiredness, IDs, deduplication, answer schema, admission, status transitions and protected-form rendering. | Wording and explanation of a genuine semantic gap; human answers/approvals retain their own authority. | Do not ask for owner-stage choice, generated clarification IDs, answer-schema echoes or status/completion claims. Preserve candidate/engine-failure precedence, earliest-stage routing, current answer binding and closed-file protection. If a model selects a genuinely unresolved family/subject among alternatives, retain that semantic selector and derive its consequences. Test mixed defects/gaps and cross-stage routing. |
+| **Generic model execution, composition and repair — existing owners; complete boundary audit required** | [model_request_preparation](../../src/domain/model_request_preparation.zig), [identity](../../src/domain/model_request_identity.zig), [schema](../../src/domain/model_result_schema.zig), [json_composition_runtime](../../src/domain/json_composition_runtime.zig), [atomic_repair](../../src/domain/atomic_repair.zig), existing runner/request/progress bindings: selection, assignment identity, schema projection, assembly, dependencies, preconditions, diagnostics, retirement, usage and retry accounting. | Only the remaining semantic result or authorized replacement. | No model merge pass, target/revision echo, retry plan, derived diagnostic, success flag or final collection bookkeeping. Use native reconstruction when one authorized replacement is uniquely determined; native failure still needs model repair when its solution is semantic. Keep structural composition free of evidence policy. Audit initial, selected, composed, correction, repair and dependent-rebuild shapes; no extra scheduler, retry engine or writable state. |
+| **Plan — proposed production contract, included in this audit** | [§18](../../design/contracts/18-plan.md), [§7 representations](../../design/contracts/07-domain-representations.md), [§33 migration](../../design/contracts/33-prompt-migration.md): repository facts, file/path candidate identities, artifact paths, known obligations, coverage, approvals and view construction. | Architecture, relevant fact/file selection, semantic name-source/path-candidate choices, design tradeoffs and justified proposals. | Audit downstream proposal keys and repeated project/environment/kind/template facts against their selected options; assign identity and expand bound facts in code. Resolve any unknown-proposal association contract explicitly. No model-generated registry facts, derived filenames, artifact manifests or approval state. Do not claim an implementation exists merely because the design names an action. |
+| **Tasks and Implement — proposed production contracts, included in this audit** | [§19](../../design/contracts/19-tasks.md), [§20](../../design/contracts/20-implement.md), existing generic execution/authority owners: obligation ledger, canonical IDs, graph construction/topological order, required commands/evidence, resource locks, safe parallel markers, authorization, copy bytes, expected target state and completion. | Work decomposition, non-obvious dependencies, allowed optional command/file/source selections, code and semantic repair. | Audit `internalKey`/proposal identity, repeated assigned file/task/source IDs, edge endpoints and operation preconditions. Native-assigned handles must support later genuine dependency choices; do not guess semantic edges from order or similarity. Preserve approvals, write sets, command evidence and whole-workflow publication. Record required design amendments without implementing missing workflows as an incidental provenance patch. |
+| **Rendering, traceability, state loading and publication — existing owners plus P2–P4 extensions** | [specification_projection](../../src/domain/specification_projection.zig), [reference_context](../../src/domain/reference_context.zig), [specification_state](../../src/domain/specification_state.zig), [workflow_output](../../src/domain/workflow_output.zig), existing output actions: headings, links, IDs, status, manifests, serialization, validation and publication ordering. | None for mechanical presentation or persistence. Summaries may contain semantic prose but cannot establish status or evidence. | Derive requirement → effective claims → captured occurrences from the sole ledger. Preserve original requirement IDs only through validated captured associations. Do not add writable provenance, infer boundaries, populate pending records or import generated sidecars as authority. Recompute/compare on load; tampering must fail rather than be overwritten by reconstructed values. |
+| **Rubric evaluator — required broader C3 transfer** | [capture/contracts](../../test/harness/contracts.zig), [packet](../../test/harness/packet.zig), [judgment](../../test/harness/judgment.zig), current harness execution/reporting: rubric subjects, result association/order/count, exact evidence bytes, null score for unscored decisions, weights, totals, thresholds and report status. | Score, applicability/uncertainty, explanation, evidence relevance and whether meaning is missing from the specification. | Replace echoed `criterion_id`/complete-list bookkeeping with native assignments and assembly. Replace reproduced `quote` bytes with one exact captured occurrence selection; derive the document identity when the selector already binds it. Define occurrence/range and assignment contracts, including Unicode/repeated text and score-conditional shapes. Do not use similar-text matching or infer semantic absence from missing quotes. Keep harness authority separate and use its existing execution/accounting owner; no new evaluator retry system. |
+| **Other registered workflows, provider adapters and diagnostics — required shared proof** | Generic registry/runner, existing provider serializers, [request-workflow tests](../../src/model_request_workflow_test.zig), architecture tests and captured-request/debugger owners. | Each registered domain's actual semantic choices; provider observations remain external input. | Exercise native assignment/reconstruction with an unrelated registered consumer as well as existing reference reuse. No workflow-name branches, Spec eligibility leakage, hand-written provider acceptance policy or models calculating usage. Capture/replay derives exact schema/request metadata without granting workflow authority. Unknown workflow shapes are not interpreted by property names; the registered native contract owns their meaning. |
 
 Known-set membership is mandatory engine work across extraction, disposition,
 review and grading. Merely constraining echoed subject IDs to enums leaves that
@@ -2991,11 +2996,11 @@ support. Preserve many-to-many source
 traceability without inventing original requirement IDs.
 
 **Owning change and contract decision:** coordinate
-[specification_session](../src/domain/specification_session.zig),
-[generation parsing/admission](../src/domain/specification_generation.zig),
-[model/canonical representations](../src/domain/specification.zig),
-[provenance](../src/domain/specification_provenance.zig),
-[generation schema](../design/workflows/spec/generation.schema.json), and their
+[specification_session](../../src/domain/specification_session.zig),
+[generation parsing/admission](../../src/domain/specification_generation.zig),
+[model/canonical representations](../../src/domain/specification.zig),
+[provenance](../../src/domain/specification_provenance.zig),
+[generation schema](../../design/workflows/spec/generation.schema.json), and their
 existing repair, review, projection and state consumers. Record the focused
 §§7.1/12/17/22 and ADR 0020 model-field amendment; preserve its evidence semantics.
 Canonical explicit selection remains the single persisted selection authority.
@@ -3105,11 +3110,11 @@ refine C2c/§7E–F and §15's architecture-wide mandate, not a new provenance p
 
 | Required follow-up / classification | Existing owner/file | Reason and proposed treatment | Required test/evidence | Contract decision before implementation |
 | --- | --- | --- | --- | --- |
-| **1. Remove determined exact selectors — confirmed response residue; earlier example B corrected.** | [reference_model_input](../src/domain/reference_model_input.zig), [typed_text](../src/domain/typed_text.zig), [request preparation](../src/domain/model_request_preparation.zig), existing selected-schema and registered operation owners. | The retained call-8 schema requires `claim_id` with enum `[2]`. Once that branch is chosen, the ID is determined. Omit it and construct the canonical handle from the bound occurrence. The model may still choose use/placement. If the entire field is determined, construct it without model work. Existing native exact reconstruction in [coverage repair](../src/domain/specification_coverage_repair.zig) is precedent within its current bounds, not authority to guess embedded occurrences. | Zero choices excludes the branch; one choice permits the ID-free marker; no marker adds no evidence; multiple choices cannot resolve an unqualified marker. Reject echoed IDs in the new shape, stale bindings and repair scope expansion. Cover initial, selected, correction, repair and unrelated registered consumers. | Amend ADR 0020 and §§7.1/12/17/22 for model/canonical separation and exact branch binding. Use typed owning contracts, not a generic scan for properties named `claim_id` or indiscriminate singleton-enum rewriting. |
-| **2. Construct fixed review evidence — implemented offline in §15.6.** | [specification_support_evidence](../src/domain/specification_support_evidence.zig), [support collection](../src/domain/specification_support.zig), [support repair](../src/domain/specification_support_repair.zig), existing support schema. | `Requirements.rule` computes `.claims.exact` and `.provenance`; the model projection now omits determined echoes and the engine constructs the canonical selection after the finding and any chosen loss location. Selectable evidence subsets and source/policy choices remain model decisions. The verdict remains semantic. | Focused regression tests cover minimal responses, forbidden echoes, fixed/selectable cases, retained-verdict repairs, conditional loss and corrupt stored evidence. Full/live evidence remains separately required. | Focused §§12/17/22 review-response amendment recorded under C2c/§7F. No automatic positive verdict or merged evidence authority. |
-| **3. Bind support before authoring — required for provenance-free responses.** | [specification_session](../src/domain/specification_session.zig), [generation](../src/domain/specification_generation.zig), existing authority, semantic-review and request-identity owners. | `packetForChoices` offers eligible claims, not per-record fixed support. Define a validated per-unit source obligation or accepted association before content or review responses; code resolves its ledger identities and constructs `S`. Broad unbound synthesis cannot be admitted without inventing support. Relocating the same ID selection to another model call achieves nothing. | Multiple independent requirements, split/combined source obligations and both many-to-many directions; joint support that no single claim supplies; broad context without automatic support inheritance; stale assignments, false-positive/negative assessments and bounded repair. Measure calls, full requests and retained resources; no assumption of lower token cost. | Define grouping, per-unit binding and association admission before changing generation/assessment boundaries. A set of eligible claims or one lone claim is not fixed support. Reuse existing runner/semantic owners; no extra reviewer, hidden model loop or parallel evidence store. |
-| **4. Keep semantic outcomes separate from ID conformance — confirmed retained-run failure.** | [retained run evidence](#subsequent-user-run--empty-principle-review-exhausts-the-token-budget), existing source/principle review, coverage, publication and [rubric judgment](../test/harness/judgment.zig). | Earlier responses chose business claim `1` as an exact occurrence. Restriction to `[2]` avoided that error in the later run, but its story was the greeting twice. A valid ID, correct union or passing coverage is not meaningful content or successful recovery. Preserve independent semantic gates; do not turn engine/model defects into user questions. | Poor-but-well-linked titles, stories, applicability explanations and requirements, plus valid and unrelated examples. Offline tests establish routing; separately approved model/reviewer observations and full publication/readback/rubric evidence establish outcomes. Report false acceptance/rejection and costs; no reliability or savings claim from fixtures. | No policy weakening, retry increase or prompt-bulk remedy. Any live call or E2E run still requires separate approval; this plan grants none. |
-| **5. Retain internal occurrence identity — completed mechanism to preserve.** | [reference_support](../src/domain/reference_support.zig), [provenance](../src/domain/specification_provenance.zig), [projection](../src/domain/specification_projection.zig), [state](../src/domain/specification_state.zig) and existing repair owners. | Keep the canonical claim identity qualified by its validated ledger and recorded occurrence. Equal text can have different source locations. Remove determined response selectors without removing internal identity, canonical `provenance.claim_ids` or the sole reference authority. Copied quotes, offsets, renamed labels and similar-text matching are not automatic replacements for semantic association. | Equal text in separate locations stays distinct; `S=[1]` plus exact `2` derives `[1,2]`, another record stays `[3]`; repair preserves original `B`, siblings and retry identity; fresh loading rejects stale/corrupt bindings and derived projections. Preserve non-Spec eligibility and separate clarification/policy/capability authority. | Assess model/canonical, parser/projection and any persistence consequences together. A model-only omission does not itself require changing stored handles; document any state-version change actually needed. No alternate ledger, compatibility reader or guessed source-requirement ID. |
+| **1. Remove determined exact selectors — confirmed response residue; earlier example B corrected.** | [reference_model_input](../../src/domain/reference_model_input.zig), [typed_text](../../src/domain/typed_text.zig), [request preparation](../../src/domain/model_request_preparation.zig), existing selected-schema and registered operation owners. | The retained call-8 schema requires `claim_id` with enum `[2]`. Once that branch is chosen, the ID is determined. Omit it and construct the canonical handle from the bound occurrence. The model may still choose use/placement. If the entire field is determined, construct it without model work. Existing native exact reconstruction in [coverage repair](../../src/domain/specification_coverage_repair.zig) is precedent within its current bounds, not authority to guess embedded occurrences. | Zero choices excludes the branch; one choice permits the ID-free marker; no marker adds no evidence; multiple choices cannot resolve an unqualified marker. Reject echoed IDs in the new shape, stale bindings and repair scope expansion. Cover initial, selected, correction, repair and unrelated registered consumers. | Amend ADR 0020 and §§7.1/12/17/22 for model/canonical separation and exact branch binding. Use typed owning contracts, not a generic scan for properties named `claim_id` or indiscriminate singleton-enum rewriting. |
+| **2. Construct fixed review evidence — implemented offline in §15.6.** | [specification_support_evidence](../../src/domain/specification_support_evidence.zig), [support collection](../../src/domain/specification_support.zig), [support repair](../../src/domain/specification_support_repair.zig), existing support schema. | `Requirements.rule` computes `.claims.exact` and `.provenance`; the model projection now omits determined echoes and the engine constructs the canonical selection after the finding and any chosen loss location. Selectable evidence subsets and source/policy choices remain model decisions. The verdict remains semantic. | Focused regression tests cover minimal responses, forbidden echoes, fixed/selectable cases, retained-verdict repairs, conditional loss and corrupt stored evidence. Full/live evidence remains separately required. | Focused §§12/17/22 review-response amendment recorded under C2c/§7F. No automatic positive verdict or merged evidence authority. |
+| **3. Bind support before authoring — required for provenance-free responses.** | [specification_session](../../src/domain/specification_session.zig), [generation](../../src/domain/specification_generation.zig), existing authority, semantic-review and request-identity owners. | `packetForChoices` offers eligible claims, not per-record fixed support. Define a validated per-unit source obligation or accepted association before content or review responses; code resolves its ledger identities and constructs `S`. Broad unbound synthesis cannot be admitted without inventing support. Relocating the same ID selection to another model call achieves nothing. | Multiple independent requirements, split/combined source obligations and both many-to-many directions; joint support that no single claim supplies; broad context without automatic support inheritance; stale assignments, false-positive/negative assessments and bounded repair. Measure calls, full requests and retained resources; no assumption of lower token cost. | Define grouping, per-unit binding and association admission before changing generation/assessment boundaries. A set of eligible claims or one lone claim is not fixed support. Reuse existing runner/semantic owners; no extra reviewer, hidden model loop or parallel evidence store. |
+| **4. Keep semantic outcomes separate from ID conformance — confirmed retained-run failure.** | [retained run evidence](#subsequent-user-run--empty-principle-review-exhausts-the-token-budget), existing source/principle review, coverage, publication and [rubric judgment](../../test/harness/judgment.zig). | Earlier responses chose business claim `1` as an exact occurrence. Restriction to `[2]` avoided that error in the later run, but its story was the greeting twice. A valid ID, correct union or passing coverage is not meaningful content or successful recovery. Preserve independent semantic gates; do not turn engine/model defects into user questions. | Poor-but-well-linked titles, stories, applicability explanations and requirements, plus valid and unrelated examples. Offline tests establish routing; separately approved model/reviewer observations and full publication/readback/rubric evidence establish outcomes. Report false acceptance/rejection and costs; no reliability or savings claim from fixtures. | No policy weakening, retry increase or prompt-bulk remedy. Any live call or E2E run still requires separate approval; this plan grants none. |
+| **5. Retain internal occurrence identity — completed mechanism to preserve.** | [reference_support](../../src/domain/reference_support.zig), [provenance](../../src/domain/specification_provenance.zig), [projection](../../src/domain/specification_projection.zig), [state](../../src/domain/specification_state.zig) and existing repair owners. | Keep the canonical claim identity qualified by its validated ledger and recorded occurrence. Equal text can have different source locations. Remove determined response selectors without removing internal identity, canonical `provenance.claim_ids` or the sole reference authority. Copied quotes, offsets, renamed labels and similar-text matching are not automatic replacements for semantic association. | Equal text in separate locations stays distinct; `S=[1]` plus exact `2` derives `[1,2]`, another record stays `[3]`; repair preserves original `B`, siblings and retry identity; fresh loading rejects stale/corrupt bindings and derived projections. Preserve non-Spec eligibility and separate clarification/policy/capability authority. | Assess model/canonical, parser/projection and any persistence consequences together. A model-only omission does not itself require changing stored handles; document any state-version change actually needed. No alternate ledger, compatibility reader or guessed source-requirement ID. |
 
 **Completion rule:** every retained response selector must name an unresolved
 semantic choice and justify why the assignment cannot already determine it.
@@ -3135,8 +3140,8 @@ before/after, and measure actual quality/cost only through separately approved c
 ### 15.6 P1 source-review response cutover — 27 September 2026
 
 P1's source-review portion of C2c is implemented in the current worktree. The
-existing [evidence rule](../src/domain/specification_support_evidence.zig) remains
-the authority for fixed and selectable claims. The [model projection](../src/domain/specification_support_model.zig)
+existing [evidence rule](../../src/domain/specification_support_evidence.zig) remains
+the authority for fixed and selectable claims. The [model projection](../../src/domain/specification_support_model.zig)
 now omits `provenance` for supported/not_applicable findings when that rule fixes
 their claim set, and for candidate omissions whose selected loss or bound exact
 rule fixes diagnostic claims. It omits invariant empty

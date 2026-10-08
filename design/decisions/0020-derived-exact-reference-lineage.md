@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-26
-- **Decision authority:** Explicit user approval of Phase 0.2 in [LLM_REWORK](../../fixes/LLM_REWORK.md).
+- **Decision authority:** Explicit user approval of Phase 0.2 in [LLM_REWORK](../../fixes/archive/LLM_REWORK.md).
 - **27 September 2026 amendment authority:** Explicit user approval of provenance-free, source-bound per-unit assignments in this session.
 - **28 September 2026 amendment authority:** Explicit user instruction to clarify generation-role assignment and require nonempty role lists when supplied.
 - **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1. The overall design remains Proposed.
@@ -146,4 +146,4 @@ authorized.
 
 This decision records the runtime contract, not a claim that live quality
 evaluation has passed. The baseline and test checkpoints remain
-in [LLM_REWORK](../../fixes/LLM_REWORK.md).
+in [LLM_REWORK](../../fixes/archive/LLM_REWORK.md).

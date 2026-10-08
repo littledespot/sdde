@@ -1,5 +1,10 @@
 # AWS Bedrock malformed JSON — findings and remediation
 
+> **Historical record — archived 9 October 2026.** Superseded as an active
+> work tracker by [FIX01](../FIX01.md). Dated statuses, proposals and approvals
+> apply to their recorded scope; archiving does not establish completion or grant
+> new authorization.
+
 **Research date:** 21 September 2026. **Status:** both approved comparisons completed;
 the user subsequently approved the narrow, logged normalization described below.
 The provider defect and live workflow effectiveness remain unproven. This work
@@ -12,7 +17,7 @@ correction, debugger replay and grading share the existing request/response
 owners. Native mode sends `response_format.type: "json_schema"` with the selected
 schema object; local validation, bounded retries and token accounting remain
 mandatory. The old codec is removed, with no fallback. See
-[F0007](../design/features/F0007-AWSBedrockProvider.md) for the current contract.
+[F0007](../../design/features/F0007-AWSBedrockProvider.md) for the current contract.
 
 Historical captures below retain their original API/bytes; they are not evidence
 of InvokeModel effectiveness. No live comparison was authorized for this change.
@@ -44,7 +49,7 @@ comparison of equivalent native constraint encodings through the shared projecti
 ## Approved prefix normalization — 21 September 2026
 
 The user approved removal of the extraneous opening bytes and explicitly required
-an alteration log. [§22.6](../design/contracts/22-repair.md#226-unparseable-output)
+an alteration log. [§22.6](../../design/contracts/22-repair.md#226-unparseable-output)
 owns the exact contract; it supersedes this note's earlier recommendation against
 any prefix removal.
 
@@ -99,10 +104,10 @@ new generic reason to call the model again.
 | Schema-valid JSON that omits requirements, invents evidence or contains incorrect relationships | Domain validation/review, then an existing engine-authorized candidate repair where permitted. Protocol correction cannot reconsider meaning or change a review verdict. |
 | A genuine missing user decision | Existing clarification handling; JSON correction cannot invent the answer. |
 
-The [action](../src/actions/model/build_model_protocol_retry.zig) only prepares the
+The [action](../../src/actions/model/build_model_protocol_retry.zig) only prepares the
 correction request. Existing workflow/runner owners invoke the model, validate the
 response, enforce the assignment allowance and account every call against the global
-token budget. The [shared builder](../src/domain/model_protocol_retry.zig) retains
+token budget. The [shared builder](../../src/domain/model_protocol_retry.zig) retains
 the original task, input and selected schema, includes the latest rejected response
 when one exists, and explains the actual error. It requests the **complete corrected
 assigned response**, preserving unaffected entries and meaning. For a configured
@@ -113,7 +118,7 @@ If correction passes JSON/schema admission, work continues through required doma
 and full-candidate validation. If it remains invalid when the allowance is exhausted,
 the workflow errors without publication. Fixing syntax alone neither restores an
 omitted requirement nor proves semantic quality. These are the existing
-[§22.6–22.7 boundaries](../design/contracts/22-repair.md#226-unparseable-output),
+[§22.6–22.7 boundaries](../../design/contracts/22-repair.md#226-unparseable-output),
 not new repair authority. Reusing this action is appropriate; its unsuccessful use
 in the latest run is why provider-conformance investigation remains necessary.
 
@@ -122,7 +127,7 @@ in the latest run is why provider-conformance investigation remains necessary.
 Run `2026-09-20T22-07-24Z-4f7e04d262338e262caad159d63ba53f` used
 `openai.gpt-oss-20b-1:0`, the then-current API, `ap-southeast-2`, temperature `0` and reasoning
 effort `low`. See the [full analysis](FIX_001.md#latest-native-json-run--malformed-output-despite-native-schema)
-and [report](../zig-out/e2e-spec/2026-09-20T22-07-24Z-4f7e04d262338e262caad159d63ba53f/report.json).
+and [report](../../zig-out/e2e-spec/2026-09-20T22-07-24Z-4f7e04d262338e262caad159d63ba53f/report.json).
 
 - All three requests included `outputConfig.textFormat.type: "json_schema"` and
   the same 6,834-byte projected schema. Its 50 object schemas all specify
@@ -194,8 +199,8 @@ tokens**. The minimal object returned:
 ```
 
 The union returned the same malformed opening. Both use the same small task and
-input from the existing [object](../src/test_fixtures/bedrock-json-object.edit.json)
-and [union](../src/test_fixtures/bedrock-json-union.edit.json) fixtures. Expected
+input from the existing [object](../../src/test_fixtures/bedrock-json-object.edit.json)
+and [union](../../src/test_fixtures/bedrock-json-union.edit.json) fixtures. Expected
 output is `{"kind":"present","value":"orchard"}`. The existing debugger extracted
 provider text successfully, rejected JSON and left schema validation unavailable.
 No result became a workflow candidate.
@@ -217,7 +222,7 @@ union-specific or complexity-specific production workaround. It does not prove
 which provider component failed, or measure a reliability rate: there was one
 observation per condition. The minimal task and schema both differ from the
 baseline; only the object/union pair isolates schema. Further API/model comparisons
-need a new bounded approval under [§28.8](../design/contracts/28-testing.md#288-model-conformance-comparisons).
+need a new bounded approval under [§28.8](../../design/contracts/28-testing.md#288-model-conformance-comparisons).
 The three-call approval is consumed. No support submission or E2E run was included.
 Those probes shared `const` tags, complete-schema prompt guidance and low
 reasoning. The separately authorized comparison below isolates the field
@@ -226,8 +231,8 @@ constraint through the same replay owner.
 ### 1.1 Plain string versus constant — completed follow-up
 
 The user's follow-up implementation request authorizes two diagnostic calls through
-the same replay owner: one [plain string](../src/test_fixtures/bedrock-json-string.edit.json)
-and one [constant](../src/test_fixtures/bedrock-json-constant.edit.json). Each contains
+the same replay owner: one [plain string](../../src/test_fixtures/bedrock-json-string.edit.json)
+and one [constant](../../src/test_fixtures/bedrock-json-constant.edit.json). Each contains
 one required `value` field in a closed object. Both ask for the package name from
 `Package: orchard`; `{"value":"orchard"}` satisfies both. Only that field's schema
 changes, from string to `const: "orchard"`. The complete string schema retains the
@@ -276,7 +281,7 @@ No more calls are authorized by this completed two-call comparison.
 There is currently no second native-schema-capable model in SDDE's trusted registry:
 the other registered model, Claude 3.5 Haiku, is prompt-only. Comparing a new model
 or region therefore requires a reviewed capability registration and authorization,
-not merely editing a model string. See the [provider contract](../design/features/F0007-AWSBedrockProvider.md#external-configuration-and-supported-contracts).
+not merely editing a model string. See the [provider contract](../../design/features/F0007-AWSBedrockProvider.md#external-configuration-and-supported-contracts).
 
 ### 3. AWS escalation ready; submission requires approval
 
@@ -362,7 +367,7 @@ required another model invocation. The correction succeeded; the run later faile
 its total-token budget. The captured response does not establish the provider-side
 cause.
 
-The user-approved [§22.6 extension](../design/contracts/22-repair.md#226-unparseable-output)
+The user-approved [§22.6 extension](../../design/contracts/22-repair.md#226-unparseable-output)
 handles this form through the existing shared prefix parser. It requires an exact
 repetition of the following object's first field, independent of field name,
 provider or workflow. It reuses `removed_repeated_field_prefix`, existing warning

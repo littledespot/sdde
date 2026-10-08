@@ -12,8 +12,9 @@ consistency review and shared actionable-question preparation to this design.
 Native assessment and question-preparation owners exist; complete semantic readiness
 is outstanding. The corrective [§12.8.1 clarification gate](../contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
 has offline-verified admission and repair-precedence coverage.
-[FIX_002](../../fixes/FIX_002.md) tracks the remaining semantic acceptance work and
-the approved D1 source-response schema change under §12.7. Historical delivery
+[FIX01](../../fixes/FIX01.md) tracks remaining semantic acceptance work;
+[FIX_002](../../fixes/archive/FIX_002.md) retains the approved D1 delivery record
+under §12.7. Historical delivery
 notes below do not establish live question necessity or completed readiness.
 
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) defines the
@@ -22,8 +23,8 @@ dependent token classifications, and global claim dispositions/signals/conflicts
 then deterministic assembly and complete validation. Global parts select the existing
 `global` definition in the reconciliation schema; summaries select `summary` as one
 part. The supplied workflow shares request, retention and assembly subgraphs. Native repairs retain per-value provenance and their existing
-rebuilding path. The finite graph limit is 1,024. [Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition)
-owns implementation and verification, including unrelated JSON shapes.
+rebuilding path. The finite graph limit is 1,024. [Chunk 18](../../fixes/archive/IMP_001.md#r34-follow-up--configured-response-decomposition)
+records historical implementation and verification, including unrelated JSON shapes.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
@@ -1526,18 +1527,15 @@ YAML definition.
 **Phase 3 repair**
 
 C1/C2 selection feasibility and disposition equivalence, including conflict-pair
-membership, are [implemented and verified offline](../../fixes/IMP_001.md#c1-and-c2-delivery--15-september-2026).
+membership, are [implemented and verified offline](../../fixes/archive/IMP_001.md#c1-and-c2-delivery--15-september-2026).
 Shared retained-claim eligibility (C3) remains consolidated in the provenance owner.
 
 **Known implementation gaps**
 
-ADR 0015's canonical principle selection and Spec assessment, persisted downstream
-obligations and shared actionable-question preparation remain pending. Existing
-native gates/lifecycle do not establish those new acceptance criteria. See the
-[implementation plan](../../fixes/IMP_001.md#spec-principle-review--approved-design-and-native-delivery).
-
 Authenticated answer acceptance and remaining publication/readback assurance remain
-open. The [rollout](../../fixes/IMP_001.md) owns their status; offline verification
+open. [FIX01](../../fixes/FIX01.md) tracks current gaps; the
+[historical delivery record](../../fixes/archive/IMP_001.md#spec-principle-review--approved-design-and-native-delivery)
+retains the earlier assessment/question-preparation implementation. Offline verification
 does not establish complete Specify or live E2E acceptance.
 
 **E2E evaluation**

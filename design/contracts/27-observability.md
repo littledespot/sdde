@@ -81,7 +81,7 @@ outcomes are recorded before close. Close failure prevents publication, repeated
 finalization preserves failure, and no event is appended after close. The feature
 stream starts at activation after preflight; pre-activation errors use the existing
 terminal/emergency path. No second sink or completion authority is introduced.
-See the [approval record](../../fixes/IMP_001.md#r39-logging-finalization-decision).
+See the [approval record](../../fixes/archive/IMP_001.md#r39-logging-finalization-decision).
 
 The runner projects action starts/outcomes, model attempts and reconciled usage,
 protocol/schema admission and current native rejection evidence. `retry.admitted`

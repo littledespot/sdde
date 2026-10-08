@@ -22,14 +22,11 @@ and publication evidence control workflow authority.
   specification generation, validation, authorized atomic repair and registered
   output publication. Evidence selections resolve to engine-owned citations;
   repair retains exact old values, revisions, dependencies and producing-call evidence.
-- Phase 3 repair is [implemented and verified offline](fixes/IMP_001.md#c1-and-c2-delivery--15-september-2026),
-  including sibling-aware selection and native disposition-set equivalence.
-  Shared eligibility (C3) and runtime assembly (20/F10) are also consolidated.
-  Authenticated clarification-answer application, feature-log integration and
-  remaining support-review/publication assurance work are also open. Connected
+- Authenticated clarification-answer application and remaining semantic-review,
+  workload and publication assurance work are open. Connected
   generation does not establish complete Specify acceptance. See
   [F0100](design/features/F0100-SpecWorkflow.md) and the
-  [active FIX_001 rollout](fixes/IMP_001.md).
+  [current FIX01 review and remaining work](fixes/FIX01.md).
 - The development harness runs real generation and grades the actual published
   specification through the selected OpenAI or Bedrock evaluator. A successful
   scored live baseline, human rubric calibration and broader acceptance remain
@@ -76,8 +73,12 @@ separate changed-scope aggregate; run the relevant owning-boundary steps during
 iteration and `zig build verify` before completing cross-cutting work.
 
 `zig build test` runs offline checks of engine internals.
-`./scripts/test-integration.sh` runs the fixed offline harness and launcher
-checks through `zig build test-integration`. `zig build verify` includes both
+`./scripts/test-integration.sh` runs the workflow scenarios, fixed offline harness
+and launcher checks through `zig build test-integration`. The integration test
+executable always uses `ReleaseSafe` optimization with runtime safety checks;
+no command-line options are required. Temporary-project workflow
+scenarios live in `test/integration/workflow_tests.zig` and are excluded from the
+unit-test import tree. `zig build verify` includes both
 as separate steps, plus architecture and smoke checks. The numbered
 specification scenarios exercise engine behavior with fake model responses;
 they do not assess prompt quality. The separately invoked live `e2e-spec`
@@ -205,21 +206,16 @@ ships with the production executable.
 | [Feature contracts](design/features/) | Component responsibilities, implementation scope and verification requirements. |
 | [Diagrams](design/diagrams/) | Markdown-fenced Mermaid views of the architecture and workflows. |
 | [Harness backlog](design/harness/README.md) | Remaining integration, calibration and live acceptance work. |
-| [FIX_001 issues](fixes/FIX_001.md) | Issues, retained evidence and required outcomes. |
-| [IMP_001 implementation](fixes/IMP_001.md) | Implementation plan, contract decisions, delivery status and validation evidence. |
+| [FIX01](fixes/FIX01.md) | Current corrective focus, code findings, remaining work and required acceptance evidence. |
+| [Fix records](fixes/README.md) | Active tracking and historical decision/evidence records. |
 
 ### Fix records
 
-Keep each fix in a matching pair under `fixes/`:
-
-- `FIX_XXX.md` describes the issues to be fixed and their required outcomes.
-- `IMP_XXX.md` describes the implementation of that fix, including progress
-  and validation evidence.
-
-Use the same three-digit ID for both files. When the entire fix is implemented
-and its required validation is complete, rename both files to `~FIX_XXX.md`
-and `~IMP_XXX.md`, and update their links. Partially implemented fixes retain
-the active names. FIX_001 remains active because its implementation is incomplete.
+[FIX01](fixes/FIX01.md) is the sole active fix record. Keep outstanding work and
+its implementation/verification status there; remove completed tasks from active
+tracking. Prior approval records, implementation history and retained experiments
+live under `fixes/archive/`. Historical proposals and status statements do not
+create current work, grant approval or establish successful live acceptance.
 
 [Templates](design/templates/), [legacy preset source examples](design/toolchainPresets/)
 and [configuration examples](design/examples/) are design inputs. They are not

@@ -56,7 +56,7 @@ replacement, not the whole candidate. Schema and domain validation still apply;
 syntax correction cannot recover omitted requirements. No candidate examples or
 accumulated correction prompts are added.
 
-In [R45](../../fixes/FIX_001.md#47-brief-schema-exhaustion-despite-child-object-guidance),
+In [R45](../../fixes/archive/FIX_001.md#47-brief-schema-exhaustion-despite-child-object-guidance),
 both corrections already included `unknown_property` at `/provenance`, required
 child `value`/`provenance` fields and the rejected response. The first correction
 therefore differed from initial generation; the second correction repeated the
@@ -134,7 +134,7 @@ do not establish a measured reliability improvement or a completed, scored basel
 
 ## Proposed conformance improvements — 20 September 2026
 
-The [21 September Bedrock comparisons](../../fixes/JSON_ISSUE.md#11-plain-string-versus-constant--completed-follow-up)
+The [21 September Bedrock comparisons](../../fixes/archive/JSON_ISSUE.md#11-plain-string-versus-constant--completed-follow-up)
 reproduced malformed native-schema output with a minimal constant-constrained field;
 the plain-string counterpart passed. This narrows the measured boundary without
 isolating native constraints from schema guidance or proving a remedy. Preserve
@@ -142,8 +142,9 @@ canonical discriminator constraints, admission and bounded correction. These
 diagnostics justify neither more decomposition nor workflow completion authority.
 
 The table distinguishes implemented guidance from remaining assessments; linked
-contracts own each boundary. [Chunk 18's current follow-up](../../fixes/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance)
-owns sequencing and approval decisions. R38 repeated incorrect nested wrappers
+contracts own each boundary. [Chunk 18's historical follow-up](../../fixes/archive/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance)
+retains its sequencing and approval record; [FIX01](../../fixes/FIX01.md) tracks
+current work. R38 repeated incorrect nested wrappers
 despite the correct schema; R39 corrected its JSON and then reached a separate
 semantic-review problem. Measure structural compliance and semantic quality separately.
 
@@ -151,7 +152,7 @@ semantic-review problem. Measure structural compliance and semantic quality sepa
 | --- | --- |
 | Assignment-specific instructions | Request/assignment guidance supplies only relevant generation rules, shared JSON framing and necessary evidence. Remove sibling-unit instructions consistently from initial and correction inputs; do not create parallel prompts for every failure. |
 | Precise nested correction guidance | The feasibility review selects [one nonrecursive child-object required-field annotation](../contracts/22-repair.md#2261-child-object-requirements), approved on 20 September 2026. Reuse the shared projection and protocol builder with the same selected schema; no branch selection, evidence relocation or candidate synthesis. |
-| Explicit error explanations | [§22.6.2](../contracts/22-repair.md#2262-explicit-error-guidance) is implemented through typed diagnostics and schema projection, with repetition wording only from confirmed prior-correction evidence. [R45 delivery](../../fixes/IMP_001.md#r45-delivery--explicit-correction-errors) records offline verification; live effectiveness remains unproven. |
+| Explicit error explanations | [§22.6.2](../contracts/22-repair.md#2262-explicit-error-guidance) is implemented through typed diagnostics and schema projection, with repetition wording only from confirmed prior-correction evidence. [R45 delivery](../../fixes/archive/IMP_001.md#r45-delivery--explicit-correction-errors) records offline verification; live effectiveness remains unproven. |
 | Model and response-mode comparison | Reuse existing provider binding, schema projection and request capture. Explicitly compare the configured baseline with native mode or another registered, authorized model; change one factor at a time. No automatic fallback, hidden model escalation or new retry owner. |
 | Further response decomposition | Reuse ADR 0016 for measured object-shape difficulties. Array-item decomposition remains deferred until finite assignments, stable identities, unique ownership, coverage/order and dependency renewal have accepted authority. Do not add arbitrary splitting, flattening or another assembler. |
 | Native derivation of mechanical fields | Reuse existing native construction where accepted inputs determine the value uniquely. Required evidence selections, relationships and business meaning remain explicit candidate data. Changing a wire shape requires consistent schema, decoding, repair, provenance and persisted-validation changes; a formatter cannot infer missing support. |
@@ -167,7 +168,7 @@ including when clarification forms are open.
 ## Nested-correction feasibility
 
 **Feasible within existing owners; model benefit remains unproven.** The latest
-[R40 evidence](../../fixes/FIX_001.md#42-brief-wrapper-recurrence-and-correction-feasibility)
+[R40 evidence](../../fixes/archive/FIX_001.md#42-brief-wrapper-recurrence-and-correction-feasibility)
 repeats R38's misplaced root provenance. The validator reports that first unknown
 property before visiting children. Its expected node already identifies the brief
 branch; the outline reduces each child object to its type. The complete schema is
@@ -195,7 +196,7 @@ or authorize copying the rejected root provenance into every child. Deeper defec
 remain governed by the full schema and subsequent diagnostics; this amendment does
 not recursively expand objects or array items. Repeated failure still exhausts.
 
-The [implementation and offline verification record](../../fixes/IMP_001.md#focused-226-decision--child-object-requirements)
+The [implementation and offline verification record](../../fixes/archive/IMP_001.md#focused-226-decision--child-object-requirements)
 cover unrelated shapes, optional fields, exact selected-schema ownership, cleanup,
 recovery and exhaustion. Request-size evidence measures overhead, not reliability;
 approved controlled calls are still needed to measure model outcomes under §28.8.
@@ -216,11 +217,11 @@ approved controlled calls are still needed to measure model outcomes under §28.
 AWS documents [structured-output support for gpt-oss-20b](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-oss-20b.html)
 and [schema-constrained InvokeModel output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
 (checked 25 September 2026). Availability does not overturn the
-[retained native-mode failures](../../fixes/FIX_001.md#47-native-mode-and-retry-counts-are-not-demonstrated-solutions)
+[retained native-mode failures](../../fixes/archive/FIX_001.md#47-native-mode-and-retry-counts-are-not-demonstrated-solutions)
 or prove improvement for the configured provider/model/schema combination. A
 comparison must record the actual mode and full engine-validation results.
 
-The [latest captured native-mode run](../../fixes/FIX_001.md#latest-native-json-run--malformed-output-despite-native-schema)
+The [latest captured native-mode run](../../fixes/archive/FIX_001.md#latest-native-json-run--malformed-output-despite-native-schema)
 returned malformed JSON on all three attempts despite the native schema and explicit
 correction errors. Raw provider text and decoded text match; the engine correctly
 exhausted and withheld publication. Before another prompt/schema refactor, isolate
