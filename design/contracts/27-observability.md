@@ -91,7 +91,8 @@ operation's newly produced diagnostic evidence, avoiding stale-failure attributi
 The [§22.6 normalization](22-repair.md#226-unparseable-output) emits one warning
 `model.response_normalized`, diagnostic `REMOVED_LEADING_BRACE_QUOTE` for the
 two-byte opening artifact or `REMOVED_REPEATED_FIELD_PREFIX` for the opening
-artifact with an unfinished repetition of the object's first member name.
+artifact repeating the object's first member name, including the approved
+string-value opener.
 Both are emitted only after strict syntax failure and successful remainder parsing.
 Correlation identifies the original request/attempt, whose raw response stays intact. Emit this when
 decoding succeeds even if subsequent schema validation fails; a separate schema

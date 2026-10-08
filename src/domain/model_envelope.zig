@@ -58,18 +58,22 @@ pub fn parseContent(allocator: std.mem.Allocator, content: []const u8, diagnosti
 
 const OpeningPrefix = struct { length: usize, normalization: Normalization };
 
-/// Recognize an unfinished object/member opener, never search for JSON inside
+/// Recognize an unfinished object/member or string-value opener, never search
 /// arbitrary text. A nonempty member name must repeat the object's first key.
 fn parseOpeningPrefix(content: []const u8) ?OpeningPrefix {
     if (!std.mem.startsWith(u8, content, "{\"")) return null;
     var end: usize = 2;
-    while (end < content.len and content[end] != '{') : (end += 1) {
-        if (content[end] < 0x20 or content[end] == '"' or content[end] == '\\') return null;
+    while (end < content.len and content[end] != '{' and content[end] != '"') : (end += 1) {
+        if (content[end] < 0x20 or content[end] == '\\') return null;
     }
     if (end == content.len) return null;
-    if (end == 2) return .{ .length = end, .normalization = .removed_leading_brace_quote };
+    if (end == 2 and content[end] == '{') return .{ .length = end, .normalization = .removed_leading_brace_quote };
     const name = content[2..end];
-    if (!std.unicode.utf8ValidateSlice(name)) return null;
+    if (name.len == 0 or !std.unicode.utf8ValidateSlice(name)) return null;
+    if (content[end] == '"') {
+        if (!std.mem.startsWith(u8, content[end..], "\":\"{")) return null;
+        end += 3;
+    }
     const first_key = std.mem.trimStart(u8, content[end + 1 ..], " \t\r\n");
     if (first_key.len == 0 or first_key[0] != '"' or !std.mem.startsWith(u8, first_key[1..], name)) return null;
     const after_name = first_key[1 + name.len ..];

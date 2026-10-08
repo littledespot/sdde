@@ -112,6 +112,11 @@ test "approved prefix normalization preserves content evidence and accounting" {
         .{ .prefix = "{\"loan", .object = "{\"loan\":{\"days\":1e3},\"note\":\"é😀\"}", .normalization = .removed_repeated_field_prefix },
         .{ .prefix = "{\"request-id", .object = "{\n\t\"request-id\" \r\n:9}", .normalization = .removed_repeated_field_prefix },
         .{ .prefix = "{\"état", .object = "{\"état\":\"active\"}", .normalization = .removed_repeated_field_prefix },
+        .{ .prefix = "{\"decision\":\"", .object = "{  \"decision\":\"compatible\",\"citations\":[1],\"detail\":\"MOCK evidence\"}", .normalization = .removed_repeated_field_prefix },
+        .{ .prefix = "{\"kind\":\"", .object = "{\"kind\":\"claims\",\"items\":[1,2],\"sibling\":{\"kept\":true}}", .normalization = .removed_repeated_field_prefix },
+        .{ .prefix = "{\"replacement\":\"", .object = "{ \"replacement\":\"candidate\",\"sibling\":{\"kept\":true}}", .normalization = .removed_repeated_field_prefix },
+        .{ .prefix = "{\"request-id\":\"", .object = "{\n\t\"request-id\" \r\n:9}", .normalization = .removed_repeated_field_prefix },
+        .{ .prefix = "{\"état\":\"", .object = "{\"état\":\"active\"}", .normalization = .removed_repeated_field_prefix },
     }) |case| {
         const bytes = try std.mem.concat(std.testing.allocator, u8, &.{ case.prefix, case.object });
         defer std.testing.allocator.free(bytes);
@@ -149,7 +154,15 @@ test "approved prefix normalization preserves content evidence and accounting" {
 
 test "prefix normalization preserves valid keys and rejects every other malformed form" {
     const envelope = @import("domain/model_envelope.zig");
-    for ([_][]const u8{ "{\"{\":1}", "{\"{name\":\"value\"}", "{\"x\":\"{\\\"{\"}", "{\"kind\":{\"kind\":\"claims\"}}", "{\"kind{\":\"value\"}" }) |bytes| {
+    for ([_][]const u8{
+        "{\"{\":1}",
+        "{\"{name\":\"value\"}",
+        "{\"x\":\"{\\\"{\"}",
+        "{\"kind\":{\"kind\":\"claims\"}}",
+        "{\"kind{\":\"value\"}",
+        "{\"decision\":\"{\\\"decision\\\":\\\"compatible\\\"}\"}",
+        "{\"decision\":{\"decision\":\"compatible\"}}",
+    }) |bytes| {
         var document = try envelope.parseContent(std.testing.allocator, bytes, null);
         defer document.deinit();
         try std.testing.expectEqual(.none, document.normalization);
@@ -172,7 +185,7 @@ test "prefix normalization preserves valid keys and rejects every other malforme
         "{\"kind{\"kind{\"kind\":\"claims\"}",
         " {\"kind{\"kind\":\"claims\"}",
         "{\"kind\"{\"kind\":\"claims\"}",
-        "{\"ki\\nd{\"ki\\nd\":1}", // Do not infer escaped or closed member names.
+        "{\"ki\\nd{\"ki\\nd\":1}", // Do not infer escaped member names.
         "{\"kind{\"kind\":\"claims\",}",
         "{\"kind{\"kind\":1,\"kind\":2}",
         "{\"kind{\"kind\":1} trailing",
@@ -182,6 +195,35 @@ test "prefix normalization preserves valid keys and rejects every other malforme
         "{\"kind\n{\"kind\":1}",
         "{\"kind{}",
         "{\"kind",
+        "{\"decision\":\"{\"other\":1}",
+        "{\"decision\":\"{\"decision_extra\":1}",
+        "{\"decision\":\"{\"decisio\":1}",
+        "{\"decision\":\"{\"\\u0064ecision\":1}",
+        "{\"\":\"{\"\":1}", // The named prefix must be nonempty.
+        "{\"decision\"\"{\"decision\":1}",
+        "{\"decision\":{\"decision\":1}",
+        "{\"decision\":\"\"{\"decision\":1}",
+        "{\"decision\":\"text{\"decision\":1}", // Never discard string content.
+        "{\"decision\" :\"{\"decision\":1}",
+        "{\"decision\": \"{\"decision\":1}",
+        "{\"decision\":\" {\"decision\":1}",
+        " {\"decision\":\"{\"decision\":1}",
+        "{\"decision\":\"{\"decision\":\"{\"decision\":1}",
+        "{\"decision\":\"{\"decision\":1,}",
+        "{\"decision\":\"{\"decision\":1,\"decision\":2}",
+        "{\"decision\":\"{\"decision\":1,\"\\u0064ecision\":2}",
+        "{\"decision\":\"{\"decision\":1} trailing",
+        "{\"decision\":\"{\"decision\":1}{}",
+        "{\"decision\":\"{\"decision\":\"\xff\"}",
+        "{\"deci\\sion\":\"{\"decision\":1}",
+        "{\"deci\nsion\":\"{\"decision\":1}",
+        "{\"\xff\":\"{\"\xff\":1}",
+        "{\"decision\":\"{}",
+        "{\"decision\":\"{\"decision\" 1}",
+        "{\"decision\":\"{\"decision\":",
+        "{\"decision\":\"",
+        "{\"decision\":",
+        "{\"decision\"",
     }) |bytes| {
         var diagnostic: ?envelope.Diagnostic = null;
         defer if (diagnostic) |failure| failure.deinit(std.testing.allocator);
@@ -259,6 +301,9 @@ test "JSON container guard accepts its exact boundary and ignores brackets in st
             const repeated = try std.fmt.allocPrint(std.testing.allocator, "{{\"nested{s}", .{bytes.items});
             defer std.testing.allocator.free(repeated);
             try checkDocument(repeated, depth == schema.max_json_depth);
+            const string_value = try std.fmt.allocPrint(std.testing.allocator, "{{\"nested\":\"{s}", .{bytes.items});
+            defer std.testing.allocator.free(string_value);
+            try checkDocument(string_value, depth == schema.max_json_depth);
         }
     }
     try checkDocument("{\"brackets\":\"" ++ "[]{}" ** 100 ++ "\"}", true);
@@ -300,16 +345,20 @@ test "separate decoded candidates own their trees and retain their own associati
 }
 
 test "every decoding allocation failure and syntax rejection frees partial trees without consuming evidence" {
-    for ([_][]const u8{
-        "{\"a\":[true,null,{\"text\":\"\\u00e9\",\"number\":1e9999}],\"b\":{}}",
-        "{\"{\"a\":[true,null,{\"text\":\"\\u00e9\",\"number\":1e9999}],\"b\":{}}",
-        "{\"a{\"a\":[true,null,{\"text\":\"\\u00e9\",\"number\":1e9999}],\"b\":{}}",
-        "{\"{\"a\":1,\"a\":2}",
-        "{\"a{\"a\":1,\"a\":2}",
-        "{\"a\":[{\"key\":\"one\",\"key\":\"two\"}]}",
-        "{\"a\":[1,2,3]} {}",
-        "[1,2,3]",
-    }, 0..) |bytes, index| {
+    const Case = struct { body: []const u8, accepted: bool = false };
+    for ([_]Case{
+        .{ .body = "{\"a\":[true,null,{\"text\":\"\\u00e9\",\"number\":1e9999}],\"b\":{}}", .accepted = true },
+        .{ .body = "{\"{\"a\":[true,null,{\"text\":\"\\u00e9\",\"number\":1e9999}],\"b\":{}}", .accepted = true },
+        .{ .body = "{\"a{\"a\":[true,null,{\"text\":\"\\u00e9\",\"number\":1e9999}],\"b\":{}}", .accepted = true },
+        .{ .body = "{\"a\":\"{\"a\":[true,null,{\"text\":\"\\u00e9\",\"number\":1e9999}],\"b\":{}}", .accepted = true },
+        .{ .body = "{\"{\"a\":1,\"a\":2}" },
+        .{ .body = "{\"a{\"a\":1,\"a\":2}" },
+        .{ .body = "{\"a\":\"{\"a\":1,\"a\":2}" },
+        .{ .body = "{\"a\":[{\"key\":\"one\",\"key\":\"two\"}]}" },
+        .{ .body = "{\"a\":[1,2,3]} {}" },
+        .{ .body = "[1,2,3]" },
+    }) |case| {
+        const bytes = case.body;
         var fixture: Fixture = undefined;
         try fixture.init();
         defer fixture.deinit();
@@ -318,7 +367,7 @@ test "every decoding allocation failure and syntax rejection frees partial trees
         defer response.deinit();
         var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
         defer validated.deinit();
-        try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ validated.evidence.result().complete, index < 3 });
+        try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ validated.evidence.result().complete, case.accepted });
         try std.testing.expectEqualStrings(bytes, validated.evidence.result().complete.content());
     }
 }

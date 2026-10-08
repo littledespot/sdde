@@ -339,11 +339,13 @@ test "native JSON diagnostic probes retain controls and inspect normalized and v
         previous_content = edit.content;
         const malformed = try std.fmt.allocPrint(a, "{{\"{{ {s}", .{probe.answer[1..]});
         const repeated = try std.fmt.allocPrint(a, "{{\"{s}{s}", .{ probe.first_key, probe.answer });
+        const string_value = try std.fmt.allocPrint(a, "{{\"{s}\":\"{s}", .{ probe.first_key, probe.answer });
         const different_value = try std.mem.replaceOwned(u8, a, probe.answer, "orchard", "peach");
-        for ([_][]const u8{ malformed, repeated, probe.answer, different_value }, 0..) |answer, attempt| {
+        const answers = [_][]const u8{ malformed, repeated, string_value, probe.answer, different_value };
+        for (answers, 0..) |answer, attempt| {
             fixture.wire.inference_body = try debugResponse(a, answer);
             const before = fixture.wire.calls;
-            const sequence = index * 4 + attempt + 1;
+            const sequence = index * answers.len + attempt + 1;
             const id = try std.fmt.allocPrint(a, "{x:0>32}", .{sequence});
             const result = try fixture.replay().replay(a, replayIdentity(id, sequence), parent, .{ .call = 0, .mode = .modified, .edit = edit });
             try std.testing.expectEqual(before + 1, fixture.wire.calls);
@@ -374,16 +376,16 @@ test "native JSON diagnostic probes retain controls and inspect normalized and v
             try std.testing.expectEqual(.valid, result.validation.json);
             try std.testing.expectEqual(@as(@TypeOf(result.validation.normalization), switch (attempt) {
                 0 => .removed_leading_brace_quote,
-                1 => .removed_repeated_field_prefix,
+                1, 2 => .removed_repeated_field_prefix,
                 else => .none,
             }), result.validation.normalization);
-            try std.testing.expectEqual(@as(@TypeOf(result.validation.schema), if (attempt == 3 and probe.constant_value) .invalid else .valid), result.validation.schema);
+            try std.testing.expectEqual(@as(@TypeOf(result.validation.schema), if (attempt == answers.len - 1 and probe.constant_value) .invalid else .valid), result.validation.schema);
             try std.testing.expectEqualStrings(answer, result.validation.model_text.?);
             try std.testing.expectEqual(@as(?u64, 10), result.validation.input_tokens);
             try std.testing.expectEqual(@as(?u64, 2), result.validation.output_tokens);
         }
     }
-    try std.testing.expectEqual(@as(usize, probes.len * 4), fixture.requests);
+    try std.testing.expectEqual(@as(usize, probes.len * 5), fixture.requests);
     try std.testing.expectEqual(fixture.requests, fixture.responses);
 }
 

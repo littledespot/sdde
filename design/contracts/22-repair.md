@@ -293,18 +293,24 @@ The engine never trusts a model field such as `valid: true`.
 
 ### 22.6 Unparseable output
 
-**Approved model-response normalization (21 September, extended 3 October 2026):**
+**Approved model-response normalization (21 September, extended 8 October 2026):**
 first parse the original complete response strictly. Only after a `SyntaxError`,
-the shared model-envelope decoder may recognize an unfinished opening `{"`
-immediately followed by another object opener, or by an unclosed, unescaped member
-name followed by that object opener. In the latter case, the name must exactly
-repeat the following object's first quoted member name, followed by a colon;
-only JSON whitespace may separate that object's opener, member and colon. Thus
-both `{"{"value":1}` and `{"value{"value":1}` qualify, without a field-name,
-provider, model or workflow special case. The prefix parser considers only that
-initial unfinished opener and is bounded by the captured response length. It stops
-on a closing quote, escape or control byte and never searches past another fragment.
-Member-name bytes must be valid UTF-8.
+the shared model-envelope decoder may recognize one of these exact opening
+artifacts immediately followed by a JSON object:
+
+- `{"`
+- `{"name` (an unfinished member name)
+- `{"name":"` (an unfinished string-value opener, with no intervening whitespace)
+
+In the named forms, `name` is nonempty, unescaped UTF-8 and must exactly repeat
+the following object's first quoted member name, followed by a colon. Only JSON
+whitespace may separate that object's opener, member and colon. Thus
+`{"{"value":1}`, `{"value{"value":1}` and `{"value":"{"value":1}` qualify
+without a field-name, provider, model or workflow special case. The prefix parser
+considers only the initial opener and is bounded by the captured response length.
+At the first quote or object opener after `{"`, it requires the exact continuation
+above. It rejects escapes, control bytes and any other closing-quote continuation;
+it never searches past another fragment or discards string-value content.
 
 Remove that one prefix and strictly parse the entire remainder. Accept normalization
 only when it is one complete JSON object. Valid input is never altered; no leading

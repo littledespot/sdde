@@ -94,10 +94,10 @@ pub const Constraint = enum {
         return switch (self) {
             .unique_nonzero => "IDs must be nonzero and unique within their collection.",
             .nonempty_unique_allowed_claims => "Select a nonempty, unique subset of the supplied claim IDs.",
-            .matching_claim_content => "Content must match the selected claims' content kind.",
+            .matching_claim_content => "Authored content must match each selected claim's content.kind (representation) and, for model content, content.model.kind (semantic category).",
             .exact_selected_token => "Preserved-token identity and exact content must match the source; native code supplies them.",
             .no_self_relation => "A claim cannot relate to itself.",
-            .same_content_kind => "Duplicate and superseded targets must have the same content kind.",
+            .same_content_kind => "Duplicate and superseded targets must match the original claim's content.kind (representation) and, for model content, content.model.kind (semantic category).",
             .same_token_value => "Duplicate tokens must have the same token kind and exact value.",
             .nonconflicting_target => "Duplicate and superseded targets cannot be conflicting.",
             .reciprocal_conflict => "Each selected conflict group represents mutually incompatible claims; native code expands reciprocal relationships.",
