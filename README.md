@@ -76,7 +76,14 @@ iteration and `zig build verify` before completing cross-cutting work.
 `./scripts/test-integration.sh` runs the workflow scenarios, fixed offline harness
 and launcher checks through `zig build test-integration`. The integration test
 executable always uses `ReleaseSafe` optimization with runtime safety checks;
-no command-line options are required. Temporary-project workflow
+no command-line options are required.
+
+Each script run prints a pass/fail summary and saves its complete output to a
+unique `.zig-cache/test-integration.*` file, whose path is printed at startup.
+Successful runs keep expected workflow-failure logs in that file; failed runs
+also display the complete output and preserve the build's exit status.
+
+Temporary-project workflow
 scenarios live in `test/integration/workflow_tests.zig` and are excluded from the
 unit-test import tree. `zig build verify` includes both
 as separate steps, plus architecture and smoke checks. The numbered

@@ -111,6 +111,18 @@ provenance to both admission and guidance. Corrections retain the precise failin
 rule once, preserving the decision; insertion retains the available choices.
 Absent presentation fields are omitted without removing source/extraction evidence.
 
+**Principle review** receives one resolved business `subject`, its semantic `task`
+and the complete selected `principles`. Feature fields contain their displayed
+text; record fields also contain their fully resolved siblings and business record
+ID. Collection subjects identify the assessed slot; entity applicability includes
+its disposition and resolved basis. Every subject retains the resolved brief,
+candidate and entity basis as supporting context: free-text principles may
+relate different requirements. Exact/passive values use the same projector as
+rendering. Native requirement tuples, assignment ordinals and
+source-review instructions are not business content. Initial review, correction,
+insertion and detail/citation repair reuse this projection; native identity,
+currentness, evidence admission and retained verdicts keep their existing owners.
+
 **After every response**, the engine independently requires one complete JSON object.
 The approved [§22.6 prefix normalization](../contracts/22-repair.md#226-unparseable-output)
 is logged and preserves the raw response. It rejects fences, duplicate keys,

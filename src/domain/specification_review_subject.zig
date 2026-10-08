@@ -18,20 +18,67 @@ pub const Subject = union(enum) {
     },
 };
 
-/// Focus the current target without changing evidence eligibility. Producer
-/// localization retains dependencies but has no support-assessment instruction.
-pub fn project(a: std.mem.Allocator, inputs: authority.Inputs, context: provenance.Context, id: authority.Id, scope: Scope) (provenance.Error || authority.Error)!Subject {
-    var target: ?Field = null;
-    if (@import("specification_authority.zig").featureField(inputs, id)) |selected| target = .{
+/// Purpose-free business facts. Review instructions belong to the selected prompt.
+pub const BusinessContext = struct {
+    brief: struct { title: spec.Scalar, description: spec.Scalar, primary_goal: spec.Scalar },
+    candidate: spec.CapturedDocument,
+    entity_basis: spec.Scalar,
+};
+pub const BusinessSubject = union(enum) {
+    field: struct { slot: authority.Slot, text: []const u8, record: ?spec.CapturedRecord = null, context: BusinessContext },
+    collection: struct { slot: authority.Slot, context: BusinessContext },
+    entity_applicability: struct { disposition: spec.Applicability, basis: spec.Scalar, context: BusinessContext },
+};
+
+fn field(a: std.mem.Allocator, inputs: authority.Inputs, context: provenance.Context, id: authority.Id) (provenance.Error || authority.Error)!?Field {
+    if (@import("specification_authority.zig").featureField(inputs, id)) |selected| return .{
         .slot = id.slot,
         .text = (try @import("specification_projection.zig").scalar(a, context, selected)).bytes,
         .provenance = selected.provenance,
-    } else if (try @import("specification_authority.zig").recordField(inputs, id)) |selected| target = .{
+    };
+    if (try @import("specification_authority.zig").recordField(inputs, id)) |selected| return .{
         .slot = id.slot,
         .text = (try @import("specification_projection.zig").recordScalar(a, context, selected.record.proposal, selected.field.value)).bytes,
         .provenance = selected.field.provenance,
         .record = selected.record,
     };
+    return null;
+}
+
+/// Resolve a native business assignment without exposing its authority tuple or
+/// importing source-review instructions. Free-text policies can relate different
+/// requirements, so every subject retains the complete resolved business context.
+pub fn projectBusiness(a: std.mem.Allocator, inputs: authority.Inputs, context: provenance.Context, id: authority.Id) (provenance.Error || authority.Error)!BusinessSubject {
+    const projection = @import("specification_projection.zig");
+    const candidate = inputs.specification orelse return error.InvalidRequiredAuthority;
+    // Preserve complete business-view validation even for a focused packet.
+    const resolved = try projection.project(a, context, candidate);
+    const brief = inputs.brief orelse return error.InvalidRequiredAuthority;
+    const related: BusinessContext = .{
+        .brief = .{ .title = try projection.scalar(a, context, brief.title), .description = try projection.scalar(a, context, brief.description), .primary_goal = try projection.scalar(a, context, brief.primary_goal) },
+        .candidate = resolved,
+        .entity_basis = try projection.scalar(a, context, candidate.entities.basis),
+    };
+    if (try field(a, inputs, context, id)) |selected| return .{ .field = .{
+        .slot = selected.slot,
+        .text = selected.text,
+        .record = if (selected.record) |record| for (resolved.records) |sibling| {
+            if (std.meta.eql(sibling.id.?, record.id)) break sibling;
+        } else return error.InvalidRequiredAuthority else null,
+        .context = related,
+    } };
+    if (id.unit != .feature) return error.InvalidRequiredAuthority;
+    return switch (id.slot) {
+        .acceptance_criteria, .functional_requirements, .scenario_coverage => .{ .collection = .{ .slot = id.slot, .context = related } },
+        .entities => .{ .entity_applicability = .{ .disposition = candidate.entities.disposition, .basis = related.entity_basis, .context = related } },
+        else => error.InvalidRequiredAuthority,
+    };
+}
+
+/// Focus the current target without changing evidence eligibility. Producer
+/// localization retains dependencies but has no support-assessment instruction.
+pub fn project(a: std.mem.Allocator, inputs: authority.Inputs, context: provenance.Context, id: authority.Id, scope: Scope) (provenance.Error || authority.Error)!Subject {
+    const target = try field(a, inputs, context, id);
     if (scope == .dependencies) return .{ .producer_localization = .{ .target = target, .candidate = inputs.specification, .brief = inputs.brief } };
     if (target) |selected| return .{ .candidate_field = selected };
     if (id.unit == .signal) {

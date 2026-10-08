@@ -11,18 +11,18 @@ compatible with the generic engine. It is feasible as a staged improvement
 programme, but is **not yet a complete implementation specification**. Several
 items already exist; source-association precision, semantic acceptance criteria,
 review grouping and disputed-verdict handling still need explicit decisions.
-The bounded policy-projection improvement is implementable within existing
-boundaries. A separate, confirmed clarification-answer lifecycle gap prevents
+The bounded R3 policy projection is complete within existing boundaries;
+its verification status is recorded below. A separate, confirmed
+clarification-answer lifecycle gap prevents
 claiming complete support for answer-derived requirements.
 No evidence currently establishes that the proposed changes will produce a
 completed, faithful specification with the configured model and execution budget.
 
-This is a review and validation document. It introduces no engine policy,
-implementation approval, new test authority or live-run authorization. The critical
-review initially changed only this file. Subsequent folder cleanup relocated
-historical records and updated documentation references, as recorded in §8.
-No code, prompts, schemas or configuration were changed; no implementation tests
-or live model calls were run for this work.
+This review and tracking document introduces no engine policy, new test authority
+or live-run authorization. The original review changed only this file; folder
+cleanup is recorded in §8. The user subsequently authorized the bounded R3
+implementation. Its code, prompt and offline verification are tracked in R3;
+the other findings remain separate work.
 
 **Material revisions:** corrected overstatements about the handoff and current
 traceability, completed the clarification-path audit, separated implementation
@@ -229,47 +229,69 @@ source-requirement registry would materially expand scope and is not justified b
 the current evidence. Full answer-supported generation is a separate cross-cutting
 completion dependency, not a small provenance-field patch.
 
-### R3 — High: policy projection is a real gap, but direct reuse has a trap
+### R3 — COMPLETE: resolve the assigned policy-review subject
 
-[principle_assessment.packet](../src/domain/principle_assessment.zig#L90) sends one
+**Status — 9 October: COMPLETE.** All R3 implementation items are implemented
+and verified offline.
+No live execution or semantic-quality improvement is claimed.
+
+At the review baseline,
+[principle_assessment.packet](../src/domain/principle_assessment.zig#L82) sent one
 raw `required_authority.Id` alongside the entire brief/candidate, entity basis and
-selected policies. The model must infer which business content that tuple denotes.
+selected policies. The model had to infer which business content that tuple denoted.
 Call 36 supplies concrete evidence of the resulting metadata/content confusion.
 
-Source review already constructs a task description and resolved subject at
-[specification_support](../src/domain/specification_support.zig#L131).
-[specification_review_subject.project](../src/domain/specification_review_subject.zig#L25)
-resolves the selected scalar, including exact/passive values, and retains the
-canonical record as sibling context. It does not resolve every sibling for display.
-This is a useful reuse point, not a ready-made policy packet.
+**Implemented boundary:** the shared
+[review-subject owner](../src/domain/specification_review_subject.zig#L51) resolves
+policy assignments through
+[specification_authority.projectRecords](../src/domain/specification_authority.zig#L44)
+and the same canonical field lenses used by source review. Each packet contains
+`task`, resolved `subject` and the unchanged
+selected `principles`, rather than a native requirement tuple. Scalar subjects
+carry displayed text; record subjects retain their business record ID and every
+resolved sibling. Collection subjects identify the assessed slot; entity subjects
+carry their disposition and resolved basis. Every subject retains the complete
+resolved brief, candidate and entity basis as supporting context, because arbitrary
+principles can compare requirements. Canonical provenance remains native authority.
 
-The handoff already requests separate instructions and collection/entity coverage.
-The code adds these concrete implementation constraints:
+The existing document projector supplies resolved record siblings and aggregate
+context, retaining its complete business-view validation even for focused
+packets; no second scalar resolver or family registry is introduced. Policy inputs
+use their `context.business` view, without importing the source subject's
+source-support instruction. Shared record descriptions are purpose-neutral; the
+source and policy prompts own their respective review instructions. Initial
+review, correction, finding insertion and detail/citation repair use the same
+[packet dispatcher](../src/domain/specification_support.zig#L112). Selection,
+cardinality, request/subject/revision binding, admission, verdict retention,
+continuation and persistence are unchanged. R4's family-purpose improvements are
+still separate.
 
-1. Policy inputs hold `context.business`; they are not already a business
-   `specification`/`brief` authority view. Reuse
-   [specification_authority.projectRecords](../src/domain/specification_authority.zig#L44)
-   or its canonical lenses before resolving the business target.
-2. The shared subject union's collection fallback embeds **source-support
-   instructions** ([review_subject](../src/domain/specification_review_subject.zig#L14)).
-   [required_authority_description.task](../src/domain/required_authority_description.zig#L35)
-   also wraps record purposes in source-review wording. Copying either unchanged
-   into policy review would mix responsibilities. Share field/family meaning and
-   resolved facts; keep review instructions at their purpose-specific owner.
-3. Resolve necessary siblings explicitly, preserving their identity and evidence.
-   Collections and entity applicability need an explicit projection, not an
-   accidental whole-candidate fallback. Removing context required for conditions
-   or cross-record relationships would trade one ambiguity for another.
+Regression coverage includes two unrelated business domains, literal/exact/passive
+values, all nine record families, resolved conditions and entity relationships,
+both applicability outcomes, legitimate “singleton” prose, foreign assignment and
+invalid provenance and malformed candidate rejection, allocation failures, and
+matching initial, correction, insertion and detail/citation-repair subjects. The
+offline workflow driver identifies policy requests by their retained result
+definition rather than the obsolete string-shaped subject.
 
-Initial review and selected repair already pass through the common
-[packet dispatcher](../src/domain/specification_support.zig#L112) and
-[review repair](../src/domain/specification_support_repair.zig#L123). Fix those
-paths together. Preserve native request/subject/revision correlation and legitimate
-source prose containing “singleton”; banning the word would overfit the example.
+**Verification:**
 
-**Feasibility:** high. This is the clearest bounded implementation candidate.
-It changes what the model understands, not policy selection or continuation rules.
-It cannot by itself establish acceptable whole-workflow cost.
+| Command | Result |
+| --- | --- |
+| `zig build test-specification-generation --summary all` | 252/252 passed on the final projection, including allocation-failure checks. |
+| `zig build test-specification-generation test-required-authority --summary all` | 401/401 passed during iteration. |
+| `zig build test-model-request-workflow test-architecture lint --summary all` | 441/441 passed; lint passed. |
+| `zig build verify --summary all` | Final run: 129/129 steps and 1318/1318 tests passed, including separate offline integration, architecture and clean packaging checks. |
+
+The first full run passed all tests but hit sandbox restrictions in two nested
+Zig builds and a packaging smoke check. Full verification passed with the required
+host access; no check or assertion was weakened. `git diff --check` and local
+documentation-target/line-anchor checks also passed. Concurrent `build.zig`
+changes are outside R3 and were preserved during verification.
+
+This removes the observed metadata/content ambiguity. It does not establish
+semantic reliability or acceptable whole-workflow cost; those claims still need
+an approved live comparison and rubric evaluation.
 
 ### R4 — Medium: the record-family proposal is incomplete and partly redundant
 
@@ -647,6 +669,7 @@ All are feasible in principle; none should be hidden inside a prompt cleanup.
    record-family purposes. Cover initial/insertion/repair paths and keep source and
    policy responsibilities separate. Measure projection and family-purpose changes
    independently so semantic improvements and record/call growth remain attributable.
+   R3's resolved projection is complete; R4's family-purpose work remains open.
    These implementation steps can progress while separate acceptance decisions are
    pending; claims of live improvement require the declared, approved comparison.
 3. **Decide traceability precision using the observed gap.** Keep current lineage

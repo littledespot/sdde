@@ -128,6 +128,8 @@ pub fn build(b: *std.Build) void {
     provenance.setCwd(b.path("."));
     provenance.has_side_effects = true;
     const provenance_file = provenance.addOutputFileArg("build-provenance.json");
+    // Only live E2E execution embeds the checkout identity. Offline test builds
+    // must not be invalidated by changes to unrelated provenance inputs.
     e2e_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
     const all_tests_module = b.createModule(.{
         .root_source_file = b.path("tests.zig"),
@@ -138,7 +140,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "unicode_normalization", .module = unicode_module },
         },
     });
-    all_tests_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
     const all_tests = b.addRunArtifact(b.addTest(.{ .name = "repository-tests", .root_module = all_tests_module }));
     all_tests.setCwd(b.path("."));
     test_step.dependOn(&all_tests.step);
@@ -151,7 +152,6 @@ pub fn build(b: *std.Build) void {
             .{ .name = "unicode_normalization", .module = unicode_module },
         },
     });
-    integration_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
     // Imported engine modules retain their own tests in the repository suite.
     const integration_tests = b.addTest(.{ .root_module = integration_module, .filters = &.{ "test.integration.", "test.harness.integration.tests." } });
     const run_integration_tests = b.addRunArtifact(integration_tests);
@@ -159,9 +159,13 @@ pub fn build(b: *std.Build) void {
     const launcher_tests = b.addSystemCommand(&.{"sh"});
     launcher_tests.addFileArg(b.path("test/harness/integration/launcher_test.sh"));
     launcher_tests.addFileArg(b.path("scripts/e2e-spec.sh"));
+    const integration_script_tests = b.addSystemCommand(&.{"sh"});
+    integration_script_tests.addFileArg(b.path("test/harness/integration/integration_script_test.sh"));
+    integration_script_tests.addFileArg(b.path("scripts/test-integration.sh"));
     const integration_step = b.step("test-integration", "Run offline workflow, harness and launcher integration tests");
     integration_step.dependOn(&run_integration_tests.step);
     integration_step.dependOn(&launcher_tests.step);
+    integration_step.dependOn(&integration_script_tests.step);
     const e2e_executable = b.addExecutable(.{ .name = "sdde-e2e-spec", .root_module = e2e_module });
     const run_e2e = b.addRunArtifact(e2e_executable);
     run_e2e.has_side_effects = true;

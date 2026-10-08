@@ -233,7 +233,7 @@ pub const Driver = struct {
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
                 const input = std.json.parseFromSlice(std.json.Value, arena.allocator(), packet.body(), .{}) catch unreachable;
                 const loss = std.mem.eql(u8, packet.resultDefinition().?.bytes, "loss");
-                const policy = input.value.object.get("subject").? == .string;
+                const policy = std.mem.eql(u8, packet.resultDefinition().?.bytes, "principle_finding");
                 assertReviewPrompt(arena.allocator(), current_request.prepared().?, if (loss) "design/workflows/spec/support-loss.prompt.md" else if (policy) "design/workflows/spec/principle.prompt.md" else "design/workflows/spec/support.prompt.md") catch unreachable;
                 if (loss) {
                     self.loss_calls += 1;
@@ -245,7 +245,7 @@ pub const Driver = struct {
                     std.testing.expectEqualStrings(expected.selected().modelBytes(), current_request.prepared().?.response_schema.modelBytes()) catch unreachable;
                 } else if (policy) {
                     self.principle_calls += 1;
-                    std.testing.expectEqualStrings("principle_consistency", input.value.object.get("subject").?.string) catch unreachable;
+                    std.testing.expect(input.value.object.get("subject").? == .object and input.value.object.contains("task") and !input.value.object.contains("requirements")) catch unreachable;
                     std.testing.expect(input.value.object.get("principles").?.array.items.len != 0) catch unreachable;
                     const schema = std.json.parseFromSlice(std.json.Value, arena.allocator(), current_request.prepared().?.response_schema.modelBytes(), .{}) catch unreachable;
                     const properties = schema.value.object.get("properties").?.object;
@@ -716,5 +716,5 @@ fn assertReviewPrompt(a: std.mem.Allocator, request: *const @import("../domain/l
         found = found or std.mem.eql(u8, part.bytes(), configured);
     };
     try std.testing.expect(found);
-    if (!std.mem.endsWith(u8, path, "support-loss.prompt.md")) try std.testing.expect(std.mem.indexOf(u8, configured, if (std.mem.endsWith(u8, path, "principle.prompt.md")) "candidate_omission" else "principle_consistency") == null);
+    if (!std.mem.endsWith(u8, path, "support-loss.prompt.md")) try std.testing.expect(std.mem.indexOf(u8, configured, if (std.mem.endsWith(u8, path, "principle.prompt.md")) "candidate_omission" else "Assess policy compliance") == null);
 }
