@@ -11,8 +11,11 @@ compatible with the generic engine. It is feasible as a staged improvement
 programme, but is **not yet a complete implementation specification**. Several
 items already exist; source-association precision, semantic acceptance criteria,
 review grouping and disputed-verdict handling still need explicit decisions.
-The bounded R3 policy projection is complete within existing boundaries;
-its verification status is recorded below. A separate, confirmed
+The bounded R3 policy projection is complete within existing boundaries. The
+9 October live evidence confirms resolved inputs and no recurrence of the observed
+`singleton` confusion, but still ends at the token budget without publication or
+grading. Its remaining semantic and workload limits are recorded in R3 and R5.
+A separate, confirmed
 clarification-answer lifecycle gap prevents
 claiming complete support for answer-derived requirements.
 No evidence currently establishes that the proposed changes will produce a
@@ -21,7 +24,8 @@ completed, faithful specification with the configured model and execution budget
 This review and tracking document introduces no engine policy, new test authority
 or live-run authorization. The original review changed only this file; folder
 cleanup is recorded in §8. The user subsequently authorized the bounded R3
-implementation. Its code, prompt and offline verification are tracked in R3;
+implementation. Its code, prompt, offline verification and subsequent retained
+live-run analysis are tracked in R3;
 the other findings remain separate work.
 
 **Material revisions:** corrected overstatements about the handoff and current
@@ -41,10 +45,12 @@ review does not execute that instruction.
 The handoff cites commit `cfb9873b5e2905a1f838c0757728f5e0170d0f4d`.
 That object is unavailable in the local repository: `git cat-file -t` fails.
 Its ancestry and exact contents could not be verified and were not fetched.
-The code assessment instead uses current HEAD
-`3bcba773a28cfc65b5d4de5cdba870fc5feb2b46` and the current working tree.
+The original code assessment instead used HEAD
+`3bcba773a28cfc65b5d4de5cdba870fc5feb2b46` and its working tree. The subsequent
+R3 outcome analysis inspected HEAD `e0b86d15bf6e18927ac67d4c5bca3105056ff8b9`;
+the worktree was clean before this documentation update.
 
-Before this review, the worktree contained an integration/build refactor in
+Before the original review, the worktree contained an integration/build refactor in
 `README.md`, `build.zig`, `build.zig.zon`, `build/test_registration.zig`,
 `integration.zig`, `scripts/test-integration.sh`, `src/architecture_test.zig`,
 `src/composition/root.zig`, `tests.zig` and untracked
@@ -72,23 +78,28 @@ Authority consulted:
   [FIX_002's reassessment decision](archive/FIX_002.md#d2--reassessment-of-a-structurally-admitted-source-finding).
 
 The local raw run bundles are available, unlike the handoff's GitHub-only review.
-The most recent retained run remains 8 October at **20:52:37 AEDT**:
+The most recent retained run started 9 October at **07:59:10 AEDT**
+(`2026-10-08T20:59:10Z`). The comparison baseline is 8 October at 20:52:37 AEDT:
 
 | Evidence | Confirmed result | What it establishes |
 | --- | --- | --- |
 | [8 October, 18:35 run](../zig-out/e2e-spec/2026-10-08T07-35-30Z-7107d1f32946458299ddf2447658f947/report.json) | 37 exchanges; 105,405 / 100,000 tokens; no publication or rubric result. | The prior workload exceeded its execution budget. |
 | [8 October, 20:52 run](../zig-out/e2e-spec/2026-10-08T09-52-37Z-975dd393a88db44ce1b06fb0f92fc8f4/report.json) | 39 exchanges; 101,476 / 100,000 tokens; no publication or rubric result. | Call 35 lacked final text; call 36 recovered JSON; call 39 hit the budget before admission. |
-| [Latest call 36](../zig-out/e2e-spec/2026-10-08T09-52-37Z-975dd393a88db44ce1b06fb0f92fc8f4/evidence/generation/call-000036/model_output.txt) | Admitted explanation treats internal `feature: singleton` as a “singleton implementation.” | Structurally admitted review can assess invented product meaning. |
+| [Pre-R3 call 36](../zig-out/e2e-spec/2026-10-08T09-52-37Z-975dd393a88db44ce1b06fb0f92fc8f4/evidence/generation/call-000036/model_output.txt) | Admitted explanation treats internal `feature: singleton` as a “singleton implementation.” | Structurally admitted review can assess invented product meaning. |
+| [9 October, 07:59 run](../zig-out/e2e-spec/2026-10-08T20-59-10Z-043b83091ff4ee6016e285ca11a2af0c/report.json) | 37 exchanges; 105,735 / 100,000 tokens; seven policy findings admitted; no publication or rubric result. | R3's resolved inputs are in use; call 37 stops on budget without a correction retry or repair. |
 | [Loan run](../zig-out/e2e-spec/2026-10-07T11-57-52Z-935b3be1a46109edb237ebb287867251/report.json), analysed in [FIX_003 §14.5](archive/FIX_003.md#145-three-approved-live-executions-after-fix3-0910) | An omission/localization sequence led to insertion of already-captured behavior and dependent rebuilding; terminal budget exhaustion. | Incorrect semantic premises can consume valid repair machinery. |
 
 Both 8 October reports identify modified builds at revision
 `dd5e6e80169c1c0ba359ca9951e222654e7edc6c`, with different source hashes.
-They demonstrate behavior of those captured builds; they do not benchmark the
-current reviewed HEAD or dirty tree.
+The 9 October report identifies a modified build at revision
+`b021e9bfaeda53c6cda8c9896342a4776f77234b`, source hash
+`65fe4bb339e123f961c991d8a598c5def7c72519b1baaf7a3fd365f217b8b14e`.
+These are different captured builds, not a controlled comparison of one code
+change. The latest request bytes independently establish that R3 was active.
 
 Call numbers are physical exchanges in those specific runs, not stable operation
 identities. The exact provider-side cause of reasoning-only output is unknown.
-The existing missing-answer correction worked in the latest run; accepting
+The existing missing-answer correction worked in the 8 October, 20:52 run; accepting
 reasoning as the answer would not address the observed semantic or workload gaps.
 
 ## 2. Validation of the handoff's central claims
@@ -101,7 +112,7 @@ reasoning as the answer would not address the observed semantic or workload gaps
 | Require more than a document-level source citation. | Sound objective; current code already retains claim-to-span traceability. The remaining issue is whether each record's inherited claim set precisely describes its support. |
 | Use stable location-based source-requirement identities. | Underspecified. Existing identities are snapshot-bound; location does not determine semantic segmentation or continuity across edits. |
 | Define record-family contributions. | Useful remaining work. The proposed table omits two existing families and some shared guidance still collapses distinct meanings. |
-| Resolve policy assignments before asking the model. | Confirmed gap, with existing projection code available for reuse. Collection/entity cases need more than a scalar-only change. |
+| Resolve policy assignments before asking the model. | R3 now implements scalar, record, collection and entity projections. Latest live packets confirm resolved business subjects; semantic reliability remains unproven. |
 | Keep small calls as the default; group only with evidence. | Consistent with §12.5. A requirement cluster can be one responsibility; no fixed call size guarantees semantic reliability or budget feasibility. |
 | Require evidenced, scoped repair. | Mostly present mechanically. Correctness of the admitted semantic premise remains unproven. New reconsideration would change accepted policy. |
 | Add isolated semantic evaluation before full E2E. | Appropriate, and already contemplated by §28.8. Whole-spec rubric calibration alone does not evaluate production generation and review assignments. |
@@ -232,14 +243,15 @@ completion dependency, not a small provenance-field patch.
 ### R3 — COMPLETE: resolve the assigned policy-review subject
 
 **Status — 9 October: COMPLETE.** All R3 implementation items are implemented
-and verified offline.
-No live execution or semantic-quality improvement is claimed.
+and verified offline. The subsequent live run confirms use of the new projection
+and a narrow improvement in assignment interpretation; it does not establish
+successful E2E execution or calibrated semantic accuracy.
 
 At the review baseline,
 [principle_assessment.packet](../src/domain/principle_assessment.zig#L82) sent one
 raw `required_authority.Id` alongside the entire brief/candidate, entity basis and
 selected policies. The model had to infer which business content that tuple denoted.
-Call 36 supplies concrete evidence of the resulting metadata/content confusion.
+Pre-R3 call 36 supplies concrete evidence of the resulting metadata/content confusion.
 
 **Implemented boundary:** the shared
 [review-subject owner](../src/domain/specification_review_subject.zig#L51) resolves
@@ -289,9 +301,63 @@ host access; no check or assertion was weakened. `git diff --check` and local
 documentation-target/line-anchor checks also passed. Concurrent `build.zig`
 changes are outside R3 and were preserved during verification.
 
-This removes the observed metadata/content ambiguity. It does not establish
-semantic reliability or acceptable whole-workflow cost; those claims still need
-an approved live comparison and rubric evaluation.
+**Live outcome analysis — 9 October:** compare semantic assignments, not physical
+call numbers. The pre-R3 description assignment was call 35, followed by correction
+call 36; the same description is assigned to
+[latest call 31](../zig-out/e2e-spec/2026-10-08T20-59-10Z-043b83091ff4ee6016e285ca11a2af0c/evidence/generation/call-000031/context.json).
+Its input now contains:
+
+```json
+{
+  "task": "A description of intended user-visible behavior.",
+  "subject": {
+    "kind": "field",
+    "slot": "description",
+    "text": "The application must start successfully, display the text \"Hello, World!\", and output the current date and time in UTC."
+  }
+}
+```
+
+This excerpt omits the retained complete business context and selected principles.
+The native `feature: singleton` tuple is absent. None of the seven admitted policy
+findings repeats the earlier invented “singleton implementation.” This confirms
+removal of that input ambiguity in this run. The display-name value is also
+unchanged between baseline call 34 and latest call 30; the later goal, story and
+acceptance-criterion wording changed upstream, so those are not identical-input
+comparisons.
+
+The [latest description response](../zig-out/e2e-spec/2026-10-08T20-59-10Z-043b83091ff4ee6016e285ca11a2af0c/evidence/generation/call-000031/model_output.txt)
+still claims the application uses a single process, maintains no state and adheres
+to Node.js/TypeScript. Those are policies, not implemented facts established by
+the business description. Similar overclaims appear in calls 32, 33 and 36.
+Compatibility may be reasonable; the explanations do not prove implementation
+compliance. Whole-chunk citations remain broad, and call 36 asserts compliance
+across seven categories while citing only architecture/core. These are remaining
+semantic-quality concerns under R7 and §17.3.1, not evidence that R3's projection
+is incomplete or that any particular compatible verdict is necessarily false.
+
+There is also an earlier, separate candidate-quality issue:
+[call 11](../zig-out/e2e-spec/2026-10-08T20-59-10Z-043b83091ff4ee6016e285ca11a2af0c/evidence/generation/call-000011/model_output.txt)
+returned `not_applicable` entities with a basis resolving only to `Hello, World!`.
+That literal does not explain why entities are unnecessary, despite the supplied
+guidance distinguishing a literal from an explanation.
+[Call 28's assignment](../zig-out/e2e-spec/2026-10-08T20-59-10Z-043b83091ff4ee6016e285ca11a2af0c/evidence/generation/call-000028/context.json)
+was entity applicability, but its
+[admitted response](../zig-out/e2e-spec/2026-10-08T20-59-10Z-043b83091ff4ee6016e285ca11a2af0c/evidence/generation/call-000028/model_output.txt)
+justified matching functional requirements instead. The source-review aggregate
+subject still uses `candidate_support`; R3 changed the policy projection, not this
+source-review path. Retain this as an R4/R7 generation-and-review evaluation case.
+It is not an established cause of the terminal budget failure.
+
+Both runs used the same case, reference, principle chunks, response schema and
+configuration: Bedrock `openai.gpt-oss-20b-1:0`, low reasoning and temperature 0.
+Among captured input files only `principle.prompt.md` changed, but builds and
+generated candidates differ. The latest run also needed no correction retry;
+known raw opening-prefix defects were normalized without a new model call. This
+does not establish that R3 eliminated provider-format defects. A single uncontrolled
+run pair, with no conflicting-policy cases or completed rubric, cannot establish
+accuracy or repeatability. R3 remains implementation-complete; R5 workload and R7
+semantic acceptance remain open.
 
 ### R4 — Medium: the record-family proposal is incomplete and partly redundant
 
@@ -322,7 +388,7 @@ and when it only repeats another representation.
 
 [equalContent](../src/domain/specification_generation.zig#L145) compares complete
 tagged content. Identical wording under different kinds is not automatically a
-native duplicate. The extra business rules in the latest run establish increased
+native duplicate. The extra business rules in the 8 October, 20:52 run establish increased
 workload and a redundancy concern, not authority for cross-kind string deletion.
 
 **Feasibility:** high for complete shared purposes and calibration; conditional
@@ -331,7 +397,7 @@ generation improvement before adding a dedicated redundancy-review call.
 
 ### R5 — High: workload feasibility needs its own demonstration
 
-The latest run grew from four to eight records relative to its predecessor. Native
+The 8 October, 20:52 run grew from four to eight records relative to its predecessor. Native
 [authority projection](../src/domain/specification_authority.zig#L50) creates eight
 feature/entity obligations plus record-field obligations;
 [policy subjects](../src/domain/principle_assessment.zig#L64) reuse those identities.
@@ -339,7 +405,7 @@ The result was 21 source-review exchanges and 18 policy subjects, rather than
 17 and 14. Each policy request repeated seven principle chunks totalling 28,067
 UTF-8 bytes. Ordinary policy exchanges used 6,643–6,646 input tokens.
 
-In the latest run, reference preparation and generation consumed 19,214 tokens,
+In that pre-R3 run, reference preparation and generation consumed 19,214 tokens,
 source review 40,491, and the six policy exchanges including correction 41,771.
 Only four of eighteen policy subjects were admitted: the fifth was budget-stopped,
 and thirteen were never reached. Subtracting the 6,952-token correction gives
@@ -348,6 +414,38 @@ run**. Call 35 had no final answer; deleting its correction would prevent later
 progress. The cost of a successful first-pass answer and the remaining work is
 unknown. The captured cost and unfinished ledger establish a workload problem;
 they do not establish that eliminating one retry would complete the workflow.
+
+**Post-R3 evidence — 9 October:** the failure remains
+`WorkflowTokenBudgetExceeded`, now at physical call **37**, reviewing the first
+acceptance criterion's `given` field. Usage was **98,945** before that call;
+its HTTP 200 response added **6,790** tokens, producing **105,735 / 100,000**.
+The [runner](../src/application/workflow_pipeline_runner.zig#L420) reconciles actual
+usage before applying the invocation result. Its budget rejection prevented final
+text extraction and finding admission; `budget_stop` is not evidence of a missing
+provider answer or invalid JSON. The raw response is retained. No correction retry,
+repair or clarification explains this failure.
+
+| Measured workload | Pre-R3, 8 October 20:52 | Post-R3, 9 October 07:59 |
+| --- | ---: | ---: |
+| Generated records | 8 | 4 |
+| Reference preparation and generation tokens | 19,214 | 19,103 |
+| Source-review calls / tokens | 21 / 40,491 | 17 / 32,317 |
+| Policy calls / tokens, including correction or budget-stopped calls | 6 / 41,771 | 8 / 54,315 |
+| Admitted policy findings / required subjects | 4 / 18 | 7 / 14 |
+| Total calls / accounted tokens | 39 / 101,476 | 37 / 105,735 |
+| Publication / rubric | Not reached / not run | Not reached / not run |
+
+The latest candidate has one acceptance criterion and three functional
+requirements. Its 14 policy subjects comprise eight feature/entity obligations
+and six record fields. All 17 source findings were admitted; seven policy findings
+were admitted, the eighth was budget-stopped, and six further subjects were never
+attempted. Each policy request still carries the same seven principle chunks
+(28,067 UTF-8 bytes) and consumes **6,467–6,571 input tokens**. More admitted
+findings is useful progress, but four fewer generated records reduced upstream
+work independently of R3's later policy projection. The latest budget failure
+without retries confirms that retry removal alone is insufficient. Prioritize
+measuring complete review cost and designing the R5 coverage-preserving workload
+change; do not treat more prompt wording or a higher budget as demonstrated fixes.
 
 Focused subjects may reduce ambiguity, but the repeated policy catalogue dominates
 the request. The handoff appropriately treats grouping as conditional. A useful
@@ -645,7 +743,7 @@ in every package. No numerical effort estimate is defensible from this review.
 | --- | --- | --- |
 | 1 — Define/calibrate assignments | A bounded pilot is practical; full calibration is real remaining work. Existing whole-spec examples are insufficient and outdated. | Labels, task-specific metrics and a comparison plan for the pilot; approved thresholds/live allowance before live acceptance claims. Expand to all nine existing families before full-scope claims, without requiring each family in every spec. |
 | 2 — Native traceability | Existing group provenance can be audited immediately. Narrower association and complete answer authority are separate coordinated changes. | Define precision and identity lifetime; amend ADR 0020 only if changing binding. Complete the separate authentication/answer/currentness contract before claiming answer-supported generation. |
-| 3 — Resolved projections/workload | Resolved policy inputs are the strongest first implementation candidate. Grouping is a distinct, conditional experiment. | Reuse resolved scalar/record/collection/entity facts with separate instructions. A production cardinality or policy-selection change needs an explicit amendment and negative tests. |
+| 3 — Resolved projections/workload | R3's resolved policy inputs are implemented and observed live. Complete workload feasibility remains unmet; grouping is a distinct, conditional experiment. | Preserve resolved scalar/record/collection/entity facts and separate instructions. A production cardinality or policy-selection change needs an explicit amendment and negative tests. |
 | 4 — Evidenced repair | Projection/evidence improvements can preserve current policy. New premise reassessment is not active authority. | Define trigger, closed outcomes, currentness, one active finding and conserved allowance; obtain the required amendment before adding reconsideration. |
 | 5 — Layered acceptance/reporting | Specific reporting gaps are bounded. Rich operation causes, dirty-source reconstruction and new acceptance rules have broader surfaces. | Extend existing capture first; separately design shared failure propagation and the development acceptance contract. A complete diagnostic redesign is not a prerequisite for the bounded projection pilot. |
 
@@ -669,9 +767,10 @@ All are feasible in principle; none should be hidden inside a prompt cleanup.
    record-family purposes. Cover initial/insertion/repair paths and keep source and
    policy responsibilities separate. Measure projection and family-purpose changes
    independently so semantic improvements and record/call growth remain attributable.
-   R3's resolved projection is complete; R4's family-purpose work remains open.
-   These implementation steps can progress while separate acceptance decisions are
-   pending; claims of live improvement require the declared, approved comparison.
+   R3's resolved projection is complete, with the narrow live observation recorded
+   above; R4's family-purpose work remains open. These implementation steps can
+   progress while separate acceptance decisions are pending; generalized claims
+   of live improvement still require the declared, approved comparison.
 3. **Decide traceability precision using the observed gap.** Keep current lineage
    machinery. If group-level attribution is insufficient, amend the binding/selection
    contract and update its complete consumer surface together; do not add metadata
@@ -722,8 +821,9 @@ The repository-owned targeted steps include `test-specification-generation`,
 `test-reference-reconciliation`, `test-required-authority`,
 `test-model-request-workflow`, `test-rubric-evaluator`, `test-workflow-graph`,
 `test-architecture` and `lint`, followed by the applicable full `verify` and native
-packaging checks. Discover the final commands from `build.zig` after the in-flight
-test refactor. No such test was executed or claimed passed during this review.
+packaging checks. Discover current commands from `build.zig`. No such test was
+executed during the original documentation review or this retained-run analysis;
+the separate R3 implementation verification is recorded above.
 
 The two live case commands in the handoff exist, but no invocation is authorized
 by this document. Isolated live comparisons require a bounded approval under
@@ -737,9 +837,10 @@ The handoff is a useful direction for the next iteration and explicitly calls fo
 reuse of existing provenance and repair owners. Distinguish those implemented
 protections from unresolved precision and semantic reliability gaps. Complete the
 record-family scope, define the claimed source-association precision and settle
-the applicable acceptance and disputed-premise decisions. Start with the confirmed
-policy projection defect and shared purpose clarity; neither requires replacing
-the generic engine or inventing another authority system.
+the applicable acceptance and disputed-premise decisions. R3 has resolved the
+policy projection defect; shared purpose clarity and complete workload feasibility
+remain. Neither requires replacing the generic engine or inventing another
+authority system.
 
 The completed clarification audit adds a separate implementation gap: production
 Spec execution does not accept and apply newly submitted answers. Preserve its
@@ -760,10 +861,20 @@ retained run evidence review, independent read-only audits of the source/project
 repair and evaluation paths, and primary-source research cited in R7. Checks passed
 for 95 local links, including 72 heading/line anchors, and document whitespace;
 `git diff --check` and `git diff --cached --check` also passed. Implementation,
-calibration and live E2E validation were not run. The unavailable handoff baseline
-commit, missing numerical semantic acceptance policy and absence of current-build
-live evidence remain explicit limits. Static feasibility and better observability
-cannot establish the configured model's future success rate.
+calibration and live E2E validation were not run during that review. Its unavailable
+handoff baseline commit and missing numerical semantic acceptance policy remain
+explicit limits. Subsequent R3 verification and retained live evidence are recorded
+above; neither establishes the configured model's future success rate.
+
+**R3 live-result analysis — 9 October:** inspected the latest and pre-R3 reports,
+captured requests/responses and input/configuration equality; matched policy calls
+by assigned business subject; recomputed stage usage from the attempt ledger; and
+traced native projection, admission and budget-stop ordering. R3's input correction
+is observed, while publication, grading, complete workload feasibility and reliable
+semantic judgment remain unmet. This update changes only FIX01; no code changes,
+test execution or new live invocation were needed for this evidence analysis.
+All 101 local links, including 73 heading/line anchors, and `git diff --check`
+passed for this update.
 
 ## 8. Outstanding scope preserved during cleanup
 
