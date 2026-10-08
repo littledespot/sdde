@@ -4933,12 +4933,15 @@ test "runner logs normalization once with call provenance and stops on log failu
             return .dropped;
         }
     };
-    const Case = struct { body: []const u8, code: []const u8 = "REMOVED_LEADING_BRACE_QUOTE" };
+    const Case = struct { body: []const u8, code: []const u8 = "REMOVED_LEADING_BRACE_QUOTE", outcome: workflow.OutcomeTag = .ok };
     for ([_]bool{ false, true }) |consolidated| for ([_]bool{ false, true }) |fail| for ([_]Case{
         .{ .body = "{\"{\"answer\":\"valid\"}" },
-        .{ .body = "{\"{\"answer\":42}" },
+        .{ .body = "{\"{\"answer\":42}", .outcome = .invalid },
         .{ .body = "{\"answer{\"answer\":\"valid\"}", .code = "REMOVED_REPEATED_FIELD_PREFIX" },
-        .{ .body = "{\"answer{\"answer\":42}", .code = "REMOVED_REPEATED_FIELD_PREFIX" },
+        .{ .body = "{\"answer{\"answer\":42}", .code = "REMOVED_REPEATED_FIELD_PREFIX", .outcome = .invalid },
+        .{ .body = "{\"answer\":\"{\"answer\":\"valid\"}", .code = "REMOVED_REPEATED_FIELD_PREFIX" },
+        .{ .body = "{\"answer\":\"{\"answer\":42}", .code = "REMOVED_REPEATED_FIELD_PREFIX", .outcome = .invalid },
+        .{ .body = "{\"answer\":\"{\"answer\":\"valid\",\"extra\":true}", .code = "REMOVED_REPEATED_FIELD_PREFIX", .outcome = .invalid },
     }) |case| {
         const body = case.body;
         var fixture: Fixture = undefined;
@@ -4964,10 +4967,33 @@ test "runner logs normalization once with call provenance and stops on log failu
         if (fail) {
             try std.testing.expectEqual(.LOG_FLUSH_FAILURE, result.execution_rejected.logging);
             try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
-        } else try std.testing.expectEqual(@as(workflow.OutcomeTag, if (std.mem.indexOf(u8, body, "42") != null) .invalid else .ok), result.execution);
+        } else try std.testing.expectEqual(case.outcome, result.execution);
         try std.testing.expect(!spy.invalid);
         try std.testing.expectEqual(@as(usize, 1), spy.count);
         try std.testing.expectEqualStrings(body, (try envelopeResult(&runner)).outcome().decoded.association().result().complete.content());
+        try expectResponseAccounting(&runner, &fake, 7);
+    };
+}
+
+test "approved repeated field prefixes avoid protocol correction" {
+    for ([_]bool{ false, true }) |consolidated| for ([_][]const u8{
+        "{\"answer{\"answer\":\"MOCK valid\"}",
+        "{\"answer\":\"{\"answer\":\"MOCK valid\"}",
+    }) |body| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try responseAdmissionYaml(&fixture, try protocolRetryYaml(&fixture), consolidated));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fake.invocation_plan.complete.content = body;
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        try std.testing.expectEqual(.ok, harness.run());
+        try std.testing.expectEqual(.removed_repeated_field_prefix, (try payloadResult(&runner)).outcome().valid.candidate().normalization());
+        try std.testing.expectEqual(.accepted, (try requestLedger(&runner)).record((try currentRequest(&runner)).id()).?.terminal_reason.?);
+        try std.testing.expectEqual(@as(usize, 1), fixture.observer.calls);
         try expectResponseAccounting(&runner, &fake, 7);
     };
 }
@@ -4978,6 +5004,9 @@ test "normalization never bypasses schema rejection or the protocol retry allowa
         "{\"{ \"answer\":\"invalid remainder\",}",
         "{\"answer{\"answer\":42}",
         "{\"answer{\"answer\":\"invalid remainder\",}",
+        "{\"answer\":\"{\"answer\":42}",
+        "{\"answer\":\"{\"answer\":\"valid\",\"extra\":true}",
+        "{\"answer\":\"{\"answer\":\"invalid remainder\",}",
     }) |body| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
@@ -5019,6 +5048,10 @@ test "YAML payload validation uses each exact compiled schema and retains the sa
             .{ .body = "{\"answer{\"answer\":42}", .rejection = .type_mismatch },
             .{ .body = "{\"answer{\"answer\":\"ok\",\"approved\":true}", .rejection = .unknown_property },
             .{ .schema = variants, .body = "{\"kind{\"kind\":\"content\",\"values\":[1,2],\"marker\":true}" },
+            .{ .body = "{\"answer\":\"{\"answer\":\"é😀\"}" },
+            .{ .body = "{\"answer\":\"{\"answer\":42}", .rejection = .type_mismatch },
+            .{ .body = "{\"answer\":\"{\"answer\":\"ok\",\"approved\":true}", .rejection = .unknown_property },
+            .{ .schema = variants, .body = "{\"kind\":\"{\"kind\":\"content\",\"values\":[1,2],\"marker\":true}" },
             .{ .body = "{\"answer\":\"" ++ "x" ** 20_000 ++ "\"}" },
             .{ .body = "{}", .rejection = .missing_required_property },
             .{ .body = "{\"answer\":42}", .rejection = .type_mismatch },

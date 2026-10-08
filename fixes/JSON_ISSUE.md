@@ -352,3 +352,46 @@ and `.zig-cache/json-normalization-verify.log`. `git diff --check` passed.
 
 Requests/prompts and provider wire bytes are unchanged. No live model call or E2E
 run occurred; live reliability and a published, scored specification remain open.
+
+## 8 October 2026: repeated field with a string-value opener
+
+Call 34 of run `2026-10-08T07-35-30Z-7107d1f32946458299ddf2447658f947`
+returned `{"decision":"` immediately before the intended object. The previous
+normalizer stopped at the closing member-name quote, so protocol correction
+required another model invocation. The correction succeeded; the run later failed
+its total-token budget. The captured response does not establish the provider-side
+cause.
+
+The user-approved [§22.6 extension](../design/contracts/22-repair.md#226-unparseable-output)
+handles this form through the existing shared prefix parser. It requires an exact
+repetition of the following object's first field, independent of field name,
+provider or workflow. It reuses `removed_repeated_field_prefix`, existing warning
+logging and debugger inspection. Original captured text stays intact; complete
+remainder parsing, schema/domain validation, retry limits and token accounting
+retain their authority.
+
+Regression coverage includes unrelated and Unicode field names, preservation of
+valid JSON, rejected prefix/remainder variants, depth boundaries, allocation
+failures, schema rejection, warning/logging failure and retry-enabled admission
+with exactly one provider invocation. Debugger inspection exercises the same
+decoder and displays the repeated-field alteration explicitly.
+
+This removes the unnecessary correction for the approved prefix class. It does
+not resolve the separately observed total-token-budget failure or establish a
+successful live E2E outcome.
+
+**Offline verification:** all commands used
+`ZIG_GLOBAL_CACHE_DIR="$PWD/.zig-cache/global"`.
+
+- `zig build test-model-envelope --global-cache-dir .zig-cache/global -j2 --summary all`:
+  **25/25 tests passed**.
+- `zig build test-model-request-workflow test-model-logging test-model-payload-schema test-architecture lint --global-cache-dir .zig-cache/global -j2 --summary all`:
+  **20/20 steps and 576/576 tests passed**.
+- `zig build verify --global-cache-dir .zig-cache/global -j2 --summary all`:
+  **129/129 steps and 1,315/1,315 tests passed**, including separate offline
+  integration tests and clean native packaging/debugger smoke checks.
+- `git diff --check`: passed.
+
+Results are recorded in `.zig-cache/model-prefix-envelope.log`,
+`.zig-cache/model-prefix-focused.log` and `.zig-cache/model-prefix-verify.log`.
+No live E2E run was performed.

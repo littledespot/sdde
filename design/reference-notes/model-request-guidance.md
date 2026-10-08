@@ -10,6 +10,10 @@ This summarizes the existing contracts in
 
 - Inputs and responses share the `kind` wire codec.
 - Evidence projections remove internal validation wrappers.
+- Reconciliation distinguishes each claim's representation (`content.kind`) from
+  model content's semantic category (`content.model.kind`). The shared
+  [native constraint descriptions](../../src/domain/reference_reconciliation_diagnostic.zig)
+  supply the matching rules for initial assignments and repairs.
 - Content references preserved-token IDs; `preserved_tokens` retains exact values
   and citations across reconciliation, generation, review and repair.
 - Extraction selects source lines as `{first: {ordinal}, last: {ordinal}}`, with
