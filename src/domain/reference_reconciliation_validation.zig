@@ -510,15 +510,23 @@ pub fn checkSignals(allocator: std.mem.Allocator, validator: r.text.Validator, p
 pub fn checkRoles(allocator: std.mem.Allocator, prior: r.CheckedSignals) r.Error!d.Result(r.CheckedSignals) {
     const source = prior.prior.source;
     const input_value = prior.prior.input;
-    const assignments = prior.prior.proposal.role_assignments;
+    const decisions = prior.prior.proposal.role_decisions orelse return error.InvalidReferenceReconciliation;
     if (prior.prior.phase == .dispositions or prior.prior.phase == .signals or prior.prior.phase == .signals_with_conflicts) return error.InvalidReferenceReconciliation;
     const roles = @import("reference_role_assignment.zig");
     const offered = try roles.groups(allocator, source, prior.signals);
     defer allocator.free(offered);
-    if (try roles.check(prior.prior.dispositions, offered, assignments)) |issue| return d.reject(r.CheckedSignals, input_value, source, .signals, issue);
+    const assignments = switch (try roles.admit(allocator, prior.prior.dispositions, offered, decisions)) {
+        .valid => |values| values,
+        .invalid => |issue| return d.reject(r.CheckedSignals, input_value, source, .signals, issue),
+    };
+    defer allocator.free(assignments);
+    var transferred = false;
+    defer if (!transferred) for (assignments) |assignment| allocator.free(assignment.generation_roles);
     const signals = try allocator.dupe(r.ValidatedSignal, prior.signals);
+    for (signals) |*signal| signal.generation_roles = &.{};
     for (assignments) |assignment| for (offered, signals) |group, *signal| {
         if (group.signal_id.ordinal == assignment.signal_id.ordinal) signal.generation_roles = assignment.generation_roles;
     };
+    transferred = true;
     return .{ .valid = .{ .prior = prior.prior, .signals = signals } };
 }

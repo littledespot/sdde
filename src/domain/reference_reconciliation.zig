@@ -125,6 +125,12 @@ pub const SignalSelectionId = struct {
     ordinal: u32,
     pub const model_scalar = "ordinal";
 };
+/// Complete model assessment; every registered role is required on the wire.
+pub const RoleDecision = union(enum) {
+    supported: struct { signal_ids: []const SignalSelectionId },
+    unsupported: struct {},
+};
+pub const RoleDecisions = std.enums.EnumFieldStruct(GenerationRole, RoleDecision, null);
 pub const RoleAssignment = struct { signal_id: SignalSelectionId, generation_roles: []const GenerationRole };
 pub const ValidatedSignal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: Content, generation_roles: []const GenerationRole };
 pub const ConflictKind = enum { mutually_exclusive, precedence_missing, value_mismatch, scope_mismatch };
@@ -134,7 +140,7 @@ pub const ConflictProposal = struct {
     summary: text.ReferenceSemanticText,
 };
 pub const ValidatedConflict = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, kind: ConflictKind, summary: text.ValidatedReferenceSemanticText, resolution: enum { unresolved } };
-pub const Proposal = struct { conflict_groups: []const @import("reference_conflict_groups.zig").Group = &.{}, claim_dispositions: []const ClaimDispositionProposal, signals: []const SignalProposal, role_assignments: []const RoleAssignment = &.{}, conflicts: []const ConflictProposal };
+pub const Proposal = struct { conflict_groups: []const @import("reference_conflict_groups.zig").Group = &.{}, claim_dispositions: []const ClaimDispositionProposal, signals: []const SignalProposal, role_decisions: ?RoleDecisions = null, conflicts: []const ConflictProposal };
 pub const diagnostic = @import("reference_reconciliation_diagnostic.zig");
 pub const Raw = struct { source: diagnostic.Source = .{}, input: Input, bytes: []const u8 };
 pub const Phase = enum { dispositions, signals, signals_with_conflicts, roles, complete };

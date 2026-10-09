@@ -328,13 +328,6 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     },
                 }
             }
-            if (falseConflict(options.source_loss) or options.reconciliation_fault == .conflict_coverage or options.reconciliation_fault == .conflict_text or options.reconciliation_fault == .occupied_conflict or options.reconciliation_fault == .permuted_conflict_disposition) {
-                var assignments: std.ArrayList(r.RoleAssignment) = .empty;
-                for (proposal.role_assignments) |assignment| {
-                    if (assignment.signal_id.ordinal <= proposal.signals.len) try assignments.append(allocator, assignment);
-                }
-                proposal.role_assignments = try assignments.toOwnedSlice(allocator);
-            }
             return @import("reference_reconciliation.zig").modelWire(allocator, .{ .global = proposal });
         },
         .specification_unit => {
@@ -848,7 +841,7 @@ fn partResponse(allocator: std.mem.Allocator, request: *const @import("../domain
     const part = request.part() orelse {
         const bound = request.packet() orelse return body;
         const definition = bound.resultDefinition() orelse return body;
-        const field: ?[]const u8 = if (std.mem.eql(u8, definition.bytes, "dispositions_assignment")) "claim_dispositions" else if (std.mem.eql(u8, definition.bytes, "signals_assignment")) "signals" else if (std.mem.eql(u8, definition.bytes, "roles_assignment")) "role_assignments" else if (std.mem.eql(u8, definition.bytes, "conflicts_assignment")) "conflicts" else null;
+        const field: ?[]const u8 = if (std.mem.eql(u8, definition.bytes, "dispositions_assignment")) "claim_dispositions" else if (std.mem.eql(u8, definition.bytes, "signals_assignment")) "signals" else if (std.mem.eql(u8, definition.bytes, "roles_assignment")) "role_decisions" else if (std.mem.eql(u8, definition.bytes, "conflicts_assignment")) "conflicts" else null;
         if (field) |name| {
             const parsed = try std.json.parseFromSlice(std.json.Value, allocator, body, .{});
             defer parsed.deinit();
@@ -896,23 +889,26 @@ fn partResponse(allocator: std.mem.Allocator, request: *const @import("../domain
                     if (!present) try pending.append(candidate);
                 }
                 try result.put(allocator, name, .{ .array = pending });
-            } else if (std.mem.eql(u8, name, "role_assignments")) {
+            } else if (std.mem.eql(u8, name, "role_decisions")) {
                 const packet = try std.json.parseFromSlice(std.json.Value, allocator, (request.packet() orelse return error.InvalidSpecificationScript).body(), .{});
                 const groups = packet.value.object.get("accepted").?.object.get("signals").?.array.items;
-                var assignments: std.array_list.Managed(std.json.Value) = .init(allocator);
-                var first = true;
+                var assignments: std.ArrayList(r.RoleAssignment) = .empty;
                 for (groups) |group| {
                     if (fault == .unassigned_roles) continue;
                     const content = group.object.get("value").?.object.get("content").?.object;
                     if (!std.mem.eql(u8, content.get("kind").?.string, "model") or !std.mem.eql(u8, content.get("model").?.object.get("kind").?.string, "business")) continue;
-                    var assignment: std.json.ObjectMap = .{};
-                    try assignment.put(allocator, "signal_id", group.object.get("signal_id").?);
-                    const roles = (try std.json.parseFromSlice(std.json.Value, allocator, if (first) (if (fault == .missing_entity_role) "[\"title\",\"description\",\"primary_goal\",\"primary_user_story\",\"records\"]" else "[\"title\",\"description\",\"primary_goal\",\"primary_user_story\",\"entity_basis\",\"records\"]") else "[\"records\"]", .{})).value;
-                    first = false;
-                    try assignment.put(allocator, "generation_roles", roles);
-                    try assignments.append(.{ .object = assignment });
+                    var roles: std.ArrayList(r.GenerationRole) = .empty;
+                    if (assignments.items.len == 0) {
+                        for (std.enums.values(r.GenerationRole)) |role| {
+                            if (fault == .missing_entity_role and role == .entity_basis) continue;
+                            try roles.append(allocator, role);
+                        }
+                    } else try roles.append(allocator, .records);
+                    try assignments.append(allocator, .{ .signal_id = .{ .ordinal = @intCast(group.object.get("signal_id").?.integer) }, .generation_roles = try roles.toOwnedSlice(allocator) });
                 }
-                try result.put(allocator, name, .{ .array = assignments });
+                const decisions = try @import("reference_reconciliation.zig").roleDecisions(allocator, assignments.items);
+                const wire = try @import("../domain/model_candidate_json.zig").encode(r.RoleDecisions, allocator, decisions);
+                try result.put(allocator, name, (try std.json.parseFromSlice(std.json.Value, allocator, wire, .{})).value);
             } else if (std.mem.eql(u8, name, "conflicts")) {
                 const packet = try std.json.parseFromSlice(std.json.Value, allocator, (request.packet() orelse return error.InvalidSpecificationScript).body(), .{});
                 try result.put(allocator, name, try @import("reference_reconciliation.zig").explanationWire(allocator, packet.value.object.get("accepted").?.object.get("conflict_groups").?.array.items, result.get(name).?.array.items));

@@ -81,9 +81,13 @@ pub fn roleInput(a: std.mem.Allocator, description: debug.Description) !@import(
     const input = try codec.decode(@import("../../../src/domain/reference_model_input.zig").RoleInput, a, body orelse return error.InvalidEvaluationContract);
     const Role = @import("../../../src/domain/reference_reconciliation.zig").GenerationRole;
     if (input.assignment.role_definitions.len != std.meta.tags(Role).len) return error.InvalidEvaluationContract;
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
     var defined: std.enums.EnumSet(Role) = .initEmpty();
     for (input.assignment.role_definitions) |definition| {
         if (defined.contains(definition.role) or !@import("../contracts.zig").text(definition.purpose)) return error.InvalidEvaluationContract;
+        const current = try definition.role.purpose(arena.allocator());
+        if (!std.mem.eql(u8, current, definition.purpose)) return error.InvalidEvaluationContract;
         defined.insert(definition.role);
     }
     return input;
@@ -111,6 +115,26 @@ pub fn controlledDescription(a: std.mem.Allocator, binding: debug.Description, p
     defer restricted.release();
     description.schema = try a.dupe(u8, restricted.selected().modelBytes());
     return description;
+}
+/// A diagnostic modification of immutable historical evidence, never a replay
+/// response imported as workflow authority. Preserve facts, evidence, purposes
+/// and ancestry while reprojecting today's contract instructions and restrictions.
+pub fn capturedDescription(a: std.mem.Allocator, binding: debug.Description, guidance: []const u8, canonical: *const @import("../../../src/domain/model_result_schema.zig").Schema) !debug.Description {
+    const model_input = @import("../../../src/domain/reference_model_input.zig");
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    var input = try roleInput(scratch, binding);
+    input.assignment.constraints = (try model_input.roleContext(scratch)).constraints;
+    const body = try codec.encode(model_input.RoleInput, scratch, input);
+    const base = try packets.create(a, body, .{ .reference_global = .{
+        .reference_state_id = .{ .bytes = "role-calibration" },
+        .unit_slot_id = .{ .bytes = "captured-role-input" },
+    } }, .initial_generation, .{ .bytes = "roles_assignment" });
+    defer packets.release(base);
+    const restricted = try @import("../../../src/domain/reference_reconciliation_stage.zig").restrictRolePacket(a, base, input.accepted.dispositions, input.accepted.signals);
+    defer packets.release(restricted);
+    return controlledDescription(a, binding, restricted, guidance, canonical);
 }
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
@@ -147,7 +171,11 @@ pub fn main(init: std.process.Init) !void {
     for (cohort.cases) |entry| {
         if (entry.split != options.split) continue;
         var parent = switch (entry.input) {
-            .captured => |selected| try captured(io, a, selected),
+            .captured => |selected| projected: {
+                var call = try captured(io, a, selected);
+                call.description = try capturedDescription(a, call.description.?, prompt, canonical);
+                break :projected call;
+            },
             .controlled => |sources| controlled: {
                 const packet = try @import("input.zig").packet(io, a, sources);
                 defer packets.release(packet);
@@ -187,7 +215,7 @@ pub fn main(init: std.process.Init) !void {
     const service: @import("../../../src/application/request_replay.zig").Service = .{ .provider = provider.provider(), .store = store.port() };
     const variants: usize = if (candidate != null) 2 else 1;
     const allowance = try std.math.mul(u64, try std.math.mul(u64, cases.items.len, options.repeats), variants);
-    const plan = try std.json.Stringify.valueAlloc(a, .{ .cohort = cohort, .options = options, .binding = binding, .maximum_physical_calls = allowance, .correction = "not_run", .repair = "not_run" }, .{ .whitespace = .indent_2 });
+    const plan = try std.json.Stringify.valueAlloc(a, .{ .cohort = cohort, .options = options, .binding = binding, .response_contract = "complete-role-decisions/v1", .captured_projection = "original-facts-evidence-and-purposes; current-contract-instructions-schema-and-native-restrictions; original-traces-unchanged", .maximum_physical_calls = allowance, .correction = "not_run", .repair = "not_run" }, .{ .whitespace = .indent_2 });
     if (environment.get("AWS_BEARER_TOKEN_BEDROCK")) |secret| {
         var sanitized = try @import("../../../src/domain/model_log_redaction.zig").sanitize(a, plan, &.{secret});
         defer sanitized.deinit(a);
@@ -230,6 +258,7 @@ pub fn main(init: std.process.Init) !void {
             trial.request_bytes = result.request.body.len;
             trial.response_bytes = if (result.response.body) |bytes| bytes.len else null;
             trial.validation = result.validation;
+            trial.decision_coverage = score.decisionCoverage(result.validation);
             trial.failure = try responseFailure(a, result.response);
             if (trial.failure == null) trial.outcome = try score.assess(a, body.accepted, entry.labels, result.validation);
         } else {
@@ -239,7 +268,7 @@ pub fn main(init: std.process.Init) !void {
         }
         try trials.append(a, trial);
     };
-    try @import("../output.zig").write(io, run.dir, "report.json", try std.json.Stringify.valueAlloc(a, .{ .schema = "role-calibration-report/v1", .label_status = cohort.label_status, .live = options.live, .maximum_physical_calls = allowance, .trials = trials.items, .totals = report.totals(trials.items) }, .{ .whitespace = .indent_2 }));
+    try @import("../output.zig").write(io, run.dir, "report.json", try std.json.Stringify.valueAlloc(a, .{ .schema = "role-calibration-report/v2", .response_contract = "complete-role-decisions/v1", .label_status = cohort.label_status, .live = options.live, .maximum_physical_calls = allowance, .trials = trials.items, .totals = report.totals(trials.items) }, .{ .whitespace = .indent_2 }));
     try @import("../output.zig").write(io, run.dir, "report.md", try report.markdown(a, options.live, cohort.label_status == .reviewed, trials.items));
     try std.Io.File.stdout().writeStreamingAll(io, try std.fmt.allocPrint(a, "Role calibration report: {s}/{s}/report.json\n", .{ options.output, &run.name }));
 }

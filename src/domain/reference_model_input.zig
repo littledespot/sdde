@@ -100,22 +100,14 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     if (presentation == .shared) return selected;
     defer packets.release(selected);
     const assignment = presentation.composed.assignment;
-    const constraints = try reconciliationGuidance(scratch, input.purpose, .{ .assignment = assignment });
     const context_body = if (assignment == .roles) roles: {
-        const definitions = try scratch.alloc(RoleDefinition, std.meta.tags(reconciliation.GenerationRole).len);
-        for (std.meta.tags(reconciliation.GenerationRole), definitions) |role, *definition| definition.* = .{
-            .role = role,
-            .purpose = role.purpose(scratch) catch |err| return switch (err) {
-                error.OutOfMemory => error.OutOfMemory,
-                error.InvalidRequiredAuthority => error.InvalidReferenceReconciliation,
-            },
-        };
-        const role_context: RoleContext = .{ .constraints = constraints, .role_definitions = definitions };
-        break :roles try @import("model_candidate_json.zig").encode(@TypeOf(role_context), scratch, role_context);
-    } else if (assignment == .conflicts) conflicts: {
-        const conflict_context = .{ .constraints = constraints };
-        break :conflicts try @import("model_candidate_json.zig").encode(@TypeOf(conflict_context), scratch, conflict_context);
+        break :roles try @import("model_candidate_json.zig").encode(RoleContext, scratch, try roleContext(scratch));
     } else other: {
+        const constraints = try reconciliationGuidance(scratch, input.purpose, .{ .assignment = assignment });
+        if (assignment == .conflicts) {
+            const conflict_context = .{ .constraints = constraints };
+            break :other try @import("model_candidate_json.zig").encode(@TypeOf(conflict_context), scratch, conflict_context);
+        }
         const assignment_context = .{
             .purpose = hierarchy.purpose,
             .level = hierarchy.level,
@@ -146,6 +138,31 @@ pub const RoleInput = struct {
     accepted: @import("reference_role_assignment.zig").Facts,
 };
 pub const RoleDefinition = struct { role: reconciliation.GenerationRole, purpose: []const u8 };
+
+/// One presentation of the registered purposes and native role-admission rule.
+/// The caller owns constraints, role_definitions and each definition's purpose.
+pub fn roleContext(a: std.mem.Allocator) (std.mem.Allocator.Error || error{InvalidReferenceReconciliation})!RoleContext {
+    var scratch: std.heap.ArenaAllocator = .init(a);
+    defer scratch.deinit();
+    const constraints = try reconciliationGuidance(a, .global, .{ .assignment = .roles });
+    errdefer a.free(constraints);
+    const definitions = try a.alloc(RoleDefinition, std.meta.tags(reconciliation.GenerationRole).len);
+    errdefer a.free(definitions);
+    var initialized: usize = 0;
+    errdefer for (definitions[0..initialized]) |definition| a.free(definition.purpose);
+    for (std.meta.tags(reconciliation.GenerationRole), definitions) |role, *definition| {
+        const purpose = role.purpose(scratch.allocator()) catch |err| return switch (err) {
+            error.OutOfMemory => error.OutOfMemory,
+            error.InvalidRequiredAuthority => error.InvalidReferenceReconciliation,
+        };
+        definition.* = .{
+            .role = role,
+            .purpose = try a.dupe(u8, purpose),
+        };
+        initialized += 1;
+    }
+    return .{ .constraints = constraints, .role_definitions = definitions };
+}
 
 /// Availability projects existing evidence, not semantics or a second registry.
 /// Reference text has no exact-copy variant; its owner leaves that choice alone.
@@ -241,6 +258,7 @@ pub const Guidance = struct { constraint: Constraint, requirement: []const u8 };
 /// retain this packet, with no separate prompt rules table.
 fn reconciliationGuidance(allocator: std.mem.Allocator, purpose: @FieldType(reconciliation.Input, "purpose"), scope: Constraint.Scope) std.mem.Allocator.Error![]const Guidance {
     var result: std.ArrayList(Guidance) = .empty;
+    errdefer result.deinit(allocator);
     for (std.enums.values(Constraint)) |constraint| if (constraint.appliesTo(purpose, scope)) {
         try result.append(allocator, .{ .constraint = constraint, .requirement = constraint.description() });
     };

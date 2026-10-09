@@ -3,6 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-06
 - **Authority:** User approval of all changes in FIX_003.
+- **9 October 2026 amendment authority:** Explicit user instruction to implement complete role decisions under [FIX01 §9.8](../../fixes/FIX01.md#98-complete-role-decisions-critical-review--9-october-2026).
 - **Amends:** Reference ingestion §16.4, model boundary §12.9, repair §22,
   ADRs 0016 and 0020 for extraction/reconciliation handoffs.
 
@@ -20,10 +21,15 @@ Signal selections reuse the existing execution-local repair occurrence IDs. They
 are distinct from final canonical signal IDs and stay with surviving groups after
 insertion or deletion. Each assignment binds reference state, partition, revision
 and the exact accepted phase facts through the existing dependency snapshot owner.
-Final canonical IDs still follow validated array order. Roles may be shared across groups;
-a group may have several roles or none. A changed upstream phase retires dependent
-assignments and YAML requests them again before full validation. Engine staleness
-is never reported as a model's invalid role decision.
+Final canonical IDs still follow validated array order. One initial role request
+returns the complete required decision map defined by
+[ADR 0020](0020-derived-exact-reference-lineage.md#complete-role-decision-amendment-approved-9-october-2026).
+Native admission projects supported selections to group-role assignments in
+offered-group and registered-role order. Roles may be shared across groups; a group
+may have several roles or none. A changed upstream phase retires its complete role
+assessment, producer origin and derived assignments, and YAML requests them again
+before full validation. Pending assessments cannot default to unsupported. Engine
+staleness is never reported as a model's invalid role decision.
 
 Summary response order determines native statement order. Native token statements
 follow semantic statements in partition claim order. Stable repair occurrence IDs
@@ -50,6 +56,15 @@ remain valid evidence without authoring roles. Filtering role choices preserves
 their original occurrence IDs and complete claim evidence; it neither removes
 members from a mixed group nor assigns missing roles. An ineligible model
 selection rejects at its producing phase before dependent dispatch.
+When the eligible catalogue is empty, tagged-variant projection removes every
+supported branch before narrowing choices; the model may report only unsupported
+decisions. Native code does not fabricate these verdicts or emit an empty ID enum.
+Protocol corrections retain the complete map, selected schema and immutable phase
+packet; existing bounds apply without a semantic correction loop. Unsupported is
+a candidate support judgment, not a human gap or `not_applicable` authority. The
+existing mandatory-role coverage gate still blocks authoring without positive
+support. Canonical readback validates the derived positive assignments; captured
+responses retain explicit negatives without a second persisted authority.
 
 Conflict groups are semantic choices. Each supplied group declares all its pairs;
 native code constructs reciprocal relationships only within that group. Overlap is

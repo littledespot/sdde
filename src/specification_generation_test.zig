@@ -3142,7 +3142,7 @@ test "source omission reconciliation repair preserves evidence and rejects stale
         try std.testing.expectEqualDeep(parsed.proposal.global.conflicts, merged.proposal.global.conflicts);
         try std.testing.expectEqualDeep(parsed.proposal.global.signals[0].claim_ids, merged.proposal.global.signals[0].claim_ids);
         var rebuilt_context = fixture.context;
-        try std.testing.expectEqual(@as(usize, 0), merged.proposal.global.role_assignments.len);
+        try std.testing.expect(merged.proposal.global.role_decisions == null);
         const stage = @import("domain/reference_reconciliation_stage.zig");
         const dispositions = (try references.validate_dispositions.execute(a, merged)).valid;
         const signals = (try references.validate_signals.execute(a, dispositions, ctx)).valid;
@@ -3150,7 +3150,7 @@ test "source omission reconciliation repair preserves evidence and rejects stale
         defer @import("domain/model_input_packet.zig").release(role_packet);
         const role_origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 102 }, .attempt = .{ .value = 1 } };
         const json = @import("domain/model_candidate_json.zig");
-        const rebuilt_roles = try stage.collect(a, .{ .roles = signals }, role_packet, try json.encodeSelected(stage.Response, a, @as(stage.Response, .{ .roles = .{ .role_assignments = parsed.proposal.global.role_assignments } })), role_origin);
+        const rebuilt_roles = try stage.collect(a, .{ .roles = signals }, role_packet, try json.encodeSelected(stage.Response, a, @as(stage.Response, .{ .roles = .{ .role_decisions = parsed.proposal.global.role_decisions.? } })), role_origin);
         try std.testing.expectEqualDeep(role_origin, rebuilt_roles.source.at(.signals, .relationship).?);
         rebuilt_context.references = (try references.finish(a, rebuilt_roles.input, rebuilt_roles.proposal.global, ctx)).valid;
         try checkSourceOmissionProgress(a, merged.source.omission_retry.?, support, rebuilt_context);
@@ -3189,9 +3189,15 @@ test "semantic disposition repair reuses fixed-sibling choices and full validati
     proposal.claim_dispositions = values;
     // The retired group stays diagnostic evidence, while authoring uses the
     // retained group. A disposition-repair fixture must not carry stale roles.
-    const roles = try a.dupe(r.RoleAssignment, proposal.role_assignments[1..]);
-    roles[0].generation_roles = proposal.role_assignments[0].generation_roles;
-    proposal.role_assignments = roles;
+    var decisions = proposal.role_decisions.?;
+    inline for (std.meta.fields(r.GenerationRole)) |field| {
+        const old = @field(decisions, field.name).supported.signal_ids;
+        @field(decisions, field.name) = .{ .supported = .{ .signal_ids = if (old.len == 1)
+            try a.dupe(r.SignalSelectionId, &.{.{ .ordinal = 2 }})
+        else
+            old[1..] } };
+    }
+    proposal.role_decisions = decisions;
     const ctx: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry, .current = fixture.context.current };
     fixture.context.references = (try references.finish(a, original.input, proposal, ctx)).valid;
     const global = fixture.context.references.records.assignments.checked.prior.prior;
@@ -3244,7 +3250,7 @@ test "localized disposition evidence replaces positive field lineage in every so
         const discarded = dispositions[1].claim_id;
         dispositions[1].disposition = .{ .duplicate = .{ .target_claim_id = retained } };
         proposal.claim_dispositions = dispositions;
-        proposal.role_assignments = proposal.role_assignments[0..1];
+        proposal.role_decisions = try references.roleDecisions(a, &.{.{ .signal_id = .{ .ordinal = 1 }, .generation_roles = std.enums.values(r.GenerationRole) }});
         const ctx: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry, .current = fixture.context.current };
         fixture.context.references = (try references.finish(a, original.input, proposal, ctx)).valid;
         const current = try completedFixture(&fixture, false);
@@ -3988,7 +3994,7 @@ test "conflict review exact evidence survives repair and rejects corrupt readbac
     dispositions[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
     proposal.claim_dispositions = dispositions;
     proposal.signals = proposal.signals[2..];
-    proposal.role_assignments = &.{};
+    proposal.role_decisions = try references.roleDecisions(a, &.{});
     proposal.conflicts = &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The outcomes disagree." } }} } }};
     const accounted = (try references.finish(a, global, proposal, fixture.context())).valid;
     const context: provenance.Context = .{ .inputs = fixture.inputs, .references = accounted, .registry = fixture.context().registry, .current = fixture.context().current };
@@ -4330,7 +4336,7 @@ test "record association preserves accepted multi-claim order and rejects unboun
         for (original.input.items, claims) |item, *id| id.* = item.claim.id;
         const signal = proposed.signals[0];
         proposed.signals = &.{.{ .claim_ids = claims, .content = signal.content }};
-        proposed.role_assignments = proposed.role_assignments[0..1];
+        proposed.role_decisions = try references.roleDecisions(a, &.{.{ .signal_id = .{ .ordinal = 1 }, .generation_roles = std.enums.values(r.GenerationRole) }});
         const accepted = (try references.finish(a, original.input, proposed, .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry, .current = fixture.context.current })).valid;
         const records = refs.records(accepted);
         try binding.validate(records, fixture.context.inputs);
@@ -5607,7 +5613,7 @@ fn introduceConflict(fixture: *Fixture) ![]const references.r.ClaimId {
         if (!affected) try signals.append(a, signal);
     }
     proposal.signals = try signals.toOwnedSlice(a);
-    proposal.role_assignments = &.{};
+    proposal.role_decisions = try references.roleDecisions(a, &.{});
     proposal.conflicts = try a.dupe(r.ConflictProposal, &.{.{ .claim_ids = claims, .kind = .mutually_exclusive, .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The compatible requirements were incorrectly grouped as conflicting." } }} } }});
     const ctx: @import("domain/reference_reconciliation_validation.zig").TextContext = .{ .inputs = fixture.context.inputs, .registry = fixture.context.registry, .current = fixture.context.current };
     fixture.context.references = (try references.finish(a, original.input, proposal, ctx)).valid;

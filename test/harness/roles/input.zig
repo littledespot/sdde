@@ -40,7 +40,7 @@ pub fn packet(io: std.Io, a: std.mem.Allocator, sources: []const c.Source) !*@im
     const context: f.Context = .{ .inputs = inputs, .registry = text.registry, .current = @import("../../../src/domain/toolchain_safety.zig").value(text.owner) };
     const global = try f.summaries(a, try f.initialize(a, inputs, extracted, 8), context);
     var proposal = try f.global(a, global);
-    proposal.role_assignments = &.{};
+    proposal.role_decisions = null;
     const parsed: r.Parsed = .{ .phase = .signals, .input = global, .proposal = .{ .global = proposal } };
     const dispositions = (try f.validate_dispositions.execute(a, parsed)).valid;
     const signals = (try f.validate_signals.execute(a, dispositions, context)).valid;

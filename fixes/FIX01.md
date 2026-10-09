@@ -40,6 +40,13 @@ below. The reassessment itself changed only FIX01. The subsequent user instructi
 authorized the two R4/§8 projection follow-ups, then the prepared 48-call routing
 comparison and an evidence-supported production change. The comparison supports
 retaining baseline guidance; it supplies no policy amendment or E2E authorization.
+The subsequent complete-role-decision proposal is critically reviewed in
+[§9.8](#98-complete-role-decisions-critical-review--9-october-2026). The user then
+explicitly authorized its coordinated implementation and the §17/ADR amendments.
+The mechanical cutover and comparison are tracked in
+[§9.9](#99-complete-role-decision-implementation--9-october-2026). The prepared
+48-call diagnostic comparison was subsequently approved explicitly; it grants
+no whole-workflow E2E invocation.
 
 **Material revisions:** corrected overstatements about the handoff and current
 traceability, completed the clarification-path audit, separated implementation
@@ -1752,7 +1759,7 @@ authorizing new code, model calls or architecture changes.
 | --- | --- | --- |
 | R4 / §8 — missed packet paths | Implemented: one selected repair task across assignment shapes, and shared resolved entity applicability in completed source review. | Closed by boundary regressions and offline verification (§9.6). Live model improvement remains unmeasured; these changes do not address the earlier role-selection blocker. |
 | R9 — reopened evidence gaps | Complete evaluator response-prefix/completeness capture across both adapters; preserve simultaneous invocation/accounting/logging causes as evidence. Correct retention documentation. | High for adapter/trace capture; medium for shared dual-cause reporting. Fault tests must traverse native adapters/runner, not start with ideal populated observations. No scoring or terminal-precedence change. |
-| R7 / R10 — observed authoring blocker | Broader cases, scoring and all 48 live comparisons are complete (§9.7); the fixed candidate is rejected and production guidance retained. | No production remedy is demonstrated. Another model/settings or guidance comparison needs a declared plan and fresh bounded approval; a semantic-boundary change needs an explicit decision. Genuine post-repair coverage remains unavailable. |
+| R7 / R10 — observed authoring blocker | The guidance-only comparison remains rejected (§9.7). The separately authorized complete role-decision contract and its subsequent 48-call comparison are complete (§9.9). | Complete representation and shared admission work. Wrong-group selections fall to zero and captured cases improve, but observed omissions rise and two answers lack final JSON. The declared semantic promotion criterion is not met. Publication/rubric quality remains unverified. |
 | R5 / §8 — complete-workflow feasibility | Measure the full selected-policy workload and memory; evaluate one bounded scheduling/grouping alternative only under an accepted contract. | Measurement is feasible now. Production grouping is conditional on policy amendment and per-member findings, retry identity, invalidation and full coverage evidence. |
 | R2 — answer recovery | Define and implement authenticated acceptance, durable/current applicability and response-backed generation/readback through existing lifecycle owners. | Medium; coordinated authority/state/typed-text work. Mandatory before claiming support for answer-dependent completion, independent of the latest no-answer failure. |
 | R1 / R6 / R8 — quality and repair acceptance | Define required association precision, bounded disputed-premise policy if needed, and development quality/expected-outcome rules. Calibrate review/localization/repair tasks against human labels, then evaluate actual published output. | Conditional decisions, not prompt cleanup. Preserve the distinction between evaluator completion, semantic acceptance and production authority. |
@@ -1970,3 +1977,479 @@ and documentation only. The experimental candidate and production guidance are
 unchanged. `git diff --check` and all six changed documentation link/anchor targets
 passed. Both cohorts parse with unchanged cases/labels; guidance bytes match HEAD.
 Independent accounting and selection audits found no material discrepancy.
+
+### 9.8 Complete role decisions: critical review — 9 October 2026
+
+**Status at this review: proposed, not implemented.** The subsequently authorized
+implementation is tracked in [§9.9](#99-complete-role-decision-implementation--9-october-2026).
+This section preserves the dated review of the user's one-call
+proposal: every registered authoring role returns selected supporting signal IDs
+or an explicit unsupported decision. Scope is code analysis, primary-source research
+and this tracking document; production code, configuration, schemas, prompts and
+accepted contracts are unchanged. No new diagnostic or E2E model invocation ran.
+
+**Verdict:** feasible as a coordinated closed response-contract change, with the
+existing canonical source bindings and R10 gate retained. It is **not a demonstrated
+fix for semantic role-selection failures**. The strongest mechanical shape is a
+closed object containing one required property per registered role, with disjoint
+supported/unsupported branches. A six-item array and prompt instructions alone
+provide weaker provider-side completeness enforcement.
+
+#### Evidence and causal limits
+
+The [48-call comparison](#live-comparison-and-selection--9-october-2026) admitted
+every response after existing normalization; its failures were incorrect semantic
+selections, not missing JSON fields required by that schema. Both variants omitted
+supported roles and selected wrong groups; identical requests varied, and
+source-order permutations produced different outcomes. The rejected candidate
+increased semantic omissions from 27/124 to 37/124. The evidence cannot establish
+whether an omitted role was
+overlooked, deliberately judged unsupported, or affected by another model error.
+
+An explicit negative makes the *reported decision* distinguishable from a missing
+decision. It does not prove that the model carefully assessed the role, make a
+negative judgment correct, or diagnose the model's internal rationale. Requiring
+six reported decisions can simply turn six silent omissions into six false
+unsupported decisions. The expected improvement in selection is therefore a
+hypothesis to measure, not the reason to declare this fix complete or effective.
+
+The current assignment already has one cohesive responsibility: select semantic
+support for authoring tasks. Its six roles do not establish a single-responsibility
+violation. This proposal changes response completeness and orientation while
+keeping one initial assessment; it does not split generation, infer semantic roles
+in native code or add an independent reviewer.
+
+#### Primary-source research and provider constraints
+
+AWS documents structured outputs for this exact
+[gpt-oss-20b model on bedrock-runtime](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-oss-20b.html),
+including InvokeModel. Its
+[structured-output documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
+uses `response_format` for open-weight InvokeModel requests, documents a restricted
+JSON Schema subset, and permits only 0 or 1 for `minItems`. Unsupported schema
+features can reject the request. New schema grammar compilation can add latency;
+reported provider compilation/cache behavior is not a reason to change engine
+caching. These are current documentation facts, not evidence that a new SDDE schema
+has been exercised successfully. Do not import guarantees or request settings from
+another model, endpoint, OpenAI-hosted API or Custom Model Import route.
+
+The repository already implements this separation:
+[Bedrock projection](../src/domain/model_schema_projection.zig#L156) reduces every
+positive array minimum to 1 and omits its maximum; complete native schema validation
+retains the original bounds. Object `required` properties and closed extra-field
+rules survive both projections. Thus `minItems: 6` would not enforce six decisions
+in this provider grammar. No adapter change or schema weakening is indicated.
+
+The JSON Schema references distinguish
+[required properties](https://json-schema.org/understanding-json-schema/reference/object#required-properties)
+from optional ones, and
+[array-item uniqueness](https://json-schema.org/understanding-json-schema/reference/array#uniqueness)
+from length. Inference: different objects with the same role but different decisions
+are distinct array items; `uniqueItems` alone would not enforce one decision per
+role. The current closed [schema compiler](../src/domain/model_result_schema.zig#L538)
+does not accept `uniqueItems`, `contains` or tuple/conditional schemas. Extending
+that generic compiler merely to encode this role count is unnecessary.
+
+[JSONSchemaBench](https://arxiv.org/abs/2501.10868) evaluates constraint coverage,
+efficiency and task quality separately. Research on
+[constrained generation](https://proceedings.mlr.press/v306/reddy26a.html) describes
+how structurally valid generation can follow semantically incorrect trajectories.
+Those studies support measuring validity and meaning separately; their models,
+tasks and decoding implementations do not predict this Bedrock routing result.
+They do not justify importing draft-generation calls, best-of-many selection or a
+new repair mechanism into SDDE.
+
+#### Recommended bounded contract
+
+Retain the [registered `GenerationRole` catalogue](../src/domain/reference_reconciliation.zig#L99)
+and [shared purposes](../src/domain/reference_model_input.zig#L104). The current
+catalogue has six roles; derive/check completeness against that catalogue rather
+than adding a second handwritten registry or relying on the literal number six.
+Use one required property for each role, with a tagged support decision. For example,
+this is an illustrative response shape, not validated source evidence:
+
+```json
+{
+  "role_decisions": {
+    "title": {"kind": "supported", "signal_ids": [17]},
+    "description": {"kind": "supported", "signal_ids": [17]},
+    "primary_goal": {"kind": "supported", "signal_ids": [17]},
+    "primary_user_story": {"kind": "supported", "signal_ids": [17]},
+    "entity_basis": {"kind": "unsupported"},
+    "records": {"kind": "supported", "signal_ids": [17, 23]}
+  }
+}
+```
+
+Every property is required. `supported` carries a nonempty, unique selection from
+the exact eligible native signal catalogue. `unsupported` carries no selection,
+prose justification or generated field content. Both branches are closed and
+disjoint, using the existing tagged-union/schema codec. Reject missing/unknown
+roles, duplicate JSON keys, unsupported extra fields, empty positive selections
+and the old sparse wire shape. Do not add defaults or a legacy reader.
+
+`unsupported` means the model reports that the offered eligible evidence provides
+no sufficient source-backed basis for the assigned authoring purpose. It is a
+candidate judgment. It does not prove missing user information, authorize
+clarification, or establish an entity
+`not_applicable` result. Behavior supporting an applicability assessment of
+`not_applicable` still supports `entity_basis` under its
+[existing purpose](../src/domain/required_authority_description.zig#L110).
+
+The shared role-assignment owner should admit the complete table and derive the
+existing positive group-role assignments. Reject duplicate IDs before conversion;
+never hide defects by deduplicating. Traverse native offered-group order and
+registered role order so model key/selection permutations produce the same canonical
+bindings. Preserve many-to-many support: roles can select multiple groups, and a
+group can support several roles. Do not merge groups or create cross-group records.
+
+The required map/type/schema must be mechanically checked against the existing
+catalogue. A manually maintained list in the prompt, schema, decoder, validator and
+scorer would recreate duplicate authority. Required nullable arrays are another
+representable shape, but [optional fields with defaults](../src/domain/model_candidate_json.zig#L203)
+admit omission, and null/array branches lack the existing tag-based exclusion for
+empty choices. Select one wire shape; do not support alternatives simultaneously.
+
+Keep native conversion and eligibility in the existing domain owner, parsing in the
+existing codec, and coordination in the compiled workflow. One call means one
+initial model-request operation containing all decisions; the existing
+[two protocol corrections](../design/workflows/spec.workflow.yaml#L560) may still
+cause additional physical sends. Missing fields are structural defects. A complete
+unsupported decision is not a malformed response and must not trigger a newly
+invented semantic retry. R10 still blocks missing positive mandatory coverage.
+
+#### Brittleness and overlooked paths
+
+| Risk | Code evidence and required treatment |
+| --- | --- |
+| Complete but semantically wrong answers | Schema completeness cannot detect false unsupported, wrong eligible groups or order-sensitive interpretation. Preserve semantic omission/wrong-basis measurement and the downstream review/coverage gates. Do not score a full decision map as quality success. |
+| Empty eligible catalogue | [Current narrowing](../src/domain/model_result_schema.zig#L194) rejects restricting a nonempty support list to no IDs. Reuse the existing tagged variant exclusion to project a valid unsupported-only shape before narrowing. Test every role; do not emit an empty enum, catch the error as a fallback, invent IDs or silently construct model verdicts. |
+| Eligible IDs confused with sufficient support | [Shared admission](../src/domain/reference_role_assignment.zig#L21) checks membership, retained claims and uniqueness. It does not prove that a group supports the role. Keep the complete evidence catalogue, original occurrence handles and semantic choice; no keyword or claim-kind routing shortcut. |
+| Role/signal identity drift | Replace the [old restriction path](../src/domain/reference_reconciliation_stage.zig#L79) with the new support-branch path. Preserve exact assignment/state/revision checks during [collection](../src/domain/reference_reconciliation_stage.zig#L85). Equal numbers in another partition or changed group must not become current evidence. |
+| Negative decisions lost during conversion | Canonical signals retain positive roles only. Keep the admitted response and its actual producer in existing captured evidence; do not claim negative verdicts survive [snapshot readback](../src/domain/reference_snapshot.zig#L121). Sparse canonical projection is permitted only after complete-table admission, never as a second independently editable candidate source. |
+| Partial/default initialization masquerading as assessment | Before the role phase the decision table is pending, not an all-unsupported result. Missing fields must reject. Never initialize absent roles to unsupported or construct a positive role from a display value to satisfy coverage. |
+| Stale decisions after upstream repair | Signal edits [clear roles and origins](../src/domain/reference_reconciliation_repair.zig#L469); disposition edits [retire affected signals and roles](../src/domain/reference_reconciliation_repair.zig#L668). The new candidate decisions and every derived binding must retire together and be reassessed through the same phase. Do not preserve old negatives while clearing positives. |
+| Protocol correction becomes semantic reconsideration | Existing correction retains the immutable request/schema and responds to structural errors. An admitted unsupported judgment remains valid candidate data followed by R10 blocking; no correction-until-supported loop, new role-repair target or altered terminal transition belongs to this cutover. |
+| Historical captures requested under the wrong contract | [Captured CLI cases](../test/harness/roles/cli.zig#L149) retain old schemas, while [scoring](../test/harness/roles/score.zig#L33) uses the current response type. Changing only the production schema would make those arms incompatible. Record any diagnostic reprojection explicitly and pair each arm with its actual decoder; preserve original captures/reports unchanged. |
+| Evidence attribution unnecessarily redesigned | All decisions still come from one admitted response. Existing [collection origin](../src/domain/reference_reconciliation_stage.zig#L125) and [coverage rejection origin](../src/domain/specification_source_binding.zig#L189) remain appropriate. Do not invent six calls or provider origins, discard correction-attempt identity, or blame stale engine state on the model. |
+| Sibling fixtures retain sparse responses | Update scripted [role responses](../src/test_fixtures/spec_generation_responses.zig#L899), initial/correction paths and [rebuilt-source role responses](../src/specification_generation_test.zig#L3153). Separate explicit-unsupported semantic faults from missing-decision protocol faults; retain MOCK business values and unchanged coverage expectations. |
+
+#### Feasibility and coordinated implementation scope
+
+| Owner | Smallest required change |
+| --- | --- |
+| Model wire/schema | Replace the role phase's [schema definition](../design/workflows/spec/reconciliation.schema.json#L454) and [typed response](../src/domain/reference_reconciliation_stage.zig#L139), with completeness tied to the registered role catalogue. Do not modify unrelated reconciliation phases or the generic parser profile. |
+| Packet/presentation | Update role guidance and support-ID restrictions; reuse existing purposes and complete evidence. Explicitly describe the negative branch. No new prompt-context registry, caching change or model-slot change. |
+| Native admission/conversion | Add complete-decision admission and deterministic inversion at the shared role-assignment owner; [production validation](../src/domain/reference_reconciliation_validation.zig#L510) and calibration reuse it. Keep parse/admit/convert responsibility separate from model dispatch. |
+| Phase lifecycle and repair | Collect the new candidate and retire it with dependent role facts after upstream changes. Preserve phase snapshots, immutable correction packets, existing receipt retirement and YAML transitions. |
+| Binding/persistence | Retain [R10's coverage owner](../src/domain/specification_source_binding.zig#L149), positive canonical `generation_roles`, final IDs and citation derivation. A wire-only change does not require a persisted-state version bump by default. If new persisted authority is proposed, declare that separate change explicitly. |
+| Diagnostics/trace | Distinguish malformed/missing decisions from an admitted unsupported role and retain the actual response/attempt. Native completeness is proof of representation only. |
+| Tests and calibration | Cut over fixtures and production decoder use, preserving immutable old evidence. Prepare a declared response-contract comparison; the existing guidance-only switch is insufficient. |
+| Governing documentation | Amend [§17](../design/contracts/17-specify.md#L159), [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md#L50) and the applicable [ADR 0022 handoff wording](../design/decisions/0022-native-reference-phase-handoffs.md#L9) before/together with implementation. Update guidance and call-tree documentation. |
+
+**Feasibility assessment:** high for the mechanical one-call response cutover using
+existing object/union/choice contracts; moderate for coordinated fixture and
+diagnostic comparison work; unknown for semantic improvement. No production
+dependency, provider mode, new evidence store, state-resume feature or separate
+success validator is needed. Canonical source binding remains ahead of authoring.
+Accepted contracts must distinguish explicit wire decisions from their derived
+canonical assignments. This review does not amend those contracts or approve
+implementation, new model calls, continuation rules or a semantic repair policy.
+
+#### Validation and promotion conditions
+
+1. Prove closed decoding and decision completeness at the owning boundary: every
+   missing/unknown/duplicate property, malformed branch, positive empty/duplicate
+   IDs, negative-with-IDs, old response shape and unsupported-only zero-choice case.
+   Test both complete and actual Bedrock projections; a JSON example parsing is
+   not evidence that the provider or native contract accepts it.
+2. Prove native conversion across unrelated MOCK domains: one-to-many and
+   many-to-one selections, inactive/mixed/foreign groups, reordered decisions and
+   IDs, deterministic role/group order, stale packet/state/revision, allocation
+   cleanup and exact producer attribution. Preserve existing group boundaries.
+3. Exercise initial request, unchanged structural correction, correction exhaustion,
+   authorized source/signal/disposition repair retirement and reassessment. All
+   decisions unsupported must be a valid assessment on unsupported premises while
+   R10 blocks mandatory authoring. Keep full candidate/readback coverage tests.
+4. Freeze a single intervention and its schema/guidance before comparison. Hold
+   model/settings, sources, purposes, eligible groups and labels fixed. Do not
+   compare new requests using an old schema or silently decode old responses as new
+   ones. Use separately pinned baseline/intervention builds or explicitly scoped
+   diagnostic arms through existing replay owners, never a production dual reader.
+   Reproject captured packets transparently or obtain fresh captures. The current
+   [candidate switch](../test/harness/roles/cli.zig#L202) changes guidance only.
+5. Preserve `missing_supported_roles`: the [current scorer](../test/harness/roles/score.zig#L38)
+   counts a required role missing when no labelled supporting group was selected,
+   including a selection made only on wrong groups. Add separate structural missing
+   decisions, explicit false unsupported and false supported/wrong-basis counts.
+   Optional/ambiguous labels must remain optional; unsupported verdicts on required
+   roles are not quality passes. Keep unusable answers and all physical sends in
+   declared denominators, with per-role/family results beside aggregate counts.
+6. Existing `allowed_signal_ids` labels are alternatives: any one suffices. They do
+   not establish cases needing combined groups. Add reviewed set-level evidence
+   cases if collective support is part of the claimed outcome, plus multi-claim
+   groups, actual native conflicting/inactive dispositions and genuine post-repair
+   inputs. Do not fabricate captures or silently reinterpret existing labels.
+7. The previous held-out cases are now inspected regression cases, not fresh blind
+   confirmation for this intervention. Reserve new source families, review labels
+   against their exact purposes/catalogue and check family separation across cohort
+   files. Reuse approved labels only where meanings/facts are unchanged. The parser
+   validates labels mechanically; it does not certify human entailment or approve
+   another API allowance.
+8. Before new calls, declare the bounded allowance and selection/tradeoff criteria.
+   Compare semantic omissions and wrong selections together, with captured-case and
+   unchanged-repeat regressions visible. Record request/schema/output bytes, actual
+   tokens, all corrections, latency availability and measured durations. One initial
+   request or zero missing decision fields is not a cost/quality improvement.
+   Retain baseline if the comparison does not justify the intervention; add no
+   automatic promotion or new application quality gate.
+9. Only after those mechanics and a supported selection decision, verify complete
+   live production publication, rubric grading of its actual specification and an
+   unchanged repeat under [§28.7](../design/contracts/28-testing.md#287-end-to-end-tests)
+   and [§28.8](../design/contracts/28-testing.md#288-model-conformance-comparisons).
+   Diagnostic replay cannot supply workflow authority or substitute for E2E. Each
+   diagnostic allowance and E2E invocation still needs its applicable explicit
+   approval. Production quality remains open until that evidence exists.
+
+**Review conclusion:** this is a bounded and testable candidate intervention at the
+correct shared role boundary. Implementing only required fields would be local
+incompleteness; reporting zero missing decisions as improved authoring would be
+misleading. The proposed contract hardens observable completeness and preserves
+fail-closed authority. Whether it reduces false negatives, wrong sources, ordering
+sensitivity or actual E2E failure remains unproved.
+
+**Research/verification limits:** reviewed current contracts, production and sibling
+paths, retained 48-call results and independent code/evaluation audits; checked
+primary AWS, JSON Schema and research sources above. No code changes, implementation
+tests, live diagnostics or E2E runs were performed for this review. Earlier offline
+test counts remain dated evidence for the existing implementation, not this proposal.
+`git diff --check`, all 29 newly introduced local link/anchor targets and the
+illustrative JSON's syntax check passed. The syntax check does not validate the
+proposed native/provider contract. Independent evidence and cutover review found
+no material discrepancy after the wording corrections above.
+
+### 9.9 Complete role-decision implementation — 9 October 2026
+
+**Authorization and status:** the user explicitly requested the coordinated
+§9.8 cutover, including §17, ADR 0020 and ADR 0022 amendments. The implementation
+is present across production, correction, repair, fixtures and calibration.
+Offline evidence is recorded below. The user approved the prepared 48-call
+diagnostic comparison after offline verification, and all 48 calls completed.
+**Mechanical implementation and this bounded comparison are complete. Semantic
+promotion is not supported by the results; production-quality acceptance remains
+open.** Execution and results are recorded below.
+
+#### Implemented contract and lifecycle
+
+- The closed wire response requires `role_decisions`. Its native map derives its
+  fields from the existing `GenerationRole` enum, with no defaults: every role is
+  `supported` with nonempty unique eligible signal IDs, or `unsupported` without
+  IDs. Native/provider schema agreement is mechanically tested. Sparse wire
+  responses, missing/unknown/duplicate roles and malformed branches reject.
+- [Shared role admission](../src/domain/reference_role_assignment.zig) checks the
+  complete decisions, rejects duplicate/foreign selections and deterministically
+  derives positive assignments in offered-group and registered-role order. It
+  reuses existing retained-claim eligibility and assignment validation; production
+  and calibration do not maintain separate semantic validators or conversions.
+  Many-to-many support and existing group boundaries remain intact.
+- [Phase packet projection](../src/domain/reference_reconciliation_stage.zig)
+  narrows supported selections to eligible native occurrence IDs. With no eligible
+  group it removes the supported branch, yielding a valid unsupported-only schema
+  for every role; native code neither emits an empty enum nor fabricates verdicts.
+  Current capture replay uses this same projection explicitly, preserving original
+  facts, evidence, shared purposes and capture ancestry while refreshing
+  contract-specific assignment instructions from the production context owner.
+- Before assessment the complete table is `null`, meaning pending. Collection
+  preserves exact packet/state/revision and producer checks. Signal or disposition
+  repair retires the table and role origin before fresh assessment. Canonical
+  snapshots retain derived positive `generation_roles`; captured responses retain
+  negatives without adding a second persisted binding authority or state version.
+- Existing immutable protocol correction and its two-correction allowance remain.
+  Missing decisions are protocol defects. Complete unsupported answers are valid
+  candidates and receive no correction-until-supported loop. **R10 is preserved:**
+  absent mandatory positive coverage blocks authoring, with the actual role
+  producer retained; unsupported does not authorize user clarification or entity
+  `not_applicable`.
+- Fixtures use complete mocked decisions. Reference-only repair tests supply an
+  explicit fresh mocked assessment before normal validation; no production or
+  fixture finish helper silently defaults pending state. Offline integration
+  exercises an omitted decision recovering on attempt two and unchanged omission
+  exhausting after three total sends, with no authoring or publication on failure.
+
+The accepted wording in [§17](../design/contracts/17-specify.md),
+[ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md) and
+[ADR 0022](../design/decisions/0022-native-reference-phase-handoffs.md), the request
+guidance and call-tree diagram are updated together. The overall design remains
+Proposed. There is no new dependency, model slot, provider mode, cache behavior,
+repair target, transition, default scenario or production compatibility reader.
+
+#### Offline evidence
+
+| Command | Result |
+| --- | --- |
+| `zig build test-reference-reconciliation test-reference-model-input test-model-candidate-json test-specification-generation --summary all` | 12/12 steps, 640/640 tests passed. |
+| `zig build test-rubric-evaluator build-role-calibration --summary all` | 5/5 steps, 119/119 tests passed. The subsequent unscored Markdown-row correction also passed 119/119 evaluator tests. |
+| `zig build test-integration --summary all` | 5/5 steps, 90/90 tests passed; fixed offline cases remain separate from live E2E. |
+| `zig build lint --summary all` | 2/2 steps passed. |
+| `zig build test-reference-model-input test-rubric-evaluator build-role-calibration --summary all` | Final shared-context projection and allocation-failure regression: 8/8 steps, 283/283 tests passed. |
+| `zig build verify build-role-calibration --summary all` | Final complete offline CI: 136/136 steps, 1357/1357 tests passed, including architecture and packaged clean-environment smoke checks. |
+| `git diff --check` | Passed. |
+
+Owning-boundary regressions cover every missing role, duplicate and escaped JSON
+keys, closed branches, empty/duplicate/foreign/inactive support IDs, empty/all-inactive
+catalogues, native ordering under key/selection permutations, many-to-many bindings
+and successful/rejected/allocation-failure cleanup. Existing state/revision,
+upstream retirement, reassessment, R10 and canonical readback tests remain active.
+Integration verifies immutable original request/schema bytes, correction origin,
+unchanged exhaustion, exact usage accounting and failure propagation. Independent
+code review found no blocking duplication, legacy reader, gate bypass or weakened
+assertion. A sandbox restriction on Homebrew compiler library reads required
+rerunning offline verification with read access enabled; it was not a code failure.
+The paired-packet audit identified stale sparse-response assignment instructions
+in historical calibration inputs. Production and replay now share the role-context
+builder; replay refreshes only contract instructions while preserving exact facts,
+evidence and purposes. A direct allocation-failure regression covers its uniformly
+owned returned purposes. Final verification includes these follow-ups. Earlier
+prepared current packets are superseded, not live evidence.
+All 54 introduced local Markdown file targets and `git diff --check` pass. Twenty
+pre-existing links to older generated E2E artifacts are unavailable in this
+workspace; their historical statements are not new verification evidence. The
+baseline and current comparison artifacts linked in this section are present.
+
+#### Frozen comparison preparation and remaining acceptance
+
+The [calibration plan](../test/calibration/authoring-roles/README.md) declares one
+intervention: complete required decisions plus their branch instruction versus
+the pre-cutover sparse contract. The old executable and runtime schema/prompt were
+pinned before editing; their hashes and byte-identical cohort/capture copies are
+retained in [the baseline manifest](../zig-out/role-contract-baseline/manifest.json).
+Actual files preserve the filesystem adapter's no-symlink rule. Each arm uses its
+own matching compiled production decoder; historical evidence is unchanged.
+The [frozen paired-plan manifest](../zig-out/role-contract-comparison/manifest.json)
+and [current executable/asset hashes](../zig-out/role-contract-comparison/implementation.json)
+identify the exact prepared requests. All **24 paired trials** have identical
+facts, evidence, purposes, labels, eligible IDs, settings, ancestry and repeat
+bodies. Permitted differences are response schema, contract guidance and
+`assignment.constraints`; the latter is deliberately reprojected for captures,
+not mistaken for unchanged historical request bytes. These preparation artifacts
+retain `not_run`; the distinct live reports below retain actual outcomes.
+
+The prepared plan is **48 new physical diagnostic calls maximum**, split between
+the two arms with two unchanged repeats per case: controlled development 24,
+captured production inputs 8 and the formerly held-out regression cases 16.
+Those known cases are not fresh blind confirmation. Settings, source bytes,
+shared role purposes, eligible IDs and labels are held fixed. No experimental
+guidance file, correction or repair is included. Offline preparation makes no API
+call. The user subsequently approved exactly these 48 live calls under §28.8;
+that allowance is now fully consumed, with no correction or repair sends.
+
+Current reports separate structural missing decision fields, semantic required-role
+omissions, explicit false unsupported decisions and wrong selections, with per-role,
+family, repeat, protocol/native rejection and cost evidence. Unscored semantic rows
+are unavailable, not zero. The sparse baseline cannot establish explicit false
+unsupported decisions; that metric is unavailable there. Its semantic omissions
+remain directly comparable. Rejected answers remain in all-trial denominators.
+
+A full map is not the selection criterion. Improvement must reduce semantic
+omissions without worsening wrong selections, or reduce wrong selections without
+worsening omissions, while exposing captured, family and repeat regressions. If
+the comparison is inconclusive or worse, it supports no semantic promotion claim.
+The mechanical contract is implemented; **improved semantic outcomes are not yet
+established**. Fresh-family, collective-support and genuine post-repair evidence
+retain the limits identified in §9.8. Actual live workflow publication, rubric
+quality and an unchanged E2E repeat require their separate approvals and remain
+unmet acceptance evidence.
+
+#### Live comparison and selection — 9 October 2026
+
+All six approved invocations completed: **24 sparse-baseline and 24 complete-contract
+physical sends**. All 48 have received response evidence and actual usage; there
+were no transport/operational or native-selection rejections. Pinned hashes still
+match. The old and new arms use their matching compiled production decoders, with
+no production legacy path. Independent request/scoring/accounting audits and the
+[aggregate results](../zig-out/role-contract-comparison/results.json) retain exact
+cohort, case, role, unchanged-repeat, byte and cost evidence.
+
+| Premises | Baseline report | Complete-contract report |
+| --- | --- | --- |
+| Controlled development, 12 calls per arm | [Sparse](../zig-out/role-contract-baseline/workspace/zig-out/role-calibration/2026-10-09T06-17-25Z-bbb4feab5c2f7d8f02411f265193584f/report.json) | [Complete](../zig-out/role-calibration/2026-10-09T06-18-19Z-d474da10eff0b18db73e705b556d797a/report.json) |
+| Captured inputs, 4 calls per arm | [Sparse](../zig-out/role-contract-baseline/workspace/zig-out/role-calibration/2026-10-09T06-19-05Z-d3b7f1fc158a665ea6f026211e712495/report.json) | [Complete](../zig-out/role-calibration/2026-10-09T06-19-53Z-9ac586af01316a09b1bed7bebbb00172/report.json) |
+| Known regression, 8 calls per arm | [Sparse](../zig-out/role-contract-baseline/workspace/zig-out/role-calibration/2026-10-09T06-21-08Z-d3f49e948f0262d1ce175571fc8f25fd/report.json) | [Complete](../zig-out/role-calibration/2026-10-09T06-22-26Z-01efd82726a97ecb832997b48385c38d/report.json) |
+
+| Measure | Sparse baseline | Complete contract |
+| --- | ---: | ---: |
+| Declared physical calls / completed replays | 24/24 | 24/24 |
+| Admitted and semantically scored answers | 24/24 | 22/24 |
+| Protocol rejection: missing final text | 0 | 2 |
+| Structural missing decisions | Not defined by sparse contract | 0/132 decisions across 22 answers; 2 answers unknown |
+| Required-role omissions, conditional on admission | 35/124 | 38/117; 7 required-role premises unscored |
+| Explicit false unsupported verdicts | Unavailable | 38/117 |
+| Wrong-basis selected pairs | 39 | 0 |
+| All unsupported / assigned pairs | 41/156 | 2/87 |
+| Exact semantic trials / all trials | 4/24 | 4/24 |
+| Provider-reported input / output tokens | 27,344 / 5,840 | 39,160 / 4,602 |
+| Total provider-reported tokens | 33,184 | 43,762 |
+| Sum of measured replay duration | 58.422 s | 46.448 s |
+
+**Denominators matter:** the two rejected current answers represent seven required
+role premises whose semantics are unknown. They are neither correct assessments
+nor zero omissions. Current observed omissions exceed baseline even before those
+unknown premises; unequal admitted denominators must not be presented as an
+omission-rate improvement. Every observed current omission is an admitted explicit
+unsupported judgment, not an absent decision field. The sparse response cannot
+distinguish a deliberate negative from an unassessed role.
+
+The whole comparison consumed **76,946 actual tokens**. Native request schema
+contributions total 10,936 bytes for baseline versus 56,856 for complete; serialized
+request bodies total 147,706 versus 246,890 bytes. Complete decisions increase
+request and token cost in this sample. Thirty-seven answers use existing response
+normalization (23 baseline, 14 complete). Duration is measured replay time including
+preparation, dispatch, parsing and evidence recording; provider latency is absent
+for every trial. No provider-speed or caching improvement is established.
+
+| Premises | Required-role omissions: baseline → complete | Wrong-basis pairs: baseline → complete | Current false unsupported | Current unusable answers |
+| --- | --- | --- | ---: | ---: |
+| Development | 22/62 → 24/62 | 29 → 0 | 24 | 0 |
+| Captured production inputs | 1/24 → 0/24 | 4 → 0 | 0 | 0 |
+| Known regression | 12/38 → 14/31, with 7 premises unknown | 6 → 0 | 14 | 2 |
+
+Both captured inputs are exact on both current repeats; that is a useful isolated
+routing improvement. It does not erase unrelated regressions. Parcel omissions
+move 9/24 → 10/24 across source-order variants; lamp omissions move 8/24 → 9/24.
+The rule-only inventory's missing basis is recovered, but two unsupported optional
+story selections remain. Wayfinding omissions rise 4/8 → 5/8. Coupon and incident
+premises go from four exact baseline trials to two false-negative answers and two
+unusable answers. Spoken-timer omissions fall 12/24 → 8/24 while order sensitivity
+remains: current source-order variants miss 2/12 versus 6/12.
+
+Across admitted answers, current missing decisions by purpose are title 16/22,
+description 0/17, primary goal 0/18, story 5/16, entity basis 7/22 and records 10/22.
+Some provider traces still interpret the absence of a ready-made title or complete
+acceptance-criterion wording as absence of support, despite shared purposes and
+guidance explicitly allowing derivation. This illustrates an observed semantic
+misinterpretation; it does not establish the internal cause of every negative.
+Unchanged repeats differ on both arms. The complete map makes negative decisions
+observable; it does not establish reasoning fidelity or deterministic selection.
+Independent recomputation confirms differing semantic/outcome results in 7/12
+baseline case pairs and 4/12 complete-contract pairs; the latter includes two
+scored/rejected pairs. A lower variation count does not establish correctness.
+
+The two current unusable answers are `coupon-undecided-outcome` repeat 2 and
+`incident-retention-conflict` repeat 1. Each raw provider response is HTTP 200 with
+finish reason `stop`, containing only a leading reasoning block and no final
+answer after its closing tag. The adapter therefore correctly reports
+`missing_final_text`; this is **not a malformed JSON document, missing map property
+or loss of JSON during normalization**. Reasoning is not a candidate decision and
+cannot substitute for the missing final payload. These diagnostics exercise no
+correction, so production recovery or exhaustion is not established by this sample.
+
+**Selection:** the predeclared no-omission-regression condition is not met. Do not
+promote this comparison as an overall semantic fix or infer publication/rubric
+success. The requested mechanical hardening remains implemented in the working
+tree, with R10 and all existing policy intact; no release or new success rule is
+introduced. Do not force positive roles, reinterpret unsupported as a user gap,
+accept reasoning as JSON, add a semantic retry or route by fixture/content-kind to
+make these cases pass. The next semantic work needs a separately declared
+false-negative experiment on the shared authoring purposes, plus the existing
+generic missing-answer recovery investigation, with these regressions retained.
+That follow-up is outside this contract cutover and grants no additional model calls.

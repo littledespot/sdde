@@ -155,6 +155,20 @@ review or repair instructions, rather than another copy of the definitions.
 These descriptions add no optional-family requirement, semantic rejection or
 cross-kind deduplication rule.
 
+**Authoring-role assessment** remains one initial model call. Its `role_decisions`
+map requires one decision for every registered role: `supported` with nonempty
+unique eligible signal IDs, or `unsupported` without IDs. Role names and purposes
+come from the shared catalogue, not another prompt registry. Native admission
+rejects missing/duplicate roles and duplicate/ineligible selections, then derives
+positive group-role bindings in native offered-group and role order through the
+existing validator. No eligible groups yields an unsupported-only selected schema;
+pending decisions are not default negatives. Upstream repairs retire the complete
+assessment and derived bindings together. Protocol correction retains the same
+immutable packet and complete contract, with the existing allowance. An admitted
+unsupported judgment does not trigger semantic reconsideration, establish a user
+gap or grant entity `not_applicable` authority. See
+[ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#complete-role-decision-amendment-approved-9-october-2026).
+
 **Authoring-role handoff** uses the shared
 [source-binding coverage check](../../src/domain/specification_source_binding.zig)
 before generation. Complete eligible coverage starts authoring. An incomplete
@@ -162,7 +176,8 @@ assignment returns `blocked` with every missing role, the current reference stat
 partition and revision, role-selection request origin, and eligible signal/claim
 IDs. The existing candidate diagnostic carries this evidence into CLI and harness
 reports. Source readiness still establishes structural accounting, not role
-completeness. Unsupported roles remain unassigned; this result authorizes neither
+completeness. Unsupported decisions contribute no canonical positive roles;
+the actual captured response retains the verdict. This result authorizes neither
 default assignments, a user clarification nor an automatic correction call.
 Canonical readback requires complete coverage through the same check.
 
@@ -280,7 +295,12 @@ For authoring-role semantics, the development-only
 [calibration command and cohort](../../test/calibration/authoring-roles/README.md)
 reuse production role packets/schema restrictions, native role admission and the
 existing single-request replay adapter. Labels stay outside model content. The
-candidate guidance is an experiment. The completed
+candidate guidance is an experiment. Baseline and intervention comparisons bind
+each request schema to its matching diagnostic decoder; historical captures are
+immutable and any packet reprojection is explicit. Production has no sparse-wire
+compatibility reader. Reports separate structural missing decisions, false
+unsupported verdicts and wrong supported selections from semantic omissions;
+complete representation is not a quality score. The completed
 [focused pilot](../../fixes/FIX01.md#r7--high-focused-role-calibration-complete-broader-calibration-remains-open)
 found fewer unsupported assignments but unchanged total omissions and a regression
 on the captured production input; it retains production guidance. Neither that
@@ -292,8 +312,12 @@ plus two retained production inputs. Reports identify wrong-basis pairs as a
 subset of unsupported assignments, after ordinary protocol/native admission.
 All 48 approved live comparisons completed. The candidate reduced unsupported
 assignments but increased omissions overall and on captured production inputs;
-production guidance is retained. No genuine post-repair role capture is available,
-and these diagnostic results establish no completed-spec quality improvement.
+production semantic guidance is retained. Those results used the prior sparse
+response contract and do not establish the effect of complete role decisions.
+No genuine post-repair role capture is available, and diagnostic results establish
+no completed-spec quality improvement. The complete-decision intervention still
+requires comparison of omissions and wrong selections before promotion, followed
+by actual live publication, rubric grading and an unchanged repeat under §28.
 
 The [latest captured native-mode run](../../fixes/archive/FIX_001.md#latest-native-json-run--malformed-output-despite-native-schema)
 returned malformed JSON on all three attempts despite the native schema and explicit

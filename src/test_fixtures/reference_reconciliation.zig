@@ -88,6 +88,7 @@ pub fn global(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
     const dispositions = try allocator.alloc(r.ClaimDispositionProposal, input.items.len);
     const signals = try allocator.alloc(r.SignalProposal, input.items.len);
     const roles = try allocator.alloc(r.RoleAssignment, input.items.len);
+    defer allocator.free(roles);
     var role_count: usize = 0;
     var assigned_feature = false;
     for (input.items, dispositions, signals, 0..) |item, *disposition, *signal, index| {
@@ -105,7 +106,31 @@ pub fn global(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
         }
         if (business) assigned_feature = true;
     }
-    return .{ .claim_dispositions = dispositions, .signals = signals, .role_assignments = roles[0..role_count], .conflicts = &.{} };
+    return .{ .claim_dispositions = dispositions, .signals = signals, .role_decisions = try roleDecisions(allocator, roles[0..role_count]), .conflicts = &.{} };
+}
+
+/// Test-only projection of mocked positive assignments into the complete wire table.
+/// Production never reconstructs model decisions from canonical bindings.
+pub fn roleDecisions(a: std.mem.Allocator, assignments: []const r.RoleAssignment) !r.RoleDecisions {
+    var result: r.RoleDecisions = undefined;
+    var initialized: usize = 0;
+    errdefer inline for (std.meta.fields(r.GenerationRole), 0..) |field, index| {
+        if (index < initialized and @field(result, field.name) == .supported) a.free(@field(result, field.name).supported.signal_ids);
+    };
+    inline for (std.meta.fields(r.GenerationRole)) |field| {
+        const role: r.GenerationRole = @enumFromInt(field.value);
+        var ids: std.ArrayList(r.SignalSelectionId) = .empty;
+        defer ids.deinit(a);
+        for (assignments) |assignment| for (assignment.generation_roles) |selected| {
+            if (selected == role) try ids.append(a, assignment.signal_id);
+        };
+        @field(result, field.name) = if (ids.items.len == 0)
+            .{ .unsupported = .{} }
+        else
+            .{ .supported = .{ .signal_ids = try ids.toOwnedSlice(a) } };
+        initialized += 1;
+    }
+    return result;
 }
 
 pub fn initialize(allocator: std.mem.Allocator, inputs: r.evidence.Inputs, extracted: r.extraction.Accounted, size: u32) !r.Progress {

@@ -1149,7 +1149,15 @@ test "configured source preservation reviews before generation and repairs throu
     try testSpecificationWorkflows(.source_preservation);
 }
 
-fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation }) !void {
+test "configured role assessment corrects an omitted decision with its original request and schema" {
+    try testSpecificationWorkflows(.role_decision_recovery);
+}
+
+test "configured role assessment exhausts repeated omitted decisions without authoring" {
+    try testSpecificationWorkflows(.role_decision_exhaustion);
+}
+
+fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation, role_decision_recovery, role_decision_exhaustion }) !void {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
     const faults = [_]@import("../../src/test_fixtures/spec_generation_driver.zig").Fault{
@@ -1215,10 +1223,21 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
     const principle_faults = std.meta.tags(@import("../../src/test_fixtures/spec_generation_responses.zig").PrincipleFault);
     const timing = @import("../../src/test_fixtures/scenario_timing.zig");
     const membership_start = principle_start + principle_faults.len * 2;
-    const preservation_start = membership_start + 8;
+    const role_decision_start = membership_start + 8;
+    const preservation_start = role_decision_start + 2;
     var costs: [preservation_start + 3]?timing.Sample = @splat(null);
-    const case_range_begin: usize = if (workflow_cases == .source_preservation) preservation_start else 0;
-    const case_range_end: usize = if (workflow_cases == .source_preservation) costs.len else preservation_start;
+    const case_range_begin: usize = switch (workflow_cases) {
+        .existing => 0,
+        .source_preservation => preservation_start,
+        .role_decision_recovery => role_decision_start,
+        .role_decision_exhaustion => role_decision_start + 1,
+    };
+    const case_range_end: usize = switch (workflow_cases) {
+        .existing => role_decision_start,
+        .source_preservation => costs.len,
+        .role_decision_recovery => role_decision_start + 1,
+        .role_decision_exhaustion => preservation_start,
+    };
     defer timing.report(io, "specification-generation", costs[case_range_begin..case_range_end]) catch |err| std.debug.panic("scenario timing report failed: {s}", .{@errorName(err)});
     for (case_range_begin..case_range_end) |scenario| {
         var cost = timing.Timer.start(io, &costs[scenario]);
@@ -1226,7 +1245,8 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         const principle_fault = if (scenario >= principle_start and scenario < membership_start) principle_faults[(scenario - principle_start) % principle_faults.len] else null;
         const applicability = if (scenario >= applicability_start and scenario < principle_start) applicability_cases[(scenario - applicability_start) % applicability_cases.len] else null;
         const other_applicability = scenario >= applicability_start + applicability_cases.len;
-        const membership_scenario = scenario >= membership_start and scenario < preservation_start;
+        const membership_scenario = scenario >= membership_start and scenario < role_decision_start;
+        const role_decision_scenario = scenario >= role_decision_start and scenario < preservation_start;
         const preservation_scenario = scenario >= preservation_start;
         const brief_scenario = scenario >= brief_start and scenario < applicability_start;
         const global_scenario = scenario >= global_start and scenario < brief_start;
@@ -1374,6 +1394,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             if (selected_fault.shape == .alternating_missing) driver.measurement_prefix = ".zig-cache/r37-recovery";
         }
         driver.principle_conflict = scenario == 1;
+        if (role_decision_scenario) driver.role_decision_fault = if (scenario == role_decision_start) .recover else .exhaust;
         driver.principle_fault = principle_fault;
         if (scenario < principle_start + principle_faults.len) {
             if (principle_fault) |mode| driver.measurement_prefix = switch (mode) {
@@ -1474,6 +1495,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         cost.enter(.assertions);
         if (global_scenario) try @import("../../src/test_fixtures/global_protocol_sequence.zig").verify(&driver, result);
         if (summary_scenario) try @import("../../src/test_fixtures/summary_protocol_sequence.zig").verify(&driver, result);
+        if (role_decision_scenario) try driver.verifyRoleDecisionSequence(result);
         const retained_repaired_source = reconciliation_scenario and (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition);
         const repaired_signal_coverage = driver.reconciliation_fault == .signal_coverage and driver.reconciliation_protocol_fault != .foreign_content_always;
         const review_scope_attack = fault != null and (fault.?.shape == .review_dropped or fault.?.shape == .review_changed);
@@ -1482,7 +1504,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             .no_entities, .entities => .ok,
             .unjustified, .missing_decision, .missing_text => .needs_user,
             .inconclusive => .invalid,
-        } else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (review_scope_attack or driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_correction or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
+        } else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (review_scope_attack or driver.role_decision_fault == .exhaust or driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_correction or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}; operation: {s}; candidate: {any}\n", .{ scenario, result, driver.rejected_operation orelse "none", try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (preservation_scenario) {
@@ -1969,10 +1991,17 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 const calls = runner.tokenLedger().accounted_operations.items;
                 const identities = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/model_request_workflow.zig").ledger_schema, @import("../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
                 var producer_found = false;
-                for (calls) |call| if (gap.origin.?.matches(identities, call.id)) {
-                    producer_found = true;
-                };
+                var role_attempts: usize = 0;
+                for (calls) |call| {
+                    if (gap.origin.?.matches(identities, call.id)) producer_found = true;
+                    const owner = call.id.model_request_id.immutable_unit_owner_id;
+                    if (owner == .reference_global and std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, "-roles-") != null) {
+                        role_attempts += 1;
+                        try std.testing.expectEqual(@as(u32, 1), call.id.model_attempt_ordinal.value);
+                    }
+                }
                 try std.testing.expect(producer_found);
+                try std.testing.expectEqual(@as(usize, 1), role_attempts);
                 try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
             } else if (occupied) {
                 try std.testing.expect(diagnostic == null);

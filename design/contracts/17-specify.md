@@ -158,17 +158,36 @@ Typed content covers these concerns; each concern does not require a separate ca
 
 The approved ADR 0020 successor binds source-obligation groups from validated
 reconciliation signals before model authoring. Signal grouping and authoring-role
-assignment are separate model calls. Feature-level fields have explicit
-group-role assignments. Reconciliation assignments use ADR 0016's native
-assignment contexts over one complete evidence catalogue. Role assignment receives
-only its exact-group rule and role purposes projected from the shared requirement
-descriptions; summary, disposition, signal and conflict rules remain with their
-own assignments. A group may support several roles and a role several groups;
-unsupported roles remain unassigned and mandatory coverage still blocks authoring.
+assignment are separate model calls. One initial role request returns a closed
+`role_decisions` object with one required property per registered `GenerationRole`:
+`supported` with nonempty unique `signal_ids`, or `unsupported` without selections.
+The schema and typed map are checked against that shared catalogue; omitted,
+unknown or duplicate roles, malformed branches and duplicate/ineligible selections
+reject. Native admission derives the existing positive group-role assignments in
+offered-group and registered-role order. A group may support several roles and a
+role several groups; this conversion preserves group boundaries and does not infer
+semantic support. An empty eligible catalogue admits only unsupported decisions.
+Reconciliation assignments use ADR 0016's native assignment contexts over one
+complete evidence catalogue. Role assignment receives only its exact-group rule
+and role purposes projected from the shared requirement descriptions; summary,
+disposition, signal and conflict rules remain with their own assignments.
+An admitted unsupported verdict is a model candidate, not proof of a user
+information gap, clarification authority or an entity `not_applicable` result.
+Unsupported roles remain unassigned in canonical signals and mandatory coverage
+still blocks authoring through the shared source-binding gate. Protocol correction
+retains the same complete decision contract, evidence and existing allowance;
+an unsupported verdict grants no semantic retry.
 Role packets and admission use the same retained-claim support rule as source
 binding and canonical readback. A historical or mixed inactive group cannot
 acquire authoring roles; native choice projection retains original group handles
 and complete source evidence under [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md).
+Upstream changes retire the complete role assessment, its producer origin and all
+derived assignments together. Pending decisions cannot default to unsupported;
+unchanged canonical persistence retains positive roles, while captured response
+evidence retains the reported negative verdicts. Structural completeness does not
+establish semantic accuracy or improved live outcomes; compare omissions, false
+unsupported verdicts and wrong selections before promotion, then verify actual
+publication and rubric quality under §28.
 Shared field purposes describe derivation from source-backed behavior, not a
 requirement for a ready-made title, goal or story in the source. Role assignment
 assesses each purpose using explicit or necessarily implied meaning; it cannot

@@ -23,11 +23,13 @@ test "reconciliation rejects the observed native union response and accepts the 
     try candidateCase("reconciliation", "summary", "{\"statements\":[{\"local_key\":1,\"claim_ids\":[1],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"Display the greeting.\"]}}}]}", .unknown_property, "/statements/0/local_key");
 }
 
-test "reconciliation roles have a separate closed native-handle assignment" {
-    try checkCandidate("reconciliation", "roles_assignment", "{\"role_assignments\":[{\"signal_id\":1,\"generation_roles\":[\"title\",\"records\"]}]}");
-    try candidateSchemaCase("reconciliation", "roles_assignment", "{\"role_assignments\":[{\"signal_id\":1,\"generation_roles\":[]}]}", .array_length, "/role_assignments/0/generation_roles");
-    try candidateSchemaCase("reconciliation", "roles_assignment", "{\"role_assignments\":[{\"signal_id\":1,\"generation_roles\":[\"unknown\"]}]}", .enum_mismatch, "/role_assignments/0/generation_roles/0");
-    try candidateCase("reconciliation", "roles_assignment", "{\"role_assignments\":[{\"signal_id\":1,\"claim_ids\":[1],\"generation_roles\":[\"records\"]}]}", .unknown_property, "/role_assignments/0/claim_ids");
+test "reconciliation roles require a complete closed decision table" {
+    const good =
+        \\{"role_decisions":{"title":{"kind":"supported","signal_ids":[1]},"description":{"kind":"unsupported"},"primary_goal":{"kind":"unsupported"},"primary_user_story":{"kind":"unsupported"},"entity_basis":{"kind":"unsupported"},"records":{"kind":"supported","signal_ids":[1]}}}
+    ;
+    try checkCandidate("reconciliation", "roles_assignment", good);
+    try candidateCase("reconciliation", "roles_assignment", "{\"role_assignments\":[]}", .unknown_property, "/role_assignments");
+    try candidateCase("reconciliation", "roles_assignment", "{\"role_decisions\":{}}", .missing_required_property, "/role_decisions/title");
 }
 
 test "compact model JSON keeps sibling objects intact and round trips native unions" {

@@ -5,6 +5,7 @@
 - **Decision authority:** Explicit user approval of Phase 0.2 in [LLM_REWORK](../../fixes/archive/LLM_REWORK.md).
 - **27 September 2026 amendment authority:** Explicit user approval of provenance-free, source-bound per-unit assignments in this session.
 - **28 September 2026 amendment authority:** Explicit user instruction to clarify generation-role assignment and require nonempty role lists when supplied.
+- **9 October 2026 amendment authority:** Explicit user instruction to implement the complete role-decision contract in [FIX01 §9.8](../../fixes/FIX01.md#98-complete-role-decisions-critical-review--9-october-2026), including shared admission, lifecycle and calibration paths.
 - **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1. The overall design remains Proposed.
 
 ## Boundary and representation
@@ -50,10 +51,11 @@ capability.
 The model chooses source meaning during reconciliation; the engine retains the
 validated claim group on each reconciliation signal. Reconciliation also records
 the semantic generation roles of those groups for feature-level fields. The
-model omits `generation_roles` for a context-only signal; a supplied role list is
-nonempty. The validated signal records the omitted case as an empty list. The
-engine validates group membership and role coverage, then binds each attributed
-field or record-generation task to its current source obligation before
+complete role-decision amendment below supersedes sparse model role lists.
+Canonical signals retain derived positive `generation_roles`; an unselected
+context-only signal retains an empty list. The engine validates group membership
+and role coverage, then binds each attributed field or record-generation task to
+its current source obligation before
 dispatch. It resolves that bound group through the existing reference ledger
 to construct canonical `S`. A record task is scoped to one group and may
 produce several requirements. A group may contain claims from several original
@@ -90,6 +92,45 @@ system.
 The coordinated runtime cutover implements this amendment. Offline schema,
 repair, readback and workflow checks establish mechanical conformance; live
 semantic quality and reliability require separately approved execution.
+
+## Complete role-decision amendment (approved 9 October 2026)
+
+One initial reconciliation role request assesses every registered `GenerationRole`.
+Its closed `role_decisions` map requires one property per role. Each decision is
+either `{"kind":"supported","signal_ids":[...]}` with a nonempty unique selection
+from the current eligible signal occurrence catalogue, or
+`{"kind":"unsupported"}` with no selection. Requiredness is mechanically checked
+against the existing role catalogue. Missing, unknown or duplicate role properties,
+empty positive selections, duplicate/ineligible IDs and the superseded sparse wire
+shape reject; no defaults, legacy reader or inferred selections apply. When no
+group is eligible, the selected schema permits only unsupported decisions.
+
+Native role admission shares the retained-claim eligibility owner and derives the
+existing positive group-role assignments in offered-group and registered-role
+order. It preserves many-to-many support and group boundaries, rejects duplicate
+IDs before conversion and validates the derived bindings through the existing
+validator. ID membership and complete representation do not prove semantic support.
+The reported unsupported verdict remains candidate data: it neither establishes a
+missing user fact nor authorizes clarification, `not_applicable`, a default binding
+or semantic correction. Mandatory positive coverage still blocks authoring through
+the existing shared source-binding gate.
+
+Production, immutable protocol corrections and diagnostic calibration use the same
+current contract and admission owner. Existing correction bounds apply only to
+protocol rejection; a complete unsupported answer is structurally admissible.
+Upstream repair retires the role assessment, producer origin and derived bindings
+together before reassessment. Pending phases have no fabricated negative decisions.
+Canonical snapshots retain their positive roles; negative verdicts remain in the
+actual captured response, not a second persisted source of binding authority. This
+wire cutover introduces no new state version, repair target, retry policy or model
+slot. Historical captures remain immutable and their response contract must stay
+associated with the appropriate diagnostic decoder.
+
+Offline conformance establishes these mechanics. Semantic omissions, explicit false
+unsupported verdicts and wrong selections must still be compared against baseline;
+complete live publication and rubric assessment establish production quality. This
+amendment accepts the contract change, not a demonstrated semantic improvement or
+the overall Proposed design.
 
 ## Repair and validation
 

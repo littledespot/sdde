@@ -15,6 +15,23 @@ test "reference packet and iteration allocations have deterministic cleanup" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, exercisePackets, .{});
 }
 
+test "shared role context owns its purposes and cleans up every allocation failure" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, roleContextAllocations, .{});
+}
+fn roleContextAllocations(a: std.mem.Allocator) !void {
+    const context = try input.roleContext(a);
+    defer {
+        for (context.role_definitions) |definition| a.free(definition.purpose);
+        a.free(context.role_definitions);
+        a.free(context.constraints);
+    }
+    const r = reconciliation.r;
+    try std.testing.expectEqual(std.meta.tags(r.GenerationRole).len, context.role_definitions.len);
+    try std.testing.expectEqual(@as(usize, 1), context.constraints.len);
+    try std.testing.expectEqual(.supported_role_assignment, context.constraints[0].constraint);
+    for (context.role_definitions) |definition| try std.testing.expect(definition.purpose.len != 0);
+}
+
 test "reconciliation assignments scope instructions while retaining complete source evidence" {
     for ([_][]const u8{
         "The application must start. Display `Hello, World!` and the current UTC time.\n",
@@ -69,18 +86,18 @@ test "role handoffs offer and accept the same retained groups as authoring and r
         try std.testing.expectEqual(@as(i64, 2), offered[0].object.get("signal_id").?.integer);
         try std.testing.expectEqual(global.items.len, body.value.object.get("claims").?.array.items.len);
         const roles = std.enums.values(r.GenerationRole);
-        const bad: stage.Response = .{ .roles = .{ .role_assignments = &.{.{ .signal_id = .{ .ordinal = 1 }, .generation_roles = roles }} } };
+        const bad: stage.Response = .{ .roles = .{ .role_decisions = try reconciliation.roleDecisions(a, &.{.{ .signal_id = .{ .ordinal = 1 }, .generation_roles = roles }}) } };
         var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
         const resource = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited));
         const restricted = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, resource.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
         defer restricted.release();
         const check = @import("model_payload_schema_test.zig").checkDocument;
-        try check(restricted.selected().modelBytes(), .{ .bytes = try codec.encodeSelected(stage.Response, a, bad), .rejection = .enum_mismatch, .path = "/role_assignments/0/signal_id" });
+        try check(restricted.selected().modelBytes(), .{ .bytes = try codec.encodeSelected(stage.Response, a, bad), .rejection = .enum_mismatch, .path = "/role_decisions/title/signal_ids/0" });
         const rejected = try stage.collect(a, .{ .roles = signals }, packet, try codec.encodeSelected(stage.Response, a, bad), origin);
         const failure = (try reconciliation.validate_roles.execute(a, (try reconciliation.validate_signals.execute(a, (try reconciliation.validate_dispositions.execute(a, rejected)).valid, fixture.context())).valid)).invalid;
         try std.testing.expectEqual(.role_assignment, failure.issue.rule);
         try std.testing.expectEqualDeep(origin, failure.origin.?);
-        const good: stage.Response = .{ .roles = .{ .role_assignments = &.{.{ .signal_id = .{ .ordinal = 2 }, .generation_roles = roles }} } };
+        const good: stage.Response = .{ .roles = .{ .role_decisions = try reconciliation.roleDecisions(a, &.{.{ .signal_id = .{ .ordinal = 2 }, .generation_roles = roles }}) } };
         try check(restricted.selected().modelBytes(), .{ .bytes = try codec.encodeSelected(stage.Response, a, good) });
         const accepted = try stage.collect(a, .{ .roles = signals }, packet, try codec.encodeSelected(stage.Response, a, good), origin);
         const complete = (try reconciliation.finish(a, global, accepted.proposal.global, fixture.context())).valid;

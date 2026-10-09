@@ -35,7 +35,7 @@ flowchart LR
     RC --> GLOBAL["Native global phase handoffs<br/>4 validated semantic assignments"]
     GLOBAL --> DISPOSITIONS["dispositions<br/>dispositions-prompt"]
     GLOBAL --> SIGNALS["signals<br/>signals-prompt"]
-    GLOBAL --> ROLES["roles<br/>roles-prompt"]
+    GLOBAL --> ROLES["roles<br/>roles-prompt<br/>1 complete role-decision request"]
     GLOBAL --> CONFLICTS["conflicts<br/>conflicts-prompt"]
     RC -. "Invalid summary" .-> RC_REPAIR["repair-reconciliation-candidate<br/>repair-prompt<br/>Authorized reconciliation repair"]
 
@@ -57,10 +57,16 @@ flowchart LR
 Global calls execute in this order: **dispositions → validate → signals → validate
 → roles → validate → conflicts → validate**. The next call receives native accepted
 facts, rather than unchecked response JSON. Repairs retire affected descendants
-and request pending assignments again. Roles select stable signal occurrence
-handles whose complete claim selections are retained; historical groups remain
-evidence without authoring roles. Admission and readback use that same eligibility
-rule. Conflicts select accepted group handles. Native code constructs token
+and request pending assignments again. Roles return one complete required decision
+map: each registered role selects supporting stable signal occurrence handles or
+reports unsupported. Native admission rejects missing/duplicate decisions and
+duplicate/ineligible selections, then derives positive group-role assignments in
+offered-group and role order. Selected groups' complete claim selections must be
+retained; historical groups remain evidence without authoring roles. An empty
+eligible catalogue permits only unsupported decisions. Admission and readback use
+that same eligibility rule. Upstream changes retire the complete assessment,
+producer origin and derived assignments together; pending is not unsupported.
+Conflicts select accepted group handles. Native code constructs token
 projections and reciprocal relationships. Summary partitions finish before the
 global phase handoffs. The YAML sets
 reconciliation `group-size: 8`; the resulting partition count depends on the
@@ -84,8 +90,13 @@ routes through source review and the authority gate.
 Native generation initialization checks all authoring roles before the first
 authoring request. Incomplete coverage ends `blocked`, retaining the missing roles,
 reference state/revision, role-selection request origin and eligible groups in the
-shared candidate diagnostic. It adds no model call, automatic role assignment or
-correction allowance. Source readiness remains a separate structural check.
+shared candidate diagnostic. Explicit unsupported decisions supply no positive
+coverage and grant no clarification or entity `not_applicable` authority. Protocol
+correction retains the complete map and immutable packet under existing bounds;
+unsupported adds no semantic retry. The gate adds no model call, automatic role
+assignment or correction allowance. Source readiness remains a separate structural
+check. Complete decisions prove representation only; semantic improvement still
+requires baseline comparison and actual publication/rubric evidence.
 
 Generation runs **brief → primary user story → entities → record groups**.
 After assembly and deterministic coverage validation, source review runs before

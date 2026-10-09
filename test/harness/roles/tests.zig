@@ -16,7 +16,14 @@ const labels = [_]c.Label{
     .{ .role = .records, .required = true, .allowed_signal_ids = &.{.{ .ordinal = 1 }} },
 };
 fn validation(a: std.mem.Allocator, assignments: []const r.RoleAssignment) !debug.Validation {
-    return .{ .extraction = .valid, .json = .valid, .schema = .valid, .parsed = try @import("../../../src/domain/strict_json.zig").decode(std.json.Value, a, try codec.encodeSelected(@import("../../../src/domain/reference_reconciliation_stage.zig").Response, a, .{ .roles = .{ .role_assignments = assignments } }), .{ .maximum_depth = 32 }) };
+    const decisions = try @import("../../../src/test_fixtures/reference_reconciliation.zig").roleDecisions(a, assignments);
+    return .{ .extraction = .valid, .json = .valid, .schema = .valid, .parsed = try @import("../../../src/domain/strict_json.zig").decode(std.json.Value, a, try codec.encodeSelected(@import("../../../src/domain/reference_reconciliation_stage.zig").Response, a, .{ .roles = .{ .role_decisions = decisions } }), .{ .maximum_depth = 32 }) };
+}
+fn expectCounts(expected: score.Counts, actual: score.Counts) !void {
+    inline for (@typeInfo(score.Counts).@"struct".fields) |field| {
+        if (comptime std.mem.eql(u8, field.name, "by_role")) continue;
+        try std.testing.expectEqual(@field(expected, field.name), @field(actual, field.name));
+    }
 }
 fn validateControlledLabels(a: std.mem.Allocator, sources: []const c.Source, case_labels: []const c.Label, rationale: []const u8) !void {
     const packet = try @import("input.zig").packet(std.testing.io, a, sources);
@@ -38,9 +45,11 @@ test "role calibration separates omission, invented support and native/protocol 
         try std.testing.expectEqual(@as(usize, 2), input.accepted.signals.len);
         const all = std.meta.tags(r.GenerationRole);
         const good = try score.assess(a, input.accepted, &labels, try validation(a, &.{.{ .signal_id = .{ .ordinal = 1 }, .generation_roles = all }}));
-        try std.testing.expectEqual(score.Counts{ .required_roles = 6, .assigned_pairs = 6 }, good.scored);
+        try expectCounts(score.Counts{ .required_roles = 6, .assigned_pairs = 6 }, good.scored);
         const omitted = try score.assess(a, input.accepted, &labels, try validation(a, &.{.{ .signal_id = .{ .ordinal = 1 }, .generation_roles = &.{ .title, .description, .primary_goal, .primary_user_story, .records } }}));
         try std.testing.expectEqual(@as(u32, 1), omitted.scored.missing_supported_roles);
+        try std.testing.expectEqual(@as(u32, 1), omitted.scored.false_unsupported_roles);
+        try std.testing.expectEqual(score.RoleCounts{ .role = .entity_basis, .required_roles = 1, .missing_supported_roles = 1, .false_unsupported_roles = 1 }, omitted.scored.by_role[@intFromEnum(r.GenerationRole.entity_basis)]);
         const invented = try score.assess(a, input.accepted, &labels, try validation(a, &.{ .{ .signal_id = .{ .ordinal = 1 }, .generation_roles = all }, .{ .signal_id = .{ .ordinal = 2 }, .generation_roles = &.{.entity_basis} } }));
         try std.testing.expectEqual(@as(u32, 1), invented.scored.unsupported_pairs);
         try std.testing.expectEqual(@as(u32, 1), invented.scored.wrong_basis_pairs);
@@ -73,16 +82,17 @@ test "partial mandatory labels separate missing support, wrong basis and unsuppo
     partial[2] = .{ .role = .primary_goal, .required = true, .allowed_signal_ids = &.{.{ .ordinal = 2 }} };
     try score.validateLabels(input.accepted, &partial);
     const supported = try score.assess(a, input.accepted, &partial, try validation(a, &.{.{ .signal_id = .{ .ordinal = 2 }, .generation_roles = &.{ .title, .primary_goal } }}));
-    try std.testing.expectEqual(score.Counts{ .required_roles = 2, .assigned_pairs = 2 }, supported.scored);
+    try expectCounts(score.Counts{ .required_roles = 2, .assigned_pairs = 2 }, supported.scored);
     const omitted = try score.assess(a, input.accepted, &partial, try validation(a, &.{.{ .signal_id = .{ .ordinal = 2 }, .generation_roles = &.{.title} }}));
-    try std.testing.expectEqual(score.Counts{ .required_roles = 2, .assigned_pairs = 1, .missing_supported_roles = 1 }, omitted.scored);
+    try expectCounts(score.Counts{ .required_roles = 2, .assigned_pairs = 1, .missing_supported_roles = 1, .false_unsupported_roles = 1 }, omitted.scored);
     const unsupported = try score.assess(a, input.accepted, &partial, try validation(a, &.{.{ .signal_id = .{ .ordinal = 2 }, .generation_roles = &.{ .title, .primary_goal, .entity_basis } }}));
-    try std.testing.expectEqual(score.Counts{ .required_roles = 2, .assigned_pairs = 3, .unsupported_pairs = 1 }, unsupported.scored);
+    try expectCounts(score.Counts{ .required_roles = 2, .assigned_pairs = 3, .unsupported_pairs = 1 }, unsupported.scored);
     const wrong_basis = try score.assess(a, input.accepted, &partial, try validation(a, &.{
         .{ .signal_id = .{ .ordinal = 2 }, .generation_roles = &.{.title} },
         .{ .signal_id = .{ .ordinal = 1 }, .generation_roles = &.{.primary_goal} },
     }));
-    try std.testing.expectEqual(score.Counts{ .required_roles = 2, .assigned_pairs = 2, .missing_supported_roles = 1, .unsupported_pairs = 1, .wrong_basis_pairs = 1 }, wrong_basis.scored);
+    try expectCounts(score.Counts{ .required_roles = 2, .assigned_pairs = 2, .missing_supported_roles = 1, .unsupported_pairs = 1, .wrong_basis_pairs = 1 }, wrong_basis.scored);
+    try std.testing.expectEqual(score.RoleCounts{ .role = .primary_goal, .required_roles = 1, .missing_supported_roles = 1, .assigned_pairs = 1, .unsupported_pairs = 1, .wrong_basis_pairs = 1 }, wrong_basis.scored.by_role[@intFromEnum(r.GenerationRole.primary_goal)]);
 }
 test "role support spans later groups and follows group identity through source and assignment reordering" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -118,20 +128,20 @@ test "role support spans later groups and follows group identity through source 
             .{ .signal_id = actor, .generation_roles = &.{ .primary_user_story, .entity_basis, .records } },
         };
         const expected: score.Counts = .{ .required_roles = 6, .assigned_pairs = 7 };
-        try std.testing.expectEqual(expected, (try score.assess(a, input.accepted, &split, try validation(a, &assignments))).scored);
+        try expectCounts(expected, (try score.assess(a, input.accepted, &split, try validation(a, &assignments))).scored);
         const reversed_assignments = [_]r.RoleAssignment{ assignments[1], assignments[0] };
         var reordered_facts = input.accepted;
         const reordered_groups = try a.dupe(roles.Group, input.accepted.signals);
         std.mem.reverse(roles.Group, reordered_groups);
         reordered_facts.signals = reordered_groups;
-        try std.testing.expectEqual(expected, (try score.assess(a, reordered_facts, &split, try validation(a, &reversed_assignments))).scored);
+        try expectCounts(expected, (try score.assess(a, reordered_facts, &split, try validation(a, &reversed_assignments))).scored);
         const omitted = try score.assess(a, input.accepted, &split, try validation(a, assignments[0..1]));
-        try std.testing.expectEqual(score.Counts{ .required_roles = 6, .assigned_pairs = 4, .missing_supported_roles = 2 }, omitted.scored);
+        try expectCounts(score.Counts{ .required_roles = 6, .assigned_pairs = 4, .missing_supported_roles = 2, .false_unsupported_roles = 2 }, omitted.scored);
         const swapped = [_]r.RoleAssignment{
             .{ .signal_id = actor, .generation_roles = assignments[0].generation_roles },
             .{ .signal_id = intent, .generation_roles = assignments[1].generation_roles },
         };
-        try std.testing.expectEqual(score.Counts{ .required_roles = 6, .assigned_pairs = 7, .missing_supported_roles = 5, .unsupported_pairs = 5, .wrong_basis_pairs = 5 }, (try score.assess(a, input.accepted, &split, try validation(a, &swapped))).scored);
+        try expectCounts(score.Counts{ .required_roles = 6, .assigned_pairs = 7, .missing_supported_roles = 5, .unsupported_pairs = 5, .wrong_basis_pairs = 5 }, (try score.assess(a, input.accepted, &split, try validation(a, &swapped))).scored);
     }
 }
 test "calibration labels permit alternatives and ambiguity without rewarding invented assignments" {
@@ -146,16 +156,40 @@ test "calibration labels permit alternatives and ambiguity without rewarding inv
     const accepted = try score.assess(a, input.accepted, &alternatives, try validation(a, &.{.{ .signal_id = .{ .ordinal = 2 }, .generation_roles = std.meta.tags(r.GenerationRole) }}));
     try std.testing.expectEqual(@as(u32, 0), accepted.scored.missing_supported_roles);
     for (&alternatives) |*label| label.required = false;
-    try std.testing.expectEqual(score.Counts{}, (try score.assess(a, input.accepted, &alternatives, try validation(a, &.{}))).scored);
+    try expectCounts(score.Counts{}, (try score.assess(a, input.accepted, &alternatives, try validation(a, &.{}))).scored);
     const ambiguous = try score.assess(a, input.accepted, &alternatives, try validation(a, &.{
         .{ .signal_id = .{ .ordinal = 1 }, .generation_roles = &.{.entity_basis} },
         .{ .signal_id = .{ .ordinal = 2 }, .generation_roles = &.{.entity_basis} },
     }));
-    try std.testing.expectEqual(score.Counts{ .assigned_pairs = 2 }, ambiguous.scored);
+    try expectCounts(score.Counts{ .assigned_pairs = 2 }, ambiguous.scored);
     const outside = try score.assess(a, input.accepted, &alternatives, try validation(a, &.{.{ .signal_id = .{ .ordinal = 3 }, .generation_roles = &.{.entity_basis} }}));
-    try std.testing.expectEqual(score.Counts{ .assigned_pairs = 1, .unsupported_pairs = 1, .wrong_basis_pairs = 1 }, outside.scored);
+    try expectCounts(score.Counts{ .assigned_pairs = 1, .unsupported_pairs = 1, .wrong_basis_pairs = 1 }, outside.scored);
     alternatives[0].allowed_signal_ids = &.{.{ .ordinal = 999 }};
     try std.testing.expectError(error.InvalidEvaluationContract, score.validateLabels(input.accepted, &alternatives));
+}
+test "complete role calibration distinguishes missing decision fields from false unsupported semantics" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const packet = try @import("input.zig").packet(std.testing.io, a, &.{.{ .text = "MOCK Display a loan renewal outcome.\n", .kind = .business }});
+    defer packets.release(packet);
+    const input = try codec.decode(@import("../../../src/domain/reference_model_input.zig").RoleInput, a, packet.body());
+    const negative = try validation(a, &.{});
+    try std.testing.expectEqual(score.DecisionCoverage{ .required_decisions = 6, .missing_decisions = 0 }, score.decisionCoverage(negative).?);
+    const assessed = try score.assess(std.testing.allocator, input.accepted, &labels, negative);
+    try expectCounts(.{ .required_roles = 6, .missing_supported_roles = 6, .false_unsupported_roles = 6 }, assessed.scored);
+    var missing = try validation(a, &.{});
+    try std.testing.expect(missing.parsed.?.object.getPtr("role_decisions").?.object.swapRemove("entity_basis"));
+    missing.schema = .invalid;
+    try std.testing.expectEqual(score.DecisionCoverage{ .required_decisions = 6, .missing_decisions = 1 }, score.decisionCoverage(missing).?);
+    try std.testing.expectEqual(.protocol_rejected, try score.assess(std.testing.allocator, input.accepted, &labels, missing));
+    const old: debug.Validation = .{ .extraction = .valid, .json = .valid, .schema = .valid, .parsed = try @import("../../../src/domain/strict_json.zig").decode(std.json.Value, a, "{\"role_assignments\":[]}", .{ .maximum_depth = 32 }) };
+    try std.testing.expectEqual(.protocol_rejected, try score.assess(std.testing.allocator, input.accepted, &labels, old));
+    try std.testing.expectEqual(score.DecisionCoverage{ .required_decisions = 6, .missing_decisions = 6 }, score.decisionCoverage(old).?);
+    try std.testing.expect(score.decisionCoverage(.{}) == null);
+    var malformed = negative;
+    malformed.json = .invalid;
+    try std.testing.expect(score.decisionCoverage(malformed) == null);
 }
 test "calibration uses closed cohort labels and explicit invocation with no live default" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -212,11 +246,13 @@ test "calibration reports unusable answers and unknown usage without a false qua
     const report = @import("report.zig");
     const prepared: report.Trial = .{ .case_id = "MOCK-case", .family = "MOCK-family", .split = .development, .input_origin = .controlled, .repeat = 1, .variant = .baseline, .guidance_bytes = 10, .input_bytes = 20, .schema_bytes = 30 };
     var valid = prepared;
-    valid.outcome = .{ .scored = .{ .required_roles = 6, .assigned_pairs = 8, .missing_supported_roles = 1, .unsupported_pairs = 2, .wrong_basis_pairs = 1 } };
+    valid.outcome = .{ .scored = .{ .required_roles = 6, .assigned_pairs = 8, .missing_supported_roles = 1, .false_unsupported_roles = 1, .unsupported_pairs = 2, .wrong_basis_pairs = 1 } };
     valid.validation = .{ .input_tokens = 10, .output_tokens = 5 };
+    valid.decision_coverage = .{ .required_decisions = 6, .missing_decisions = 0 };
     var unusable = prepared;
     unusable.outcome = .protocol_rejected;
     unusable.validation = .{};
+    unusable.decision_coverage = .{ .required_decisions = 6, .missing_decisions = 1 };
     var failed = prepared;
     failed.failure = "MOCK-transport-failure";
     var exact = prepared;
@@ -232,6 +268,10 @@ test "calibration reports unusable answers and unknown usage without a false qua
     try std.testing.expectEqual(@as(u64, 0), counts[0].exact_semantic_cases);
     try std.testing.expectEqual(@as(u64, 6), counts[0].required_roles);
     try std.testing.expectEqual(@as(u64, 1), counts[0].missing_supported_roles);
+    try std.testing.expectEqual(@as(u64, 1), counts[0].false_unsupported_roles);
+    try std.testing.expectEqual(@as(u64, 2), counts[0].decision_observations);
+    try std.testing.expectEqual(@as(u64, 1), counts[0].missing_decisions);
+    try std.testing.expectEqual(@as(u64, 12), counts[0].required_decisions);
     try std.testing.expectEqual(@as(u64, 8), counts[0].assigned_pairs);
     try std.testing.expectEqual(@as(u64, 2), counts[0].unsupported_pairs);
     try std.testing.expectEqual(@as(u64, 1), counts[0].wrong_basis_pairs);
@@ -242,13 +282,17 @@ test "calibration reports unusable answers and unknown usage without a false qua
     defer std.testing.allocator.free(measured);
     try std.testing.expect(std.mem.indexOf(u8, measured, "Wrong-basis / unsupported pairs") != null);
     try std.testing.expect(std.mem.indexOf(u8, measured, "subset of unsupported pairs whose role has at least one labelled allowed group") != null);
-    try std.testing.expect(std.mem.indexOf(u8, measured, "| baseline | 3 | 1 | 1 | 0 | 1 | 1/6 | 2/8 | 1/2 | 0 |") != null);
-    try std.testing.expect(std.mem.indexOf(u8, measured, "| candidate | 1 | 1 | 0 | 0 | 0 | 0/2 | 0/2 | 0/0 | 1 |") != null);
-    try std.testing.expect(std.mem.indexOf(u8, measured, "| MOCK-case | controlled | 1 | baseline | scored | 1 | 2 | 1 |") != null);
+    try std.testing.expect(std.mem.indexOf(u8, measured, "| baseline | 3 | 1 | 1 | 0 | 1 | 1/6 | 1/6 | 2/8 | 1/2 | 0 |") != null);
+    try std.testing.expect(std.mem.indexOf(u8, measured, "| candidate | 1 | 1 | 0 | 0 | 0 | 0/2 | 0/2 | 0/2 | 0/0 | 1 |") != null);
+    try std.testing.expect(std.mem.indexOf(u8, measured, "| MOCK-case | controlled | 1 | baseline | scored | 0 | 1 | 1 | 2 | 1 |") != null);
+    try std.testing.expect(std.mem.indexOf(u8, measured, "| MOCK-case | controlled | 1 | baseline | protocol_rejected | 1 | — | — | — | — |") != null);
+    try std.testing.expect(std.mem.indexOf(u8, measured, "| MOCK-case | controlled | 1 | baseline | operational_failure | unknown | — | — | — | — |") != null);
+    try std.testing.expect(std.mem.indexOf(u8, measured, "Structural coverage: 1/12 missing decision fields over 2/3 observed JSON objects") != null);
     const text = try report.markdown(std.testing.allocator, false, false, &.{prepared});
     defer std.testing.allocator.free(text);
     try std.testing.expect(std.mem.indexOf(u8, text, "no semantic outcomes") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "not_run") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "| MOCK-case | controlled | 1 | baseline | not_run | unknown | — | — | — | — |") != null);
 }
 
 test "controlled calibration claims retain only their own captured source chunk" {
@@ -302,13 +346,51 @@ test "prepared calibration descriptions retain distinct case inputs after packet
         try std.testing.expectEqualStrings("MOCK guidance", description.content[0].guidance);
     }
     const original = try cli.roleInput(a, descriptions[0]);
-    for (0..3) |mode| {
+    // Historical schema and instructions remain unchanged; the declared diagnostic
+    // modification reprojects current instructions without changing source facts.
+    var stale_input = original;
+    stale_input.assignment.constraints = &.{.{ .constraint = .supported_role_assignment, .requirement = "MOCK old sparse group-assignment instructions" }};
+    var historical = descriptions[0];
+    historical.schema = "MOCK historical sparse schema bytes";
+    historical.content = &.{ .{ .guidance = "MOCK guidance" }, .{ .user = try codec.encode(@TypeOf(stale_input), a, stale_input) } };
+    const projected = try cli.capturedDescription(a, historical, "MOCK current guidance", canonical);
+    try std.testing.expect(!std.mem.eql(u8, historical.content[1].user, projected.content[1].user));
+    try std.testing.expectEqualStrings("MOCK guidance", historical.content[0].guidance);
+    try std.testing.expectEqualStrings("MOCK historical sparse schema bytes", historical.schema);
+    try std.testing.expectEqualStrings("MOCK current guidance", projected.content[0].guidance);
+    try std.testing.expect(std.mem.indexOf(u8, projected.schema, "role_decisions") != null);
+    try std.testing.expect(std.mem.indexOf(u8, projected.schema, "role_assignments") == null);
+    const admitted = try cli.roleInput(a, projected);
+    try std.testing.expectEqualDeep(original.assignment.role_definitions, admitted.assignment.role_definitions);
+    try std.testing.expectEqualDeep(original.claims, admitted.claims);
+    try std.testing.expectEqualDeep(original.citations, admitted.citations);
+    try std.testing.expectEqualDeep(original.preserved_tokens, admitted.preserved_tokens);
+    try std.testing.expectEqualDeep(original.passive_literals, admitted.passive_literals);
+    try std.testing.expectEqualDeep(original.accepted, admitted.accepted);
+    try std.testing.expectEqualDeep(original.assignment.constraints, admitted.assignment.constraints);
+    try std.testing.expectEqualStrings("MOCK old sparse group-assignment instructions", (try cli.roleInput(a, historical)).assignment.constraints[0].requirement);
+    // A declared MOCK empty native catalogue has only negative branches; no
+    // invalid empty enum or synthesized role assessment is inserted.
+    var empty_input = original;
+    empty_input.accepted.signals = &.{};
+    var empty_description = historical;
+    empty_description.content = &.{ .{ .guidance = "MOCK historical guidance" }, .{ .user = try codec.encode(@TypeOf(empty_input), a, empty_input) } };
+    const empty_projection = try cli.capturedDescription(a, empty_description, "MOCK current guidance", canonical);
+    const empty_schema = try parser.compiler().compileSelected(a, empty_projection.schema);
+    const schema = @import("../../../src/domain/model_result_schema.zig");
+    const decision_fields = schema.findProperty(empty_schema.root().object, "role_decisions").?.schema.object;
+    for (std.meta.tags(r.GenerationRole)) |role| {
+        const negative = schema.findProperty(decision_fields, @tagName(role)).?.schema;
+        try std.testing.expectEqualStrings("unsupported", schema.findProperty(negative.object, "kind").?.schema.constant.string);
+    }
+    for (0..4) |mode| {
         var invalid = original;
         const definitions = try a.dupe(@import("../../../src/domain/reference_model_input.zig").RoleDefinition, original.assignment.role_definitions);
         switch (mode) {
             0 => definitions[1].role = definitions[0].role,
             1 => definitions[0].purpose = " \t\n",
             2 => definitions[0].purpose = "MOCK invalid\x00purpose",
+            3 => definitions[0].purpose = "MOCK different well-formed purpose",
             else => unreachable,
         }
         invalid.assignment.role_definitions = definitions;

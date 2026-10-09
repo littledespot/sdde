@@ -466,7 +466,7 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
                 result.phase = .dispositions;
             },
             .signal_selection, .signal_content, .signal, .insert_signal => {
-                global.role_assignments = &.{};
+                global.role_decisions = null;
                 result.source.fields = try retireRoles(a, result.source.fields);
                 result.phase = if (parsed.phase == .complete or parsed.phase == .signals_with_conflicts) .signals_with_conflicts else .signals;
             },
@@ -682,7 +682,7 @@ fn retireSignals(a: std.mem.Allocator, parsed: r.Parsed, claims: []const r.Claim
         _ = values.orderedRemove(index);
     }
     result.proposal.global.signals = try values.toOwnedSlice(a);
-    result.proposal.global.role_assignments = &.{};
+    result.proposal.global.role_decisions = null;
     result.source.fields = try retireRoles(a, result.source.fields);
     return result;
 }
