@@ -275,6 +275,10 @@ For scored criteria, the percentage is:
 - Each invocation captures inputs once and receives a new random evaluation ID.
 - The existing output directory receives exclusively created `eval-<id>.json` and
   `eval-<id>.md` files with owner-only file permissions.
+- A matching `eval-<id>/` directory uses the same evaluation trace store as generated
+  specification grading. Each attempt retains its serialized request, raw provider
+  response, available final text and outcome with known credentials redacted. Capture
+  failure aborts evaluation; a score is never reported without its required evidence.
 - Existing files, including specifications and clarifications, are never replaced.
 - Reports are retained until the operator removes them; no pruning, transaction store or
   resume path is created.

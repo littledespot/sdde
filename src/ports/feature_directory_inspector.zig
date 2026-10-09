@@ -2,7 +2,7 @@ const std = @import("std");
 const feature = @import("../domain/feature_directory.zig");
 const roots = @import("../domain/bootstrap_root_registry.zig");
 
-pub const Error = std.mem.Allocator.Error || error{FeatureDirectoryUnavailable};
+pub const Error = @import("../domain/operation_error.zig").FeatureDirectoryInspector;
 pub const Inspector = struct {
     context: *anyopaque,
     capability: ?*const roots.FeatureDirectoryReadCapability = null,

@@ -20,7 +20,7 @@ pub const ParseInvocation = struct {
             .invocation => |value| value.arguments,
             .step => return error.OperationExecutionFailed,
         };
-        const result = self.action.execute(arguments) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(arguments) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.parsed, invocation_types.ParsedInvocation, result);
     }
 };
@@ -33,8 +33,8 @@ pub const ValidateArguments = struct {
         return context.?.run(input.step.data);
     }
     fn run(self: *@This(), view: @import("../domain/pipeline_data.zig").View) operations.Error!execution.Candidate {
-        const parsed = values.read(&view, schemas.parsed, invocation_types.ParsedInvocation) catch return error.OperationExecutionFailed;
-        const result = self.action.execute(parsed.*) catch return error.OperationExecutionFailed;
+        const parsed = values.read(&view, schemas.parsed, invocation_types.ParsedInvocation) catch |operation_error| return operation_error;
+        const result = self.action.execute(parsed.*) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.invocation, invocation_types.Invocation, result);
     }
 };
@@ -61,7 +61,7 @@ pub const Invocation = struct {
             .envelope = .init(context.?.allocator, &schemas.schemas),
         };
         defer runner.envelope.deinit();
-        if (orchestrator.run(.{ .context = &runner, .parse_fn = InvocationRunner.parse, .validate_fn = InvocationRunner.validate }) != .ok) return error.OperationExecutionFailed;
+        if (orchestrator.run(.{ .context = &runner, .parse_fn = InvocationRunner.parse, .validate_fn = InvocationRunner.validate }) != .ok) return runner.failure orelse error.OperationExecutionFailed;
         // Transfer only the validated output; parsed arguments remain private.
         const slot = &runner.envelope.slots[@intFromEnum(schemas.invocation.key)];
         var delta: pipeline.NodeDelta = .{};
@@ -76,23 +76,29 @@ const InvocationRunner = struct {
     validator: ValidateArguments,
     arguments: []const []const u8,
     envelope: Envelope,
+    failure: ?operations.Error = null,
+
+    fn reject(self: *@This(), cause: operations.Error) children.Outcome {
+        self.failure = cause;
+        return .failed;
+    }
 
     fn parse(context: *anyopaque) children.Outcome {
         const self: *@This() = @ptrCast(@alignCast(context));
-        _ = self.envelope.view(ParseInvocation.Action.contract) catch return .failed;
-        var candidate = ParseInvocation.invoke(&self.parser, .{ .invocation = .{ .arguments = self.arguments } }) catch return .failed;
+        _ = self.envelope.view(ParseInvocation.Action.contract) catch |cause| return self.reject(cause);
+        var candidate = ParseInvocation.invoke(&self.parser, .{ .invocation = .{ .arguments = self.arguments } }) catch |cause| return self.reject(cause);
         defer self.envelope.discard(&candidate.delta);
-        self.envelope.apply(ParseInvocation.Action.contract, &candidate.delta, candidate.outcome) catch return .failed;
+        self.envelope.apply(ParseInvocation.Action.contract, &candidate.delta, candidate.outcome) catch |cause| return self.reject(cause);
         return .ok;
     }
 
     fn validate(context: *anyopaque) children.Outcome {
         const self: *@This() = @ptrCast(@alignCast(context));
-        const view = self.envelope.view(ValidateArguments.Action.contract) catch return .failed;
+        const view = self.envelope.view(ValidateArguments.Action.contract) catch |cause| return self.reject(cause);
         // Use the same action and publication path as its standalone YAML binding.
-        var candidate = self.validator.run(view) catch return .failed;
+        var candidate = self.validator.run(view) catch |cause| return self.reject(cause);
         defer self.envelope.discard(&candidate.delta);
-        self.envelope.apply(ValidateArguments.Action.contract, &candidate.delta, candidate.outcome) catch return .failed;
+        self.envelope.apply(ValidateArguments.Action.contract, &candidate.delta, candidate.outcome) catch |cause| return self.reject(cause);
         return .ok;
     }
 };

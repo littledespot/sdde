@@ -7,8 +7,9 @@ const requests = @import("../../../src/application/model_request_workflow.zig");
 const authorization = @import("../../../src/application/provider_authorization_workflow.zig");
 
 /// Diagnostic projection only: retirement may release transport before the
-/// runner rejects continuation. Only a newer protocol rejection supersedes it.
+/// runner rejects continuation. Protocol and provider rejections retain their own origins.
 pub const LastModelRejection = struct {
+    provider: ?c.ProviderRejection = null,
     call: usize = 0,
     origin: ?@import("../../../src/domain/model_candidate_origin.zig").Origin = null,
     reason: ?[]const u8 = null,
@@ -16,6 +17,7 @@ pub const LastModelRejection = struct {
     schema_error: @FieldType(c.Report, "schema_error") = null,
 
     pub fn deinit(self: *LastModelRejection, allocator: std.mem.Allocator) void {
+        if (self.provider) |provider| allocator.free(provider.reason);
         if (self.reason) |reason| allocator.free(reason);
         if (self.json_error) |diagnostic| diagnostic.deinit(allocator);
         if (self.schema_error) |diagnostic| allocator.free(diagnostic.path);
@@ -23,6 +25,11 @@ pub const LastModelRejection = struct {
     }
 
     pub fn observe(self: *LastModelRejection, allocator: std.mem.Allocator, call: usize, report: c.Report) !void {
+        if (report.provider_diagnostic) |reason| {
+            const retained = try allocator.dupe(u8, reason);
+            if (self.provider) |prior| allocator.free(prior.reason);
+            self.provider = .{ .call = if (report.provider_origin != null and call != 0) call else null, .origin = report.provider_origin, .reason = retained, .content = report.provider_content_diagnostic };
+        }
         const diagnostic = report.model_diagnostic orelse return;
         const origin = report.last_model_origin orelse return error.MissingRequestEvidence;
         const reason = try allocator.dupe(u8, diagnostic);
@@ -31,11 +38,18 @@ pub const LastModelRejection = struct {
         if (shape) |*value| value.path = try allocator.dupe(u8, value.path);
         errdefer if (shape) |value| allocator.free(value.path);
         const json_error = if (report.json_error) |value| try value.copy(allocator) else null;
+        const provider = self.provider;
+        self.provider = null;
         self.deinit(allocator);
-        self.* = .{ .call = call, .origin = origin, .reason = reason, .json_error = json_error, .schema_error = shape };
+        self.* = .{ .provider = provider, .call = call, .origin = origin, .reason = reason, .json_error = json_error, .schema_error = shape };
     }
 
     pub fn project(self: *const LastModelRejection, allocator: std.mem.Allocator, call: usize, report: *c.Report) !void {
+        if (self.provider) |value| {
+            var retained = value;
+            retained.reason = try allocator.dupe(u8, value.reason);
+            report.last_provider_rejection = retained;
+        }
         const reason = self.reason orelse return;
         const retained = try allocator.dupe(u8, reason);
         errdefer allocator.free(retained);
@@ -53,6 +67,7 @@ pub const LastModelRejection = struct {
 };
 
 pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../src/application/workflow_pipeline_runner.zig").Runner, report: *c.Report) !void {
+    report.last_operation_rejection = runner.last_operation_rejection;
     const ledger = runner.tokenLedger();
     report.model_calls = ledger.accounted_operations.items.len;
     report.total_tokens = ledger.committed();
@@ -109,23 +124,33 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
     const information = runner.envelope.latestInformation(observation.schema.key);
     if (information.contains(observation.schema.key)) {
         const result = try values.read(&information, observation.schema, observation.Result);
-        if (latest(ledger, result.operationId())) switch (result.outcome()) {
-            .validated => |evidence| {
-                const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
-                report.last_model_origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, result.operationId()) orelse return error.MissingProviderEvidence;
-                report.last_model_usage = evidence.usage();
-                switch (evidence.result()) {
-                    .failed => |failure| {
-                        report.provider_diagnostic = @tagName(failure.cause);
-                        report.provider_content_diagnostic = failure.content;
-                    },
-                    .stopped => |reason| report.provider_diagnostic = @tagName(reason),
-                    .complete => {},
-                }
-            },
-            .rejected => |reason| report.provider_diagnostic = @errorName(reason),
-            .cancelled => {},
-        };
+        if (latest(ledger, result.operationId())) {
+            const identities = try values.read(&view, requests.ledger_schema, @import("../../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
+            const origin = @import("../../../src/domain/model_candidate_origin.zig").Origin.from(identities, result.operationId()) orelse return error.MissingProviderEvidence;
+            switch (result.outcome()) {
+                .validated => |evidence| {
+                    report.last_model_origin = origin;
+                    report.last_model_usage = evidence.usage();
+                    switch (evidence.result()) {
+                        .failed => |failure| {
+                            report.provider_diagnostic = @tagName(failure.cause);
+                            report.provider_origin = origin;
+                            report.provider_content_diagnostic = failure.content;
+                        },
+                        .stopped => |reason| {
+                            report.provider_diagnostic = @tagName(reason);
+                            report.provider_origin = origin;
+                        },
+                        .complete => {},
+                    }
+                },
+                .rejected => |reason| {
+                    report.provider_diagnostic = @errorName(reason);
+                    report.provider_origin = origin;
+                },
+                .cancelled => {},
+            }
+        }
     }
     if (view.slots[@intFromEnum(requests.prepared_schema.key)] != null) {
         const request = try requests.readCurrent(&view, requests.prepared_schema);
@@ -144,6 +169,9 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
                 switch (result.outcome().*) {
                     .failed => |failure| if (failure.operation_id.model_request_id == request.id()) {
                         report.provider_diagnostic = @tagName(failure.cause);
+                        // This failure precedes its physical exchange, even when
+                        // older calls exist. Their origin cannot identify it.
+                        report.provider_origin = null;
                         report.provider_content_diagnostic = failure.content;
                     },
                     .prepared, .cancelled => {},
@@ -195,7 +223,7 @@ pub const Call = struct {
 /// Join only exact native associations. A prepared request or a retained older
 /// candidate never supplies the latest exchange's identity or token usage.
 pub fn correlate(a: std.mem.Allocator, calls: []Call, report: *c.Report) !void {
-    if (report.provider_diagnostic) |diagnostic| if (report.last_model_origin) |origin| {
+    if (report.provider_diagnostic) |diagnostic| if (report.provider_origin) |origin| {
         const call = &calls[try findCall(calls, origin)];
         call.provider_diagnostic = diagnostic;
         call.provider_content_diagnostic = report.provider_content_diagnostic;
@@ -213,6 +241,7 @@ pub fn correlate(a: std.mem.Allocator, calls: []Call, report: *c.Report) !void {
         report.last_model_usage = last.usage;
         if (report.provider_diagnostic == null) {
             report.provider_diagnostic = last.provider_diagnostic;
+            report.provider_origin = if (last.provider_diagnostic != null) last.origin else null;
             report.provider_content_diagnostic = last.provider_content_diagnostic;
         }
         report.last_model_output = if (last.output == .available) try @import("../evidence.zig").Store.path(a, .generation, calls.len, .model_output) else null;

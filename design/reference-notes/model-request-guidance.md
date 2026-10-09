@@ -26,6 +26,14 @@ This summarizes the existing contracts in
   repairing one citation preserves sibling attribution.
 - Source selection proves location, not semantic support.
 
+Native operation causes and expected domain rejections survive into CLI, telemetry
+and harness evidence through the closed operation contract. The harness records
+the first observed diagnostic and explicit repair/revision/invalidation links;
+event order does not prove the initiating semantic cause. Provider-content rejection
+survives transport retirement independently of protocol rejection. See the
+[retained evidence contract](../harness/e2e.md#retained-results). These observations
+grant no retry, repair, continuation or publication authority.
+
 ## Guidance by call type
 
 **Every call** receives one shared engine instruction, emitted once by serialization

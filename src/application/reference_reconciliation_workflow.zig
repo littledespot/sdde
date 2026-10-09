@@ -33,10 +33,10 @@ pub const BuildItems = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, extraction.accounted_schema, .accounted);
-        const source = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, r.evidence.Inputs) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+        const source = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, r.evidence.Inputs) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .reconciliation_items = self.action.execute(owner.arena.allocator(), source.*, prior.payload().accounted) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .reconciliation_items = self.action.execute(owner.arena.allocator(), source.*, prior.payload().accounted) catch |operation_error| return operation_error };
         return extraction.publish(self.allocator, items_schema, owner, .ok);
     }
 };
@@ -52,9 +52,9 @@ pub const Partition = struct {
         for (input.step.step.parameters) |parameter| {
             if (std.mem.eql(u8, parameter.id.bytes, "group-size") and parameter.value == .integer) size = std.math.cast(u32, parameter.value.integer);
         }
-        const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .reconciliation_layout = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_items, size orelse return error.OperationExecutionFailed) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .reconciliation_layout = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_items, size orelse return error.OperationExecutionFailed) catch |operation_error| return operation_error };
         return extraction.publish(self.allocator, layout_schema, owner, .ok);
     }
 };
@@ -77,9 +77,9 @@ pub const ValidateRoles = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, signals_schema, .reconciliation_signals);
-        const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        const result = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_signals) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_signals) catch |operation_error| return operation_error;
         owner.payload = switch (result) {
             .valid => |checked| .{ .reconciliation_roles = checked },
             .invalid => |rejection| .{ .reconciliation_rejected = rejection },
@@ -98,11 +98,11 @@ pub const BuildSummary = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, summary_ids_schema, .reconciliation_summary_ids);
-        const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .reconciliation_progress = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_summary_ids) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .reconciliation_progress = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_summary_ids) catch |operation_error| return operation_error };
         var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
-        delta.data_replacements[@intFromEnum(progress_schema.key)] = values.adopt(self.allocator, progress_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
+        delta.data_replacements[@intFromEnum(progress_schema.key)] = values.adopt(self.allocator, progress_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
         return .{ .outcome = .ok, .delta = delta };
     }
@@ -115,9 +115,9 @@ pub const Account = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, records_schema, .reconciliation_records);
-        const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        const result = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_records) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_records) catch |operation_error| return operation_error;
         owner.payload = .{ .reconciliation_accounted = result };
         return extraction.publish(self.allocator, accounted_schema, owner, if (result.outcome == .complete) .ok else .blocked);
     }
@@ -132,9 +132,9 @@ fn Unary(comptime A: type, comptime from: data.Schema, comptime from_tag: Tag, c
         pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
             const self = context.?;
             const prior = try extraction.read(&input.step.data, from, from_tag);
-            const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+            const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
             errdefer owned.destroy(owner);
-            owner.payload = @unionInit(owned.Payload, @tagName(to_tag), self.action.execute(owner.arena.allocator(), @field(prior.payload(), @tagName(from_tag))) catch return error.OperationExecutionFailed);
+            owner.payload = @unionInit(owned.Payload, @tagName(to_tag), self.action.execute(owner.arena.allocator(), @field(prior.payload(), @tagName(from_tag))) catch |operation_error| return operation_error);
             var result = try extraction.publish(self.allocator, to, owner, .ok);
             for (A.contract.invalidates) |key| result.delta.data_invalidations.insert(key);
             return result;
@@ -152,9 +152,9 @@ fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: d
             const self = context.?;
             const prior = try extraction.read(&input.step.data, from, from_tag);
 
-            const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+            const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
             errdefer owned.destroy(owner);
-            const result = (if (needs_text) self.action.execute(owner.arena.allocator(), @field(prior.payload(), @tagName(from_tag)), try textContext(&input.step.data)) else self.action.execute(owner.arena.allocator(), @field(prior.payload(), @tagName(from_tag)))) catch return error.OperationExecutionFailed;
+            const result = (if (needs_text) self.action.execute(owner.arena.allocator(), @field(prior.payload(), @tagName(from_tag)), try textContext(&input.step.data)) else self.action.execute(owner.arena.allocator(), @field(prior.payload(), @tagName(from_tag)))) catch |operation_error| return operation_error;
             owner.payload = switch (result) {
                 .valid => |checked| @unionInit(owned.Payload, @tagName(to_tag), checked),
                 .invalid => |rejection| .{ .reconciliation_rejected = rejection },
@@ -168,7 +168,7 @@ fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: d
                 else => unreachable,
             };
             const transition = if (!needs_text)
-                repair.dispositionProgress(owner.arena.allocator(), parsed) catch return error.OperationExecutionFailed
+                repair.dispositionProgress(owner.arena.allocator(), parsed) catch |operation_error| return operation_error
             else
                 repair.progress(owner.arena.allocator(), self.action.validator, try textContext(&input.step.data), parsed, switch (to_tag) {
                     .reconciliation_summary => .summary,
@@ -180,7 +180,7 @@ fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: d
                     .reconciliation_signals => prior.payload().reconciliation_signals.prior.dispositions,
                     .reconciliation_roles => prior.payload().reconciliation_roles.prior.dispositions,
                     else => &.{},
-                }) catch return error.OperationExecutionFailed;
+                }) catch |operation_error| return operation_error;
             if (result == .valid) if (transition) |receipt| {
                 // The runner applies this receipt with the checked facts. Later
                 // phase handoffs must not acknowledge the same repair again.
@@ -199,9 +199,9 @@ fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: d
     };
 }
 pub fn textContext(view: *const data.View) operations.Error!validation.TextContext {
-    const inputs = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, r.evidence.Inputs) catch return error.OperationExecutionFailed;
-    const registry = values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch return error.OperationExecutionFailed;
-    const current = values.read(view, @import("toolchain_workflow_values.zig").valid, @import("../domain/toolchain_safety.zig").ValidToolchain) catch return error.OperationExecutionFailed;
+    const inputs = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, r.evidence.Inputs) catch |operation_error| return operation_error;
+    const registry = values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch |operation_error| return operation_error;
+    const current = values.read(view, @import("toolchain_workflow_values.zig").valid, @import("../domain/toolchain_safety.zig").ValidToolchain) catch |operation_error| return operation_error;
     return .{ .inputs = inputs.*, .registry = registry.*, .current = current };
 }
 
@@ -209,8 +209,8 @@ pub fn textContext(view: *const data.View) operations.Error!validation.TextConte
 /// input. Models cannot choose a partition, current state, or canonical identity.
 pub fn capture(allocator: std.mem.Allocator, input: *const owned.Value, bytes: []const u8) operations.Error!*owned.Owner {
     if (input.payload().* != .reconciliation_input) return error.OperationExecutionFailed;
-    const owner = owned.create(allocator, input) catch return error.OperationExecutionFailed;
+    const owner = owned.create(allocator, input) catch |operation_error| return operation_error;
     errdefer owned.destroy(owner);
-    owner.payload = .{ .reconciliation_raw = .{ .input = input.payload().reconciliation_input, .bytes = owner.arena.allocator().dupe(u8, bytes) catch return error.OperationExecutionFailed } };
+    owner.payload = .{ .reconciliation_raw = .{ .input = input.payload().reconciliation_input, .bytes = owner.arena.allocator().dupe(u8, bytes) catch |operation_error| return operation_error } };
     return owner;
 }

@@ -133,7 +133,7 @@ pub fn build(b: *std.Build) void {
             .{ .name = "unicode_normalization", .module = unicode_module },
         },
     });
-    const provenance_module = b.createModule(.{ .root_source_file = b.path("build/provenance.zig"), .target = b.graph.host, .optimize = optimize });
+    const provenance_module = b.createModule(.{ .root_source_file = b.path("build_provenance.zig"), .target = b.graph.host, .optimize = optimize, .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }} });
     const provenance_tool = b.addExecutable(.{ .name = "capture-build-provenance", .root_module = provenance_module });
     const provenance = b.addRunArtifact(provenance_tool);
     provenance.setCwd(b.path("."));
@@ -642,6 +642,7 @@ pub fn build(b: *std.Build) void {
     lint_command.setName("lint Zig source");
     lint_command.addFileArg(b.path("build.zig"));
     lint_command.addFileArg(b.path("build.zig.zon"));
+    lint_command.addFileArg(b.path("build_provenance.zig"));
     lint_command.addFileArg(b.path("harness.zig"));
     lint_command.addFileArg(b.path("role_calibration.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));

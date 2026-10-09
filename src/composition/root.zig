@@ -164,6 +164,7 @@ pub fn reportInvocation(io: std.Io, allocator: std.mem.Allocator, project_root: 
                 report.clarifications = try @import("../application/workflow_clarification_report.zig").capture(report.arena.allocator(), &.{ .slots = runner.envelope.slots });
             };
             if (invocation.pipeline_runner) |*runner| {
+                report.last_operation_rejection = runner.last_operation_rejection;
                 if (try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })) |diagnostic|
                     report.candidate_error = try diagnostic.copy(report.arena.allocator());
             }

@@ -25,11 +25,11 @@ pub const Initialize = struct {
         const self = context.?;
         const selected = requests.resource(input.step, "composition") orelse return error.OperationExecutionFailed;
         if (selected.content != .json_composition) return error.OperationExecutionFailed;
-        const packet = values.read(&input.step.data, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch return error.OperationExecutionFailed;
-        const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+        const packet = values.read(&input.step.data, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
+        const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         const owner = try Owner.create(self.allocator, &input.step.data, &.{ .model_input_packet, .model_request_identity_ledger });
         errdefer owner.destroy();
-        owner.payload = .{ .state = self.action.execute(owner.arena.allocator(), selected.content.json_composition, packet, ledger.stageRunEpochId()) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .state = self.action.execute(owner.arena.allocator(), selected.content.json_composition, packet, ledger.stageRunEpochId()) catch |operation_error| return operation_error };
         return publish(owner, state_schema, false, &.{});
     }
 };
@@ -45,10 +45,10 @@ pub const Retain = struct {
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         const part = request.part() orelse return error.OperationExecutionFailed;
         const accepted = try @import("model_candidate_handoff.zig").readAccepted(&input.step.data);
-        const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+        const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         const owner = try Owner.create(self.allocator, &input.step.data, &.{ .json_composition, .model_payload_schema_result });
         errdefer owner.destroy();
-        owner.payload = .{ .state = self.action.execute(owner.arena.allocator(), state.*, part, accepted.evidence, accepted.candidate.origin, ledger) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .state = self.action.execute(owner.arena.allocator(), state.*, part, accepted.evidence, accepted.candidate.origin, ledger) catch |operation_error| return operation_error };
         return publish(owner, state_schema, true, &.{});
     }
 };
@@ -63,7 +63,7 @@ pub const Assemble = struct {
         const state = try readState(&input.step.data);
         const owner = try Owner.create(self.allocator, &input.step.data, &.{.json_composition});
         errdefer owner.destroy();
-        owner.payload = .{ .candidate = self.action.execute(owner.arena.allocator(), state.*) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .candidate = self.action.execute(owner.arena.allocator(), state.*) catch |operation_error| return operation_error };
         return publish(owner, assembled_schema, false, Action.contract.invalidates);
     }
 };
@@ -97,14 +97,14 @@ pub fn readValidated(view: *const data.View) operations.Error!*const runtime.Can
     return checked.payload.validated;
 }
 fn read(view: *const data.View, schema: data.Schema) operations.Error!*const Owner {
-    const value = values.read(view, schema, Value) catch return error.OperationExecutionFailed;
+    const value = values.read(view, schema, Value) catch |operation_error| return operation_error;
     return @ptrCast(@alignCast(value));
 }
 fn descriptor(action: pipeline.NodeContract, parameters: []const @import("../domain/workflow_operation.zig").ParameterDescriptor) @import("../domain/workflow_operation.zig").Contract {
     return .{ .id = action.id, .kind = .step, .parameters = parameters, .requires = action.requires, .produces = action.produces, .replaces = action.replaces, .invalidates = action.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none };
 }
 pub fn publish(owner: *Owner, schema: data.Schema, replacement: bool, invalidates: []const pipeline.DataKey) operations.Error!execution.Candidate {
-    const value = values.adopt(owner.allocator, schema, Value, Owner, owner, Owner.view, Owner.destroy, null) catch return error.OperationExecutionFailed;
+    const value = values.adopt(owner.allocator, schema, Value, Owner, owner, Owner.view, Owner.destroy, null) catch |operation_error| return operation_error;
     var delta: pipeline.NodeDelta = .{};
     if (replacement) delta.data_replacements[@intFromEnum(schema.key)] = value else delta.data_writes[@intFromEnum(schema.key)] = value;
     for (invalidates) |key| delta.data_invalidations.insert(key);
@@ -116,10 +116,10 @@ pub const Owner = struct {
     retained: [2]?*data.Value = @splat(null),
     payload: Payload,
     pub fn create(allocator: std.mem.Allocator, source: *const data.View, keys: []const pipeline.DataKey) operations.Error!*Owner {
-        const owner = allocator.create(Owner) catch return error.OperationExecutionFailed;
+        const owner = allocator.create(Owner) catch |operation_error| return operation_error;
         owner.* = .{ .allocator = allocator, .arena = .init(allocator), .payload = undefined };
         errdefer owner.destroy();
-        for (keys, 0..) |key, index| owner.retained[index] = values.retain(source.slots[@intFromEnum(key)] orelse return error.OperationExecutionFailed) catch return error.OperationExecutionFailed;
+        for (keys, 0..) |key, index| owner.retained[index] = values.retain(source.slots[@intFromEnum(key)] orelse return error.OperationExecutionFailed) catch |operation_error| return operation_error;
         return owner;
     }
     fn view(self: *const Owner) *const Value {

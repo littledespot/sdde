@@ -2,7 +2,7 @@ const std = @import("std");
 const roots = @import("../domain/bootstrap_root_registry.zig");
 const reference = @import("../domain/reference_selector.zig");
 
-pub const Error = std.mem.Allocator.Error || error{ReferenceDirectoryUnavailable};
+pub const Error = @import("../domain/operation_error.zig").ReferenceDirectoryInspector;
 pub const Inspector = struct {
     context: *anyopaque,
     capability: ?*const roots.ConfiguredBaseRootCapability = null,

@@ -468,6 +468,7 @@ test "runner contract rejections cannot enter invalid or failed recovery leading
         try std.testing.expectEqual(@as(usize, 0), barrier.calls);
         try std.testing.expect(runner.envelope.slots[@intFromEnum(test_value_schema.key)] == null);
         try std.testing.expect(!runner.envelope.latestInformation(test_value_schema.key).contains(test_value_schema.key));
+        try std.testing.expect(runner.last_effects == null and runner.last_operation_rejection == null);
         try std.testing.expectEqual(@as(u128, 0), runner.token_accounting.current().committed());
     }
 }
@@ -696,6 +697,8 @@ const OperationState = struct {
     expected_resource_id: ?[]const u8 = null,
     calls: usize = 0,
     fail_call: ?usize = null,
+    failure: enum { generic, reconciliation, omission, allocation } = .generic,
+    diagnostic: enum { none, unsafe, allocation } = .none,
     delta_fault: ?DeltaFault = null,
 };
 const DeltaFault = enum { missing_write, wrong_schema, undeclared_invalidation, undeclared_outcome };
@@ -766,7 +769,12 @@ fn invokeOperation(context: ?*OperationState, input: operations.Input) operation
             else
                 control.outcome;
             control.calls += 1;
-            if (control.fail_call == control.calls) return error.OperationExecutionFailed;
+            if (control.fail_call == control.calls) return switch (control.failure) {
+                .generic => error.OperationExecutionFailed,
+                .reconciliation => error.InvalidReferenceReconciliation,
+                .omission => error.InvalidSpecificationCoverageRepair,
+                .allocation => error.OutOfMemory,
+            };
             var delta: pipeline.NodeDelta = .{};
             if (control.delta_fault) |fault| {
                 const values = @import("application/pipeline_values.zig");
@@ -779,7 +787,11 @@ fn invokeOperation(context: ?*OperationState, input: operations.Input) operation
                 if (fault == .undeclared_outcome and control.calls == 1) break :step .{ .outcome = .more, .delta = delta };
             }
             step_input.log.log(&delta, .{ .event_type = .action_completed }) catch return error.OperationExecutionFailed;
-            break :step .{ .outcome = outcome, .delta = delta };
+            break :step .{ .outcome = outcome, .delta = delta, .diagnostic = switch (control.diagnostic) {
+                .none => null,
+                .unsafe => error.UnsafeSpecificationRepair,
+                .allocation => error.OutOfMemory,
+            } };
         },
     };
 }
@@ -836,3 +848,73 @@ const test_transitions = [_]workflow.Transition{
     .{ .from = .{ .bytes = "run" }, .outcome = .failed, .target = .{ .terminal = .failed } },
     .{ .from = .{ .bytes = "run" }, .outcome = .cancelled, .target = .{ .terminal = .cancelled } },
 };
+
+test "operation failures retain unrelated native causes without applying a failed delta" {
+    for ([_]operations.Error{ error.InvalidReferenceReconciliation, error.InvalidSpecificationCoverageRepair, error.OutOfMemory }, [_]@FieldType(OperationState, "failure"){ .reconciliation, .omission, .allocation }) |cause, failure| {
+        var control: OperationControl = .{ .state = .{ .outcome = .ok, .fail_call = 1, .failure = failure } };
+        var barrier: FakeBarrier = .{};
+        var graph = try testGraph();
+        var registry = testRegistry(&control);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        defer runner.deinit();
+        var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+        const result = engine.run(children.bindings());
+        try std.testing.expectEqual(cause, result.execution_rejected.operation_failed);
+        try std.testing.expectEqualStrings(@errorName(cause), result.execution_rejected.diagnostic());
+        try std.testing.expect(runner.last_effects == null);
+        try std.testing.expect(runner.last_operation_rejection == null);
+        try std.testing.expectEqual(@as(usize, 0), barrier.calls);
+        for (runner.envelope.slots) |slot| try std.testing.expect(slot == null);
+    }
+}
+
+test "expected operation rejection evidence preserves outcomes and cannot accompany success" {
+    for ([_]workflow.OutcomeTag{ .invalid, .blocked, .failed, .ok }) |outcome| {
+        var control: OperationControl = .{ .state = .{ .outcome = outcome, .diagnostic = .unsafe } };
+        var barrier: FakeBarrier = .{};
+        var graph = try testGraph();
+        var registry = testRegistry(&control);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        defer runner.deinit();
+        var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+        const result = engine.run(children.bindings());
+        if (outcome == .ok) {
+            try std.testing.expectEqual(.authority, result.execution_rejected);
+            try std.testing.expect(runner.last_effects == null and runner.last_operation_rejection == null);
+        } else {
+            try std.testing.expectEqual(outcome, result.executionStatus().?);
+            try std.testing.expectEqual(.UnsafeSpecificationRepair, runner.last_operation_rejection.?.cause);
+            try std.testing.expectEqual(outcome, runner.last_operation_rejection.?.outcome);
+        }
+    }
+}
+
+test "runner allocation failure crosses its boundary without allocating diagnostic storage" {
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+    var barrier: FakeBarrier = .{};
+    var graph = try testGraph();
+    var registry = testRegistry(&control);
+    var runner = runner_module.Runner.init(failing.allocator(), selected(&graph), &registry, barrier.port(), .{}, null);
+    defer runner.deinit();
+    var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+    const result = engine.run(children.bindings());
+    try std.testing.expectEqual(error.OutOfMemory, result.execution_rejected.operation_failed);
+    try std.testing.expectEqualStrings("OutOfMemory", result.execution_rejected.diagnostic());
+    try std.testing.expectEqual(@as(usize, 0), control.state.calls);
+    try std.testing.expectEqual(@as(usize, 0), failing.allocated_bytes);
+}
+
+test "allocation failure cannot be disguised as an expected candidate rejection" {
+    var control: OperationControl = .{ .state = .{ .outcome = .invalid, .diagnostic = .allocation } };
+    var barrier: FakeBarrier = .{};
+    var graph = try testGraph();
+    var registry = testRegistry(&control);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    defer runner.deinit();
+    var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+    const result = engine.run(children.bindings());
+    try std.testing.expectEqual(error.OutOfMemory, result.execution_rejected.operation_failed);
+    try std.testing.expect(runner.last_effects == null and runner.last_operation_rejection == null);
+    for (runner.envelope.slots) |slot| try std.testing.expect(slot == null);
+}

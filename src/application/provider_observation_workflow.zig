@@ -50,13 +50,13 @@ pub const Validate = struct {
         const call = input.step.provider_invocation orelse return error.OperationExecutionFailed;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         if (request.prepared() != call.request or request.binding() != call.provider_binding) return error.OperationExecutionFailed;
-        const response = values.read(&input.step.data, model_invocation.schema, invocation.Result) catch return error.OperationExecutionFailed;
+        const response = values.read(&input.step.data, model_invocation.schema, invocation.Result) catch |operation_error| return operation_error;
         const raw = response.outcome() orelse return error.OperationExecutionFailed;
-        const owner = self.allocator.create(Owner) catch return error.OperationExecutionFailed;
+        const owner = self.allocator.create(Owner) catch |operation_error| return operation_error;
         errdefer self.allocator.destroy(owner);
-        const retained_request = values.retain(input.step.data.slots[@intFromEnum(requests.prepared_schema.key)].?) catch return error.OperationExecutionFailed;
+        const retained_request = values.retain(input.step.data.slots[@intFromEnum(requests.prepared_schema.key)].?) catch |operation_error| return operation_error;
         errdefer values.destroy(retained_request);
-        const retained_response = values.retain(input.step.data.slots[@intFromEnum(model_invocation.schema.key)].?) catch return error.OperationExecutionFailed;
+        const retained_response = values.retain(input.step.data.slots[@intFromEnum(model_invocation.schema.key)].?) catch |operation_error| return operation_error;
         errdefer values.destroy(retained_response);
         owner.* = .{
             .allocator = self.allocator,
@@ -68,17 +68,18 @@ pub const Validate = struct {
             else switch (raw.*) {
                 .observation => |*observation| observed: {
                     const evidence = self.action.execute(self.allocator, call, observation) catch |err| break :observed switch (err) {
-                        error.OutOfMemory => return error.OperationExecutionFailed,
+                        error.OutOfMemory => return error.OutOfMemory,
                         else => |reason| .{ .rejected = reason },
                     };
                     break :observed .{ .validated = evidence };
                 },
                 .cancelled => .cancelled,
-                .allocation_failed, .logging_blocked_before_send => return error.OperationExecutionFailed,
+                .allocation_failed => return error.OutOfMemory,
+                .logging_blocked_before_send => return error.OperationExecutionFailed,
             },
         };
         errdefer owner.releaseEvidence();
-        const value = values.adopt(self.allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch return error.OperationExecutionFailed;
+        const value = values.adopt(self.allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch |operation_error| return operation_error;
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(schema.key)] = value;
         return .{ .outcome = status(owner.view()), .delta = delta };
@@ -87,7 +88,7 @@ pub const Validate = struct {
 
 /// Bind a consumer to the original sealed result, without repeating provider validation.
 pub fn readCurrent(view: *const data.View) operations.Error!*const Result {
-    const result = values.read(view, schema, Result) catch return error.OperationExecutionFailed;
+    const result = values.read(view, schema, Result) catch |operation_error| return operation_error;
     try requireCurrent(view, result);
     return result;
 }

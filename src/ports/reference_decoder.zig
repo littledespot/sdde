@@ -1,6 +1,6 @@
 const std = @import("std");
 const reference = @import("../domain/reference_ingestion.zig");
-pub const Error = std.mem.Allocator.Error || error{ UnsupportedMedia, MalformedText, DecodeLimitExceeded };
+pub const Error = @import("../domain/operation_error.zig").ReferenceDecoder;
 pub const Decoder = struct {
     context: *anyopaque,
     /// This reader consumes captured bytes only. No filesystem or process port.

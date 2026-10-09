@@ -120,6 +120,28 @@ fn reviewedFacts(a: std.mem.Allocator, current: sessions.Session, context: p.Con
     facts.support = support;
     return facts;
 }
+/// Native authorization rejection; retained evidence names the reviewed work that
+/// could not be authorized. It grants neither a target nor permission to repair.
+pub const AuthorizationRejection = struct {
+    reason: @import("operation_error.zig").Code(Error),
+    revision: u64,
+    outstanding_requirements: []const authority.Entry,
+    review_origin: ?@import("model_candidate_origin.zig").Origin,
+};
+
+pub fn authorizationRejection(a: std.mem.Allocator, support: Support, cause: Error) std.mem.Allocator.Error!AuthorizationRejection {
+    var outstanding: std.ArrayList(authority.Entry) = .empty;
+    for (support.result.entries) |entry| if (entry.candidate_defect != null) {
+        try outstanding.append(a, entry);
+    };
+    return .{
+        .reason = @import("operation_error.zig").code(Error, cause),
+        .revision = support.inputs.revision,
+        .outstanding_requirements = try outstanding.toOwnedSlice(a),
+        .review_origin = support.inputs.review_origin,
+    };
+}
+
 /// Only a current, shared-classified omission may select a native content slot.
 /// No coverage row, source record or review verdict is a repair target.
 pub fn authorizeOmission(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, support: Support) Error!Authorization {

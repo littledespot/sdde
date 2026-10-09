@@ -1958,7 +1958,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expect(runner.repair_retry.currentPermit() == null);
                 const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
                 try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
-                try std.testing.expectError(error.OperationExecutionFailed, @import("../../src/application/specification_workflow.zig").readSession(&view));
+                try std.testing.expectError(error.InvalidCandidatePayload, @import("../../src/application/specification_workflow.zig").readSession(&view));
                 const accounted = (try @import("../../src/application/reference_extraction_workflow.zig").read(&view, @import("../../src/application/reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted)).payload().reconciliation_accounted;
                 const prior = accounted.records.assignments.checked.prior.prior;
                 try std.testing.expectEqualDeep(prior.source.at(.signals, .relationship).?, gap.origin.?);

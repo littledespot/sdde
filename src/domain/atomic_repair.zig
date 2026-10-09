@@ -41,7 +41,16 @@ const json = @import("model_candidate_json.zig");
 const strict = @import("strict_json.zig");
 
 /// Execution-local dependency binding, never persisted freshness authority.
-pub const Snapshot = struct { bytes: [32]u8 };
+pub const Snapshot = struct {
+    bytes: [32]u8,
+
+    pub fn jsonStringify(self: Snapshot, writer: *std.json.Stringify) std.json.Stringify.Error!void {
+        try writer.beginObject();
+        try writer.objectField("bytes");
+        try @import("canonical_json.zig").writeByteArray(writer, &self.bytes);
+        try writer.endObject();
+    }
+};
 pub fn snapshot(comptime T: type, a: std.mem.Allocator, value: T) std.mem.Allocator.Error!Snapshot {
     const bytes = try std.json.Stringify.valueAlloc(a, value, .{});
     defer a.free(bytes);

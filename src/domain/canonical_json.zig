@@ -2,6 +2,14 @@
 //! array order, integer-only numbers, and one final LF. No input normalization.
 const std = @import("std");
 pub const Error = std.mem.Allocator.Error || error{InvalidCanonicalJson};
+
+/// Fixed native byte arrays have numeric-array wire shape. Unlike byte slices,
+/// they must not acquire string shape when their contents happen to be UTF-8.
+pub fn writeByteArray(writer: *std.json.Stringify, bytes: []const u8) std.json.Stringify.Error!void {
+    try writer.beginArray();
+    for (bytes) |byte| try writer.write(byte);
+    try writer.endArray();
+}
 pub fn encode(comptime T: type, allocator: std.mem.Allocator, value: T) Error![]const u8 {
     const bytes = try std.json.Stringify.valueAlloc(allocator, value, .{});
     defer allocator.free(bytes);

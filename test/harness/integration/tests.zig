@@ -711,7 +711,7 @@ test "provider cause survives request release without inventing a candidate reje
         .exception = "AccessDeniedException",
         .request_id = "request-1",
     }};
-    var observed: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .provider_diagnostic = "authorization_denied", .last_model_origin = calls[0].origin };
+    var observed: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .provider_diagnostic = "authorization_denied", .provider_origin = calls[0].origin, .last_model_origin = calls[0].origin };
     try obs.correlate(a, &calls, &observed);
     // The next projection has no active request or provider observation slots.
     var released: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .usage_complete = false };
@@ -892,6 +892,7 @@ test "reports retain scoped retry history and rejected-content usage after owner
         .status = .workflow_failed,
         .workflow_outcome = .failed,
         .provider_diagnostic = "response_invalid",
+        .provider_origin = calls[0].origin,
         .provider_content_diagnostic = .missing_final_text,
         .last_model_origin = calls[0].origin,
         .last_model_usage = .{ .input_tokens = 884, .output_tokens = 48, .total_tokens = 932 },
@@ -1168,4 +1169,107 @@ test "persisted extraction rejection retains its terminal diagnostic in report r
     defer decoded.deinit();
     try std.testing.expectEqual(.operation_failed, decoded.value.kind);
     try std.testing.expectEqualStrings("REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE", decoded.value.detail.?);
+}
+
+test "provider content rejection survives retirement and projects exact native event evidence" {
+    const obs = @import("../e2e/observation.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var retained: obs.LastModelRejection = .{};
+    defer retained.deinit(std.testing.allocator);
+    var reason = "missing_final_text".*;
+    const origin: @import("../../../src/domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 8 }, .attempt = .{ .value = 2 } };
+    const observed: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .last_model_origin = origin, .provider_origin = origin, .provider_diagnostic = &reason, .provider_content_diagnostic = .missing_final_text };
+    try retained.observe(std.testing.allocator, 11, observed);
+    @memset(&reason, 'x');
+    var terminal: c.Report = .{ .started_at_utc = "", .status = .workflow_failed };
+    try retained.observe(std.testing.allocator, 12, terminal);
+    try retained.project(a, 12, &terminal);
+    retained.deinit(std.testing.allocator);
+    try std.testing.expectEqualStrings("missing_final_text", terminal.last_provider_rejection.?.reason);
+    try std.testing.expectEqualDeep(origin, terminal.last_provider_rejection.?.origin.?);
+    try std.testing.expectEqual(@as(usize, 11), terminal.last_provider_rejection.?.call.?);
+    try std.testing.expect(terminal.last_protocol_rejection == null);
+    const event = try @import("../e2e/trace.zig").Trace.stepEvent(a, 14, .{ .bytes = "observe-provider" }, .{ .outcome = .failed }, observed);
+    const tree = try std.json.parseFromSlice(std.json.Value, a, event, .{});
+    try std.testing.expectEqualStrings("missing_final_text", tree.value.object.get("provider_content_diagnostic").?.string);
+    // Pre-call authorization never inherits the previous exchange's origin.
+    for ([_]usize{ 0, 12 }) |prior_calls| {
+        terminal.provider_diagnostic = "authentication_failed";
+        terminal.last_model_origin = if (prior_calls == 0) null else origin;
+        try retained.observe(std.testing.allocator, prior_calls, terminal);
+        try retained.project(a, prior_calls, &terminal);
+        try std.testing.expect(terminal.last_provider_rejection.?.call == null);
+        try std.testing.expect(terminal.last_provider_rejection.?.origin == null);
+    }
+    var calls = [_]obs.Call{.{ .origin = origin, .step = "prior-call", .provider_diagnostic = "missing_final_text" }};
+    try obs.correlate(a, &calls, &terminal);
+    try std.testing.expectEqualStrings("missing_final_text", calls[0].provider_diagnostic.?);
+    try std.testing.expectEqualStrings("authentication_failed", terminal.provider_diagnostic.?);
+    try std.testing.expect(terminal.provider_origin == null);
+}
+
+test "native correction links retain first observation invalidation rebuild and unresolved work" {
+    const execution = @import("../../../src/domain/workflow_execution.zig");
+    const Progress = @import("../e2e/progress.zig").Progress;
+    var progress = Progress.init(std.testing.allocator);
+    defer progress.deinit();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .last_operation_rejection = .{ .cause = .UnsafeSpecificationRepair, .outcome = .blocked } };
+    try progress.observe(2, "authorize", report, null);
+    report.last_operation_rejection = null;
+    const permit: @import("../../../src/domain/workflow_retry.zig").Permit = .{ .key = .{ .scope = @splat(1), .target = @splat(2), .family = @splat(3) }, .authorization = @splat(4), .revision = 1, .maximum_targets = 1 };
+    try progress.observe(3, "merge", report, execution.AppliedEffects{ .invalidations = .initMany(&.{ .identified_specification_content, .specification_support_review }), .repair = .{ .merged = .{ .permit = permit, .revision_after = 2, .validation = .dependent_review } } });
+    try progress.observe(4, "rebuild-content", report, execution.AppliedEffects{ .writes = .initOne(.identified_specification_content) });
+    try progress.observe(5, "failed-merge", report, null);
+    try progress.project(a, &report);
+    progress.deinit();
+    progress = Progress.init(std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 2), report.first_observed_defect.?.sequence);
+    try std.testing.expectEqualStrings("authorize", report.first_observed_defect.?.step);
+    try std.testing.expectEqual(.UnsafeSpecificationRepair, report.first_observed_defect.?.evidence.operation.cause);
+    try std.testing.expectEqual(@as(usize, 2), report.corrections.len);
+    try std.testing.expectEqualDeep(permit, report.corrections[0].repair.?.merged.permit);
+    try std.testing.expectEqual(@as(u64, 2), report.corrections[0].repair.?.merged.revision_after);
+    try std.testing.expectEqualDeep(c.WorkLink{ .key = .identified_specification_content, .invalidated_at = 3 }, report.corrections[1].rebuilt[0]);
+    try std.testing.expectEqualDeep(&[_]c.WorkLink{.{ .key = .specification_support_review, .invalidated_at = 3 }}, report.outstanding_work);
+    const readback = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
+    try std.testing.expectEqualDeep(report.corrections, readback.corrections);
+    const text = try @import("../e2e/report.zig").renderMarkdown(a, readback);
+    try std.testing.expect(std.mem.indexOf(u8, text, "not proven root cause") != null);
+    var fresh: c.Report = .{ .started_at_utc = "", .status = .workflow_failed };
+    try progress.project(a, &fresh);
+    try std.testing.expect(fresh.first_observed_defect == null and fresh.corrections.len == 0 and fresh.outstanding_work.len == 0);
+}
+
+test "build evidence preserves bytes deletion and incompleteness and marks credential redaction" {
+    const provenance = @import("../../../build/provenance.zig");
+    const save = @import("../e2e/build_evidence.zig").save;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for (0..3) |example| {
+        var destination = std.testing.tmpDir(.{});
+        defer destination.cleanup();
+        const store: @import("../evidence.zig").Store = .{ .io = std.testing.io, .allocator = a, .run = destination.dir, .secrets = &.{"MOCK_CREDENTIAL"} };
+        const bundle: provenance.Bundle = .{ .identity = .{ .revision = "MOCK_REVISION", .source_sha256 = "MOCK_HASH", .modified = true }, .inputs = &.{ .{ .path = "src/untracked.zig", .state = .captured, .bytes = if (example == 1) "MOCK_CREDENTIAL" else "new source" }, .{ .path = "src/deleted.zig", .state = .deleted } }, .complete = example != 2 };
+        const state = try save(store, try std.json.Stringify.valueAlloc(a, bundle, .{}));
+        try std.testing.expectEqual(@as(@TypeOf(state), if (example == 0) .captured else if (example == 1) .redacted else .incomplete), state);
+        const bytes = try @import("../files.zig").read(std.testing.io, a, destination.dir, "build-inputs.json");
+        try std.testing.expect(std.mem.indexOf(u8, bytes, "MOCK_CREDENTIAL") == null);
+        const readback = try @import("../contracts.zig").decode(provenance.Bundle, a, bytes);
+        try std.testing.expectEqualStrings(if (example == 1) "[REDACTED_CREDENTIAL]" else "new source", readback.inputs[0].bytes.?);
+        try std.testing.expectEqual(.deleted, readback.inputs[1].state);
+        try std.testing.expectEqual(example == 0, readback.complete);
+        try std.testing.expectError(error.PathAlreadyExists, save(store, bytes));
+        var invalid = bundle;
+        invalid.schema = "build-inputs/v2";
+        try std.testing.expectError(error.InvalidBuildInputs, save(store, try std.json.Stringify.valueAlloc(a, invalid, .{})));
+        invalid = bundle;
+        invalid.inputs = &.{.{ .path = "src/missing.zig", .state = .captured }};
+        try std.testing.expectError(error.InvalidBuildInputs, save(store, try std.json.Stringify.valueAlloc(a, invalid, .{})));
+    }
 }

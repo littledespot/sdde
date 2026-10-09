@@ -18,7 +18,7 @@ pub const Capture = struct {
             .blocked => |failure| failure,
         };
     }
-    pub fn action(self: Capture, node: workflow.WorkflowStepId, result: ?execution.Applied) ?stream.FailureCode {
+    pub fn action(self: Capture, node: workflow.WorkflowStepId, result: ?execution.Applied, rejection: ?execution.OperationError) ?stream.FailureCode {
         var code: [96]u8 = undefined;
         return self.emit(.{
             .event_type = if (result) |value| switch (value.status()) {
@@ -31,7 +31,7 @@ pub const Capture = struct {
                 .outcome = outcome(value.status()),
                 .diagnostic_code = switch (value.status()) {
                     .ok, .more, .needs_user => null,
-                    else => diagnostic(&code, if (value == .rejected) value.rejected.diagnostic() else @tagName(value.outcome)) orelse return .LOG_SERIALIZATION_FAILURE,
+                    else => diagnostic(&code, if (value == .rejected) value.rejected.diagnostic() else if (rejection) |cause| @errorName(cause) else @tagName(value.outcome)) orelse return .LOG_SERIALIZATION_FAILURE,
                 },
             } else .{},
         });

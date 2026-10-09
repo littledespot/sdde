@@ -22,10 +22,10 @@ pub const ResolvePaths = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const selected = values.read(&input.step.data, feature_values.directory, feature.Directory) catch return error.OperationExecutionFailed;
+        const selected = values.read(&input.step.data, feature_values.directory, feature.Directory) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const result = self.action.execute(arena.allocator(), selected.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(arena.allocator(), selected.*) catch |operation_error| return operation_error;
         return publish(self.allocator, paths_schema, artifacts.FeaturePaths, result);
     }
 };
@@ -35,11 +35,11 @@ pub const Capture = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const selected = values.read(&input.step.data, feature_values.directory, feature.Directory) catch return error.OperationExecutionFailed;
-        const paths = values.read(&input.step.data, paths_schema, artifacts.FeaturePaths) catch return error.OperationExecutionFailed;
+        const selected = values.read(&input.step.data, feature_values.directory, feature.Directory) catch |operation_error| return operation_error;
+        const paths = values.read(&input.step.data, paths_schema, artifacts.FeaturePaths) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const result = self.action.execute(arena.allocator(), selected.*, paths.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(arena.allocator(), selected.*, paths.*) catch |operation_error| return operation_error;
         return publish(self.allocator, captures_schema, clarification.Captures, result);
     }
 };
@@ -49,10 +49,10 @@ pub const ParseState = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const captures = values.read(&input.step.data, captures_schema, clarification.Captures) catch return error.OperationExecutionFailed;
+        const captures = values.read(&input.step.data, captures_schema, clarification.Captures) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const result = self.action.execute(arena.allocator(), captures.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(arena.allocator(), captures.*) catch |operation_error| return operation_error;
         return publish(self.allocator, parsed_schema, clarification.ParsedState, result);
     }
 };
@@ -62,9 +62,9 @@ pub const ValidateState = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const parsed = values.read(&input.step.data, parsed_schema, clarification.ParsedState) catch return error.OperationExecutionFailed;
-        const paths = values.read(&input.step.data, paths_schema, artifacts.FeaturePaths) catch return error.OperationExecutionFailed;
-        const result = self.action.execute(parsed.*, paths.feature.feature_id) catch return error.OperationExecutionFailed;
+        const parsed = values.read(&input.step.data, parsed_schema, clarification.ParsedState) catch |operation_error| return operation_error;
+        const paths = values.read(&input.step.data, paths_schema, artifacts.FeaturePaths) catch |operation_error| return operation_error;
+        const result = self.action.execute(parsed.*, paths.feature.feature_id) catch |operation_error| return operation_error;
         return publish(self.allocator, state_schema, clarification.ValidatedState, result);
     }
 };
@@ -74,11 +74,11 @@ pub const ValidateForms = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const state = values.read(&input.step.data, state_schema, clarification.ValidatedState) catch return error.OperationExecutionFailed;
-        const captures = values.read(&input.step.data, captures_schema, clarification.Captures) catch return error.OperationExecutionFailed;
+        const state = values.read(&input.step.data, state_schema, clarification.ValidatedState) catch |operation_error| return operation_error;
+        const captures = values.read(&input.step.data, captures_schema, clarification.Captures) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const result = self.action.execute(arena.allocator(), state.*, captures.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(arena.allocator(), state.*, captures.*) catch |operation_error| return operation_error;
         return publish(self.allocator, inputs_schema, clarification.Inputs, result);
     }
 };

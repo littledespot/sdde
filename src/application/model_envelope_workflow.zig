@@ -56,7 +56,7 @@ pub const Decode = struct {
         errdefer values.destroy(value);
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(schema.key)] = value;
-        const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch return error.OperationExecutionFailed;
+        const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch |operation_error| return operation_error;
         return .{ .outcome = status(result), .delta = delta };
     }
 };
@@ -76,7 +76,7 @@ pub fn complete(source: *const observation.Result) ?*const @import("../domain/pr
 pub fn capture(allocator: std.mem.Allocator, view: *const data.View, decoded: ?envelope.Error!envelope.Owned, diagnostic: ?envelope.Diagnostic) operations.Error!*data.Value {
     var outcome: Decoded = if (decoded) |result| decoded_result: {
         const owned = result catch |err| break :decoded_result switch (err) {
-            error.OutOfMemory => return error.OperationExecutionFailed,
+            error.OutOfMemory => return error.OutOfMemory,
             error.InvalidModelEnvelope => .{ .protocol_rejected = .{ .reason = error.InvalidModelEnvelope, .diagnostic = diagnostic orelse return error.OperationExecutionFailed } },
         };
         break :decoded_result .{ .decoded = owned };
@@ -85,12 +85,12 @@ pub fn capture(allocator: std.mem.Allocator, view: *const data.View, decoded: ?e
     const source = try observation.readCurrent(view);
     if ((complete(source) != null) != (decoded != null)) return error.OperationExecutionFailed;
     if (outcome == .decoded and outcome.decoded.candidate.association() != complete(source).?.association()) return error.OperationExecutionFailed;
-    const owner = allocator.create(Owner) catch return error.OperationExecutionFailed;
+    const owner = allocator.create(Owner) catch |operation_error| return operation_error;
     errdefer allocator.destroy(owner);
-    const retained = values.retain(view.slots[@intFromEnum(observation.schema.key)].?) catch return error.OperationExecutionFailed;
+    const retained = values.retain(view.slots[@intFromEnum(observation.schema.key)].?) catch |operation_error| return operation_error;
     errdefer values.destroy(retained);
     owner.* = .{ .allocator = allocator, .retained = retained, .source = source, .outcome = outcome };
-    return values.adopt(allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch error.OperationExecutionFailed;
+    return values.adopt(allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch |operation_error| operation_error;
 }
 
 const Decoded = union(enum) { decoded: envelope.Owned, protocol_rejected: Rejection, not_decoded };
@@ -105,7 +105,7 @@ fn release(allocator: std.mem.Allocator, outcome: *Decoded) void {
 
 /// The sealed source owns association; consumers do not revalidate provider data.
 pub fn readCurrent(view: *const data.View) operations.Error!*const Result {
-    const result = values.read(view, schema, Result) catch return error.OperationExecutionFailed;
+    const result = values.read(view, schema, Result) catch |operation_error| return operation_error;
     try observation.requireCurrent(view, result.source());
     return result;
 }

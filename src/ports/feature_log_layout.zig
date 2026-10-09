@@ -4,7 +4,7 @@ const feature = @import("../domain/feature_directory.zig");
 const binding = @import("../domain/feature_log_binding.zig");
 const active = @import("../domain/active_feature_directory.zig");
 
-pub const Error = std.mem.Allocator.Error || error{ InvalidFeatureLogLayout, FeatureLogLayoutUnavailable, InsecurePermissions, Cancelled };
+pub const Error = @import("../domain/operation_error.zig").FeatureLogLayout;
 pub const Context = opaque {};
 pub const Port = struct {
     context: *Context,

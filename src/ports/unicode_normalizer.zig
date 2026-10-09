@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const Error = std.mem.Allocator.Error || error{ InvalidUtf8, NormalizationLimitExceeded, NormalizationFailed };
+pub const Error = @import("../domain/operation_error.zig").UnicodeNormalizer;
 
 /// Unicode character properties only; carries no operational capability.
 pub const LexicalClassifier = struct {

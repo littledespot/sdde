@@ -166,6 +166,7 @@ zig-out/e2e-spec/<UTC-date-time>-<unique-id>/
   report.json     # generation result and joined rubric evaluation
   report.md
   events.jsonl    # ordered production step outcomes and diagnostics
+  build-inputs.json # allowlisted build sources and reconstruction status
   evidence/
     generation/call-000001/
       context.json       # request origin, attempt, prompt/input and schema
@@ -291,8 +292,17 @@ The terminal prints the score and threshold result explicitly.
 Reports embed the development harness's build-time source digest, Git revision,
 modified-source flag, Zig version, target and build mode. The digest covers build,
 engine, harness, test, design and script inputs, including untracked source files;
-credentials are excluded. Git runs only in the development provenance build step.
-This identity is diagnostic evidence and never participates in workflow gates.
+`build-inputs.json` retains those UTF-8 bytes, tracked status, permissions and deleted
+paths. Credential paths are excluded before reading. Known run credentials are
+redacted before storage. Unavailable, excluded, non-UTF-8 or redacted inputs make
+the bundle explicitly incomplete; `report.build.reconstruction` distinguishes that
+from a captured snapshot or a snapshot not saved. Declared dependencies remain
+identified by `build.zig.zon`; their downloads and the compiler/toolchain must still
+be available to rebuild. Git runs only in the development provenance build step.
+These bytes are development evidence, never workflow authority or recovery state.
+The snapshot permits source reconstruction when complete, not a guarantee of an
+identical binary or future provider response. Exact request replay remains a
+separate byte-equality check and rejects redacted parents.
 
 `total_token_budget`, `retry_settings` and `attempts` project the executed graph
 and native accounting. Per-call usage survives budget rejection before candidate
@@ -301,7 +311,27 @@ absent responses, budget stops, other missing text and capture failure. Known
 transport phases/causes remain separate from delivery and retry policy; unknown
 causes stay unknown. Recognized provider failures survive request release.
 `last_protocol_rejection` keeps its own call/request/attempt when a later exchange
-fails for another reason. None of these projections creates another counter.
+fails for another reason. `last_provider_rejection` independently retains provider
+content diagnostics after request retirement; `provider_origin` is independent of
+the latest exchange's identity. Failures before a physical call cannot inherit an
+earlier exchange's call or origin. Events include `provider_content_diagnostic` directly.
+None of these projections creates another counter.
+
+Operation failures retain their closed native error names through bindings, runner,
+CLI, telemetry and reports. Allocation failure crosses that boundary by value without
+allocating a diagnostic or applying a failed delta. Expected domain rejections keep
+their existing typed outcomes and may carry a native cause; that evidence cannot
+accompany success. Omission-authorization rejection additionally retains the reviewed
+revision, outstanding candidate-defect requirements and review origin. A review
+origin is not attributed as the producer of the generation defect.
+
+`first_observed_defect` identifies the earliest captured diagnostic and event sequence,
+not a proven initial semantic cause. `corrections` project accepted native repair
+permits, target keys, revisions and actual invalidation/rebuild links. `outstanding_work`
+lists invalidated data keys not rebuilt, with the event that invalidated each; it may
+include intentionally retired transport data and does not independently determine
+workflow completion. Rejected deltas create no applied-effect evidence. Each fresh
+invocation starts a new projection; earlier recovered errors remain historical.
 
 ### Reliability assessment
 

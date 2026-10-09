@@ -1,7 +1,7 @@
 const std = @import("std");
 const reference = @import("../domain/reference_ingestion.zig");
 const roots = @import("../domain/bootstrap_root_registry.zig");
-pub const Error = std.mem.Allocator.Error || error{ ReferenceUnavailable, ReferenceInventoryChanged, ReferenceLimitExceeded, Cancelled };
+pub const Error = @import("../domain/operation_error.zig").ReferenceCorpusSource;
 pub const Enumerator = struct {
     context: *anyopaque,
     capability: ?*const roots.ReferenceContentReadCapability = null,

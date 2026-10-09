@@ -17,6 +17,7 @@
         "README.md",
         "build.zig",
         "build.zig.zon",
+        "build_provenance.zig",
         "tests.zig",
         "integration.zig",
         "build",

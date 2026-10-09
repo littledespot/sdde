@@ -1014,81 +1014,80 @@ If adding those rules, extend the owning closed contracts and their reports/test
 together. Do not change CLI success semantics incidentally or make test thresholds
 production workflow authority.
 
-### R9 — Medium: diagnostics and reproducibility require upstream changes
+### R9 — Medium: preserve native diagnostics and reconstruction evidence
 
-The proposed capture work should be a gap-driven extension. Existing
-[E2E trace](../test/harness/e2e/trace.zig),
-[observation](../test/harness/e2e/observation.zig),
-[model exchange capture](../src/application/model_exchange_capture.zig#L65) and
-[report contracts](../test/harness/e2e/contracts.zig#L111) already retain substantial
-request, schema, response, origin, usage, retry, repair and source-snapshot evidence.
+**Status — DONE for implementation and offline verification on 9 October.
+No new live E2E or model comparison has been run for R9.** This improves retained
+evidence, not authoring-role selection, model quality or workflow continuation policy.
 
-There are concrete projection gaps: the
-[event projection](../test/harness/e2e/trace.zig#L226) omits
-`provider_content_diagnostic`, although the report holds it; the
-[retained rejection observer](../test/harness/e2e/observation.zig#L25) tracks the
-latest model-protocol rejection and does not capture provider-content failures
-such as missing final text. The report also lacks a complete linked first-defect,
-repair, invalidation/rebuild and outstanding-work projection. Reuse native evidence
-for those additions instead of inferring the missing data from prose.
+The pre-implementation findings were upstream information loss: bindings collapsed
+native causes to `OperationExecutionFailed`; its rendered diagnostic was `failed`.
+Omission authorization returned `invalid` without the native cause or outstanding
+requirements. Provider-content failures disappeared from the retained rejection
+observer/events, and build provenance identified dirty inputs without retaining
+those bytes. Supplied-spec grading bypassed the existing raw exchange store.
 
-The 9 October, 08:34 run adds a concrete native-rejection example: the report names
-omission authorization but retains no missing-family requirement or exact domain
-cause. Its last model output is a successful exact-token finding, which does not
-identify the earlier generation defect. The
-[omission binding](../src/application/specification_omission_repair_workflow.zig#L25)
-maps non-allocation domain errors to `invalid`; retaining their typed cause belongs
-at that boundary and through its consumers, not in a guessed report explanation.
+The 9 October, 08:34 run demonstrates the omission-authorization gap. The later
+02:01:41 UTC run stopped at `g14-g6-review-omit-merge` with `operation_failed` /
+`failed`, after 31 calls and 54,298 tokens. Its final model replacement and preceding
+review establish the observed repair sequence, but cannot recover the thrown native
+merge cause. New instrumentation cannot retroactively establish that cause.
 
-The cause-loss claim is confirmed:
-[reference_reconciliation_workflow](../src/application/reference_reconciliation_workflow.zig#L137)
-collapses operational errors to `OperationExecutionFailed`, and
-[workflow_execution](../src/domain/workflow_execution.zig#L49) renders that as
-`failed`. A harness renderer cannot reconstruct the discarded cause. Fix the
-narrowest shared typed failure boundary and audit sibling bindings. Existing
-[reconciliation diagnostics](../src/domain/reference_reconciliation_diagnostic.zig#L128)
-and [candidate diagnostics](../src/domain/specification_candidate.zig#L16) already
-retain typed field/rule/target evidence; this is not absence of all diagnostics.
+| Required outcome | Implementation and owning boundary |
+| --- | --- |
+| Preserve native operation failures | [Closed operation error contract](../src/domain/operation_error.zig) combines declared domain/port error sets. Application bindings propagate the original cause through the runner, CLI, telemetry and harness. Post-call token accounting retains invocation failure and reports its own revision errors precisely. Error names are static; allocation failure needs no allocated diagnostic and applies no candidate delta. Explicit invariant guards retain their existing generic failure. |
+| Keep expected rejection separate | [Candidate evidence](../src/domain/workflow_execution.zig) carries an optional closed native rejection outside the delta, only for existing rejecting outcomes. Success and disguised allocation failures reject at the runner. Existing outcome routing and publication gates remain authoritative. |
+| Retain omission-authorization detail | [Omission authorization](../src/application/specification_omission_repair_workflow.zig) retains its native cause, reviewed revision, outstanding candidate-defect requirements and review origin. The [diagnostic projection](../src/domain/candidate_validation_diagnostic.zig) treats this as candidate-level evidence; a review call is not invented as the producer of the generation defect. |
+| Retain provider failures | Existing [observer](../test/harness/e2e/observation.zig), [events](../test/harness/e2e/trace.zig) and reports preserve provider-content diagnostics and an independently owned latest provider rejection after transport retirement. Provider-diagnostic origin is separate from the latest exchange: pre-call authentication failures cannot inherit an earlier call's identity. Protocol rejection history remains separate. |
+| Link observed progress | The runner exposes only accepted native data effects and repair transitions. The existing trace projects [first observation, correction history and invalidation/rebuild links](../test/harness/e2e/progress.zig), including target/family keys, permit/revision and unrebuilt data keys. Rejected deltas produce no applied effects. Each fresh invocation starts empty. |
+| Preserve closed repair wire shapes | Native repair keys, permits and dependency snapshots serialize fixed digests as numeric arrays through the shared JSON byte-array writer. Their shape no longer varies with accidental UTF-8 validity; the closed decoder is unchanged. |
+| Reconstruct allowlisted dirty sources | [Build provenance](../build/provenance.zig) embeds allowlisted source bytes, tracked/untracked status, deletions, permissions, source digest, revision, compiler version and dependency/build metadata in the development harness. The existing evidence store saves `build-inputs.json`, excludes credential paths before reading, redacts known run secrets and labels missing/redacted/non-UTF-8 inputs as incomplete. It creates no runtime authority or recovery path. |
+| Capture supplied-spec evaluation | The [evaluator CLI](../test/harness/cli.zig) creates an exclusive per-invocation evidence directory and always uses the existing [evaluation trace](../test/harness/evaluation_trace.zig). Both live grading entry points require that store; capture failure prevents reporting a quality result. |
 
-The [operation binding signature](../src/ports/workflow_operation_registry.zig#L58)
-returns the narrow `OperationError!Candidate` contract. Preserving richer causes
-affects its producers, runner failure handling, cleanup/lifetime ownership and
-CLI/telemetry/harness consumers. Allocation failure must remain reportable without
-requiring another allocation. Keep expected typed domain rejection separate from
-operational failures; do not publish a failed delta to transport a diagnostic.
-This is cross-cutting work, not a report-field patch. No reconciliation-only
-exception, arbitrary error/payload channel or diagnostic capability bag is warranted.
+**Evidence interpretation:** `first_observed_defect` names the earliest captured
+diagnostic, not a proven initiating semantic cause. Native repair permits and data
+invalidation links establish only their explicit associations. `outstanding_work`
+means invalidated data not rebuilt and can include intentionally retired transport;
+it does not independently decide whether a workflow is complete. Historical recovered
+errors stay distinct from current and terminal diagnostics. No attribution is inferred
+from model prose or temporal proximity.
 
-Chronology alone is not causation. Extend existing native origin, repair-target,
-revision and invalidation links where absent; label inferred attribution. An early
-recovered protocol error need not be the initiating semantic defect, and the first
-semantic defect may remain unprovable without human review.
+**Reconstruction limits:** a complete bundle retains the allowlisted source set.
+Compiler/toolchain availability, target/build settings and declared dependency
+hashes remain necessary external build inputs; dependency downloads are not copied.
+Missing, excluded or redacted bytes explicitly prevent exact source reconstruction.
+[Exact replay](../src/application/request_replay.zig) separately verifies regenerated
+request bytes and rejects redacted parents. Current encoding changes can invalidate
+replay, and identical request bytes do not guarantee identical future provider output.
+Modified replay retains its overrides and cannot establish unchanged behavior.
 
-[build/provenance.zig](../build/provenance.zig#L4) records revision, a source hash and
-a modified flag. It does not retain the modified source bytes. A hash identifies a
-build input set but cannot reconstruct it. A reproducible bundle needs the relevant
-allowlisted build inputs or a complete patch against an available exact base,
-plus untracked/deleted-file evidence and declared compiler/dependency/build
-metadata. Preserve existing redaction and
-credential exclusion; report any missing or redacted bytes rather than claiming
-exact reproducibility. This belongs to development evidence, not runtime authority
-or checkpoint recovery.
+**Regression coverage:** unrelated reconciliation/omission failures and OOM cross the
+shared runner boundary without a delta; expected rejecting outcomes retain their
+cause while success rejects it. Post-call accounting retains the invocation cause,
+records unknown usage and reports a stale revision without replacing it with generic
+failure. Provider rejection survives retirement and owner release, including
+pre-call failure before and after earlier exchanges. Native repair progress
+round-trips with exact revision/invalidation links and starts empty on fresh
+invocation. Stale omission authorization retains outstanding requirements without
+false response attribution.
+Source capture covers dirty/untracked/deleted files, permissions, credential exclusion,
+symlink rejection, explicit incompleteness, redaction and exclusive writes. UTF-8 and
+binary repair digests share the same closed numeric-array wire shape. Evaluator trace
+capture/retry/failure tests reuse the existing mechanism.
 
-Distinguish **source/build reconstruction**, **exact request resubmission** and
-**reproduction of live output**. Existing
-[exact replay](../src/application/request_replay.zig#L20) verifies regenerated
-request bytes and rejects redacted parents; it uses current adapters and may reject
-after encoding changes. A source snapshot improves reconstruction, but neither it
-nor identical request bytes guarantees an identical future provider response.
-Modified replay must retain its overrides and cannot establish unchanged behavior.
+**Validation — 9 October:**
 
-The supplied-spec evaluator also needs scrutiny before calibration: its
-[CLI live invocation](../test/harness/cli.zig#L74) does not pass an exchange store.
-Reuse the existing [evaluation trace store](../test/harness/evaluation_trace.zig)
-for raw per-call evidence instead of implementing another capture system.
+| Command | Result |
+| --- | --- |
+| `zig build test-model-request-workflow test-required-authority test-clarification-inputs test-architecture --summary all` | 12/12 steps; 627/627 tests passed. |
+| `zig build test-integration build-e2e-harness --summary all` | 9/9 steps; 87/87 tests passed, including the final provider-origin regression. |
+| `zig build verify build-e2e-harness build-rubric-evaluator --summary all` | 137/137 steps; 1,341/1,341 tests passed. Includes architecture/schema/format checks, native clean-environment packaging smoke tests and both development harness builds. |
+| `git diff --check` | Passed. |
 
-**Feasibility:** high for specific capture/report gaps; medium for preserving typed
-causes across the shared operation boundary and packaging reproducible dirty builds.
+The complete diff was reviewed for scope, ownership, duplicate authority, failure
+suppression and weakened validation. No new live outcome improvement is claimed.
+See [E2E evidence](../design/harness/e2e.md)
+and [evaluator capture](../design/harness/evaluator.md) for the retained contracts.
 
 ### R10 — High: incomplete authoring-role coverage stops at the generation handoff
 
@@ -1178,7 +1177,7 @@ reject the binding; initialization now identifies exactly which roles are absent
   reports retain the complete payload. The production invocation report copies
   candidate diagnostics before releasing source owners, and the CLI prints them
   for unsuccessful execution. This handles the expected handoff rejection without
-  a new error channel or the broader operational-error redesign proposed in R9.
+  a new error channel or a parallel implementation of R9's shared error boundary.
 - Initial assignments, repaired reconciliation and source invalidation still
   converge on this same initialization check. Canonical readback uses its strict
   `validate` wrapper; it cannot load incomplete coverage as successful authority.
@@ -1300,7 +1299,7 @@ in every package. No numerical effort estimate is defensible from this review.
 | 2 — Native traceability | Existing group provenance can be audited immediately. Narrower association and complete answer authority are separate coordinated changes. | Define precision and identity lifetime; amend ADR 0020 only if changing binding. Complete the separate authentication/answer/currentness contract before claiming answer-supported generation. |
 | 3 — Resolved projections/workload | R3's resolved policy inputs are implemented and observed live; R4 supplies shared family meanings. Complete workload feasibility remains unmet; grouping is a distinct, conditional experiment. | Preserve resolved scalar/record/collection/entity facts and separate instructions. A production cardinality or policy-selection change needs an explicit amendment and negative tests. |
 | 4 — Evidenced repair | Projection/evidence improvements can preserve current policy. New premise reassessment is not active authority. | Define trigger, closed outcomes, currentness, one active finding and conserved allowance; obtain the required amendment before adding reconsideration. |
-| 5 — Layered acceptance/reporting | Specific reporting gaps are bounded. Rich operation causes, dirty-source reconstruction and new acceptance rules have broader surfaces. | Extend existing capture first; separately design shared failure propagation and the development acceptance contract. A complete diagnostic redesign is not a prerequisite for the bounded projection pilot. |
+| 5 — Layered acceptance/reporting | R9 implements native cause propagation, linked observations, source reconstruction evidence and supplied-spec exchange capture, with full offline verification above. Acceptance rules remain separate work. | Apply the development acceptance contract separately. Diagnostic evidence does not establish model quality or publication success. |
 | R10 role-coverage handoff | Typed blocking and evidence propagation are implemented using the existing coverage/diagnostic owners. | No new decision for blocking. Automatic upstream correction needs its own trigger, authorization and allowance contract; R7 owns live measurement. |
 
 No engine replacement is indicated. The largest uncertainty is measured semantic
@@ -1353,7 +1352,9 @@ All are feasible in principle; none should be hidden inside a prompt cleanup.
 6. **Complete the applicable lifecycle and diagnostic work.** If claiming full
    answer-supported Spec execution, demonstrate authenticated answer acceptance
    through generation and readback, including source refresh and invalidation.
-   Handle shared operational-cause changes as their own reviewed contract change.
+   R9's shared operational-cause and evidence changes are implemented, with their
+   verification and reconstruction limits recorded above. They do not implement
+   the answer lifecycle or change acceptance policy.
 7. **Complete layered verification and approved live acceptance.** Use the current
    repository build steps, preserve separate unit/integration/live layers, and then
    run the explicitly approved E2E cases with actual publication and rubric evidence.
@@ -1406,6 +1407,9 @@ protections from unresolved precision and semantic reliability gaps. R3 resolves
 the policy projection defect, and R4 supplies shared purposes for every existing
 record family, aggregate requiredness and explicit reviewed collections. R10
 makes incomplete authoring roles an explicit blocked result with producer evidence.
+R9 retains native causes and explicit repair/progress links and captures permitted
+build inputs and evaluator exchanges. It improves observability without proving
+the initiating semantic cause or improving model decisions.
 Any automatic upstream correction requires its own bounded policy. Define the
 claimed source-association precision and settle the applicable acceptance and
 disputed-premise decisions. Semantic calibration and

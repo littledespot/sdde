@@ -17,12 +17,12 @@ pub const Authorize = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const rejection = owned.read(&input.step.data, spec.coverage_schema, .coverage_rejected) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const rejection = owned.read(&input.step.data, spec.coverage_schema, .coverage_rejected) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        const decision = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), try content(&input.step.data), rejection) catch return error.OperationExecutionFailed;
+        const decision = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), try content(&input.step.data), rejection) catch |operation_error| return operation_error;
         owner.payload = .{ .coverage_repair = decision };
-        var result = owned.publish(self.allocator, schema, owner, if (decision == .authorized) .ok else .blocked) catch return error.OperationExecutionFailed;
+        var result = owned.publish(self.allocator, schema, owner, if (decision == .authorized) .ok else .blocked) catch |operation_error| return operation_error;
         if (decision == .authorized) result.delta.repair_transition = .{ .authorized = decision.authorized.retry orelse return error.OperationExecutionFailed };
         return result;
     }
@@ -36,17 +36,17 @@ pub const Merge = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const state = owned.read(&input.step.data, schema, .coverage_repair) catch return error.OperationExecutionFailed;
+        const state = owned.read(&input.step.data, schema, .coverage_repair) catch |operation_error| return operation_error;
         if (state != .authorized) return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .session = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), try content(&input.step.data), state.authorized) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .session = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), try content(&input.step.data), state.authorized) catch |operation_error| return operation_error };
         var delta: pipeline.NodeDelta = .{ .repair_transition = .{ .merged = .{ .permit = state.authorized.retry orelse return error.OperationExecutionFailed, .revision_after = owner.payload.session.revision } } };
-        delta.data_replacements[@intFromEnum(spec.session_schema.key)] = values.adopt(self.allocator, spec.session_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
+        delta.data_replacements[@intFromEnum(spec.session_schema.key)] = values.adopt(self.allocator, spec.session_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
         return .{ .outcome = .ok, .delta = delta };
     }
 };
 fn content(view: *const data.View) operations.Error!@import("../domain/specification.zig").IdentifiedContent {
-    return @import("required_authority_values.zig").read(view, @import("required_authority_workflow.zig").content_schema, .content) catch error.OperationExecutionFailed;
+    return @import("required_authority_values.zig").read(view, @import("required_authority_workflow.zig").content_schema, .content) catch |operation_error| operation_error;
 }

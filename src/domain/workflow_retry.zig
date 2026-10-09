@@ -143,6 +143,15 @@ pub const Key = struct {
     scope: [32]u8,
     target: [32]u8,
     family: [32]u8,
+
+    pub fn jsonStringify(self: Key, writer: *std.json.Stringify) std.json.Stringify.Error!void {
+        try writer.beginObject();
+        inline for (.{ "scope", "target", "family" }) |field| {
+            try writer.objectField(field);
+            try @import("canonical_json.zig").writeByteArray(writer, &@field(self, field));
+        }
+        try writer.endObject();
+    }
 };
 
 pub const Permit = struct {
@@ -151,6 +160,19 @@ pub const Permit = struct {
     revision: u64,
     /// Frozen native bound on distinct target/family keys in this scope.
     maximum_targets: u32,
+
+    pub fn jsonStringify(self: Permit, writer: *std.json.Stringify) std.json.Stringify.Error!void {
+        try writer.beginObject();
+        try writer.objectField("key");
+        try writer.write(self.key);
+        try writer.objectField("authorization");
+        try @import("canonical_json.zig").writeByteArray(writer, &self.authorization);
+        try writer.objectField("revision");
+        try writer.write(self.revision);
+        try writer.objectField("maximum_targets");
+        try writer.write(self.maximum_targets);
+        try writer.endObject();
+    }
 };
 
 pub const Validation = enum { resolved, recurring };

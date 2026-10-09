@@ -71,12 +71,17 @@ pub fn main(init: std.process.Init) !void {
     defer json_file.close(io);
     const md_file = output.createFile(io, md_name, .{ .exclusive = true, .permissions = .fromMode(0o600) }) catch return fail(io, "Cannot create the report view. No API call made; an empty JSON report may remain.");
     defer md_file.close(io);
-    const result = @import("live.zig").run(io, a, config, key, inputs, null) catch return fail(io, "Evaluator aborted; reserved report files may be incomplete. No quality result is available.");
+    // Every supplied-spec evaluation gets its own exclusive raw exchange store.
+    try output.createDir(io, id, .default_dir);
+    const evidence_dir = try directories.open(io, output, id);
+    defer evidence_dir.close(io);
+    const store: @import("evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_dir, .secrets = &.{key} };
+    const result = @import("live.zig").run(io, a, config, key, inputs, store) catch return fail(io, "Evaluator aborted; reserved report files may be incomplete. No quality result is available.");
     try json_file.writeStreamingAll(io, try reports.json(a, result));
     try json_file.sync(io);
     try md_file.writeStreamingAll(io, try reports.markdown(a, result));
     try md_file.sync(io);
-    const message = try std.fmt.allocPrint(a, "Evaluation report: {s}/{s}\n", .{ options.output, md_name });
+    const message = try std.fmt.allocPrint(a, "Evaluation report: {s}/{s}\nModel exchanges: {s}/{s}\n", .{ options.output, md_name, options.output, id });
     try std.Io.File.stdout().writeStreamingAll(io, message);
     switch (result.outcome) {
         .evaluator_error => std.process.exit(1),

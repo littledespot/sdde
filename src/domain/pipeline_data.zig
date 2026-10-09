@@ -83,3 +83,22 @@ pub fn find(schemas: []const Schema, key: pipeline.DataKey) ?Schema {
     }
     return result;
 }
+
+pub const ValueError = std.mem.Allocator.Error || error{
+    InvalidDataSchema,
+    DataSchemaMismatch,
+    DataValueLimitExceeded,
+    MissingRequiredData,
+    InvalidCandidatePayload,
+};
+
+pub const EnvelopeError = @import("pipeline.zig").DeltaError || std.mem.Allocator.Error || error{
+    DataSchemaMismatch,
+    UnregisteredDataSchema,
+    AliasedDataValue,
+    DataGenerationExhausted,
+    DataReferenceOverflow,
+    InvalidInformationOccurrence,
+    InformationConflict,
+    InvalidRepairRenewal,
+};

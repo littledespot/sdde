@@ -17,10 +17,10 @@ pub const CaptureRegistry = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const prior: ?registry.Registry = if (input.step.data.contains(prior_schema.key)) (values.read(&input.step.data, prior_schema, ?registry.Registry) catch return error.OperationExecutionFailed).* else null;
+        const prior: ?registry.Registry = if (input.step.data.contains(prior_schema.key)) (values.read(&input.step.data, prior_schema, ?registry.Registry) catch |operation_error| return operation_error).* else null;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
-        return publish(self.allocator, registry_schema, registry.Registry, self.action.execute(scratch.allocator(), prior) catch return error.OperationExecutionFailed);
+        return publish(self.allocator, registry_schema, registry.Registry, self.action.execute(scratch.allocator(), prior) catch |operation_error| return operation_error);
     }
 };
 pub const Inventory = struct {
@@ -31,7 +31,7 @@ pub const Inventory = struct {
         const self = context.?;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        return publish(self.allocator, raw_schema, registry.Raw, self.action.execute(scratch.allocator()) catch return error.OperationExecutionFailed);
+        return publish(self.allocator, raw_schema, registry.Raw, self.action.execute(scratch.allocator()) catch |operation_error| return operation_error);
     }
 };
 pub const ValidateInventory = struct {
@@ -40,10 +40,10 @@ pub const ValidateInventory = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const raw = values.read(&input.step.data, raw_schema, registry.Raw) catch return error.OperationExecutionFailed;
+        const raw = values.read(&input.step.data, raw_schema, registry.Raw) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        return publish(self.allocator, inventory_schema, registry.Inventory, self.action.execute(scratch.allocator(), raw.*) catch return error.OperationExecutionFailed);
+        return publish(self.allocator, inventory_schema, registry.Inventory, self.action.execute(scratch.allocator(), raw.*) catch |operation_error| return operation_error);
     }
 };
 pub const Capture = struct {
@@ -52,10 +52,10 @@ pub const Capture = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const inventory = values.read(&input.step.data, inventory_schema, registry.Inventory) catch return error.OperationExecutionFailed;
+        const inventory = values.read(&input.step.data, inventory_schema, registry.Inventory) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        return publish(self.allocator, capture_schema, registry.Captured, self.action.execute(scratch.allocator(), inventory.*) catch return error.OperationExecutionFailed);
+        return publish(self.allocator, capture_schema, registry.Captured, self.action.execute(scratch.allocator(), inventory.*) catch |operation_error| return operation_error);
     }
 };
 pub const Build = struct {
@@ -64,10 +64,10 @@ pub const Build = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const captured = values.read(&input.step.data, capture_schema, registry.Captured) catch return error.OperationExecutionFailed;
-        const prior: ?registry.Registry = if (input.step.data.contains(prior_schema.key)) (values.read(&input.step.data, prior_schema, ?registry.Registry) catch return error.OperationExecutionFailed).* else null;
+        const captured = values.read(&input.step.data, capture_schema, registry.Captured) catch |operation_error| return operation_error;
+        const prior: ?registry.Registry = if (input.step.data.contains(prior_schema.key)) (values.read(&input.step.data, prior_schema, ?registry.Registry) catch |operation_error| return operation_error).* else null;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        return publish(self.allocator, registry_schema, registry.Registry, self.action.execute(scratch.allocator(), captured.*, prior) catch return error.OperationExecutionFailed);
+        return publish(self.allocator, registry_schema, registry.Registry, self.action.execute(scratch.allocator(), captured.*, prior) catch |operation_error| return operation_error);
     }
 };

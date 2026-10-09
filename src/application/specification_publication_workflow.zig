@@ -24,10 +24,10 @@ pub const Capture = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const feature = try readFeature(&input.step.data);
-        const paths = values.read(&input.step.data, ci.paths_schema, @import("../domain/workflow_artifact_registry.zig").FeaturePaths) catch return error.OperationExecutionFailed;
+        const paths = values.read(&input.step.data, ci.paths_schema, @import("../domain/workflow_artifact_registry.zig").FeaturePaths) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const bytes = self.action.execute(arena.allocator(), feature, paths.*) catch return error.OperationExecutionFailed;
+        const bytes = self.action.execute(arena.allocator(), feature, paths.*) catch |operation_error| return operation_error;
         return @import("workflow_candidate.zig").publish(self.allocator, raw_schema, ?[]const u8, bytes);
     }
 };
@@ -37,15 +37,15 @@ pub const Parse = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const bytes = values.read(&input.step.data, raw_schema, ?[]const u8) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const bytes = values.read(&input.step.data, raw_schema, ?[]const u8) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .prior_state = self.action.execute(owner.arena.allocator(), (try readFeature(&input.step.data)).selector.feature_id, bytes.*) catch |err| return contractError(err) };
+        owner.payload = .{ .prior_state = self.action.execute(owner.arena.allocator(), (try readFeature(&input.step.data)).selector.feature_id, bytes.*) catch |cause| return cause };
         const prior_principles = if (owner.payload.prior_state.specified()) |state_value| state_value.principle_assessment.registry else null;
         const principle_schema = @import("principle_workflow.zig").prior_schema;
-        const projected = values.create(self.allocator, principle_schema, ?@import("../domain/principle_registry.zig").Registry, prior_principles) catch return error.OperationExecutionFailed;
+        const projected = values.create(self.allocator, principle_schema, ?@import("../domain/principle_registry.zig").Registry, prior_principles) catch |operation_error| return operation_error;
         errdefer values.destroy(projected);
-        var result = owned.publish(self.allocator, prior_schema, owner, .ok) catch return error.OperationExecutionFailed;
+        var result = owned.publish(self.allocator, prior_schema, owner, .ok) catch |operation_error| return operation_error;
         result.delta.data_writes[@intFromEnum(principle_schema.key)] = projected;
         return result;
     }
@@ -57,8 +57,8 @@ pub const ResolvedNeeds = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const result = authority.read(&input.step.data, @import("required_authority_workflow.zig").result_schema, .result) catch return error.OperationExecutionFailed;
-        const needs = self.action.execute(result) catch return error.OperationExecutionFailed;
+        const result = authority.read(&input.step.data, @import("required_authority_workflow.zig").result_schema, .result) catch |operation_error| return operation_error;
+        const needs = self.action.execute(result) catch |operation_error| return operation_error;
         return @import("workflow_candidate.zig").publish(self.allocator, refresh.needs_schema, @import("../domain/clarification_refresh.zig").Needs, needs);
     }
 };
@@ -70,20 +70,20 @@ pub const Build = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const view = &input.step.data;
-        const prior = owned.read(view, prior_schema, .prior_state) catch return error.OperationExecutionFailed;
-        const snapshot = owned.read(view, snapshot_schema, .reference_snapshot) catch return error.OperationExecutionFailed;
-        const content = authority.read(view, @import("required_authority_workflow.zig").content_schema, .content) catch return error.OperationExecutionFailed;
-        const ledger = values.read(view, @import("specification_workflow.zig").ids_schema, @import("../domain/specification_identity.zig").Ledger) catch return error.OperationExecutionFailed;
-        const coverage = owned.read(view, @import("specification_workflow.zig").coverage_schema, .coverage) catch return error.OperationExecutionFailed;
-        const inputs = authority.read(view, @import("required_authority_workflow.zig").inputs_schema, .inputs) catch return error.OperationExecutionFailed;
-        const observations = authority.read(view, @import("required_authority_workflow.zig").observations_schema, .observations) catch return error.OperationExecutionFailed;
-        const result = authority.read(view, @import("required_authority_workflow.zig").result_schema, .result) catch return error.OperationExecutionFailed;
-        const clarifications = values.read(view, refresh.state_schema, @import("../domain/clarification_refresh.zig").Result) catch return error.OperationExecutionFailed;
-        const valid = values.read(view, rendering.validated_schema, bool) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const prior = owned.read(view, prior_schema, .prior_state) catch |operation_error| return operation_error;
+        const snapshot = owned.read(view, snapshot_schema, .reference_snapshot) catch |operation_error| return operation_error;
+        const content = authority.read(view, @import("required_authority_workflow.zig").content_schema, .content) catch |operation_error| return operation_error;
+        const ledger = values.read(view, @import("specification_workflow.zig").ids_schema, @import("../domain/specification_identity.zig").Ledger) catch |operation_error| return operation_error;
+        const coverage = owned.read(view, @import("specification_workflow.zig").coverage_schema, .coverage) catch |operation_error| return operation_error;
+        const inputs = authority.read(view, @import("required_authority_workflow.zig").inputs_schema, .inputs) catch |operation_error| return operation_error;
+        const observations = authority.read(view, @import("required_authority_workflow.zig").observations_schema, .observations) catch |operation_error| return operation_error;
+        const result = authority.read(view, @import("required_authority_workflow.zig").result_schema, .result) catch |operation_error| return operation_error;
+        const clarifications = values.read(view, refresh.state_schema, @import("../domain/clarification_refresh.zig").Result) catch |operation_error| return operation_error;
+        const valid = values.read(view, rendering.validated_schema, bool) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .publication_state = self.action.execute(owner.arena.allocator(), prior, snapshot, try @import("specification_workflow.zig").readContext(view), content, ledger.*, coverage, inputs, observations, result, clarifications.*, valid.*) catch |err| return contractError(err) };
-        return owned.publish(self.allocator, state_schema, owner, .ok) catch error.OperationExecutionFailed;
+        owner.payload = .{ .publication_state = self.action.execute(owner.arena.allocator(), prior, snapshot, try @import("specification_workflow.zig").readContext(view), content, ledger.*, coverage, inputs, observations, result, clarifications.*, valid.*) catch |cause| return cause };
+        return owned.publish(self.allocator, state_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };
 pub const BuildSnapshot = struct {
@@ -93,15 +93,15 @@ pub const BuildSnapshot = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const view = &input.step.data;
-        const directory = values.read(view, @import("reference_workflow_values.zig").directory, @import("../domain/reference_selector.zig").Directory) catch return error.OperationExecutionFailed;
-        const inputs = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch return error.OperationExecutionFailed;
-        const extracted = @import("reference_extraction_workflow.zig").read(view, @import("reference_extraction_workflow.zig").accounted_schema, .accounted) catch return error.OperationExecutionFailed;
-        const reconciled = @import("reference_extraction_workflow.zig").read(view, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted) catch return error.OperationExecutionFailed;
-        const registry = values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const directory = values.read(view, @import("reference_workflow_values.zig").directory, @import("../domain/reference_selector.zig").Directory) catch |operation_error| return operation_error;
+        const inputs = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch |operation_error| return operation_error;
+        const extracted = @import("reference_extraction_workflow.zig").read(view, @import("reference_extraction_workflow.zig").accounted_schema, .accounted) catch |operation_error| return operation_error;
+        const reconciled = @import("reference_extraction_workflow.zig").read(view, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted) catch |operation_error| return operation_error;
+        const registry = values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .reference_snapshot = self.action.execute(owner.arena.allocator(), (input.step.authority orelse return error.OperationExecutionFailed).*, .{ .bytes = directory.project_relative_path }, inputs.*, extracted.payload().accounted, reconciled.payload().reconciliation_accounted, registry.*) catch |err| return contractError(err) };
-        return owned.publish(self.allocator, snapshot_schema, owner, .ok) catch error.OperationExecutionFailed;
+        owner.payload = .{ .reference_snapshot = self.action.execute(owner.arena.allocator(), (input.step.authority orelse return error.OperationExecutionFailed).*, .{ .bytes = directory.project_relative_path }, inputs.*, extracted.payload().accounted, reconciled.payload().reconciliation_accounted, registry.*) catch |cause| return cause };
+        return owned.publish(self.allocator, snapshot_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };
 pub const RenderReference = struct {
@@ -110,11 +110,11 @@ pub const RenderReference = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const current = owned.read(&input.step.data, state_schema, .publication_state) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const current = owned.read(&input.step.data, state_schema, .publication_state) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .reference_context = self.action.execute(owner.arena.allocator(), current) catch return error.OperationExecutionFailed };
-        return owned.publish(self.allocator, reference_schema, owner, .ok) catch error.OperationExecutionFailed;
+        owner.payload = .{ .reference_context = self.action.execute(owner.arena.allocator(), current) catch |operation_error| return operation_error };
+        return owned.publish(self.allocator, reference_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };
 pub const Prepare = struct {
@@ -124,31 +124,23 @@ pub const Prepare = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const view = &input.step.data;
-        const paths = values.read(view, ci.paths_schema, @import("../domain/workflow_artifact_registry.zig").FeaturePaths) catch return error.OperationExecutionFailed;
-        const captured = values.read(view, ci.captures_schema, c.Captures) catch return error.OperationExecutionFailed;
-        const inputs = values.read(view, ci.inputs_schema, c.Inputs) catch return error.OperationExecutionFailed;
-        const clarifications = values.read(view, refresh.state_schema, @import("../domain/clarification_refresh.zig").Result) catch return error.OperationExecutionFailed;
-        const forms = values.read(view, refresh.views_schema, []const @import("../domain/clarification_views.zig").View) catch return error.OperationExecutionFailed;
-        const prior = owned.read(view, prior_schema, .prior_state) catch return error.OperationExecutionFailed;
-        const current = owned.read(view, state_schema, .publication_state) catch return error.OperationExecutionFailed;
-        const spec = owned.read(view, rendering.rendered_schema, .rendered) catch return error.OperationExecutionFailed;
-        const valid = values.read(view, rendering.validated_schema, bool) catch return error.OperationExecutionFailed;
-        const reference = owned.read(view, reference_schema, .reference_context) catch return error.OperationExecutionFailed;
+        const paths = values.read(view, ci.paths_schema, @import("../domain/workflow_artifact_registry.zig").FeaturePaths) catch |operation_error| return operation_error;
+        const captured = values.read(view, ci.captures_schema, c.Captures) catch |operation_error| return operation_error;
+        const inputs = values.read(view, ci.inputs_schema, c.Inputs) catch |operation_error| return operation_error;
+        const clarifications = values.read(view, refresh.state_schema, @import("../domain/clarification_refresh.zig").Result) catch |operation_error| return operation_error;
+        const forms = values.read(view, refresh.views_schema, []const @import("../domain/clarification_views.zig").View) catch |operation_error| return operation_error;
+        const prior = owned.read(view, prior_schema, .prior_state) catch |operation_error| return operation_error;
+        const current = owned.read(view, state_schema, .publication_state) catch |operation_error| return operation_error;
+        const spec = owned.read(view, rendering.rendered_schema, .rendered) catch |operation_error| return operation_error;
+        const valid = values.read(view, rendering.validated_schema, bool) catch |operation_error| return operation_error;
+        const reference = owned.read(view, reference_schema, .reference_context) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const current_feature = values.read(view, @import("feature_logging_workflow.zig").directory, @import("../domain/feature_directory.zig").Directory) catch return error.OperationExecutionFailed;
-        const prepared = self.action.execute(arena.allocator(), current_feature.*, paths.*, captured.*, inputs.*, clarifications.*, forms.*, prior, current, try @import("specification_workflow.zig").readContext(view), spec, valid.*, reference) catch |err| return contractError(err);
+        const current_feature = values.read(view, @import("feature_logging_workflow.zig").directory, @import("../domain/feature_directory.zig").Directory) catch |operation_error| return operation_error;
+        const prepared = self.action.execute(arena.allocator(), current_feature.*, paths.*, captured.*, inputs.*, clarifications.*, forms.*, prior, current, try @import("specification_workflow.zig").readContext(view), spec, valid.*, reference) catch |cause| return cause;
         return @import("workflow_candidate.zig").publish(self.allocator, @import("workflow_output_binding.zig").prepared_schema, @import("../domain/workflow_output.zig").Prepared, prepared);
     }
 };
 fn readFeature(view: *const @import("../domain/pipeline_data.zig").View) operations.Error!@import("../domain/feature_directory.zig").Directory {
-    return (values.read(view, @import("feature_directory_workflow.zig").directory, @import("../domain/feature_directory.zig").Directory) catch return error.OperationExecutionFailed).*;
-}
-
-const DomainError = @typeInfo(@typeInfo(@TypeOf(Parse.Action.execute)).@"fn".return_type.?).error_union.error_set ||
-    @typeInfo(@typeInfo(@TypeOf(Build.Action.execute)).@"fn".return_type.?).error_union.error_set ||
-    @typeInfo(@typeInfo(@TypeOf(BuildSnapshot.Action.execute)).@"fn".return_type.?).error_union.error_set ||
-    @typeInfo(@typeInfo(@TypeOf(Prepare.Action.execute)).@"fn".return_type.?).error_union.error_set;
-fn contractError(err: DomainError) operations.Error {
-    return if (err == error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE) error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE else error.OperationExecutionFailed;
+    return (values.read(view, @import("feature_directory_workflow.zig").directory, @import("../domain/feature_directory.zig").Directory) catch |operation_error| return operation_error).*;
 }

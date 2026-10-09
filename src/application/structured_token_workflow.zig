@@ -21,10 +21,10 @@ pub const Extract = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const source = values.read(&input.step.data, source_values.inputs_schema, evidence.Inputs) catch return error.OperationExecutionFailed;
+        const source = values.read(&input.step.data, source_values.inputs_schema, evidence.Inputs) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const result = self.action.execute(arena.allocator(), source.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(arena.allocator(), source.*) catch |operation_error| return operation_error;
         return @import("workflow_candidate.zig").publish(self.allocator, facts_schema, tokens.Facts, result);
     }
 };
@@ -34,11 +34,11 @@ pub const AssignCandidates = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const source = values.read(&input.step.data, source_values.inputs_schema, evidence.Inputs) catch return error.OperationExecutionFailed;
-        const facts = values.read(&input.step.data, facts_schema, tokens.Facts) catch return error.OperationExecutionFailed;
+        const source = values.read(&input.step.data, source_values.inputs_schema, evidence.Inputs) catch |operation_error| return operation_error;
+        const facts = values.read(&input.step.data, facts_schema, tokens.Facts) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const result = self.action.execute(arena.allocator(), source.*, facts.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(arena.allocator(), source.*, facts.*) catch |operation_error| return operation_error;
         return @import("workflow_candidate.zig").publish(self.allocator, candidates_schema, tokens.Candidates, result);
     }
 };
@@ -49,9 +49,9 @@ pub const AssignTokens = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction_values.read(&input.step.data, extraction_values.selections_schema, .selections_validated);
-        const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .tokens_assigned = self.action.execute(owner.arena.allocator(), prior.payload().selections_validated) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .tokens_assigned = self.action.execute(owner.arena.allocator(), prior.payload().selections_validated) catch |operation_error| return operation_error };
         return extraction_values.publish(self.allocator, assigned_schema, owner, .ok);
     }
 };
@@ -62,9 +62,9 @@ pub const BuildClaims = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction_values.read(&input.step.data, assigned_schema, .tokens_assigned);
-        const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .prepared = self.action.execute(owner.arena.allocator(), prior.payload().tokens_assigned) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .prepared = self.action.execute(owner.arena.allocator(), prior.payload().tokens_assigned) catch |operation_error| return operation_error };
         return extraction_values.publish(self.allocator, prepared_schema, owner, .ok);
     }
 };

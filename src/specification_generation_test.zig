@@ -6224,6 +6224,24 @@ test "reviewed record omission uses sibling exact support for authorization and 
         try bindReviewClaims(a, inputs, fixture.context, findings);
         const admitted = (try collectReview(support, a, inputs, fixture.context, try @import("domain/model_candidate_json.zig").encode(support.Review, a, .{ .entries = findings }), null)).accepted.inputs;
         const decision = try supportDecision(a, admitted);
+        var stale = decision;
+        stale.inputs.revision += 1;
+        stale.inputs.review_origin = .{ .request = .{ .value = 14 }, .attempt = .{ .value = 2 } };
+        try std.testing.expectError(error.InvalidSpecificationCoverageRepair, repair.authorizeOmission(a, text.validator, current, fixture.context, content, stale));
+        const Diagnostic = @import("domain/candidate_validation_diagnostic.zig").Diagnostic;
+        const observed = captured: {
+            var rejection_arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+            defer rejection_arena.deinit();
+            const native = try repair.authorizationRejection(rejection_arena.allocator(), stale, error.InvalidSpecificationCoverageRepair);
+            break :captured try (Diagnostic{ .omission_authorization = native }).copy(a);
+        };
+        try std.testing.expectEqualStrings("InvalidSpecificationCoverageRepair", observed.code());
+        try std.testing.expectEqual(stale.inputs.revision, observed.omission_authorization.revision);
+        try std.testing.expectEqualDeep(stale.inputs.review_origin, observed.omission_authorization.review_origin);
+        try std.testing.expectEqual(.candidate, observed.attribution());
+        try std.testing.expect(observed.origin() == null);
+        try std.testing.expect(observed.omission_authorization.outstanding_requirements.len > 0);
+        for (observed.omission_authorization.outstanding_requirements) |entry| try std.testing.expect(entry.candidate_defect != null);
         const authorization = try repair.authorizeOmission(a, text.validator, current, fixture.context, content, decision);
         try std.testing.expect(authorization.target.part == .value);
         const packet = try repair.omissionPacket(a, current, fixture.context, content, decision, authorization);

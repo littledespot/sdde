@@ -12,6 +12,7 @@ pub const Report = struct {
     outcome: Outcome,
     clarifications: []const Clarification = &.{},
     candidate_error: ?@import("candidate_validation_diagnostic.zig").Diagnostic = null,
+    last_operation_rejection: ?execution.OperationRejection = null,
     arena: std.heap.ArenaAllocator,
 
     pub fn deinit(self: *Report) void {

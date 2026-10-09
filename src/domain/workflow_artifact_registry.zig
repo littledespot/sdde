@@ -24,7 +24,9 @@ pub const FeaturePaths = struct {
     }
 };
 
-pub fn resolveFeaturePaths(allocator: std.mem.Allocator, configured: FeatureRoots, selected: directory.Selector) (std.mem.Allocator.Error || error{InvalidFeatureArtifactPath})!FeaturePaths {
+pub const FeaturePathError = std.mem.Allocator.Error || error{InvalidFeatureArtifactPath};
+
+pub fn resolveFeaturePaths(allocator: std.mem.Allocator, configured: FeatureRoots, selected: directory.Selector) FeaturePathError!FeaturePaths {
     const checked = directory.validate(allocator, .{ .bytes = selected.feature_id.bytes }, .{ .specs = configured.specs, .archive = configured.archive }) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         error.InvalidFeatureDirectory => error.InvalidFeatureArtifactPath,

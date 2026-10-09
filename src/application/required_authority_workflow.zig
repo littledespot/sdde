@@ -39,16 +39,16 @@ pub const ProjectSpecification = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch return error.OperationExecutionFailed;
-        const references = @import("reference_extraction_workflow.zig").read(&input.step.data, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted) catch return error.OperationExecutionFailed;
-        const content = if (input.step.data.contains(.identified_specification_content)) owned.read(&input.step.data, content_schema, .content) catch return error.OperationExecutionFailed else null;
+        const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch |operation_error| return operation_error;
+        const references = @import("reference_extraction_workflow.zig").read(&input.step.data, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted) catch |operation_error| return operation_error;
+        const content = if (input.step.data.contains(.identified_specification_content)) owned.read(&input.step.data, content_schema, .content) catch |operation_error| return operation_error else null;
         const current = if (input.step.data.contains(.specification_generation_session)) try @import("specification_workflow.zig").readSession(&input.step.data) else null;
         const brief = if (current) |value| if (value.units[0]) |checked| checked.response.content.brief else null else null;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted, content, brief) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
         if (current) |value| owner.payload.inputs.revision = value.revision;
-        return owned.publish(self.allocator, inputs_schema, owner, .ok) catch return error.OperationExecutionFailed;
+        return owned.publish(self.allocator, inputs_schema, owner, .ok) catch |operation_error| return operation_error;
     }
 };
 
@@ -60,13 +60,13 @@ pub const ProjectSourcePreservation = struct {
 
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch return error.OperationExecutionFailed;
-        const references = @import("reference_extraction_workflow.zig").read(&input.step.data, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted) catch return error.OperationExecutionFailed;
-        const sources = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch |operation_error| return operation_error;
+        const references = @import("reference_extraction_workflow.zig").read(&input.step.data, @import("reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted) catch |operation_error| return operation_error;
+        const sources = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         owner.payload = .{ .inputs = self.action.execute(owner.arena.allocator(), feature.feature_id, references.payload().reconciliation_accounted, sources.*) catch |err| return reject(self.allocator, inputs_schema, owner, err) };
-        return owned.publish(self.allocator, inputs_schema, owner, .ok) catch error.OperationExecutionFailed;
+        return owned.publish(self.allocator, inputs_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };
 pub const BuildObservations = struct {
@@ -75,11 +75,11 @@ pub const BuildObservations = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const ledger = owned.read(&input.step.data, ledger_schema, .ledger) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const ledger = owned.read(&input.step.data, ledger_schema, .ledger) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .observations = self.action.execute(owner.arena.allocator(), ledger) catch return error.OperationExecutionFailed };
-        return owned.publish(self.allocator, observations_schema, owner, .ok) catch error.OperationExecutionFailed;
+        owner.payload = .{ .observations = self.action.execute(owner.arena.allocator(), ledger) catch |operation_error| return operation_error };
+        return owned.publish(self.allocator, observations_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };
 pub const Retire = struct {
@@ -97,11 +97,11 @@ pub const Build = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const source = owned.read(&input.step.data, inputs_schema, .inputs) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const source = owned.read(&input.step.data, inputs_schema, .inputs) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         owner.payload = .{ .ledger = self.action.execute(owner.arena.allocator(), source) catch |err| return reject(self.allocator, ledger_schema, owner, err) };
-        return owned.publish(self.allocator, ledger_schema, owner, .ok) catch return error.OperationExecutionFailed;
+        return owned.publish(self.allocator, ledger_schema, owner, .ok) catch |operation_error| return operation_error;
     }
 };
 pub const Parse = struct {
@@ -111,11 +111,11 @@ pub const Parse = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const raw = owned.read(&input.step.data, raw_schema, .raw) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const raw = owned.read(&input.step.data, raw_schema, .raw) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         owner.payload = .{ .observations = self.action.execute(owner.arena.allocator(), raw) catch |err| return reject(self.allocator, observations_schema, owner, err) };
-        return owned.publish(self.allocator, observations_schema, owner, .ok) catch return error.OperationExecutionFailed;
+        return owned.publish(self.allocator, observations_schema, owner, .ok) catch |operation_error| return operation_error;
     }
 };
 pub const Reconcile = struct {
@@ -125,13 +125,13 @@ pub const Reconcile = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const ledger = owned.read(&input.step.data, ledger_schema, .ledger) catch return error.OperationExecutionFailed;
-        const observations = owned.read(&input.step.data, observations_schema, .observations) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const ledger = owned.read(&input.step.data, ledger_schema, .ledger) catch |operation_error| return operation_error;
+        const observations = owned.read(&input.step.data, observations_schema, .observations) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const result = self.action.execute(owner.arena.allocator(), ledger, observations) catch |err| return reject(self.allocator, result_schema, owner, err);
         owner.payload = .{ .result = result };
-        return owned.publish(self.allocator, result_schema, owner, status(result)) catch return error.OperationExecutionFailed;
+        return owned.publish(self.allocator, result_schema, owner, status(result)) catch |operation_error| return operation_error;
     }
 };
 pub const Validate = struct {
@@ -141,27 +141,32 @@ pub const Validate = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const source = owned.read(&input.step.data, inputs_schema, .inputs) catch return error.OperationExecutionFailed;
-        const observations = owned.read(&input.step.data, observations_schema, .observations) catch return error.OperationExecutionFailed;
-        const result = owned.read(&input.step.data, result_schema, .result) catch return error.OperationExecutionFailed;
+        const source = owned.read(&input.step.data, inputs_schema, .inputs) catch |operation_error| return operation_error;
+        const observations = owned.read(&input.step.data, observations_schema, .observations) catch |operation_error| return operation_error;
+        const result = owned.read(&input.step.data, result_schema, .result) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
+        var rejection: ?operations.Error = null;
         const outcome: @import("../domain/workflow.zig").OutcomeTag = checked: {
             const accepted = self.action.execute(arena.allocator(), source, observations, result) catch |err| switch (err) {
-                error.OutOfMemory => return error.OperationExecutionFailed,
-                error.InvalidRequiredAuthority => break :checked .blocked,
+                error.OutOfMemory => return error.OutOfMemory,
+                error.InvalidRequiredAuthority => {
+                    rejection = err;
+                    break :checked .blocked;
+                },
             };
             break :checked if (accepted) .ok else if (result.continuation == .invalid) .invalid else if (result.continuation == .needs_user) .needs_user else .blocked;
         };
         var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
-        delta.data_writes[@intFromEnum(gate_schema.key)] = values.create(self.allocator, gate_schema, gate.Decision, if (outcome == .ok) .accepted else .rejected) catch return error.OperationExecutionFailed;
-        return .{ .outcome = outcome, .delta = delta };
+        delta.data_writes[@intFromEnum(gate_schema.key)] = values.create(self.allocator, gate_schema, gate.Decision, if (outcome == .ok) .accepted else .rejected) catch |operation_error| return operation_error;
+        return .{ .outcome = outcome, .delta = delta, .diagnostic = rejection };
     }
 };
 fn reject(allocator: std.mem.Allocator, schema: data.Schema, owner: *owned.Owner, err: a.Error) operations.Error!execution.Candidate {
-    if (err == error.OutOfMemory) return error.OperationExecutionFailed;
+    if (err == error.OutOfMemory) return error.OutOfMemory;
+    owner.rejection = err;
     owner.payload = .{ .rejected = .invalid_contract };
-    return owned.publish(allocator, schema, owner, .blocked) catch return error.OperationExecutionFailed;
+    return owned.publish(allocator, schema, owner, .blocked) catch |operation_error| return operation_error;
 }
 fn status(result: a.Result) @import("../domain/workflow.zig").OutcomeTag {
     return switch (result.continuation) {

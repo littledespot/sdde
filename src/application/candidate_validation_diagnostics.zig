@@ -5,6 +5,12 @@ const values = @import("pipeline_values.zig");
 const Diagnostic = @import("../domain/candidate_validation_diagnostic.zig").Diagnostic;
 pub fn read(view: *const data.View) values.Error!?Diagnostic {
     if (try @import("source_omission_repair_workflow.zig").rejection(view)) |rejected| return .{ .support_findings = .from(.source, rejected.support.inputs, rejected.reason) };
+    const omission_schema = @import("specification_omission_repair_workflow.zig").schema;
+    if (view.contains(omission_schema.key)) {
+        const storage = @import("specification_values.zig").storage;
+        const payload = storage.payload(try values.read(view, omission_schema, storage.Value));
+        if (payload.* == .omission_rejected) return .{ .omission_authorization = payload.omission_rejected };
+    }
     const extraction = @import("reference_extraction_workflow.zig");
     if (view.contains(extraction.text_schema.key)) {
         const value = try values.read(view, extraction.text_schema, @import("../domain/reference_candidate_value.zig").Value);

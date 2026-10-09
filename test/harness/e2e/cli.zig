@@ -37,7 +37,7 @@ fn command(init: std.process.Init) !bool {
     defer output.close(io);
     var report: c.Report = .{ .started_at_utc = &run.started_at_utc, .execution_id = &run.name, .case_source = case_path, .status = .input_invalid };
     report.build = .{
-        .source = try @import("../contracts.zig").decode(@import("../../../build/provenance.zig").Identity, allocator, @embedFile("build_provenance")),
+        .source = (try @import("../contracts.zig").decode(@import("../../../build/provenance.zig").Bundle, allocator, @embedFile("build_provenance"))).identity,
         .zig_version = @import("builtin").zig_version_string,
         .target = @tagName(@import("builtin").cpu.arch) ++ "-" ++ @tagName(@import("builtin").os.tag) ++ "-" ++ @tagName(@import("builtin").abi),
         .optimize = @tagName(@import("builtin").mode),
@@ -70,6 +70,9 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
     try std.Io.File.stdout().writeStreamingAll(io, "Generating with the selected project's configured LLM...\n");
     const secrets = [_][]const u8{ generation_key, judge_key };
     const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = allocator, .run = run, .secrets = &secrets };
+    const reconstruction = try @import("build_evidence.zig").save(store, @embedFile("build_provenance"));
+    report.build.?.inputs_file = "build-inputs.json";
+    report.build.?.reconstruction = reconstruction;
     const specification = try @import("invoke.zig").run(io, allocator, project, selected, captured, generation_key, store, report);
     if (!try verifySources(io, allocator, case_path, case_bytes, captured, report)) return;
     const published = specification orelse return;

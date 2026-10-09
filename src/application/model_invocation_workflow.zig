@@ -39,21 +39,21 @@ fn Call(comptime kind: provider.ProviderOperationKind) type {
             const self = context.?;
             const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
             const prepared = request.prepared() orelse return error.OperationExecutionFailed;
-            const invoked = (values.read(&input.step.data, accounting.invoked_schema, lifecycle.InvokedOperation) catch return error.OperationExecutionFailed).operation();
-            const authorization_result = values.read(&input.step.data, authorization.schema, @import("../domain/provider_authorization_result.zig").Result) catch return error.OperationExecutionFailed;
+            const invoked = (values.read(&input.step.data, accounting.invoked_schema, lifecycle.InvokedOperation) catch |operation_error| return operation_error).operation();
+            const authorization_result = values.read(&input.step.data, authorization.schema, @import("../domain/provider_authorization_result.zig").Result) catch |operation_error| return operation_error;
             const reference = switch (authorization_result.outcome().*) {
                 .prepared => |*reference| reference,
                 .failed, .cancelled => return error.OperationExecutionFailed,
             };
-            const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
-            const owner = self.allocator.create(Owner) catch return error.OperationExecutionFailed;
+            const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
+            const owner = self.allocator.create(Owner) catch |operation_error| return operation_error;
             errdefer self.allocator.destroy(owner);
-            const retained = values.retain(input.step.data.slots[@intFromEnum(requests.prepared_schema.key)].?) catch return error.OperationExecutionFailed;
+            const retained = values.retain(input.step.data.slots[@intFromEnum(requests.prepared_schema.key)].?) catch |operation_error| return operation_error;
             errdefer values.destroy(retained);
-            owner.* = .{ .allocator = self.allocator, .request = retained, .response = result.Owner.init(self.allocator, ledger, invoked.id) catch return error.OperationExecutionFailed };
-            const value = values.adopt(self.allocator, output_schema, result.Result, Owner, owner, Owner.view, Owner.destroy, null) catch {
+            owner.* = .{ .allocator = self.allocator, .request = retained, .response = result.Owner.init(self.allocator, ledger, invoked.id) catch |operation_error| return operation_error };
+            const value = values.adopt(self.allocator, output_schema, result.Result, Owner, owner, Owner.view, Owner.destroy, null) catch |native_failure| {
                 owner.response.destroy();
-                return error.OperationExecutionFailed;
+                return native_failure;
             };
             const outcome: result.Outcome = if (self.action) |action| call: {
                 const observed = action.execute(request.binding(), prepared, reference, invoked) catch |err| break :call switch (err) {

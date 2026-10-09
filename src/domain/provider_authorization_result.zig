@@ -17,7 +17,9 @@ pub const Result = opaque {
 };
 const Storage = struct { allocator: std.mem.Allocator, requests: *identity.Owner, outcome: Outcome };
 
-pub fn create(allocator: std.mem.Allocator, requests: *const identity.ModelRequestIdentityLedger, outcome: Outcome) (std.mem.Allocator.Error || identity.Error || error{InvalidAuthorizationResult})!*Result {
+pub const Error = std.mem.Allocator.Error || identity.Error || error{InvalidAuthorizationResult};
+
+pub fn create(allocator: std.mem.Allocator, requests: *const identity.ModelRequestIdentityLedger, outcome: Outcome) Error!*Result {
     const id = switch (outcome) {
         .prepared => null,
         .failed => |failure| failure.operation_id,

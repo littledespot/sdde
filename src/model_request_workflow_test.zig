@@ -264,11 +264,40 @@ test "failed consolidated selection publishes neither a ledger successor nor par
     const initial = try requestLedger(&runner);
     const revision = initial.revision();
     const result = runner.bindings().invokeStep(.{ .bytes = "origin" });
-    try std.testing.expectEqualDeep(execution.Rejection{ .operation_failed = error.OperationExecutionFailed }, result.rejected);
+    try std.testing.expectEqualDeep(execution.Rejection{ .operation_failed = error.ModelRequestAssociationInvalid }, result.rejected);
     try std.testing.expect(initial == try requestLedger(&runner));
     try std.testing.expectEqual(revision, initial.revision());
     for ([_]pipeline.DataKey{ .assigned_model_request, .validated_model_request, .prepared_model_request }) |key| try std.testing.expect(runner.envelope.slots[@intFromEnum(key)] == null);
     try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+}
+
+test "post-call accounting preserves native invocation failure and reports its own stale revision" {
+    const projection = @import("application/workflow_model_invocation.zig");
+    for ([_]execution.OperationError{ error.OutOfMemory, error.InvalidCandidatePayload }) |cause| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try invocationYaml(&fixture));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        try prepareInvocable(&runner);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "advance-operation" }).outcome);
+        const request = try currentRequest(&runner);
+        const call: @import("domain/provider_invocation_validation.zig").Call = .{
+            .request = request.prepared().?,
+            .provider_binding = request.binding(),
+            .operations = runner.model_accounting.?.current_operations,
+            .operation_id = (try invokedOperation(&runner)).operation().id,
+        };
+        try runner.token_accounting.prepare(call.operation_id);
+        const revision = runner.token_accounting.current().revision();
+        const rejected = projection.reconcile(&runner.token_accounting, revision, call, .{ .failed = cause }).?;
+        try std.testing.expectEqual(cause, rejected.operation_failed);
+        try std.testing.expectEqual(.usage_unavailable, runner.token_accounting.current().status());
+        try std.testing.expectEqual(@as(u128, 0), runner.token_accounting.current().committed());
+        try std.testing.expectEqual(error.TokenAccountingRevisionConflict, projection.reconcile(&runner.token_accounting, revision, call, .{ .failed = cause }).?.operation_failed);
+        try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+    }
 }
 
 test "native domain packets traverse generic fake provider execution without resource or request substitution" {
@@ -863,7 +892,7 @@ test "foreign attempt and assignment evidence never reach an assignment or consu
     const saved = second.envelope.slots[key].?;
     second.envelope.slots[key] = null;
     defer second.envelope.slots[key] = saved;
-    try std.testing.expectEqualDeep(execution.Rejection{ .operation_failed = error.OperationExecutionFailed }, second.bindings().invokeStep(.{ .bytes = "assign-operation" }).rejected);
+    try std.testing.expectEqualDeep(execution.Rejection{ .operation_failed = error.ProviderOperationRevisionConflict }, second.bindings().invokeStep(.{ .bytes = "assign-operation" }).rejected);
     try std.testing.expectEqual(@as(u64, 1), second.model_accounting.?.current_operations.revision().value);
 }
 
@@ -2177,7 +2206,7 @@ test "YAML advances the logical request once while preserving its request attemp
         try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
         try std.testing.expectEqual(@as(usize, 1), fixture.authorization.prepare_count);
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "observe" }).outcome);
-        try std.testing.expectEqualDeep(execution.Rejection{ .operation_failed = error.OperationExecutionFailed }, runner.bindings().invokeStep(.{ .bytes = "advance-request" }).rejected);
+        try std.testing.expectEqualDeep(execution.Rejection{ .operation_failed = error.ModelRequestStatusConflict }, runner.bindings().invokeStep(.{ .bytes = "advance-request" }).rejected);
         try std.testing.expect(try requestLedger(&runner) == next);
         var second = fixture.runner(graph, std.testing.allocator);
         defer second.deinit();
@@ -2550,7 +2579,7 @@ test "provider invocation requires an invoked request and rejects failed cancell
         }
         const applied = runner.bindings().invokeStep(.{ .bytes = "advance-operation" });
         try std.testing.expectEqual(@as(execution.Rejection, switch (variant) {
-            0 => .{ .operation_failed = error.OperationExecutionFailed },
+            0 => .{ .operation_failed = error.InvalidProviderOperationTransition },
             1, 6 => .authority,
             2, 4 => .cancelled,
             3 => .deadline_exhausted,

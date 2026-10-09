@@ -17,6 +17,23 @@ pub const SelectedWorkflow = struct {
 pub const Candidate = struct {
     outcome: workflow.OutcomeTag,
     delta: pipeline.NodeDelta,
+    /// Expected rejection evidence; operational failure uses the error union.
+    diagnostic: ?OperationError = null,
+};
+
+/// Diagnostic facts from the last accepted in-memory application. Failed deltas
+/// never appear here and these facts cannot authorize execution or publication.
+pub const OperationRejection = struct {
+    cause: @import("operation_error.zig").Code(OperationError),
+    outcome: workflow.OutcomeTag,
+};
+
+pub const AppliedEffects = struct {
+    writes: @import("std").enums.EnumSet(pipeline.DataKey) = .initEmpty(),
+    replacements: @import("std").enums.EnumSet(pipeline.DataKey) = .initEmpty(),
+    invalidations: @import("std").enums.EnumSet(pipeline.DataKey) = .initEmpty(),
+    repair: ?@import("workflow_retry.zig").Transition = null,
+    diagnostic: ?OperationError = null,
 };
 
 pub const Applied = union(enum) {
@@ -31,7 +48,7 @@ pub const Applied = union(enum) {
     }
 };
 
-pub const OperationError = error{ OperationExecutionFailed, REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE };
+pub const OperationError = @import("operation_error.zig").Error;
 
 pub const Rejection = union(enum) {
     gate: @import("workflow_gate.zig").Rejection,
@@ -46,10 +63,7 @@ pub const Rejection = union(enum) {
     pub fn diagnostic(self: Rejection) []const u8 {
         return switch (self) {
             .token_budget => |failure| @errorName(failure),
-            .operation_failed => |failure| switch (failure) {
-                error.OperationExecutionFailed => "failed",
-                error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE => @errorName(failure),
-            },
+            .operation_failed => |failure| @errorName(failure),
             .retry_limit => "RetryLimitExhausted",
             .gate, .authority, .logging, .cancelled, .deadline_exhausted => @tagName(self.status()),
         };

@@ -17,7 +17,7 @@ pub const CaptureProject = struct {
         const self = context.?;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator()) catch return failed();
+        const result = self.action.execute(scratch.allocator()) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.project_capture, toolchain.Capture, result);
     }
 };
@@ -29,7 +29,7 @@ pub const InventoryPresets = struct {
         const self = context.?;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator()) catch return failed();
+        const result = self.action.execute(scratch.allocator()) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.preset_inventory, []const toolchain.Entry, result);
     }
 };
@@ -39,11 +39,11 @@ pub const CapturePresets = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const project = values.read(&input.step.data, schemas.project_capture, toolchain.Capture) catch return failed();
-        const entries = values.read(&input.step.data, schemas.preset_inventory, []const toolchain.Entry) catch return failed();
+        const project = values.read(&input.step.data, schemas.project_capture, toolchain.Capture) catch |operation_error| return operation_error;
+        const entries = values.read(&input.step.data, schemas.preset_inventory, []const toolchain.Entry) catch |operation_error| return operation_error;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), project.*, entries.*) catch return failed();
+        const result = self.action.execute(scratch.allocator(), project.*, entries.*) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.preset_captures, []const toolchain.Capture, result);
     }
 };
@@ -53,11 +53,11 @@ pub const ParseDocuments = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const project = values.read(&input.step.data, schemas.project_capture, toolchain.Capture) catch return failed();
-        const presets = values.read(&input.step.data, schemas.preset_captures, []const toolchain.Capture) catch return failed();
+        const project = values.read(&input.step.data, schemas.project_capture, toolchain.Capture) catch |operation_error| return operation_error;
+        const presets = values.read(&input.step.data, schemas.preset_captures, []const toolchain.Capture) catch |operation_error| return operation_error;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), project.*, presets.*) catch return failed();
+        const result = self.action.execute(scratch.allocator(), project.*, presets.*) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.raw_documents, []const toolchain.RawDocument, result);
     }
 };
@@ -67,11 +67,11 @@ pub const ValidateProject = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const documents = values.read(&input.step.data, schemas.raw_documents, []const toolchain.RawDocument) catch return failed();
-        if (documents.len == 0) return failed();
+        const documents = values.read(&input.step.data, schemas.raw_documents, []const toolchain.RawDocument) catch |operation_error| return operation_error;
+        if (documents.len == 0) return error.OperationExecutionFailed;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), documents.*[0]) catch return failed();
+        const result = self.action.execute(scratch.allocator(), documents.*[0]) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.project, toolchain.Project, result);
     }
 };
@@ -81,11 +81,11 @@ pub const ValidateRegistry = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const documents = values.read(&input.step.data, schemas.raw_documents, []const toolchain.RawDocument) catch return failed();
-        if (documents.len == 0) return failed();
+        const documents = values.read(&input.step.data, schemas.raw_documents, []const toolchain.RawDocument) catch |operation_error| return operation_error;
+        if (documents.len == 0) return error.OperationExecutionFailed;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), documents.*[1..]) catch return failed();
+        const result = self.action.execute(scratch.allocator(), documents.*[1..]) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.registry, toolchain.Registry, result);
     }
 };
@@ -95,11 +95,11 @@ pub const ResolveInheritance = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const project = values.read(&input.step.data, schemas.project, toolchain.Project) catch return failed();
-        const registry = values.read(&input.step.data, schemas.registry, toolchain.Registry) catch return failed();
+        const project = values.read(&input.step.data, schemas.project, toolchain.Project) catch |operation_error| return operation_error;
+        const registry = values.read(&input.step.data, schemas.registry, toolchain.Registry) catch |operation_error| return operation_error;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), project.*, registry.*) catch return failed();
+        const result = self.action.execute(scratch.allocator(), project.*, registry.*) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.resolved, toolchain.Resolved, result);
     }
 };
@@ -109,11 +109,11 @@ pub const Compose = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const project = values.read(&input.step.data, schemas.project, toolchain.Project) catch return failed();
-        const resolved = values.read(&input.step.data, schemas.resolved, toolchain.Resolved) catch return failed();
+        const project = values.read(&input.step.data, schemas.project, toolchain.Project) catch |operation_error| return operation_error;
+        const resolved = values.read(&input.step.data, schemas.resolved, toolchain.Resolved) catch |operation_error| return operation_error;
         var scratch = std.heap.ArenaAllocator.init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), project.*, resolved.*) catch return failed();
+        const result = self.action.execute(scratch.allocator(), project.*, resolved.*) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.composed, toolchain.Composed, result);
     }
 };
@@ -123,18 +123,14 @@ pub const ValidateSafety = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const composed = values.read(&input.step.data, schemas.composed, toolchain.Composed) catch return failed();
-        const owner = self.action.execute(self.allocator, composed.*) catch return failed();
-        const result = values.adopt(self.allocator, schemas.valid, safety.ValidToolchain, safety.Owner, owner, safety.value, safety.deinitOwner, safety.retainedBytes(owner)) catch {
+        const composed = values.read(&input.step.data, schemas.composed, toolchain.Composed) catch |operation_error| return operation_error;
+        const owner = self.action.execute(self.allocator, composed.*) catch |operation_error| return operation_error;
+        const result = values.adopt(self.allocator, schemas.valid, safety.ValidToolchain, safety.Owner, owner, safety.value, safety.deinitOwner, safety.retainedBytes(owner)) catch |operation_error| {
             safety.deinitOwner(owner);
-            return failed();
+            return operation_error;
         };
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(schemas.valid.key)] = result;
         return .{ .outcome = .ok, .delta = delta };
     }
 };
-
-fn failed() operations.Error {
-    return error.OperationExecutionFailed;
-}

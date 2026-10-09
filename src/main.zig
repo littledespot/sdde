@@ -41,6 +41,7 @@ pub fn main(init: std.process.Init) !void {
             },
             .invalid, .blocked, .failed, .cancelled => {
                 try writeFailure(init.io, @tagName(execution));
+                if (report.last_operation_rejection) |rejection| try writeFailure(init.io, @tagName(rejection.cause));
                 if (report.candidate_error) |diagnostic| try writeFailure(init.io, try std.json.Stringify.valueAlloc(init.arena.allocator(), diagnostic, .{}));
                 std.process.exit(1);
             },

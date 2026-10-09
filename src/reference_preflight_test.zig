@@ -102,7 +102,7 @@ test "invocation publishes only validated owned context and rejects without outp
     const read_contract: @import("domain/pipeline.zig").NodeContract = .{ .id = "read", .kind = .action, .requires = &.{.specify_invocation}, .produces = &.{}, .side_effect = .none };
     const view = try envelope.view(read_contract);
     try std.testing.expectEqualStrings("hello", (try values.read(&view, schemas.invocation, @import("domain/specify_invocation.zig").Invocation)).raw_reference);
-    try std.testing.expectError(error.OperationExecutionFailed, invocation_runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{} } }));
+    try std.testing.expectError(error.InvalidSpecifyArguments, invocation_runner.Invocation.invoke(&binding, .{ .invocation = .{ .arguments = &.{} } }));
 }
 
 test "registered bindings derive only their narrow operational capabilities" {

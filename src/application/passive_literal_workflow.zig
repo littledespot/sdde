@@ -24,12 +24,12 @@ pub const Scan = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const current = values.read(&input.step.data, toolchain_values.valid, safety.ValidToolchain) catch return error.OperationExecutionFailed;
-        const compiled = values.read(&input.step.data, grammar_values.grammar_schema, grammar.Grammar) catch return error.OperationExecutionFailed;
-        const source = values.read(&input.step.data, evidence_values.inputs_schema, evidence.Inputs) catch return error.OperationExecutionFailed;
+        const current = values.read(&input.step.data, toolchain_values.valid, safety.ValidToolchain) catch |operation_error| return operation_error;
+        const compiled = values.read(&input.step.data, grammar_values.grammar_schema, grammar.Grammar) catch |operation_error| return operation_error;
+        const source = values.read(&input.step.data, evidence_values.inputs_schema, evidence.Inputs) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), compiled.*, current, source.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), compiled.*, current, source.*) catch |operation_error| return operation_error;
         return publish(self.allocator, candidates_schema, literals.Candidates, result);
     }
 };
@@ -39,10 +39,10 @@ pub const Assign = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const candidates = values.read(&input.step.data, candidates_schema, literals.Candidates) catch return error.OperationExecutionFailed;
+        const candidates = values.read(&input.step.data, candidates_schema, literals.Candidates) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), candidates.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), candidates.*) catch |operation_error| return operation_error;
         return publish(self.allocator, assigned_schema, literals.Assigned, result);
     }
 };
@@ -52,12 +52,12 @@ pub const Validate = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const assigned = values.read(&input.step.data, assigned_schema, literals.Assigned) catch return error.OperationExecutionFailed;
-        const current = values.read(&input.step.data, toolchain_values.valid, safety.ValidToolchain) catch return error.OperationExecutionFailed;
-        const source = values.read(&input.step.data, evidence_values.inputs_schema, evidence.Inputs) catch return error.OperationExecutionFailed;
+        const assigned = values.read(&input.step.data, assigned_schema, literals.Assigned) catch |operation_error| return operation_error;
+        const current = values.read(&input.step.data, toolchain_values.valid, safety.ValidToolchain) catch |operation_error| return operation_error;
+        const source = values.read(&input.step.data, evidence_values.inputs_schema, evidence.Inputs) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), assigned.*, current, source.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), assigned.*, current, source.*) catch |operation_error| return operation_error;
         return publish(self.allocator, registry_schema, literals.Registry, result);
     }
 };

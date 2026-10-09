@@ -28,19 +28,19 @@ pub const Terminate = struct {
         const facts = try readCurrent(&input.step.data);
         const authority = input.step.provider_operation orelse return error.OperationExecutionFailed;
         const record = facts.source.assigned.record();
-        var delta = self.action.execute(authority.ledger, authority.authority, authority.ledger.revision(), record.id, record.revision, .{ .terminate = facts.terminal }) catch return error.OperationExecutionFailed;
+        var delta = self.action.execute(authority.ledger, authority.authority, authority.ledger.revision(), record.id, record.revision, .{ .terminate = facts.terminal }) catch |operation_error| return operation_error;
         delta.data_invalidations.insert(.assigned_provider_operation);
         return .{ .outcome = facts.outcome, .delta = delta };
     }
 };
 
 pub fn readCurrent(view: *const data.View) operations.Error!accounting.Completion {
-    const assigned = values.read(view, accounting.operation_schema, lifecycle.AssignedOperation) catch return error.OperationExecutionFailed;
-    const source = values.read(view, authorization.schema, result.Result) catch return error.OperationExecutionFailed;
+    const assigned = values.read(view, accounting.operation_schema, lifecycle.AssignedOperation) catch |operation_error| return operation_error;
+    const source = values.read(view, authorization.schema, result.Result) catch |operation_error| return operation_error;
     const id = assigned.record().id;
     return switch (source.outcome().*) {
         .failed => |failure| failed: {
-            @import("workflow_provider_authorization.zig").validateFailure(failure, id) catch return error.OperationExecutionFailed;
+            @import("workflow_provider_authorization.zig").validateFailure(failure, id) catch |operation_error| return operation_error;
             break :failed .{ .source = .{ .assigned = assigned }, .terminal = .{ .preparation_failed = failure }, .outcome = .failed };
         },
         .cancelled => |cancelled| if (cancelled.eql(id))

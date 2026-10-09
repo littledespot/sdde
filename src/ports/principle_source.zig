@@ -1,7 +1,7 @@
 const std = @import("std");
 const registry = @import("../domain/principle_registry.zig");
 const roots = @import("../domain/bootstrap_root_registry.zig");
-pub const Error = registry.Error || error{PrincipleSourceUnavailable};
+pub const Error = @import("../domain/operation_error.zig").PrincipleSource;
 pub const Reader = struct {
     context: *anyopaque,
     capability: ?*const roots.ConfiguredBaseRootCapability = null,

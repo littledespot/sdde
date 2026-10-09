@@ -990,12 +990,12 @@ test "production event projection uses closed facts and propagates every barrier
         spy.blocked = blocked;
         const expected: ?log_stream.FailureCode = if (blocked) .LOG_FLUSH_FAILURE else null;
         try std.testing.expectEqual(expected, events.emit(.{ .event_type = .run_started }));
-        try std.testing.expectEqual(expected, events.action(node, null));
+        try std.testing.expectEqual(expected, events.action(node, null, null));
         for (std.enums.values(@import("domain/workflow.zig").OutcomeTag)) |status| {
-            try std.testing.expectEqual(expected, events.action(node, .{ .outcome = status }));
+            try std.testing.expectEqual(expected, events.action(node, .{ .outcome = status }, null));
             if (status != .more) try std.testing.expectEqual(expected, events.terminal(.{ .execution = status }));
         }
-        try std.testing.expectEqual(expected, events.action(node, .{ .rejected = .authority }));
+        try std.testing.expectEqual(expected, events.action(node, .{ .rejected = .authority }, null));
         try std.testing.expectEqual(log_stream.FailureCode.LOG_SERIALIZATION_FAILURE, events.terminal(.{ .execution = .more }).?);
         try std.testing.expectEqual(expected, events.validation(node, .ok, null, null));
         try std.testing.expectEqual(expected, events.validation(node, .invalid, "WRONG_SHAPE", null));

@@ -23,13 +23,13 @@ pub const Advance = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!@import("../domain/workflow_execution.zig").Candidate {
         const self = context.?;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
-        const current = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+        const current = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         const operation_ledger = input.step.model_request_lifecycle orelse return error.OperationExecutionFailed;
         const selected = selection.transition(input.step.step.parameters) orelse return error.OperationExecutionFailed;
-        const owner = self.action.execute(current, operation_ledger, current.revision(), request.id(), .assigned, selected) catch return error.OperationExecutionFailed;
+        const owner = self.action.execute(current, operation_ledger, current.revision(), request.id(), .assigned, selected) catch |operation_error| return operation_error;
         errdefer identity.deinitOwner(owner);
         var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
-        delta.data_replacements[@intFromEnum(requests.ledger_schema.key)] = requests.adoptLedger(self.allocator, owner) catch return error.OperationExecutionFailed;
+        delta.data_replacements[@intFromEnum(requests.ledger_schema.key)] = requests.adoptLedger(self.allocator, owner) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
     }
 };

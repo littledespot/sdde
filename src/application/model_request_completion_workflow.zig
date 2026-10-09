@@ -30,12 +30,12 @@ fn Completion(comptime kind: @import("../domain/llm_provider_operation.zig").Pro
             if (input.step.data.contains(.provider_token_count_validation_result) != (kind == .input_token_count)) return error.OperationExecutionFailed;
             const facts = try readCurrent(&input.step.data);
             const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
-            const current = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+            const current = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
             const operation_ledger = input.step.model_request_lifecycle orelse return error.OperationExecutionFailed;
-            const owner = self.action.execute(current, operation_ledger, current.revision(), request.id(), facts.expected_status, .{ .terminal = facts.reason }) catch return error.OperationExecutionFailed;
+            const owner = self.action.execute(current, operation_ledger, current.revision(), request.id(), facts.expected_status, .{ .terminal = facts.reason }) catch |operation_error| return operation_error;
             errdefer identity.deinitOwner(owner);
             var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
-            delta.data_replacements[@intFromEnum(requests.ledger_schema.key)] = requests.adoptLedger(self.allocator, owner) catch return error.OperationExecutionFailed;
+            delta.data_replacements[@intFromEnum(requests.ledger_schema.key)] = requests.adoptLedger(self.allocator, owner) catch |operation_error| return operation_error;
             return .{ .outcome = facts.outcome, .delta = delta };
         }
     };
@@ -46,10 +46,10 @@ pub fn readCurrent(view: *const @import("../domain/pipeline_data.zig").View) ope
     if (view.contains(.provider_token_count_validation_result)) return readCountClosure(view);
     const result = try payload.readCurrent(view);
     const source = result.source().source();
-    const terminal = values.read(view, @import("workflow_model_accounting.zig").terminal_schema, lifecycle.TerminalOperation) catch return error.OperationExecutionFailed;
+    const terminal = values.read(view, @import("workflow_model_accounting.zig").terminal_schema, lifecycle.TerminalOperation) catch |operation_error| return operation_error;
     if (!terminal.record().id.eql(source.operationId()) or source.operationId().kind != .inference or
         source.outcome() == .rejected) return error.OperationExecutionFailed;
-    const current = values.read(view, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+    const current = values.read(view, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
     const record = current.record(source.operationId().model_request_id) orelse return error.OperationExecutionFailed;
     if (record.status != .invoked) return error.OperationExecutionFailed;
     const outcome = payload.status(result);
@@ -69,10 +69,10 @@ pub fn readCurrent(view: *const @import("../domain/pipeline_data.zig").View) ope
 fn readCountClosure(view: *const @import("../domain/pipeline_data.zig").View) operations.Error!selection.Closure {
     const counts = @import("model_token_count_observation_workflow.zig");
     const source = try counts.readCurrent(view);
-    const terminal = values.read(view, @import("workflow_model_accounting.zig").terminal_schema, lifecycle.TerminalOperation) catch return error.OperationExecutionFailed;
+    const terminal = values.read(view, @import("workflow_model_accounting.zig").terminal_schema, lifecycle.TerminalOperation) catch |operation_error| return operation_error;
     const record = terminal.record();
     if (!record.id.eql(source.operationId()) or record.state != .terminal) return error.OperationExecutionFailed;
-    const current = values.read(view, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+    const current = values.read(view, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
     const request_record = current.record(record.id.model_request_id) orelse return error.OperationExecutionFailed;
     if (request_record.status != .invoked) return error.OperationExecutionFailed;
     switch (source.outcome()) {

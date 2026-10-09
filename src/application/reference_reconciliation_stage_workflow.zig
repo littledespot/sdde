@@ -37,9 +37,9 @@ pub fn Build(comptime phase: stage.Stage) type {
         pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
             const self = context.?;
             const prior = try extraction.read(&input.step.data, schema(phase), tag(phase));
-            const source = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, r.evidence.Inputs) catch return error.OperationExecutionFailed;
-            const registry = values.read(&input.step.data, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch return error.OperationExecutionFailed;
-            const packet = self.action.execute(self.allocator, @unionInit(stage.Prior, @tagName(phase), @field(prior.payload(), @tagName(tag(phase)))), source.*, registry.*) catch return error.OperationExecutionFailed;
+            const source = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, r.evidence.Inputs) catch |operation_error| return operation_error;
+            const registry = values.read(&input.step.data, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch |operation_error| return operation_error;
+            const packet = self.action.execute(self.allocator, @unionInit(stage.Prior, @tagName(phase), @field(prior.payload(), @tagName(tag(phase)))), source.*, registry.*) catch |operation_error| return operation_error;
             return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
         }
     };
@@ -57,11 +57,11 @@ pub fn Collect(comptime phase: stage.Stage) type {
         pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
             const self = context.?;
             const prior = try extraction.read(&input.step.data, schema(phase), tag(phase));
-            const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch return error.OperationExecutionFailed;
+            const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
             const accepted = (try @import("model_candidate_handoff.zig").readAccepted(&input.step.data)).candidate;
-            const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+            const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
             errdefer owned.destroy(owner);
-            owner.payload = .{ .reconciliation_parsed = self.action.execute(owner.arena.allocator(), @unionInit(stage.Prior, @tagName(phase), @field(prior.payload(), @tagName(tag(phase)))), packet, accepted.body, accepted.origin) catch return error.OperationExecutionFailed };
+            owner.payload = .{ .reconciliation_parsed = self.action.execute(owner.arena.allocator(), @unionInit(stage.Prior, @tagName(phase), @field(prior.payload(), @tagName(tag(phase)))), packet, accepted.body, accepted.origin) catch |operation_error| return operation_error };
             var result = try extraction.publish(self.allocator, reconciliation.parsed_schema, owner, .ok);
             if (phase != .dispositions) {
                 result.delta.data_replacements[@intFromEnum(reconciliation.parsed_schema.key)] = result.delta.data_writes[@intFromEnum(reconciliation.parsed_schema.key)];
