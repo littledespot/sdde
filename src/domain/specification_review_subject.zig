@@ -10,6 +10,7 @@ pub const Subject = union(enum) {
     source_preservation: struct {},
     candidate_field: Field,
     collection: Collection,
+    entity_applicability: EntityApplicability,
     reference_signal: struct { signal: @import("model_evidence.zig").Signal, exact_value: ?[]const u8 = null },
     producer_localization: struct { target: ?Field, candidate: ?spec.IdentifiedContent, brief: ?spec.Brief },
     candidate_support: struct {
@@ -26,10 +27,11 @@ pub const BusinessContext = struct {
     entity_basis: spec.Scalar,
 };
 pub const Collection = struct { slot: authority.Slot, records: []const spec.CapturedRecord, context: BusinessContext };
+pub const EntityApplicability = struct { disposition: spec.Applicability, basis: spec.Scalar, context: BusinessContext };
 pub const BusinessSubject = union(enum) {
     field: struct { slot: authority.Slot, text: []const u8, record: ?spec.CapturedRecord = null, context: BusinessContext },
     collection: Collection,
-    entity_applicability: struct { disposition: spec.Applicability, basis: spec.Scalar, context: BusinessContext },
+    entity_applicability: EntityApplicability,
 };
 
 fn collection(a: std.mem.Allocator, slot: authority.Slot, context: BusinessContext) authority.Error!Collection {
@@ -94,6 +96,7 @@ pub fn project(a: std.mem.Allocator, inputs: authority.Inputs, context: provenan
     if (target) |selected| return .{ .candidate_field = selected };
     if (inputs.specification != null and inputs.brief != null and id.unit == .feature) switch (id.slot) {
         .acceptance_criteria, .functional_requirements, .scenario_coverage => return .{ .collection = (try projectBusiness(a, inputs, context, id)).collection },
+        .entities => return .{ .entity_applicability = (try projectBusiness(a, inputs, context, id)).entity_applicability },
         else => {},
     };
     if (id.unit == .signal) {

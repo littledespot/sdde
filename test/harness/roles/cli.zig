@@ -79,7 +79,13 @@ pub fn roleInput(a: std.mem.Allocator, description: debug.Description) !@import(
     };
     if (guidance_count != 1) return error.InvalidEvaluationContract;
     const input = try codec.decode(@import("../../../src/domain/reference_model_input.zig").RoleInput, a, body orelse return error.InvalidEvaluationContract);
-    if (input.assignment.role_definitions.len != std.meta.tags(@import("../../../src/domain/reference_reconciliation.zig").GenerationRole).len) return error.InvalidEvaluationContract;
+    const Role = @import("../../../src/domain/reference_reconciliation.zig").GenerationRole;
+    if (input.assignment.role_definitions.len != std.meta.tags(Role).len) return error.InvalidEvaluationContract;
+    var defined: std.enums.EnumSet(Role) = .initEmpty();
+    for (input.assignment.role_definitions) |definition| {
+        if (defined.contains(definition.role) or !@import("../contracts.zig").text(definition.purpose)) return error.InvalidEvaluationContract;
+        defined.insert(definition.role);
+    }
     return input;
 }
 const Authorization = struct {

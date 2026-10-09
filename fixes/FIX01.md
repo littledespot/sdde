@@ -6,47 +6,48 @@
 approval/run history are retained in [archive/](archive/); their old plans and
 status statements are historical. This document owns the outstanding work below.
 
-**Verdict:** The handoff identifies the right reliability problem and is broadly
-compatible with the generic engine. It is feasible as a staged improvement
-programme, but is **not yet a complete implementation specification**. Several
-items already exist; source-association precision, semantic acceptance criteria,
-review grouping and disputed-verdict handling still need explicit decisions.
-The bounded R3 policy projection and R4 shared family meanings are complete within
-existing boundaries, with full offline verification. The first 9 October live
-evidence for R3 confirms resolved inputs and no recurrence of the observed
-`singleton` confusion, but still ends at the token budget without publication or
-grading. Its remaining semantic and workload limits are recorded in R3 and R5.
-The later post-R4 run confirms delivery of the shared meanings but omits every
-functional-requirement record. Native validation rejects the candidate before
-policy review; no improvement in completion or rubric quality is established.
-R4 now implements the requiredness/collection projections identified by that run;
-their live effect remains unmeasured.
-The subsequent 09:07 run stopped earlier: role assignment omitted `entity_basis`
-despite unchanged request bytes, and generation initialization rejected the
-incomplete binding. R10 records this separate role-coverage handoff weakness;
-the latest R4 projections were not reached. R10 now implements an explicit typed
-blocking result with missing-role and producer evidence. The 11:53 post-R10 run
-confirms that handling and correct attribution to call 7, but the model again
-omits `entity_basis`; generation, publication and grading remain unachieved.
-A separate, confirmed
-clarification-answer lifecycle gap prevents
-claiming complete support for answer-derived requirements.
-No evidence currently establishes that the proposed changes will produce a
-completed, faithful specification with the configured model and execution budget.
+**Current architectural verdict:** Yes, the implemented items move the engineering
+forward: business subjects and family meanings are clearer, incomplete role coverage
+has a truthful typed outcome, and failure evidence is substantially better. They
+have **not demonstrated improved completion or specification quality**. The latest
+retained run still blocks before authoring; no published output or rubric result
+exists for that run. Offline correctness, a completed calibration pilot and better
+diagnostics are different outcomes from a reliable completed workflow.
+
+The bounded R3 policy projection, R4 family meanings and R10 blocking handoff remain
+implemented. R7's focused pilot and broader 48-call routing comparison are complete;
+the candidate worsened required-role omissions, so production guidance is retained.
+R9's main mechanisms and offline verification are complete, but this review
+identifies **open evaluator failure-body
+capture and simultaneous-failure evidence gaps**. Its blanket DONE claim is narrowed
+below. The two subsequently authorized R4/§8 projection follow-ups are now
+implemented: selected repair tasks survive every assignment shape, and completed
+entity source review reuses the resolved business subject. Their implementation
+and offline verification do not establish improved live model outcomes.
+
+The remaining brittleness is principally semantic selection and review reliability,
+repeated whole-context review cost, and incomplete answer recovery. The inspected
+changes do not establish a new fixture-specific production workaround or weakened
+success rule. They also do not remove those existing weaknesses. See [§9](#9-post-implementation-architectural-reassessment--9-october-2026)
+for current findings, evidence limits and the proposed next work. The dated analyses
+below remain historical; §9 supersedes their current-status claims where noted.
 
 This review and tracking document introduces no engine policy, new test authority
 or live-run authorization. The original review changed only this file; folder
-cleanup is recorded in §8. The user subsequently authorized the bounded R3, R4
-and R10 implementations. Their code, prompt and offline verification are tracked
-below; R3, R4 and R10 also record subsequent retained live-run analysis. The other
-findings remain separate work.
+cleanup is recorded in §8. The user subsequently authorized the bounded R3, R4,
+R7, R9 and R10 work. Their implementation, calibration and verification are tracked
+below. The reassessment itself changed only FIX01. The subsequent user instructions
+authorized the two R4/§8 projection follow-ups, then the prepared 48-call routing
+comparison and an evidence-supported production change. The comparison supports
+retaining baseline guidance; it supplies no policy amendment or E2E authorization.
 
 **Material revisions:** corrected overstatements about the handoff and current
 traceability, completed the clarification-path audit, separated implementation
 feasibility from semantic reliability, and added a research-backed evaluation
-method with explicit measurement limits. R10 adds the observed incomplete-role
-handoff and implements its typed blocking contract. Automatic upstream correction
-remains a separate policy decision.
+method with explicit measurement limits. The current reassessment adds inspected
+post-R9 evidence, corrects stale live/status statements, identifies missed sibling
+and failure paths, and separates engineering progress from unproved product benefit.
+Automatic upstream correction remains a separate policy decision.
 
 ## 1. Scope, baseline and evidence
 
@@ -74,12 +75,17 @@ changes only this document; it authorizes no implementation or live execution.
 The subsequently authorized R10 implementation preserves those staged changes
 and implements the existing blocking option without adding automatic rework.
 
+The current critical architectural review inspected clean HEAD
+`073da87ea432e2e8c596a5c2a299fe19516a7d06`, the present code and the three locally
+retained 9 October E2E bundles. Only this document is edited by the review.
+
 Before the original review, the worktree contained an integration/build refactor in
 `README.md`, `build.zig`, `build.zig.zon`, `build/test_registration.zig`,
 `integration.zig`, `scripts/test-integration.sh`, `src/architecture_test.zig`,
 `src/composition/root.zig`, `tests.zig` and untracked
 `test/integration/workflow_tests.zig`. Those changes were preserved. Historical
-test counts are not verification of this current dirty tree.
+test counts describe those dated implementation checks, not a fresh verification
+performed during this documentation review.
 
 Authority consulted:
 
@@ -101,12 +107,11 @@ Authority consulted:
 - [FIX_003 §15](archive/FIX_003.md#15-latest-evidence-and-critical-review--8-october-2026) and
   [FIX_002's reassessment decision](archive/FIX_002.md#d2--reassessment-of-a-structurally-admitted-source-finding).
 
-The local raw run bundles are available, unlike the handoff's GitHub-only review.
-The most recent retained run started 9 October at **11:53:40 AEDT**
-(`2026-10-09T00:53:40Z`), after R10 implementation. The preceding run started at
-09:07:58 AEDT; the earlier post-R4 run started at 08:34:58 AEDT;
-its pre-R4 baseline started at 07:59:10 AEDT. The earlier R3 comparison uses
-8 October at 20:52:37 AEDT:
+The most recent retained run started 9 October at **14:39:42 AEDT**
+(`2026-10-09T03:39:42Z`), after R9 implementation. The other locally inspectable
+E2E bundles started at 11:53:40 and 13:01:41 AEDT. Earlier R3/R4 and loan bundles
+referenced below are no longer present in this checkout; their findings are retained
+as dated review history, not independently revalidated raw evidence in this review.
 
 | Evidence | Confirmed result | What it establishes |
 | --- | --- | --- |
@@ -117,6 +122,8 @@ its pre-R4 baseline started at 07:59:10 AEDT. The earlier R3 comparison uses
 | [9 October, 08:34 post-R4 run](../zig-out/e2e-spec/2026-10-08T21-34-58Z-08faa42fc180e22e11a0e27cd7f459d0/report.json) | 34 exchanges; 59,850 / 100,000 tokens; `workflow_invalid` at omission authorization; no policy review, publication or rubric result. | Shared meanings reached generation and source review, but call 12 omitted functional requirements and the positive source review did not supply an eligible omission repair. |
 | [9 October, 09:07 run](../zig-out/e2e-spec/2026-10-08T22-07-58Z-81991f12973d8466095855fd3d3399e0/report.json) | 8 exchanges; 12,148 / 100,000 tokens; `workflow_failed` at generation initialization; no specification authoring, review, publication or rubric result. | Call 7 omitted `entity_basis` with byte-identical inputs to the preceding run; R10 traces the incomplete binding and generic failure. The latest R4 projections were not exercised. |
 | [9 October, 11:53 post-R10 run](../zig-out/e2e-spec/2026-10-09T00-53-40Z-ab59e9144c1aff2ce96a9816c782f782/report.json) | 8 exchanges; 12,123 / 100,000 tokens; `workflow_blocked` at generation initialization; no authoring, clarification, repair, publication or rubric result. | R10 retains missing `entity_basis`, source state/revision, eligible groups and call 7's origin. The same role omission persists; explicit handling improves, completed-spec outcomes do not. |
+| [9 October, 13:01 pre-R9 run](../zig-out/e2e-spec/2026-10-09T02-01-41Z-2abaff5b6f3e0d8e0604e340f9cfdcaa/report.json) | 31 exchanges; 54,298 tokens; `workflow_failed` at `g14-g6-review-omit-merge`; native cause rendered as `failed`. | Call 7 supplies all six roles under the same request used by the two blocked runs. The workflow reaches authoring and repair but still publishes no specification or rubric result. The thrown merge cause is unrecoverable from this old report. |
+| [9 October, 14:39 post-R9 run](../zig-out/e2e-spec/2026-10-09T03-39-42Z-932157c58a866f39133651ca3f3e8bbb/report.json) | 8 exchanges; 12,123 tokens; `workflow_blocked` at `g8-generate-initialize-specification`; first captured defect at event 231; no authoring, repair, publication or grading. | Missing `entity_basis` is correctly attributed to call 7 rather than the latest exchange, call 8. All eight contexts, serialized requests and projected outputs match 11:53 byte-for-byte. R9 improves evidence on the reached path; it neither changes nor repairs the role omission. |
 | [Loan run](../zig-out/e2e-spec/2026-10-07T11-57-52Z-935b3be1a46109edb237ebb287867251/report.json), analysed in [FIX_003 §14.5](archive/FIX_003.md#145-three-approved-live-executions-after-fix3-0910) | An omission/localization sequence led to insertion of already-captured behavior and dependent rebuilding; terminal budget exhaustion. | Incorrect semantic premises can consume valid repair machinery. |
 
 Both 8 October reports identify modified builds at revision
@@ -400,10 +407,17 @@ semantic acceptance remain open.
 
 ### R4 — Explicit, shared record-family meanings
 
-**Status — 9 October: COMPLETE for shared meanings and the two input-projection
-follow-ups.** Semantic calibration remains R7 work. The 08:34 run below predates
-the follow-ups; the 09:07 run stopped before their affected calls (R10). Neither
-establishes their live improvement; offline verification is recorded separately.
+**Status — 9 October: COMPLETE for shared meanings and the authorized projection
+follow-ups, including the two later gaps in §9.2.** Semantic calibration remains
+R7 work. The 08:34 run below predates the earlier follow-ups; the 09:07 run stopped
+before their affected calls (R10). Neither establishes their live improvement;
+offline verification is recorded separately, with the latest changes in §9.6.
+
+**Current review qualification:** the nine shared meanings remain implemented.
+The cross-path audit found a separate selected-task projection defect for active
+brief repairs, and an unresolved entity subject in source review. Both are now
+implementation-complete under R4/§8; see §9.2 and §9.6 for the bounded changes and
+verification. The clarification lifecycle and R9 evidence findings remain open.
 
 The original gap was one generic `.text` description for several different
 families, a records role describing only functional requirements and acceptance
@@ -432,8 +446,9 @@ own source support and policy assessment instructions.
 [Native repair](../src/domain/specification_repair.zig) derives its field or
 permitted-family purpose from the authorized target. The
 [session packet owner](../src/domain/specification_session.zig) replaces the broad
-records purpose for an active repair while preserving its source selection. It
-does not repeat the full catalogue or add a second copy of the selected task.
+authoring purposes with one explicit selected `task` for every repair shape while
+preserving its source selection. It does not repeat the full catalogue or add a
+second copy of the selected task. Initial authoring guidance remains unchanged.
 [Reviewed omission repair](../src/domain/specification_coverage_repair.zig)
 supplies the selected field or inserted family directly. Completed units retain
 `source_assignment: null`; their repair task does not revive a consumed authoring
@@ -757,6 +772,19 @@ are complete. This closes the bounded pilot, not broader generation/review/repai
 calibration or production reliability. See the
 [calibration instructions](../test/calibration/authoring-roles/README.md).
 
+**Measurement limit identified before the routing follow-up:** the original live
+cohort does not establish partial-role or multi-group routing accuracy. Supported mandatory
+roles always point to group 1; the separate captured cohort covers one source
+family. Broader claims need the order/selection cases described in §9.4, not more
+unchanged repeats of the same answer topology.
+
+**Routing follow-up complete — 9 October 2026:** broader cases, wrong-basis scoring,
+packet/admission regressions, label approval and all 48 live comparison trials are
+complete. The candidate reduces unsupported selections but worsens omissions overall
+and on captured production inputs, so production guidance is retained. This closes
+the bounded comparison; improved production outcomes and broader calibration remain open.
+See [§9.7](#97-r7-routing-calibration-follow-up--9-october-2026).
+
 - `zig build calibrate-roles` takes an explicit cohort, captured binding, split,
   repetition count and optional guidance comparison. `--live` is separate and
   requires human-reviewed labels. No default live case or E2E scenario was added.
@@ -1016,9 +1044,15 @@ production workflow authority.
 
 ### R9 — Medium: preserve native diagnostics and reconstruction evidence
 
-**Status — DONE for implementation and offline verification on 9 October.
-No new live E2E or model comparison has been run for R9.** This improves retained
-evidence, not authoring-role selection, model quality or workflow continuation policy.
+**Status — main implementation and offline verification complete on 9 October;
+failure-path follow-ups OPEN after critical review.** The 14:39 retained live run
+confirms role-producer attribution and build-input capture, but reaches no native
+operation failure, provider rejection, repair or evaluator call. Inspection found
+available evaluator failure bodies are dropped before capture, and secondary
+accounting/logging failures can replace the original invocation cause in retained
+diagnostics. See §9.3. The earlier blanket DONE/no-live statement is superseded.
+These mechanisms improve evidence, not authoring-role selection, model quality or
+workflow continuation policy.
 
 The pre-implementation findings were upstream information loss: bindings collapsed
 native causes to `OperationExecutionFailed`; its rendered diagnostic was `failed`.
@@ -1035,7 +1069,7 @@ merge cause. New instrumentation cannot retroactively establish that cause.
 
 | Required outcome | Implementation and owning boundary |
 | --- | --- |
-| Preserve native operation failures | [Closed operation error contract](../src/domain/operation_error.zig) combines declared domain/port error sets. Application bindings propagate the original cause through the runner, CLI, telemetry and harness. Post-call token accounting retains invocation failure and reports its own revision errors precisely. Error names are static; allocation failure needs no allocated diagnostic and applies no candidate delta. Explicit invariant guards retain their existing generic failure. |
+| Preserve native operation failures | [Closed operation error contract](../src/domain/operation_error.zig) combines declared domain/port error sets. Application bindings propagate native causes through the runner, CLI, telemetry and harness. Post-call accounting retains invocation failure when reconciliation succeeds and reports its own revision errors precisely. Retention of simultaneous causes remains open (§9.3). Error names are static; allocation failure needs no allocated diagnostic and applies no candidate delta. Explicit invariant guards retain their existing generic failure. |
 | Keep expected rejection separate | [Candidate evidence](../src/domain/workflow_execution.zig) carries an optional closed native rejection outside the delta, only for existing rejecting outcomes. Success and disguised allocation failures reject at the runner. Existing outcome routing and publication gates remain authoritative. |
 | Retain omission-authorization detail | [Omission authorization](../src/application/specification_omission_repair_workflow.zig) retains its native cause, reviewed revision, outstanding candidate-defect requirements and review origin. The [diagnostic projection](../src/domain/candidate_validation_diagnostic.zig) treats this as candidate-level evidence; a review call is not invented as the producer of the generation defect. |
 | Retain provider failures | Existing [observer](../test/harness/e2e/observation.zig), [events](../test/harness/e2e/trace.zig) and reports preserve provider-content diagnostics and an independently owned latest provider rejection after transport retirement. Provider-diagnostic origin is separate from the latest exchange: pre-call authentication failures cannot inherit an earlier call's identity. Protocol rejection history remains separate. |
@@ -1052,7 +1086,8 @@ it does not independently decide whether a workflow is complete. Historical reco
 errors stay distinct from current and terminal diagnostics. No attribution is inferred
 from model prose or temporal proximity.
 
-**Reconstruction limits:** a complete bundle retains the allowlisted source set.
+**Reconstruction limits:** a complete bundle retains captured Git-visible files
+within the allowlist; it does not prove compiler-input closure (§9.3).
 Compiler/toolchain availability, target/build settings and declared dependency
 hashes remain necessary external build inputs; dependency downloads are not copied.
 Missing, excluded or redacted bytes explicitly prevent exact source reconstruction.
@@ -1063,9 +1098,10 @@ Modified replay retains its overrides and cannot establish unchanged behavior.
 
 **Regression coverage:** unrelated reconciliation/omission failures and OOM cross the
 shared runner boundary without a delta; expected rejecting outcomes retain their
-cause while success rejects it. Post-call accounting retains the invocation cause,
-records unknown usage and reports a stale revision without replacing it with generic
-failure. Provider rejection survives retirement and owner release, including
+cause while success rejects it. Post-call accounting retains the invocation cause
+when reconciliation succeeds, records unknown usage and separately reports a stale
+revision precisely. These tests do not establish retention of both simultaneous
+causes. Provider rejection survives retirement and owner release, including
 pre-call failure before and after earlier exchanges. Native repair progress
 round-trips with exact revision/invalidation links and starts empty on fresh
 invocation. Stale omission authorization retains outstanding requirements without
@@ -1086,6 +1122,8 @@ capture/retry/failure tests reuse the existing mechanism.
 
 The complete diff was reviewed for scope, ownership, duplicate authority, failure
 suppression and weakened validation. No new live outcome improvement is claimed.
+Those dated passing tests did not cover the adapter-to-trace and simultaneous-failure
+gaps identified in this review; they do not close the follow-ups in §9.3.
 See [E2E evidence](../design/harness/e2e.md)
 and [evaluator capture](../design/harness/evaluator.md) for the retained contracts.
 
@@ -1299,7 +1337,7 @@ in every package. No numerical effort estimate is defensible from this review.
 | 2 — Native traceability | Existing group provenance can be audited immediately. Narrower association and complete answer authority are separate coordinated changes. | Define precision and identity lifetime; amend ADR 0020 only if changing binding. Complete the separate authentication/answer/currentness contract before claiming answer-supported generation. |
 | 3 — Resolved projections/workload | R3's resolved policy inputs are implemented and observed live; R4 supplies shared family meanings. Complete workload feasibility remains unmet; grouping is a distinct, conditional experiment. | Preserve resolved scalar/record/collection/entity facts and separate instructions. A production cardinality or policy-selection change needs an explicit amendment and negative tests. |
 | 4 — Evidenced repair | Projection/evidence improvements can preserve current policy. New premise reassessment is not active authority. | Define trigger, closed outcomes, currentness, one active finding and conserved allowance; obtain the required amendment before adding reconsideration. |
-| 5 — Layered acceptance/reporting | R9 implements native cause propagation, linked observations, source reconstruction evidence and supplied-spec exchange capture, with full offline verification above. Acceptance rules remain separate work. | Apply the development acceptance contract separately. Diagnostic evidence does not establish model quality or publication success. |
+| 5 — Layered acceptance/reporting | R9 implements the main native-cause, progress, source-snapshot and evaluator-trace mechanisms. This review reopens evaluator failure-body and simultaneous-failure evidence follow-ups (§9.3). Acceptance rules remain separate work. | Complete capture at its adapter/observation boundary; preserve rejection precedence and redaction. Apply development acceptance policy separately. Diagnostic evidence does not establish model quality or publication success. |
 | R10 role-coverage handoff | Typed blocking and evidence propagation are implemented using the existing coverage/diagnostic owners. | No new decision for blocking. Automatic upstream correction needs its own trigger, authorization and allowance contract; R7 owns live measurement. |
 
 No engine replacement is indicated. The largest uncertainty is measured semantic
@@ -1353,8 +1391,9 @@ All are feasible in principle; none should be hidden inside a prompt cleanup.
    answer-supported Spec execution, demonstrate authenticated answer acceptance
    through generation and readback, including source refresh and invalidation.
    R9's shared operational-cause and evidence changes are implemented, with their
-   verification and reconstruction limits recorded above. They do not implement
-   the answer lifecycle or change acceptance policy.
+   verification and reconstruction limits recorded above; the missed failure
+   paths in §9.3 remain open. They do not implement the answer lifecycle or change
+   acceptance policy. The current bounded priorities are refined in §9.5.
 7. **Complete layered verification and approved live acceptance.** Use the current
    repository build steps, preserve separate unit/integration/live layers, and then
    run the explicitly approved E2E cases with actual publication and rubric evidence.
@@ -1391,7 +1430,8 @@ The repository-owned targeted steps include `test-specification-generation`,
 `test-architecture` and `lint`, followed by the applicable full `verify` and native
 packaging checks. Discover current commands from `build.zig`. No such test was
 executed during the original documentation review or this retained-run analysis;
-the subsequent R3, R4 and R10 implementation verification is recorded above.
+the subsequent R3, R4, R7, R9 and R10 verification is recorded above. The present
+architectural reassessment adds inspection, not another implementation test run.
 
 The two live case commands in the handoff exist, but no invocation is authorized
 by this document. Isolated live comparisons require a bounded approval under
@@ -1503,3 +1543,430 @@ SHA-256 hashes. Fix-record whitespace, `git diff --check` and
 `git diff --cached --check` passed. The 262 already unavailable historical targets
 remain unavailable; this cleanup does not reconstruct old run/cache artifacts.
 No implementation tests or live executions were needed for the document relocation.
+
+## 9. Post-implementation architectural reassessment — 9 October 2026
+
+This reassessment answers whether the implemented items improve the application,
+what was missed, and whether local fixes introduced brittleness. It inspects the
+current owners and their sibling paths, with independent read-only audits of
+R3/R4, R7/R10 and R9. Findings below refine the existing R1–R10 work; they do not
+create a second implementation checklist or amend accepted architecture.
+
+### 9.1 Progress is real, but the product outcome remains unproved
+
+| Implemented item | Architectural progress | What remains unestablished |
+| --- | --- | --- |
+| R3 | Policy review receives resolved business fields, collections and entity applicability through one projection owner. Internal authority tuples are no longer the business subject. | Reliable semantic policy judgments and a completed review workload. Earlier live delivery observations cannot be rechecked against absent raw bundles here. |
+| R4 | All nine family/field meanings share one owner across authoring and review. Native aggregate requiredness remains separate from optional per-group output. The two sibling projection gaps in §9.2 are now closed. | Correct classification and preservation of meaning. Shared wording and fake-port tests establish delivery/native behavior, not the model's interpretation or improved live completion. |
+| R7 | A reusable bounded comparison separates native admission from human-labelled semantic accuracy. Mixed results prevented promotion of a guidance candidate that regressed on captured input. | Production reliability, partial-role/multi-group selection, other generation/review/repair tasks, and completed-spec quality. The pilot changed no production guidance. |
+| R10 | One coverage owner produces an explicit block with missing roles, current source state and exact producer evidence before authoring. | Better selection or authorized recovery. Turning a generic failure into an actionable block was its intended outcome; it does not promise successful generation. |
+| R9 | Native causes, observation history and permitted source bytes are substantially better retained. The latest report correctly distinguishes producer call 7 from latest exchange 8. | Complete failure-path capture (§9.3), stronger executed-source correspondence, or better model decisions. Latest live evidence exercises only part of the implementation. |
+
+The latest run's eight contexts, serialized requests and projected outputs are
+byte-identical to the 11:53 run. Against the 13:01 run, contexts and requests 1–7
+are identical, but call 7 chooses a different role set. These comparisons show
+unchanged reached inputs can produce complete or incomplete authoring bindings.
+They do not establish the provider's internal reason or a causal R9 regression.
+The early stop is semantic role omission, not a newly unhandled JSON prefix.
+
+No presently inspectable run in this comparison publishes a specification or
+reaches rubric evaluation. Consequently there is no defensible quality gain,
+completion-rate estimate or complete-workflow cost improvement to report. More
+truthful failures and rejected bad guidance are valuable engineering outcomes;
+they do not satisfy the application's completed-spec acceptance criteria.
+
+### 9.2 Projection follow-ups and remaining lifecycle gap
+
+**Closed — active brief repairs silently dropped the selected task.**
+[specification_repair.packet](../src/domain/specification_repair.zig#L217) derives
+the authorized field's purpose and passes `PacketOptions.task` to the session.
+Previously, [packetForOptions](../src/domain/specification_session.zig) replaced an
+active purpose only for `.records` and emitted a separate task only when the
+assignment was absent. Active brief repairs therefore lost the selected-field
+purpose. The shared packet owner now emits the supplied `task` once for every
+assignment shape. [Source-binding presentation](../src/domain/specification_source_binding.zig)
+omits competing authoring purposes during repair while preserving claim/signal
+selections. Completed units retain a null assignment; initial authoring retains
+its original purposes. No new task authority, repair permission or prompt branch
+was added.
+
+The [boundary tests](../src/specification_generation_test.zig) now assert all three
+brief fields, story and entity-basis repair, every record family/field and completed
+units. They retain source selections and reconstruction evidence, verify authorized
+replacement/merge, and preserve stale-target and sibling protections. This fixes
+guidance delivery, not the latest live role-selection failure.
+
+**Closed — completed entity source review required interpreting the raw candidate.**
+[projectBusiness](../src/domain/specification_review_subject.zig) already supplied
+policy review with disposition, resolved basis and business context. Focused source
+review now reuses that projection and the same `EntityApplicability` payload, instead
+of falling through to `candidate_support`. Initial review, correction, finding
+insertion and detail/evidence repair use the existing shared projector. Source
+reconstruction evidence remains complete; source and policy instructions remain
+separate.
+
+Tests cover required and not-applicable entities, literal/exact/passive bases,
+invalid provenance, and allocation failures through the source packet path. Partial
+pre-authoring subjects and dependency localization remain unchanged. This closes
+the presentation asymmetry; no live evidence yet establishes better entity verdicts.
+
+**High — confirmed, pre-existing: newly submitted answers cannot complete the
+clarification recovery path (R2).** The current YAML preparation ends at
+[form validation](../design/workflows/spec.workflow.yaml#L243), which distinguishes
+submitted from recorded responses but does not authenticate/accept a new answer.
+[refresh](../src/domain/clarification_refresh.zig#L31) rejects a submitted nonempty
+answer with `AuthenticationRequired`, while
+[specification provenance](../src/domain/specification_provenance.zig#L84) rejects
+nonempty clarification-response IDs. The protections are intentional; the missing
+acceptance/current-applicability and answer-to-generation integration is the defect.
+This did not cause the latest no-clarification block, but prevents claiming a
+complete workflow for cases that need user answers. Resolve the R2 authority
+contract before implementation; never accept answers merely because a form is loaded
+or closed.
+
+### 9.3 R9 follow-ups: failure evidence is not yet complete
+
+**Medium — confirmed: evaluator adapters discard available partial response bodies.**
+[Bedrock's evaluator adapter](../test/harness/bedrock.zig#L52) does not supply the
+transport's error-path response slot and copies a body only for `.received`.
+The existing [transport](../src/adapters/provider/bedrock_transport.zig#L18) and
+[HTTP adapter](../src/adapters/provider/bedrock_http.zig#L31) already retain body
+prefixes and their completeness on failures. They are lost before reaching the
+[evaluation trace](../test/harness/evaluation_trace.zig#L39).
+The sibling [OpenAI evaluator HTTP path](../test/harness/http.zig#L95) also assigns
+`response_body` only after its read finishes, so a failed read loses the prefix.
+This is a shared evaluator-observation contract gap, not solely a missing Bedrock
+conditional. The [current observation](../test/harness/provider.zig#L25) has no
+body-completeness field or error-exit evidence channel.
+
+Thread available bytes and completeness through the existing evaluator observation
+and capture owner, including typed failures and error-union exits. Preserve task
+joining, call-local ownership, credential redaction, original failure and scoring
+rules. Existing [trace tests](../test/harness/tests.zig#L467) inject already-populated
+fake observations; they cannot detect adapter evidence loss. Add fault cases through
+native adapters and the trace for partial reads, timeout/cancellation, allocation failure,
+full non-success responses and no received body. The evaluator documentation also
+[says error bodies are not retained](../design/harness/evaluator.md#L249), while its
+later capture section promises raw responses. Reconcile that stale statement with
+the approved raw-capture/redaction contract when implementing this follow-up.
+
+**Medium — confirmed limit: simultaneous failures need separate evidence.**
+[Post-call accounting](../src/application/workflow_model_invocation.zig#L24) can
+replace a thrown invocation cause with its own stale-revision or other accounting
+error. Successful reconciliation of unavailable usage preserves that invocation
+cause. Budget precedence is a different path: an admitted usage observation can
+exceed the budget and supersede another candidate-classification rejection.
+The [runner's invocation catch](../src/application/workflow_pipeline_runner.zig#L410)
+can return a logging/capture rejection before the invocation's original cause.
+These paths remain fail-closed; rejection precedence may be correct. However, R9
+does not retain both causes, so the original diagnostic can still disappear when
+accounting or evidence writing also fails. Retain bounded primary/secondary evidence
+through the shared observation boundary and test combined failures. Preserve existing
+terminal precedence; do not replace it with a second continuation rule or require
+successful allocation/logging to record an allocation failure.
+
+**Evidence limits, not demonstrated runtime defects:**
+
+- The latest bundle contains 1,020 captured inputs and its recomputed source digest
+  matches. [Build capture](../build/provenance.zig#L34) enumerates Git-visible files
+  in an explicit allowlist, excluding ignored untracked files. The
+  [build graph](../build.zig#L138) captures before compilation rather than compiling
+  from the captured tree. `complete` therefore describes that permitted snapshot,
+  not proven compiler-input closure or immunity to concurrent edits. No mismatch is
+  observed here. State this limit; strengthen correspondence only if claiming exact
+  executed-source reconstruction.
+- The latest report has 107 `corrections`, zero native repair transitions and 19
+  outstanding data keys. [Progress.observe](../test/harness/e2e/progress.zig#L37)
+  includes routine invalidation/rebuild and transport retirement under those labels.
+  They do not mean 107 semantic repairs or 19 completion failures. Distinguish repair
+  actions from ordinary effects in presentation while retaining the existing facts.
+  This is diagnostic noise, not workflow authority or the cause of the role omission.
+
+### 9.4 Where brittleness remains, and what the changes did not cause
+
+**Semantic routing is still a consequential model judgment.** Role membership and
+coverage validators prove eligible, current bindings and detect missing roles;
+they do not prove the model correctly recognized support. The
+[entity purpose](../src/domain/required_authority_description.zig#L110) already
+explains that source-backed behavior may justify `not_applicable` without an explicit
+absence declaration. Repeating that instruction is not a newly identified missing
+definition. An omitted role can represent genuine insufficiency or model oversight;
+R10 correctly blocks both under current authority.
+
+The role selector makes an additional semantic judgment about actor/benefit/entity
+support before authoring makes related judgments again. This is no data-flow cycle,
+but it adds an independently fallible gate. Single responsibility and smaller calls
+do not remove that risk. [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md#L50)
+requires the pre-authoring binding; bypassing it, auto-filling all roles or moving
+it elsewhere requires an explicit architecture decision. More self-agreement calls
+would not constitute semantic proof.
+
+**R7's original cohort was broader in wording/domain than in routing structure.** Every
+mandatory supported role in the live cohorts selects group 1; positive cases mostly
+require all six roles, negatives none. The
+[ambiguous case](../test/calibration/authoring-roles/cohort.json#L379) permits either
+entity-basis selection. That tests uncertainty without proving reliable partial-role
+selection. Controlled inputs use [admitted builders](../test/harness/roles/input.zig#L19),
+bypassing production extraction/grouping; the
+[captured cohort](../test/calibration/authoring-roles/captured.cohort.json#L7) has one
+source family. Add later-group support, group-order permutations, an earlier plausible
+distractor, split-role support, contradictory/underspecified sources and captured
+post-repair premises. Score wrong-basis selection separately from omission and
+unusable output. This is an evaluation coverage gap, not evidence of fixture-specific
+production branches. Keep labels outside requests and fix candidate guidance before
+held-out comparisons. The bounded routing follow-up in §9.7 now closes this
+case/scoring/comparison gap; genuine post-repair coverage remains unavailable.
+
+**Complete review cost remains structurally unresolved (R5).** Each policy subject
+[reconstructs the full business context](../src/domain/specification_review_subject.zig#L66)
+and receives [all selected principles](../src/domain/principle_assessment.zig#L101).
+More records/fields increase both subject count and repeated context. R3 clarifies
+the subject; it does not make this workload cheaper, and clearer family guidance can
+produce more content to review. Measure complete required coverage, retries, repairs,
+tokens, latency and retained memory. If grouping is justified, amend its existing
+assignment/correction contract first. Do not truncate dependencies, select policies
+by keywords, add local size ceilings or raise the budget and label that a repair.
+
+**Valid mechanics still permit wrong semantic premises (R1/R2/R6).** Native lineage,
+current revision and atomic mutation prevent fabricated IDs, stale writes and excess
+scope; they cannot establish faithful prose, extraction completeness or a correct
+omission verdict. A false finding can initiate a mechanically valid harmful repair.
+That needs assignment-level false-positive/false-negative and repair-harm measurement.
+A new verdict-reconsideration route remains a separate accepted-policy amendment.
+
+The inspected R3/R4/R10/R9 owners do not add a hardcoded greeting/loan continuation
+rule, a parallel success validator or a weakened gate to make one case pass. The
+concrete local incompleteness was the records-only repair-task branch in a shared
+packet API; the authorized follow-up removes it at that API across all shapes.
+The evidence does not justify attributing all semantic variability to recent edits,
+or claiming that all existing brittleness has been repaired.
+
+### 9.5 Suggested next work and feasibility
+
+The immediate model-outcome priority remains the role selector that currently stops
+authoring. Bounded native corrections can proceed independently; they must not be
+presented as solutions to that semantic failure. This order refines §5 without
+authorizing new code, model calls or architecture changes.
+
+| Priority and existing item | Smallest architecturally complete next step | Feasibility and required evidence |
+| --- | --- | --- |
+| R4 / §8 — missed packet paths | Implemented: one selected repair task across assignment shapes, and shared resolved entity applicability in completed source review. | Closed by boundary regressions and offline verification (§9.6). Live model improvement remains unmeasured; these changes do not address the earlier role-selection blocker. |
+| R9 — reopened evidence gaps | Complete evaluator response-prefix/completeness capture across both adapters; preserve simultaneous invocation/accounting/logging causes as evidence. Correct retention documentation. | High for adapter/trace capture; medium for shared dual-cause reporting. Fault tests must traverse native adapters/runner, not start with ideal populated observations. No scoring or terminal-precedence change. |
+| R7 / R10 — observed authoring blocker | Broader cases, scoring and all 48 live comparisons are complete (§9.7); the fixed candidate is rejected and production guidance retained. | No production remedy is demonstrated. Another model/settings or guidance comparison needs a declared plan and fresh bounded approval; a semantic-boundary change needs an explicit decision. Genuine post-repair coverage remains unavailable. |
+| R5 / §8 — complete-workflow feasibility | Measure the full selected-policy workload and memory; evaluate one bounded scheduling/grouping alternative only under an accepted contract. | Measurement is feasible now. Production grouping is conditional on policy amendment and per-member findings, retry identity, invalidation and full coverage evidence. |
+| R2 — answer recovery | Define and implement authenticated acceptance, durable/current applicability and response-backed generation/readback through existing lifecycle owners. | Medium; coordinated authority/state/typed-text work. Mandatory before claiming support for answer-dependent completion, independent of the latest no-answer failure. |
+| R1 / R6 / R8 — quality and repair acceptance | Define required association precision, bounded disputed-premise policy if needed, and development quality/expected-outcome rules. Calibrate review/localization/repair tasks against human labels, then evaluate actual published output. | Conditional decisions, not prompt cleanup. Preserve the distinction between evaluator completion, semantic acceptance and production authority. |
+
+Success for the next phase means measured fewer unsupported/missing selections and
+harmful repairs, a complete feasible workload, actual publication, declared rubric
+acceptance and unchanged live repeats. Test-count growth or the disappearance of one
+error message is insufficient. Preserve the useful deterministic engine; improve and
+measure its semantic boundaries before expanding the number of model decisions.
+
+**Review validation:** inspected current source/contracts, all three locally retained
+9 October E2E reports and reached request comparisons, current calibration cohorts
+and their retained results, plus independent read-only audits. No code changes,
+implementation tests, new research calls or live model executions were performed.
+Earlier full-suite counts remain dated implementation evidence. Older unavailable
+run bundles limit retrospective causal claims; current static findings are identified
+separately from observed live failures and future risks.
+`git diff --check` passed, all 28 newly introduced local link/anchor targets passed,
+and the latest bundle's 1,020-input digest was independently reproduced. Only FIX01
+is modified; unavailable historical targets were not reconstructed or counted as
+newly validated evidence.
+
+### 9.6 R4/§8 projection follow-up implementation — 9 October 2026
+
+The two explicitly requested projection paths are implemented at the existing
+session/source-binding and review-subject owners. The records-only task override
+is removed. Repair guidance presents one selected task across brief, story, entity
+and record assignments; source selections and completed-unit retirement remain
+unchanged. Completed source entity review shares the policy review's resolved
+entity-applicability payload. No response schemas, persisted state, model routes, retry
+allowances, repair permissions or lifecycle transitions changed.
+
+Generation/story instructions and the static generation context now accommodate
+the selected repair purpose without requiring an authoring purpose that repair
+intentionally omits. The model-request guidance documents the shared presentation.
+Regression tests extend the existing repair/review matrices across two unrelated
+mock domains, both entity dispositions, resolved literal/exact/passive text,
+initial/correction/insertion/detail/evidence repair, completed units and partial
+source/localization cases. Invalid provenance and allocation-failure checks remain
+fail-closed.
+
+| Offline command | Result |
+| --- | --- |
+| `zig build test-specification-generation --summary all` | 258/258 tests passed. |
+| `zig build test-required-authority test-model-candidate-json test-architecture lint --summary all` | 336/336 tests passed; lint passed. |
+| `zig build verify build-e2e-harness build-rubric-evaluator --summary all` | 137/137 steps and 1342/1342 tests passed, including separate offline integration, lint/architecture, clean native packaging and harness builds. |
+
+Compiler/cache and clean packaging verification required host access. The complete
+diff was reviewed for scope, duplicate authority, obsolete paths and weakened
+enforcement. `git diff --check` passed; all 24 newly introduced local documentation
+targets passed, and the changed generation JSON context parsed successfully.
+
+These changes close the two presentation defects. No live E2E or calibration call
+was run for this implementation, and no improved semantic verdict or published
+specification is claimed. The latest retained authoring-role blocker precedes
+these paths; the R7/R10, R9 and clarification findings remain separate.
+
+### 9.7 R7 routing calibration follow-up — 9 October 2026
+
+**Complete: local implementation, offline preparation and all 48 approved live
+comparisons, with a documented decision to retain production guidance.** This
+addresses the calibration coverage gap identified in §9.4. It does not add production
+roles, change role meanings or bypass R10's mandatory authoring coverage gate.
+
+The existing calibration owners now cover:
+
+- [Ten controlled cases](../test/calibration/authoring-roles/routing.cohort.json),
+  with six development and four held-out cases in disjoint source families.
+  Later-group support and reversed sources test order dependence; same-kind
+  competing business sources prevent a technical/business classification shortcut.
+  Partial-role and split-role premises, undecided outcomes and contradictory prose
+  extend the earlier all-or-none routing topology.
+- [Two captured cases](../test/calibration/authoring-roles/routing-captured.cohort.json)
+  retaining the latest and preceding production call-7 inputs. Both are initial
+  requests from one development family. Their observed omissions are evidence to
+  compare, not the source of expected labels.
+- A separate `wrong_basis_pairs` count at the existing scorer/report boundary.
+  It is a subset of `unsupported_pairs` when a role has allowed groups but selects
+  another group. Assignments to roles with no allowed group remain unsupported;
+  omission is independent. Native role membership and retained-claim eligibility
+  validate first through the production admission owner; historical captures retain
+  their historical facts rather than importing current workflow state.
+- Captured task intake rejects duplicate role definitions and invalid/blank purposes,
+  preserving captured wording rather than substituting another purpose registry.
+  Boundary regressions cover partial support, incorrect bases, optional/alternative
+  support, source/group/assignment permutations, unusable output and report totals.
+  Dataset checks validate actual packet handles and label isolation without freezing
+  the human review metadata in a particular review state.
+
+At preparation time both new cohorts had `label_status: proposed`, `reviewer: null`.
+The live approval and reviewed metadata are recorded below. The original
+reviewed pilot, its immutable results, production guidance and experimental candidate
+are unchanged. The [preparation commands](../test/calibration/authoring-roles/README.md#completed-routing-follow-up)
+hold Bedrock `openai.gpt-oss-20b-1:0`, low reasoning, temperature 0, native schema and
+`ap-southeast-2` fixed. Two repeats per case compare baseline with the same candidate:
+
+| Prepared set | Planned calls | Offline evidence |
+| --- | ---: | --- |
+| Controlled development | 24 | [Report](../zig-out/role-calibration/2026-10-09T04-37-11Z-9325a5656eb8088e07d440b7e783483f/report.md) |
+| Captured development | 8 | [Report](../zig-out/role-calibration/2026-10-09T04-37-24Z-61f163fa36980ce840959fec057e74ca/report.md) |
+| Controlled held-out | 16 | [Report](../zig-out/role-calibration/2026-10-09T04-37-33Z-e1ea57d4933889a5310097856a41cfc8/report.md) |
+
+All **48** immutable requests were inspected against their actual serialized provider
+bodies. Controlled citations/claim text match each case's source bytes; captured user
+content matches the original logs. Baseline/candidate pairs differ only in guidance;
+unchanged repeats are byte-identical. Labels/rationales are absent from model content,
+schema handles match native groups and every preparation outcome is `not_run`.
+No API call, correction, repair, workflow publication or rubric evaluation ran
+during this offline preparation.
+
+**Remaining limits:** no genuine post-repair role capture exists in retained runs;
+do not manufacture one by editing captured requests. The controlled builder produces
+single-claim retained groups. The contradiction case tests unresolved prose, not
+native conflicting dispositions or conflict admission; allowed group IDs are
+alternatives, not a requirement to select every group. Partial cases test valid role
+selection from incomplete premises, not successful complete specification generation.
+These small, assistant-authored cohorts received user approval but cannot establish
+population reliability or replace complete live E2E/rubric evidence.
+
+The comparison held the candidate fixed on development/captured inputs and held-out
+families. The selection below compares missing roles, unsupported/wrong-basis pairs,
+unusable answers, repeated variability and actual costs together. Do not tune against
+held-out results or promote guidance automatically.
+Retain production guidance unless the measured comparison supports a change.
+[§28.8](../design/contracts/28-testing.md#288-model-conformance-comparisons)
+requires explicit bounded approval for external calls; the approved 48-call allowance
+has now executed in full. Genuine post-repair coverage remains a separate evidence gap.
+
+| Offline command | Result |
+| --- | --- |
+| `zig build test-rubric-evaluator --summary all` | 118/118 tests passed. |
+| `zig build test-architecture lint smoke-role-calibration --summary all` | 123/123 architecture tests passed; lint and clean diagnostic startup passed. |
+| `zig build verify build-role-calibration --summary all` | 136/136 steps and 1345/1345 tests passed, including separate offline integration and clean native packaging. |
+
+The three documented `zig build calibrate-roles` commands completed without
+`--live`; their planned allowances are 24, 8 and 16. Full verification used the
+installed Zig compiler/cache with host access. Scope review preserves existing
+staged R4 changes; this follow-up changes calibration data/intake/scoring/tests
+and documentation only. No production prompt, schema, route, state or retry rule
+changed.
+`git diff --check`, both new JSON parses and all nine new local documentation
+links/anchors passed. Independent review found no material code or approval-boundary
+defect; its correction of an unsupported freshness claim is incorporated above.
+
+**Latest E2E after the follow-up — 9 October, 04:44 UTC:** the
+[retained run](../zig-out/e2e-spec/2026-10-09T04-44-10Z-351303ae95d313768b68b362cedf3248/report.md)
+again blocked at generation initialization. Call 7's provider request and extracted
+response are byte-identical to the 04:19 run: signal 1 receives only `title`,
+`description` and `primary_goal`, omitting `primary_user_story`, `entity_basis`
+and `records`. Eight calls consumed 11,990 tokens; no specification was published
+or rubric evaluation performed. The comparison was unexecuted and both cohorts
+were still proposed at that time. That E2E run demonstrates no production improvement
+from the calibration tooling; the later diagnostic comparison is recorded below.
+
+#### Live comparison and selection — 9 October 2026
+
+The user's instruction to complete the prepared live comparison authorized its
+reviewed labels and all **48** planned sends. Both cohorts record that review;
+their label contents remained fixed. The three README commands subsequently ran
+with `--live`, explicitly sourcing the dedicated `.env.e2e` credentials. All sends
+executed once, without correction, repair or an additional allowance. This is
+diagnostic model evidence, separate from live E2E and rubric evaluation.
+
+| Live input set / evidence | Guidance | Trials | Missing / required roles | Unsupported / assigned pairs | Wrong-basis pairs | Exact trials | Actual tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| [Controlled development](../zig-out/role-calibration/2026-10-09T05-06-02Z-f84d70dc1b9790a9fc93c79a4edc78d5/report.md) | Baseline | 12 | 14/62 | 35/87 | 34 | 0 | 15,547 |
+| Same | Candidate | 12 | 20/62 | 17/61 | 15 | 3 | 15,596 |
+| [Captured production inputs](../zig-out/role-calibration/2026-10-09T05-06-47Z-724ba34c545ad7140fc2b4bc8d03fee6/report.md) | Baseline | 4 | 1/24 | 4/27 | 4 | 0 | 6,603 |
+| Same | Candidate | 4 | 8/24 | 0/16 | 0 | 0 | 6,038 |
+| [Controlled held-out](../zig-out/role-calibration/2026-10-09T05-07-28Z-8f662480c06876d58dcb79816fee1368/report.md) | Baseline | 8 | 12/38 | 3/44 | 3 | 2 | 10,906 |
+| Same | Candidate | 8 | 9/38 | 0/40 | 0 | 2 | 10,538 |
+| **Total** | **Baseline** | **24** | **27/124** | **42/158** | **41** | **2** | **33,056** |
+| **Total** | **Candidate** | **24** | **37/124** | **17/117** | **15** | **5** | **32,172** |
+
+All 48 trials passed protocol and native admission, with complete usage and zero
+operational failures. The existing Bedrock normalizer handled 47 prefixes; there
+was no JSON retry. Independent inspection confirmed source/capture fidelity,
+guidance-only paired differences, byte-identical unchanged repeats and no label or
+rationale leakage. Binding, role purposes and response schema remained fixed:
+Bedrock `openai.gpt-oss-20b-1:0`, low reasoning, temperature 0, native schema,
+`ap-southeast-2`. Identical requests still produced different assignments.
+
+**Selection: reject the candidate and retain production guidance.** It reduces
+unsupported assignments but increases required-role omissions by 10 overall and
+by 7 on captured inputs. All four captured candidate trials omit `entity_basis`;
+two also omit title/story. The baseline supports all six roles in three of those
+four trials, while wrongly assigning title or description to the copied-value
+group in all four. Neither variant is reliable; fewer unsupported assignments
+alone do not repair the production authoring blocker.
+
+The held-out improvement does not establish order invariance: the candidate is
+exact on both `spoken-timer-later` trials but omits title/records on both reversed
+inputs. Same-kind lamp routing remains wrong, and both inventory candidate repeats
+assign an unsupported story while omitting title/entity. These are unrelated
+failure classes; the comparison does not support a greeting-specific rule,
+forced role assignment or candidate promotion.
+
+The experiment used **65,228 actual tokens** and **53.4424 seconds** of summed
+measured replay duration. Provider latency was unavailable; no dollar cost is asserted. Counts
+are descriptive for these small, correlated cohorts, not statistical reliability
+or completed-spec quality. Missing-role and wrong-basis errors can overlap;
+wrong-basis counts must not be added to unsupported counts as separate failures.
+
+No production change is supported by these results, so none is introduced.
+The bounded call-7 routing comparison is complete; genuine post-repair premises,
+other generation/review/repair tasks and published-output quality remain open.
+Another comparison requires a declared fixed intervention, labels, measurement
+plan and fresh bounded approval. A new semantic correction or continuation route
+also requires an explicit policy decision rather than a local workaround.
+
+After execution, `zig build test-rubric-evaluator lint --summary all` passed
+**118/118 tests** and lint. The preceding full verification remains the applicable
+implementation evidence above; this execution changes reviewed cohort metadata
+and documentation only. The experimental candidate and production guidance are
+unchanged. `git diff --check` and all six changed documentation link/anchor targets
+passed. Both cohorts parse with unchanged cases/labels; guidance bytes match HEAD.
+Independent accounting and selection audits found no material discrepancy.

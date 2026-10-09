@@ -122,6 +122,9 @@ Collection assignments identify the assessed slot and its resolved records,
 including an empty collection. Source review retains the complete business and
 source reconstruction context; related prose cannot replace the selected records.
 Collection membership comes from the same native lens as evidence aggregation.
+Completed entity-applicability review receives the disposition, resolved basis and
+business context through the same projection as policy review. Partial source
+review and producer localization retain their existing subjects and evidence.
 
 **Principle review** receives one resolved business `subject`, its semantic `task`
 and the complete selected `principles`. Feature fields contain their displayed
@@ -143,9 +146,11 @@ purpose. Records authoring also receives `record_requirements`, projecting the
 canonical mandatory families with `assembled_specification` scope. Requiredness
 applies across bound source-group batches; optional families need no filler.
 Atomic repair omits that aggregate authoring guidance and retains its selected
-target. Native value and membership repairs project only the selected field or
-permitted families. Completed-unit omission repair supplies its authorized task
-without recreating a consumed authoring assignment. Prompts own the generation,
+target. Specification content repair presents its authorized `task` once; active source
+assignments retain their claim/signal selections and omit authoring purposes.
+Native value and membership repairs describe only the selected field or permitted
+families. Completed-unit omission repair retains `source_assignment: null` without
+recreating a consumed authoring assignment. Prompts own the generation,
 review or repair instructions, rather than another copy of the definitions.
 These descriptions add no optional-family requirement, semantic rejection or
 cross-kind deduplication rule.
@@ -280,6 +285,15 @@ candidate guidance is an experiment. The completed
 found fewer unsupported assignments but unchanged total omissions and a regression
 on the captured production input; it retains production guidance. Neither that
 small comparison nor offline tests establish whole-workflow reliability.
+
+The [R7 routing follow-up](../../fixes/FIX01.md#97-r7-routing-calibration-follow-up--9-october-2026)
+adds reviewed partial-role, competing-group, source-order and split-role cases,
+plus two retained production inputs. Reports identify wrong-basis pairs as a
+subset of unsupported assignments, after ordinary protocol/native admission.
+All 48 approved live comparisons completed. The candidate reduced unsupported
+assignments but increased omissions overall and on captured production inputs;
+production guidance is retained. No genuine post-repair role capture is available,
+and these diagnostic results establish no completed-spec quality improvement.
 
 The [latest captured native-mode run](../../fixes/archive/FIX_001.md#latest-native-json-run--malformed-output-despite-native-schema)
 returned malformed JSON on all three attempts despite the native schema and explicit

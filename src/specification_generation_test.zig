@@ -226,7 +226,13 @@ test "draft generation and selected repair retain original source meaning withou
             try std.testing.expect(!input.object.contains("signals"));
             try std.testing.expect(input.object.get("claims").?.array.items.len != 0);
             const assignment = input.object.get("source_assignment").?.object;
-            try std.testing.expectEqualStrings("A description of intended user-visible behavior.", assignment.get("description").?.object.get("purpose").?.string);
+            if (packet == original) {
+                try std.testing.expectEqualStrings("A description of intended user-visible behavior.", assignment.get("description").?.object.get("purpose").?.string);
+                try std.testing.expect(!input.object.contains("task"));
+            } else {
+                try std.testing.expect(!assignment.get("description").?.object.contains("purpose"));
+                try std.testing.expectEqualStrings(try @import("domain/required_authority_description.zig").task(a, .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .display_name }), try selectedNativeRepairTask(input));
+            }
             try std.testing.expectEqualDeep(good.provenance.claim_ids, (try @import("domain/model_candidate_json.zig").decode(@import("domain/specification_source_binding.zig").Guidance, a, try std.json.Stringify.valueAlloc(a, input.object.get("source_assignment").?, .{}))).brief.description.claim_ids);
         }
         // Added source context does not widen valid provenance or authorize lost content.
@@ -288,9 +294,9 @@ test "authoring assignments retain field purpose bound meaning and exact choices
                     try std.testing.expectEqualDeep(bound.brief.title.claim_ids, brief.title.claim_ids);
                     try std.testing.expectEqualDeep(bound.brief.description.claim_ids, brief.description.claim_ids);
                     try std.testing.expectEqualDeep(bound.brief.primary_goal.claim_ids, brief.primary_goal.claim_ids);
-                    try std.testing.expectEqualStrings(try references.r.GenerationRole.title.purpose(a), brief.title.purpose);
-                    try std.testing.expectEqualStrings(try references.r.GenerationRole.description.purpose(a), brief.description.purpose);
-                    try std.testing.expectEqualStrings(try references.r.GenerationRole.primary_goal.purpose(a), brief.primary_goal.purpose);
+                    try std.testing.expectEqualStrings(try references.r.GenerationRole.title.purpose(a), brief.title.purpose.?);
+                    try std.testing.expectEqualStrings(try references.r.GenerationRole.description.purpose(a), brief.description.purpose.?);
+                    try std.testing.expectEqualStrings(try references.r.GenerationRole.primary_goal.purpose(a), brief.primary_goal.purpose.?);
                     const selected = try schema.restrict(a, canonical.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
                     defer selected.release();
                     if (body.get("preserved_tokens").?.array.items.len != 0) {
@@ -307,16 +313,16 @@ test "authoring assignments retain field purpose bound meaning and exact choices
                 },
                 .primary_user_story => |story| {
                     try std.testing.expectEqualDeep(bound.primary_user_story.claim_ids, story.claim_ids);
-                    try std.testing.expectEqualStrings(try references.r.GenerationRole.primary_user_story.purpose(a), story.purpose);
+                    try std.testing.expectEqualStrings(try references.r.GenerationRole.primary_user_story.purpose(a), story.purpose.?);
                 },
                 .entities => |entities| {
                     try std.testing.expectEqualDeep(bound.entities.claim_ids, entities.claim_ids);
-                    try std.testing.expectEqualStrings(try references.r.GenerationRole.entity_basis.purpose(a), entities.purpose);
+                    try std.testing.expectEqualStrings(try references.r.GenerationRole.entity_basis.purpose(a), entities.purpose.?);
                 },
                 .records => |records| {
                     try std.testing.expectEqualDeep(bound.records.selection.claim_ids, records.claim_ids);
                     try std.testing.expectEqualDeep(bound.records.signal, records.signal);
-                    try std.testing.expectEqualStrings(try references.r.GenerationRole.records.purpose(a), records.purpose);
+                    try std.testing.expectEqualStrings(try references.r.GenerationRole.records.purpose(a), records.purpose.?);
                 },
             }
         }
@@ -360,9 +366,11 @@ test "story generation and repair omit sibling drafts while retaining source evi
             try std.testing.expect(!body.contains("brief"));
             try std.testing.expect(!body.contains("entities"));
             try std.testing.expectEqualStrings(source, body.get("sources").?.array.items[0].object.get("text").?.string);
-            for ([_][]const u8{ "source_assignment", "claims", "citations", "sources" }) |field|
+            for ([_][]const u8{ "claims", "citations", "sources" }) |field|
                 try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, original.get(field).?, .{}), try std.json.Stringify.valueAlloc(a, body.get(field).?, .{}));
         }
+        try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, original.get("source_assignment").?.object.get("claim_ids").?, .{}), try std.json.Stringify.valueAlloc(a, corrected.get("source_assignment").?.object.get("claim_ids").?, .{}));
+        try std.testing.expectEqualStrings(try @import("domain/required_authority_description.zig").task(a, .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .primary_user_story }), try selectedNativeRepairTask(.{ .object = corrected }));
         const merged = try repair.merge(a, current, fixture.context, candidate, auth, .{ .value = good.value }, null);
         try std.testing.expect((try validate_unit.execute(a, current, fixture.context, merged)) == .valid);
         try std.testing.expectEqualDeep(brief, current.units[0].?);
@@ -1209,6 +1217,13 @@ test "completed repair packets retire authoring assignments while pending record
         defer @import("domain/model_input_packet.zig").release(completed);
         const complete_json = try std.json.parseFromSlice(std.json.Value, a, completed.body(), .{});
         try std.testing.expect(complete_json.value.object.get("source_assignment").? == .null);
+        for (0..sessions.unit_count) |index| {
+            const selected = try sessions.packetForOptions(a, current, fixture.context, index, .{ .task = "MOCK selected completed replacement." });
+            defer @import("domain/model_input_packet.zig").release(selected);
+            const input = (try std.json.parseFromSlice(std.json.Value, a, selected.body(), .{})).value;
+            try std.testing.expect(input.object.get("source_assignment").? == .null);
+            try std.testing.expectEqualStrings("MOCK selected completed replacement.", try selectedNativeRepairTask(input));
+        }
         var pending = current;
         pending.completed = sessions.records_index;
         pending.units[sessions.records_index] = null;
@@ -1581,6 +1596,74 @@ test "atomic specification repair preserves siblings and rejects stale or foreig
         try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, with_sibling));
         const still_invalid = try repair.merge(a, current, fixture.context, candidate, authorization, .{ .value = bad.value }, null);
         try std.testing.expectEqual(.typed_text, (try g.validate(a, text.validator, fixture.context, .brief, still_invalid.response)).invalid.rule);
+    }
+}
+
+test "active scalar repairs present one selected task and retain their bound source selections" {
+    const repair = @import("domain/specification_repair.zig");
+    const sessions = @import("domain/specification_session.zig");
+    const binding = @import("domain/specification_source_binding.zig");
+    const candidates = @import("domain/specification_candidate.zig");
+    const descriptions = @import("domain/required_authority_description.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    const json = @import("domain/model_candidate_json.zig");
+    for ([_][]const u8{ "MOCK A visitor sees a startup greeting.", "MOCK A borrower receives a renewal receipt." }) |source| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+        const cases = [_]struct { index: usize, subject: candidates.Subject, slot: @import("domain/required_authority.zig").Slot }{
+            .{ .index = 0, .subject = .title, .slot = .display_name },
+            .{ .index = 0, .subject = .description, .slot = .description },
+            .{ .index = 0, .subject = .primary_goal, .slot = .primary_goal },
+            .{ .index = 1, .subject = .story, .slot = .primary_user_story },
+            .{ .index = 2, .subject = .entity_basis, .slot = .entities },
+        };
+        for (cases) |case| {
+            var current = try completedFixture(&fixture, false);
+            const good = try fixture.proposal(source);
+            const original: g.Response = .{ .content = switch (case.index) {
+                0 => .{ .brief = .{ .title = good, .description = good, .primary_goal = good } },
+                1 => .{ .primary_user_story = good },
+                2 => .{ .entities = .{ .disposition = .not_applicable, .basis = good } },
+                else => return error.UnexpectedRecordAssignment,
+            } };
+            current.completed = case.index;
+            for (current.units[case.index..]) |*unit_value| unit_value.* = null;
+            const bound = try sessions.currentBinding(a, current, fixture.context);
+            const target: candidates.Target = .{ .value = .{ .subject = case.subject, .field = .value } };
+            const candidate: repair.Candidate = .{ .response = try candidates.replace(a, original, target, .{ .value = .{ .segments = &.{.{ .literal = .{ .value = " " } }} } }) };
+            const rejection = (try validate_unit.execute(a, current, fixture.context, candidate)).invalid;
+            try std.testing.expectEqualDeep(target, rejection.issue.field.target);
+            const authorization = try repair.authorize(a, current, fixture.context, candidate, rejection);
+            const packet = try repair.packet(std.testing.allocator, current, fixture.context, authorization);
+            defer packets.release(packet);
+            const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+            const input = body.get("input").?;
+            try std.testing.expectEqualStrings(try descriptions.task(a, .{ .kind = if (case.slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = case.slot }), try selectedNativeRepairTask(input));
+            const assigned = try json.decode(binding.Guidance, a, try std.json.Stringify.valueAlloc(a, input.object.get("source_assignment").?, .{}));
+            switch (assigned) {
+                .brief => |value| {
+                    try std.testing.expectEqualDeep(bound.brief.title.claim_ids, value.title.claim_ids);
+                    try std.testing.expectEqualDeep(bound.brief.description.claim_ids, value.description.claim_ids);
+                    try std.testing.expectEqualDeep(bound.brief.primary_goal.claim_ids, value.primary_goal.claim_ids);
+                },
+                .primary_user_story => |value| try std.testing.expectEqualDeep(bound.primary_user_story.claim_ids, value.claim_ids),
+                .entities => |value| try std.testing.expectEqualDeep(bound.entities.claim_ids, value.claim_ids),
+                .records => return error.UnexpectedRecordAssignment,
+            }
+            const initial = try sessions.packet(std.testing.allocator, current, fixture.context);
+            defer packets.release(initial);
+            const initial_body = (try std.json.parseFromSlice(std.json.Value, a, initial.body(), .{})).value.object;
+            inline for (.{ "claims", "citations", "sources" }) |key| try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, initial_body.get(key).?, .{}), try std.json.Stringify.valueAlloc(a, input.object.get(key).?, .{}));
+            const selected = try candidates.attributedValue(.model, original, case.subject, .value);
+            const replacement: repair.Replacement = .{ .value = selected.value };
+            const decoded = try repair.parse(a, authorization, packet, try json.encodeSelected(repair.Replacement, a, replacement));
+            const merged = try repair.merge(a, current, fixture.context, candidate, authorization, decoded, null);
+            try std.testing.expectEqualDeep(original, merged.response);
+            _ = (try validate_unit.execute(a, current, fixture.context, merged)).valid;
+        }
     }
 }
 
@@ -2379,6 +2462,13 @@ test "entity applicability shares native policy across initial inserted and pers
                 const task = requirement.object.get("task").?.string;
                 try std.testing.expect(std.mem.indexOf(u8, task, "explicit declaration of absence") != null);
                 try std.testing.expect(std.mem.indexOf(u8, task, "displayed values alone") != null);
+                const subject = body.get("subject").?.object;
+                try std.testing.expectEqualStrings(switch (mode) {
+                    0 => "source_preservation",
+                    1 => "candidate_support",
+                    else => "entity_applicability",
+                }, subject.get("kind").?.string);
+                if (mode >= 2) try expectBusinessReviewPurpose(.source, a, inputs, fixture.context, packet, ledger.requirements[entity].seed.id);
             }
             const allowed = requirement.object.get("permitted_not_applicable");
             if (mode < 2 and index == entity) try std.testing.expectEqualStrings("no_business_data", allowed.?.string) else try std.testing.expect(allowed == null);
@@ -3982,7 +4072,7 @@ test "reviewed source meaning lost to path references repairs one field while ge
                 try std.testing.expectEqual(@as(usize, 0), subject.get("records").?.array.items.len);
                 const projected_content = try json.decode(spec.CapturedDocument, a, try std.json.Stringify.valueAlloc(a, subject.get("context").?.object.get("candidate").?, .{}));
                 try std.testing.expectEqualDeep(try @import("domain/specification_projection.zig").project(a, fixture.context, content), projected_content);
-                try expectCollectionReviewPurpose(.source, a, inputs, fixture.context, review_packet, ledger.requirements[index].seed.id);
+                try expectBusinessReviewPurpose(.source, a, inputs, fixture.context, review_packet, ledger.requirements[index].seed.id);
             } else {
                 try std.testing.expectEqualStrings("candidate_field", subject.get("kind").?.string);
                 try std.testing.expectEqualStrings("stories.md", subject.get("text").?.string);
@@ -4518,8 +4608,8 @@ test "source and policy collections expose selected members despite matching tex
                 defer packets.release(source_packet);
                 const policy_packet = try policy_review.packetFor(std.testing.allocator, policy_inputs, fixture.context, .{ .finding = policy_ledger.requirements[policy_index].seed.id });
                 defer packets.release(policy_packet);
-                try expectCollectionReviewPurpose(.source, a, source_inputs, fixture.context, source_packet, business_id);
-                try expectCollectionReviewPurpose(.principles, a, policy_inputs, fixture.context, policy_packet, business_id);
+                try expectBusinessReviewPurpose(.source, a, source_inputs, fixture.context, source_packet, business_id);
+                try expectBusinessReviewPurpose(.principles, a, policy_inputs, fixture.context, policy_packet, business_id);
                 const source_body = (try std.json.parseFromSlice(std.json.Value, a, source_packet.body(), .{})).value.object;
                 const policy_body = (try std.json.parseFromSlice(std.json.Value, a, policy_packet.body(), .{})).value.object;
                 const expected_claims: ?[]const @import("domain/reference_reconciliation.zig").ClaimId = switch (slot) {
@@ -4676,6 +4766,28 @@ test "principle packets resolve assigned business subjects without exposing nati
                         if (id.slot == .entities) {
                             try std.testing.expectEqualStrings(@tagName(disposition), subject.get("disposition").?.string);
                             try std.testing.expectEqualStrings("MOCK read stories.md", subject.get("basis").?.object.get("bytes").?.string);
+                            const source_entity_index = for (source_ledger.requirements, 0..) |source_requirement, index| {
+                                if (std.meta.eql(source_requirement.seed.id, id)) break index;
+                            } else return error.MissingEntityRequirement;
+                            if (source_index == 0 and disposition == .required)
+                                try std.testing.checkAllAllocationFailures(std.testing.allocator, scalarReviewPacketAllocationCase, .{ source_inputs, fixture.context, id });
+                            for ([_]spec.AttributedValue{ literal, exact, passive }) |basis| {
+                                var entity_source = source_inputs;
+                                entity_source.specification.?.entities.basis = basis;
+                                const entity_findings = try reviewFor(a, entity_source, fixture.context.inputs);
+                                try checkReviewRepairPurposes(.source, a, entity_source, fixture.context, entity_findings, source_entity_index, id);
+                                var entity_policy = inputs;
+                                entity_policy.principle_context.?.business.content.entities.basis = basis;
+                                try checkReviewRepairPurposes(.principles, a, entity_policy, fixture.context, .{ .entries = policy_findings }, requirement.seed.id.unit.decision.ordinal - 1, id);
+                                const localized = try @import("domain/specification_review_subject.zig").project(a, entity_source, fixture.context, id, .dependencies);
+                                try std.testing.expect(localized == .producer_localization);
+                                try std.testing.expect(localized.producer_localization.target == null);
+                                try std.testing.expectEqualDeep(entity_source.specification, localized.producer_localization.candidate);
+                                try std.testing.expectEqualDeep(entity_source.brief, localized.producer_localization.brief);
+                            }
+                            var invalid_entity = source_inputs;
+                            invalid_entity.specification.?.entities.basis.provenance.claim_ids = &.{};
+                            try std.testing.expectError(error.InvalidSpecification, @import("domain/specification_support.zig").Source.packetFor(std.testing.allocator, invalid_entity, fixture.context, .{ .finding = id }));
                         } else try std.testing.expectEqualStrings(@tagName(id.slot), subject.get("slot").?.string);
                     },
                     else => return error.UnexpectedPolicySubject,
@@ -4723,9 +4835,11 @@ fn expectSameReviewSubject(a: std.mem.Allocator, expected: *@import("domain/mode
 
 fn selectedNativeRepairTask(input: std.json.Value) ![]const u8 {
     const assignment = input.object.get("source_assignment").?;
-    if (assignment == .object and std.mem.eql(u8, assignment.object.get("kind").?.string, "records")) {
-        try std.testing.expect(!input.object.contains("task"));
-        return assignment.object.get("purpose").?.string;
+    if (assignment == .object) {
+        try std.testing.expect(!assignment.object.contains("purpose"));
+        if (std.mem.eql(u8, assignment.object.get("kind").?.string, "brief")) {
+            inline for (.{ "title", "description", "primary_goal" }) |field| try std.testing.expect(!assignment.object.get(field).?.object.contains("purpose"));
+        }
     }
     return input.object.get("task").?.string;
 }
@@ -4749,39 +4863,52 @@ fn expectRecordReviewPurpose(comptime purpose: @import("domain/specification_sup
     } else try std.testing.expect(!input.contains("principles"));
 }
 
-fn expectCollectionReviewPurpose(comptime purpose: @import("domain/specification_support.zig").Purpose, a: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, packet: *const @import("domain/model_input_packet.zig").Packet, id: @import("domain/required_authority.zig").Id) !void {
+fn expectBusinessReviewPurpose(comptime purpose: @import("domain/specification_support.zig").Purpose, a: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, packet: *const @import("domain/model_input_packet.zig").Packet, id: @import("domain/required_authority.zig").Id) !void {
     const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value;
     const input = (body.object.get("input") orelse body).object;
     const task = if (purpose == .principles) input.get("task").?.string else input.get("requirements").?.array.items[0].object.get("task").?.string;
     try std.testing.expectEqualStrings(try @import("domain/required_authority_description.zig").task(a, id), task);
     const subject_value = input.get("subject").?;
     const subject = subject_value.object;
-    try std.testing.expectEqualStrings("collection", subject.get("kind").?.string);
-    const selected = (try @import("domain/model_candidate_json.zig").decode(@import("domain/specification_review_subject.zig").Subject, a, try std.json.Stringify.valueAlloc(a, subject_value, .{}))).collection;
-    try std.testing.expectEqual(id.slot, selected.slot);
+    const selected = try @import("domain/model_candidate_json.zig").decode(@import("domain/specification_review_subject.zig").Subject, a, try std.json.Stringify.valueAlloc(a, subject_value, .{}));
     const content = if (purpose == .source) inputs.specification.? else inputs.principle_context.?.business.content;
     const brief = if (purpose == .source) inputs.brief.? else inputs.principle_context.?.business.brief;
     const projection = @import("domain/specification_projection.zig");
     const resolved = try projection.project(a, context, content);
-    try std.testing.expectEqualDeep(resolved, selected.context.candidate);
-    try std.testing.expectEqualDeep(try projection.scalar(a, context, brief.title), selected.context.brief.title);
-    try std.testing.expectEqualDeep(try projection.scalar(a, context, brief.description), selected.context.brief.description);
-    try std.testing.expectEqualDeep(try projection.scalar(a, context, brief.primary_goal), selected.context.brief.primary_goal);
-    try std.testing.expectEqualDeep(try projection.scalar(a, context, content.entities.basis), selected.context.entity_basis);
-    var count: usize = 0;
-    for (resolved.records) |record| {
-        const matches = switch (id.slot) {
-            .acceptance_criteria => record.content == .acceptance_criterion,
-            .functional_requirements => record.content == .functional_requirement,
-            .scenario_coverage => record.content == .acceptance_criterion or record.content == .edge_case or record.content == .user_visible_outcome,
-            else => return error.NotACollectionRequirement,
-        };
-        if (!matches) continue;
-        try std.testing.expect(count < selected.records.len);
-        try std.testing.expectEqualDeep(record, selected.records[count]);
-        count += 1;
-    }
-    try std.testing.expectEqual(count, selected.records.len);
+    const related = switch (selected) {
+        .collection => |value| collection: {
+            try std.testing.expectEqualStrings("collection", subject.get("kind").?.string);
+            try std.testing.expectEqual(id.slot, value.slot);
+            var count: usize = 0;
+            for (resolved.records) |record| {
+                const matches = switch (id.slot) {
+                    .acceptance_criteria => record.content == .acceptance_criterion,
+                    .functional_requirements => record.content == .functional_requirement,
+                    .scenario_coverage => record.content == .acceptance_criterion or record.content == .edge_case or record.content == .user_visible_outcome,
+                    else => return error.NotACollectionRequirement,
+                };
+                if (!matches) continue;
+                try std.testing.expect(count < value.records.len);
+                try std.testing.expectEqualDeep(record, value.records[count]);
+                count += 1;
+            }
+            try std.testing.expectEqual(count, value.records.len);
+            break :collection value.context;
+        },
+        .entity_applicability => |value| entity: {
+            try std.testing.expectEqualStrings("entity_applicability", subject.get("kind").?.string);
+            try std.testing.expectEqual(.entities, id.slot);
+            try std.testing.expectEqual(content.entities.disposition, value.disposition);
+            try std.testing.expectEqualDeep(try projection.scalar(a, context, content.entities.basis), value.basis);
+            break :entity value.context;
+        },
+        else => return error.UnexpectedBusinessReviewSubject,
+    };
+    try std.testing.expectEqualDeep(resolved, related.candidate);
+    try std.testing.expectEqualDeep(try projection.scalar(a, context, brief.title), related.brief.title);
+    try std.testing.expectEqualDeep(try projection.scalar(a, context, brief.description), related.brief.description);
+    try std.testing.expectEqualDeep(try projection.scalar(a, context, brief.primary_goal), related.brief.primary_goal);
+    try std.testing.expectEqualDeep(try projection.scalar(a, context, content.entities.basis), related.entity_basis);
     try std.testing.expect(!subject.contains("instruction"));
     if (purpose == .principles) {
         try std.testing.expect(!input.contains("sources"));
@@ -4811,7 +4938,7 @@ fn expectCollectionReviewPurpose(comptime purpose: @import("domain/specification
 
 fn expectReviewPurpose(comptime purpose: @import("domain/specification_support.zig").Purpose, a: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, packet: *const @import("domain/model_input_packet.zig").Packet, id: @import("domain/required_authority.zig").Id) !void {
     if (id.unit == .record) return expectRecordReviewPurpose(purpose, a, packet, id);
-    return expectCollectionReviewPurpose(purpose, a, inputs, context, packet, id);
+    return expectBusinessReviewPurpose(purpose, a, inputs, context, packet, id);
 }
 
 fn checkReviewRepairPurposes(comptime purpose: @import("domain/specification_support.zig").Purpose, a: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, good: @import("domain/specification_support.zig").Contract(purpose).Review, index: usize, business_id: @import("domain/required_authority.zig").Id) !void {

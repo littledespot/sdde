@@ -28,33 +28,40 @@ pub const Bound = union(enum) {
 
 /// Presentation of the already bound source selection. Claims and their meaning
 /// remain in the packet's single evidence catalogue; this view grants no authority.
-pub const FieldGuidance = struct { purpose: []const u8, claim_ids: []const r.ClaimId };
+pub const GuidanceMode = enum { authoring, repair };
+pub const FieldGuidance = struct { purpose: ?[]const u8 = null, claim_ids: []const r.ClaimId };
 pub const Guidance = union(enum) {
     brief: struct { title: FieldGuidance, description: FieldGuidance, primary_goal: FieldGuidance },
     primary_user_story: FieldGuidance,
     entities: FieldGuidance,
-    records: struct { purpose: []const u8, signal: r.SignalId, claim_ids: []const r.ClaimId },
+    records: struct { purpose: ?[]const u8 = null, signal: r.SignalId, claim_ids: []const r.ClaimId },
 };
 
-pub fn guidance(a: std.mem.Allocator, bound: Bound) Error!Guidance {
+pub fn guidance(a: std.mem.Allocator, bound: Bound, mode: GuidanceMode) Error!Guidance {
     return switch (bound) {
         .brief => |value| .{ .brief = .{
-            .title = try fieldGuidance(a, .title, value.title),
-            .description = try fieldGuidance(a, .description, value.description),
-            .primary_goal = try fieldGuidance(a, .primary_goal, value.primary_goal),
+            .title = try fieldGuidance(a, .title, value.title, mode),
+            .description = try fieldGuidance(a, .description, value.description, mode),
+            .primary_goal = try fieldGuidance(a, .primary_goal, value.primary_goal, mode),
         } },
-        .primary_user_story => |value| .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, value) },
-        .entities => |value| .{ .entities = try fieldGuidance(a, .entity_basis, value) },
+        .primary_user_story => |value| .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, value, mode) },
+        .entities => |value| .{ .entities = try fieldGuidance(a, .entity_basis, value, mode) },
         .records => |value| .{ .records = .{
-            .purpose = try rolePurpose(a, .records),
+            .purpose = try presentedPurpose(a, .records, mode),
             .signal = value.signal,
             .claim_ids = value.selection.claim_ids,
         } },
     };
 }
 
-fn fieldGuidance(a: std.mem.Allocator, role: r.GenerationRole, selected: spec.Selection) Error!FieldGuidance {
-    return .{ .purpose = try rolePurpose(a, role), .claim_ids = selected.claim_ids };
+fn fieldGuidance(a: std.mem.Allocator, role: r.GenerationRole, selected: spec.Selection, mode: GuidanceMode) Error!FieldGuidance {
+    return .{ .purpose = try presentedPurpose(a, role, mode), .claim_ids = selected.claim_ids };
+}
+fn presentedPurpose(a: std.mem.Allocator, role: r.GenerationRole, mode: GuidanceMode) Error!?[]const u8 {
+    return switch (mode) {
+        .authoring => try rolePurpose(a, role),
+        .repair => null,
+    };
 }
 fn rolePurpose(a: std.mem.Allocator, role: r.GenerationRole) Error![]const u8 {
     return role.purpose(a) catch |err| switch (err) {

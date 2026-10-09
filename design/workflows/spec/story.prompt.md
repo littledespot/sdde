@@ -1,2 +1,2 @@
-Write one primary user story for source_assignment.purpose using its bound claims
+Write or repair the primary user story for its supplied purpose, using bound claims
 and original sources. Express the required behavior in one coherent narrative.

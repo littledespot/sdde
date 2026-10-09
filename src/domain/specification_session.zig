@@ -83,7 +83,7 @@ const RecordRequirements = struct {
 };
 
 /// Repair retains all source claims but offers exact-copy choices only from the
-/// bound owning unit. Its task replaces the broad records purpose while retaining
+/// bound owning unit. An explicit task replaces authoring purposes while retaining
 /// the source binding. Completed units receive only their authorized repair task.
 pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context: p.Context, index: usize, options: PacketOptions) Error!*packets.Packet {
     if (!current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
@@ -93,10 +93,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     const a = arena.allocator();
     // Completed units are repaired under an atomic target and its evidence.
     // Their authoring cursor no longer selects a current source assignment.
-    var assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(index), current.record_cursor));
-    if (options.task) |task| if (assigned) |*value| {
-        if (value.* == .records) value.records.purpose = task;
-    };
+    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(index), current.record_cursor), if (options.task != null) .repair else .authoring);
     var claims: std.ArrayList(@import("reference_reconciliation.zig").Item) = .empty;
     var scopes: std.ArrayList(@import("reference_evidence.zig").Scope) = .empty;
     for (context.references.records.assignments.checked.prior.prior.dispositions) |disposition| {
@@ -136,11 +133,11 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         .records => "records",
     } });
     defer packets.release(result);
-    if (options.task) |task| if (assigned == null) {
+    if (options.task) |task| {
         const contextual = try packets.withContext([]const u8, allocator, result, "task", task);
         packets.release(result);
         result = contextual;
-    };
+    }
     // Only dependent units receive earlier drafts. The evidence catalogue and
     // native dependency snapshots remain complete for generation and repair.
     switch (selected) {

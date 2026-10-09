@@ -9,6 +9,9 @@ pub const Counts = struct {
     missing_supported_roles: u32 = 0,
     assigned_pairs: u32 = 0,
     unsupported_pairs: u32 = 0,
+    /// Unsupported pairs whose role has at least one labelled allowed group.
+    /// Empty allowed sets describe unsupported roles, not a wrong selected basis.
+    wrong_basis_pairs: u32 = 0,
 };
 pub const Outcome = union(enum) {
     protocol_rejected,
@@ -37,7 +40,12 @@ pub fn assess(a: std.mem.Allocator, facts: roles.Facts, labels: []const c.Label,
         for (assignments) |assignment| for (assignment.generation_roles) |role| {
             if (role != label.role) continue;
             counts.assigned_pairs += 1;
-            if (r.contains(r.SignalSelectionId, label.allowed_signal_ids, assignment.signal_id)) supported = true else counts.unsupported_pairs += 1;
+            if (r.contains(r.SignalSelectionId, label.allowed_signal_ids, assignment.signal_id)) {
+                supported = true;
+            } else {
+                counts.unsupported_pairs += 1;
+                if (label.allowed_signal_ids.len != 0) counts.wrong_basis_pairs += 1;
+            }
         };
         if (label.required and !supported) counts.missing_supported_roles += 1;
     }
