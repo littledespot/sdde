@@ -6,6 +6,7 @@ test {
     _ = @import("roles/tests.zig");
     _ = @import("records/tests.zig");
     _ = @import("signals/tests.zig");
+    _ = @import("entities/tests.zig");
 }
 
 const case_bytes =

@@ -97,7 +97,9 @@ test "record comparison freezes paired facts guidance schema and unchanged repea
             const bytes = try read(a, name);
             try hash(@field(entry, @tagName(arm) ++ "_edit_sha256"), bytes);
             const edit = try @import("../contracts.zig").decode(debug.Edit, a, bytes);
-            try std.testing.expectEqualStrings(try files.read(std.testing.io, a, .cwd(), "design/workflows/spec/generation.context.json"), edit.content[0].guidance);
+            // Historical arms retain their hashed guidance when production
+            // guidance changes; this comparison varies only the packet projection.
+            try std.testing.expectEqualStrings(baseline_edit.content[0].guidance, edit.content[0].guidance);
             try std.testing.expectEqualStrings(try files.read(std.testing.io, a, .cwd(), "design/workflows/spec/records.prompt.md"), edit.content[1].guidance);
             try hash(entry.schema_sha256, edit.schema);
             try std.testing.expectEqualStrings(baseline_edit.schema, edit.schema);

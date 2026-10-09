@@ -2918,3 +2918,77 @@ or foreign selections, missing meaning, changed obligations, invented behavior
 and literal fidelity separately. Labels are proposed, the scorecard is unassessed,
 and no live call is authorized by this document. §28.8 requires explicit bounded
 approval. These diagnostics are not E2E publication or rubric evidence.
+
+### 9.14 Entity applicability and explanation guidance — 10 October 2026
+
+**Scope:** the user authorized the shared decision/basis definition, removal of
+duplicated prompt criteria, purpose-neutral fragment guidance, lifecycle checks
+and preparation of a bounded semantic comparison. Entity authoring remains one
+decision-with-explanation call. This implements presentation under §§12/17/21;
+§22 repair permissions, the generic engine, schemas, provenance, persisted state,
+model settings and retry rules remain unchanged.
+
+**Observed failure:** in the [08:54 run](../zig-out/e2e-spec/2026-10-09T08-54-06Z-0efdbc7422d397f5c8192fe26ef96323/report.md),
+physical call 11 returned `not_applicable` with an exact-copy-only basis resolving
+to `Hello, World!`. The decision was defensible; the value did not explain why
+the requirements needed no entities. The response was structurally admissible,
+and native singleton reconstruction correctly supplied its exact reference.
+Call 27 then incorrectly interpreted the negative entity decision as discarding
+startup, greeting and UTC behavior, although the review packet contained those
+behaviors. Call 28 returned `unlocalized`; omission authorization failed with
+`UnsafeSpecificationOmissionRepair`. These are distinct authoring, review and
+recovery findings, not evidence that missing entities caused the failure or that
+the false omission allegation deserved repair.
+
+**Shared implementation:**
+
+- `required_authority_description.task(.entities)` now defines disposition scope
+  and the purpose of its basis. The existing role selector, authoring assignment,
+  source/policy review and authorized scalar repair reuse that definition.
+  `entities.prompt.md` requests the assignment without repeating classification
+  criteria. The definition is descriptive because role selection consumes it too.
+- `generation.context.json` describes value fragments by the assigned field's
+  purpose. Explanations, titles, questions and behavioral fields no longer all
+  receive instructions that assume they directly express behavior. Exact/reference
+  fragments remain available; no mandatory-prose rule, literal ban or semantic
+  acceptance heuristic was added.
+- The existing resolved entity review subject carries both disposition and basis.
+  Its shared task makes both decision correctness and explanation adequacy relevant
+  without adding another review call or source-evidence projection.
+- Recovery stays separate. Mechanical basis repair retains the disposition and
+  siblings. Semantic omission repair still excludes entity applicability; the
+  existing conditional-membership amendment cannot change that decision. Any
+  extension needs its own bounded authority and dependency-invalidation contract.
+
+**Verification and limits:** offline lifecycle checks cover common purpose delivery
+to role selection, authoring, source/policy review and scalar repair, both entity
+dispositions, unrelated inputs, retained exact/passive references, correction
+retention and repair isolation. Targeted checks passed:
+
+- `zig build test-specification-generation --summary all`: **254/254**.
+- `zig build test-model-request-workflow test-reference-model-input test-architecture --summary all`:
+  **648/648** (357 request workflow, 168 reference input, 123 architecture).
+- `zig build test-required-authority test-model-result-schema --summary all`:
+  **242/242** (185 authority, 57 result-schema).
+- `zig build test-rubric-evaluator --summary all`: **152/152**, including the new
+  frozen diagnostic cases, native schema projection and unknown-field rejection.
+- `zig build verify --summary all`: **135/135 steps, 1,376/1,376 tests**, including
+  lint, the separate offline integration entry point and packaged clean-environment
+  smoke checks. The initial sandbox could not access Zig's compiler/cache;
+  the same offline verification passed with that access permitted.
+- `git diff --check`: passed.
+
+Historical record-authoring comparison edits retain their hashed guidance; the
+test now compares those frozen arms rather than equating historical guidance with
+the mutable production file.
+
+The [entity comparison](../test/calibration/entity-applicability/README.md) prepares
+eight cases × two arms × two unchanged repeats: **32 physical diagnostic calls**,
+with fixed evidence, schema and model settings within each pair. It
+separately scores disposition, explanation quality and false omission findings,
+including display-only behavior, business entities, relationships and genuinely
+missing information. Offline checks do not prove semantic improvement. Live
+diagnostic execution requires bounded approval under §28.8; actual E2E publication
+and rubric quality remain separate acceptance evidence. The shared description
+also reaches authoring-role selection; isolated entity diagnostics do not prove
+that earlier role coverage or later workflow completion remains reliable.

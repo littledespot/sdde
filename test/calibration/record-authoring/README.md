@@ -31,6 +31,9 @@ assignment, aggregate record requirements, guidance and selected response schema
 remain identical within each pair. The captured entity explanation remains weak
 in both arms; improving it would confound this comparison. Controlled premises
 are diagnostic data, not claims about what upstream production would generate.
+Guidance is frozen in the hashed edits; later shared-guidance changes do not
+rewrite either historical arm. Results measure this projection comparison, not
+the current production request in its entirety.
 
 The unrelated cases use the production schema restricted to zero or two exact
 choices respectively. The captured case uses its unchanged singleton schema.

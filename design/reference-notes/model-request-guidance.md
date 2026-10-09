@@ -143,6 +143,14 @@ Completed entity-applicability review receives the disposition, resolved basis a
 business context through the same projection as policy review. Partial source
 review and producer localization retain their existing subjects and evidence.
 
+**Entity applicability** uses the shared requirement description for role
+selection, generation, source/policy review and authorized basis repair. It defines
+both the entity-only disposition and the explanation connecting that decision to
+the requirements. A negative entity decision retains the other behavioral
+obligations. Review assesses the decision and its basis together; an irrelevant
+basis is not evidence that those obligations disappeared. This guidance grants
+no additional semantic omission-repair authority.
+
 **Principle review** receives one resolved business `subject`, its semantic `task`
 and the complete selected `principles`. Feature fields contain their displayed
 text; record fields also contain their fully resolved siblings and business record
@@ -177,6 +185,13 @@ the existing repair prompt and authorized task. Prompts own the generation, revi
 or repair instructions, rather than another copy of the definitions.
 These descriptions add no optional-family requirement, semantic rejection or
 cross-kind deduplication rule.
+
+The shared generation context describes fragments by their assigned field purpose:
+a title names, a basis explains, and behavioral fields express requirements.
+Exact-copy/reference fragments insert display values; any required explanation or
+behavioral meaning comes from the surrounding text. Literal-only values remain
+structurally valid where the selected schema permits them. Schema admission and
+valid provenance do not establish that a field fulfils its semantic purpose.
 
 **Determined exact references** follow ADR 0020. A single eligible occurrence is
 constructed by native code: the model returns `{"kind":"exact_copy"}` and must

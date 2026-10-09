@@ -107,7 +107,7 @@ pub fn task(allocator: std.mem.Allocator, id: a.Id) a.Error![]const u8 {
             .acceptance_criteria => recordFamily(.acceptance_criterion),
             .functional_requirements => recordFamily(.functional_requirement),
             .scenario_coverage => "Source-required triggers, outcomes and exact copy.",
-            .entities => "Whether source-backed behavior requires business entities or relationships. Behavior can support required or not_applicable without an explicit declaration of absence; displayed values alone do not establish entities.",
+            .entities => "The disposition states whether required behavior needs business entities or relationships. The basis explains which requirements support that decision and why. not_applicable means entity records are unnecessary; all other behavioral requirements remain in force. Displayed values alone do not establish entities, and an explicit declaration of absence is unnecessary.",
             else => error.InvalidRequiredAuthority,
         },
         .record => |id_record| recordTask(allocator, id_record.kind, id.slot),

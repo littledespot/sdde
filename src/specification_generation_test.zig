@@ -1727,12 +1727,13 @@ test "active scalar repairs present one selected task and retain their bound sou
         const a = arena.allocator();
         var fixture = try Fixture.init(a, source);
         defer fixture.deinit();
-        const cases = [_]struct { index: usize, subject: candidates.Subject, slot: @import("domain/required_authority.zig").Slot }{
+        const cases = [_]struct { index: usize, subject: candidates.Subject, slot: @import("domain/required_authority.zig").Slot, disposition: spec.Applicability = .not_applicable }{
             .{ .index = 0, .subject = .title, .slot = .display_name },
             .{ .index = 0, .subject = .description, .slot = .description },
             .{ .index = 0, .subject = .primary_goal, .slot = .primary_goal },
             .{ .index = 1, .subject = .story, .slot = .primary_user_story },
             .{ .index = 2, .subject = .entity_basis, .slot = .entities },
+            .{ .index = 2, .subject = .entity_basis, .slot = .entities, .disposition = .required },
         };
         for (cases) |case| {
             var current = try completedFixture(&fixture, false);
@@ -1740,7 +1741,7 @@ test "active scalar repairs present one selected task and retain their bound sou
             const original: g.Response = .{ .content = switch (case.index) {
                 0 => .{ .brief = .{ .title = good, .description = good, .primary_goal = good } },
                 1 => .{ .primary_user_story = good },
-                2 => .{ .entities = .{ .disposition = .not_applicable, .basis = good } },
+                2 => .{ .entities = .{ .disposition = case.disposition, .basis = good } },
                 else => return error.UnexpectedRecordAssignment,
             } };
             current.completed = case.index;
@@ -1770,12 +1771,21 @@ test "active scalar repairs present one selected task and retain their bound sou
             const initial = try sessions.packet(std.testing.allocator, current, fixture.context);
             defer packets.release(initial);
             const initial_body = (try std.json.parseFromSlice(std.json.Value, a, initial.body(), .{})).value.object;
+            if (case.subject == .entity_basis) {
+                // The same decision-and-basis purpose governs initial authoring
+                // and repair of the selected explanation, for either disposition.
+                const purpose = try descriptions.task(a, .{ .kind = .entity_applicability, .unit = .{ .feature = .singleton }, .slot = .entities });
+                try std.testing.expectEqualStrings(purpose, initial_body.get("source_assignment").?.object.get("purpose").?.string);
+                try std.testing.expectEqualStrings(purpose, try references.r.GenerationRole.entity_basis.purpose(a));
+                try std.testing.expectEqualStrings(purpose, try selectedNativeRepairTask(input));
+            }
             inline for (.{ "context_requirements", "preserved_tokens", "sources" }) |key| try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, initial_body.get(key).?, .{}), try std.json.Stringify.valueAlloc(a, input.object.get(key).?, .{}));
             const selected = try candidates.attributedValue(.model, original, case.subject, .value);
             const replacement: repair.Replacement = .{ .value = selected.value };
             const decoded = try repair.parse(a, authorization, packet, try json.encodeSelected(repair.Replacement, a, replacement));
             const merged = try repair.merge(a, current, fixture.context, candidate, authorization, decoded, null);
             try std.testing.expectEqualDeep(original, merged.response);
+            if (case.subject == .entity_basis) try std.testing.expectEqual(case.disposition, merged.response.content.entities.disposition);
             _ = (try validate_unit.execute(a, current, fixture.context, merged)).valid;
         }
     }
@@ -2574,8 +2584,7 @@ test "entity applicability shares native policy across initial inserted and pers
             if (index == entity) {
                 try std.testing.expectEqualStrings(if (mode < 2) "applicability_finding" else "finding", packet.resultDefinition().?.bytes);
                 const task = requirement.object.get("task").?.string;
-                try std.testing.expect(std.mem.indexOf(u8, task, "explicit declaration of absence") != null);
-                try std.testing.expect(std.mem.indexOf(u8, task, "displayed values alone") != null);
+                try std.testing.expectEqualStrings(try @import("domain/required_authority_description.zig").task(a, ledger.requirements[entity].seed.id), task);
                 const subject = body.get("subject").?.object;
                 try std.testing.expectEqualStrings(switch (mode) {
                     0 => "source_preservation",
