@@ -1,8 +1,8 @@
-Use original source meaning and the brief. Functional requirements state required
-behavior and obligation (MUST, SHOULD, MUST NOT). Acceptance criteria describe
-distinct observable flows: Given is the precondition, When the triggering action,
-Then the observable outcome.
-Include other record kinds only when supported: assumptions are premises, non-goals
-are explicit scope exclusions, and prohibited behaviors are forbidden actions.
-Do not relabel positive requirements as assumptions or non-goals, invent extra
-conditions, or repeat records to fill sections. Follow the supplied entity decision.
+Use original source meaning, the brief and the supplied record-family purposes.
+When supplied, record_requirements applies across the assembled specification.
+Author initial batches from their assigned source groups.
+Include only supported records; optional families need no filler. Preserve each
+statement's role and obligation strength. Do not relabel positive requirements as
+assumptions or non-goals, invent conditions, or repeat records to fill sections.
+Acceptance criteria may test behavior stated by functional requirements.
+Follow the supplied entity decision.

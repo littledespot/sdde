@@ -9,6 +9,7 @@ pub const Field = struct { slot: authority.Slot, text: []const u8, provenance: s
 pub const Subject = union(enum) {
     source_preservation: struct {},
     candidate_field: Field,
+    collection: Collection,
     reference_signal: struct { signal: @import("model_evidence.zig").Signal, exact_value: ?[]const u8 = null },
     producer_localization: struct { target: ?Field, candidate: ?spec.IdentifiedContent, brief: ?spec.Brief },
     candidate_support: struct {
@@ -24,11 +25,21 @@ pub const BusinessContext = struct {
     candidate: spec.CapturedDocument,
     entity_basis: spec.Scalar,
 };
+pub const Collection = struct { slot: authority.Slot, records: []const spec.CapturedRecord, context: BusinessContext };
 pub const BusinessSubject = union(enum) {
     field: struct { slot: authority.Slot, text: []const u8, record: ?spec.CapturedRecord = null, context: BusinessContext },
-    collection: struct { slot: authority.Slot, context: BusinessContext },
+    collection: Collection,
     entity_applicability: struct { disposition: spec.Applicability, basis: spec.Scalar, context: BusinessContext },
 };
+
+fn collection(a: std.mem.Allocator, slot: authority.Slot, context: BusinessContext) authority.Error!Collection {
+    var selected: std.ArrayList(spec.CapturedRecord) = .empty;
+    errdefer selected.deinit(a);
+    for (context.candidate.records) |record| {
+        if (try @import("specification_authority.zig").collectionContains(slot, std.meta.activeTag(record.content))) try selected.append(a, record);
+    }
+    return .{ .slot = slot, .records = try selected.toOwnedSlice(a), .context = context };
+}
 
 fn field(a: std.mem.Allocator, inputs: authority.Inputs, context: provenance.Context, id: authority.Id) (provenance.Error || authority.Error)!?Field {
     if (@import("specification_authority.zig").featureField(inputs, id)) |selected| return .{
@@ -69,7 +80,7 @@ pub fn projectBusiness(a: std.mem.Allocator, inputs: authority.Inputs, context: 
     } };
     if (id.unit != .feature) return error.InvalidRequiredAuthority;
     return switch (id.slot) {
-        .acceptance_criteria, .functional_requirements, .scenario_coverage => .{ .collection = .{ .slot = id.slot, .context = related } },
+        .acceptance_criteria, .functional_requirements, .scenario_coverage => .{ .collection = try collection(a, id.slot, related) },
         .entities => .{ .entity_applicability = .{ .disposition = candidate.entities.disposition, .basis = related.entity_basis, .context = related } },
         else => error.InvalidRequiredAuthority,
     };
@@ -81,6 +92,10 @@ pub fn project(a: std.mem.Allocator, inputs: authority.Inputs, context: provenan
     const target = try field(a, inputs, context, id);
     if (scope == .dependencies) return .{ .producer_localization = .{ .target = target, .candidate = inputs.specification, .brief = inputs.brief } };
     if (target) |selected| return .{ .candidate_field = selected };
+    if (inputs.specification != null and inputs.brief != null and id.unit == .feature) switch (id.slot) {
+        .acceptance_criteria, .functional_requirements, .scenario_coverage => return .{ .collection = (try projectBusiness(a, inputs, context, id)).collection },
+        else => {},
+    };
     if (id.unit == .signal) {
         const records = inputs.references orelse return error.InvalidRequiredAuthority;
         for (records.signals) |signal| if (std.meta.eql(signal.id, id.unit.signal)) {

@@ -277,12 +277,7 @@ fn aggregateRecords(allocator: std.mem.Allocator, records: []const spec.Identifi
     var claims: std.ArrayList(r.ClaimId) = .empty;
     var citations: std.ArrayList(r.CitationId) = .empty;
     for (records) |record| {
-        const relevant = switch (slot) {
-            .acceptance_criteria => record.proposal.content == .acceptance_criterion,
-            .functional_requirements => record.proposal.content == .functional_requirement,
-            .scenario_coverage => record.proposal.content == .acceptance_criterion or record.proposal.content == .edge_case or record.proposal.content == .user_visible_outcome,
-            else => false,
-        };
+        const relevant = try @import("specification_authority.zig").collectionContains(slot, std.meta.activeTag(record.proposal.content));
         if (!relevant) continue;
         const values = try @import("specification_provenance.zig").recordValues(allocator, record.proposal.content);
         const effective = try @import("specification_provenance.zig").effectiveClaims(allocator, record.proposal.provenance.claim_ids, values);

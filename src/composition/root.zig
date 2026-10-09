@@ -163,6 +163,10 @@ pub fn reportInvocation(io: std.Io, allocator: std.mem.Allocator, project_root: 
             if (outcome.executionStatus() == .needs_user) if (invocation.pipeline_runner) |*runner| {
                 report.clarifications = try @import("../application/workflow_clarification_report.zig").capture(report.arena.allocator(), &.{ .slots = runner.envelope.slots });
             };
+            if (invocation.pipeline_runner) |*runner| {
+                if (try @import("../application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots })) |diagnostic|
+                    report.candidate_error = try diagnostic.copy(report.arena.allocator());
+            }
             break :execute outcome;
         },
     };

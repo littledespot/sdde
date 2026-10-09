@@ -55,7 +55,7 @@ pub fn policy(id: Id) ?Policy {
     };
 }
 
-fn recordField(kind: @import("specification.zig").Kind, slot: Slot) bool {
+pub fn recordField(kind: @import("specification.zig").Kind, slot: Slot) bool {
     const Content = @import("specification.zig").Content(@import("specification.zig").BusinessValue);
     switch (kind) {
         inline else => |tag| inline for (@typeInfo(@FieldType(Content, @tagName(tag))).@"struct".fields) |field| {

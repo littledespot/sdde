@@ -1,5 +1,5 @@
 {
-  "purpose": "Specification text guidance. Apply only to fields in the selected schema; the schema defines the response shape and source_assignment supplies field purposes.",
+  "purpose": "Specification text guidance. The selected schema defines the response shape; source_assignment or task supplies field purposes.",
   "business_value": "An ordered array of fragments concatenated into one field value, not separate values or records.",
   "strings": "Express the field's meaning as prose, preserving source-backed conditions, qualifiers and obligation strength.",
   "exact_copy": "Insert a supplied preserved_tokens.claim_id only where the field needs that exact literal. A literal alone cannot express the behavior or explanation involving it.",

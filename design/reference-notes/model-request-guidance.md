@@ -110,18 +110,48 @@ evidence owner supplies claim minimums, eligible/exact sets and current candidat
 provenance to both admission and guidance. Corrections retain the precise failing
 rule once, preserving the decision; insertion retains the available choices.
 Absent presentation fields are omitted without removing source/extraction evidence.
+Collection assignments identify the assessed slot and its resolved records,
+including an empty collection. Source review retains the complete business and
+source reconstruction context; related prose cannot replace the selected records.
+Collection membership comes from the same native lens as evidence aggregation.
 
 **Principle review** receives one resolved business `subject`, its semantic `task`
 and the complete selected `principles`. Feature fields contain their displayed
 text; record fields also contain their fully resolved siblings and business record
-ID. Collection subjects identify the assessed slot; entity applicability includes
-its disposition and resolved basis. Every subject retains the resolved brief,
-candidate and entity basis as supporting context: free-text principles may
-relate different requirements. Exact/passive values use the same projector as
-rendering. Native requirement tuples, assignment ordinals and
+ID. Collection subjects identify the assessed slot and selected resolved records;
+entity applicability includes its disposition and resolved basis. Every subject
+retains the resolved brief, candidate and entity basis as supporting context:
+free-text principles may relate different requirements. Exact/passive values use
+the same projector as rendering. Native requirement tuples, assignment ordinals and
 source-review instructions are not business content. Initial review, correction,
 insertion and detail/citation repair reuse this projection; native identity,
 currentness, evidence admission and retained verdicts keep their existing owners.
+
+**Specification record meanings** come from the shared
+[requirement descriptions](../../src/domain/required_authority_description.zig).
+Generation receives all nine family meanings and their fields through its source
+assignment; focused source and policy reviews receive the selected family/field
+purpose. Records authoring also receives `record_requirements`, projecting the
+canonical mandatory families with `assembled_specification` scope. Requiredness
+applies across bound source-group batches; optional families need no filler.
+Atomic repair omits that aggregate authoring guidance and retains its selected
+target. Native value and membership repairs project only the selected field or
+permitted families. Completed-unit omission repair supplies its authorized task
+without recreating a consumed authoring assignment. Prompts own the generation,
+review or repair instructions, rather than another copy of the definitions.
+These descriptions add no optional-family requirement, semantic rejection or
+cross-kind deduplication rule.
+
+**Authoring-role handoff** uses the shared
+[source-binding coverage check](../../src/domain/specification_source_binding.zig)
+before generation. Complete eligible coverage starts authoring. An incomplete
+assignment returns `blocked` with every missing role, the current reference state,
+partition and revision, role-selection request origin, and eligible signal/claim
+IDs. The existing candidate diagnostic carries this evidence into CLI and harness
+reports. Source readiness still establishes structural accounting, not role
+completeness. Unsupported roles remain unassigned; this result authorizes neither
+default assignments, a user clarification nor an automatic correction call.
+Canonical readback requires complete coverage through the same check.
 
 **After every response**, the engine independently requires one complete JSON object.
 The approved [§22.6 prefix normalization](../contracts/22-repair.md#226-unparseable-output)

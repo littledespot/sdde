@@ -30,6 +30,7 @@ pub const SourceReadiness = struct {
 
 pub const Initialize = struct {
     pub const Action = @import("../actions/specification/initialize_specification_generation.zig").Action;
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -38,8 +39,12 @@ pub const Initialize = struct {
         const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
         errdefer owned.destroy(owner);
         const prior = owned.read(&input.step.data, @import("specification_publication_workflow.zig").prior_schema, .prior_state) catch return error.OperationExecutionFailed;
-        owner.payload = .{ .session = self.action.execute(feature.feature_id, try readContext(&input.step.data), prior) catch return error.OperationExecutionFailed };
-        return publish(self.allocator, session_schema, owner, .ok);
+        const result = self.action.execute(owner.arena.allocator(), feature.feature_id, try readContext(&input.step.data), prior) catch return error.OperationExecutionFailed;
+        owner.payload = switch (result) {
+            .ready => |current| .{ .session = current },
+            .blocked => |gap| .{ .binding_rejected = gap },
+        };
+        return publish(self.allocator, session_schema, owner, if (result == .ready) .ok else .blocked);
     }
 };
 pub const Check = struct {

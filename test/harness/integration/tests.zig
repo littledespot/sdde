@@ -1039,7 +1039,7 @@ test "step events keep the newer exchange usage separate from an older rejected 
     try std.testing.expectError(error.MissingRequestEvidence, obs.correlate(a, &calls, &report));
 }
 
-test "reports preserve native extraction reconciliation specification and complete review failures after source release" {
+test "reports preserve native extraction reconciliation authoring coverage specification and review failures after source release" {
     const reference_fixture = @import("../../../src/reference_reconciliation_test.zig");
     const references = @import("../../../src/test_fixtures/reference_reconciliation.zig");
     const Diagnostic = @import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic;
@@ -1048,7 +1048,7 @@ test "reports preserve native extraction reconciliation specification and comple
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var retained: [6]Diagnostic = undefined;
+    var retained: [7]Diagnostic = undefined;
     {
         var source: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer source.deinit();
@@ -1080,7 +1080,7 @@ test "reports preserve native extraction reconciliation specification and comple
         const selection = try registry.select(scratch, policies, .{ .stage = .spec, .environment = null, .fileKind = null });
         const citation = (try registry.validateCitation(policies, selection, .{ .chunk = .{ .ordinal = 8 }, .first_line = 1, .last_line = 1 })).?;
         retained[5] = try (Diagnostic{ .principle_review = .{ .diagnostics = &.{.{ .issue = .invalid_evidence, .requirement = .{ .kind = .policy_predicate, .unit = .{ .decision = .{ .ordinal = 8 } }, .slot = .compliance }, .ordinal = 8, .revision = 1, .origin = origin, .entry_index = 7, .evidence = .{ .issue = .invalid_principle_citation, .rule = .{ .citations_required = true, .permitted_chunks = selection.chunks }, .citation = .{ .index = 0, .diagnostic = citation } } }} } }).copy(a);
-        var current = try @import("../../../src/domain/specification_session.zig").initialize(.{ .bytes = "chosen" }, context);
+        var current = (try @import("../../../src/domain/specification_session.zig").initialize(scratch, .{ .bytes = "chosen" }, context)).ready;
         current.completed = 1;
         const action = @import("../../../src/actions/specification/validate_specification_unit.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
         const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .primary_user_story = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "A reservation is confirmed." } }} }, .provenance = .{ .claim_ids = &.{.{ .ordinal = 999 }}, .clarification_response_ids = &.{} } } } } })).invalid;
@@ -1088,9 +1088,16 @@ test "reports preserve native extraction reconciliation specification and comple
         const extraction_action = @import("../../../src/actions/reference/validate_reference_extraction_text.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
         const lexical = (try extraction_action.execute(scratch, context.registry, context.current, input.inputs, .{ .entries = &.{.{ .scope = .{ .state_id = input.inputs.corpus.state_id, .chunk_id = input.inputs.chunks.entries[0].id }, .origin = origin, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } }} })).invalid;
         retained[2] = try (Diagnostic{ .extraction_text = lexical }).copy(a);
+        var partial = context;
+        const signals = try scratch.dupe(@import("../../../src/domain/reference_reconciliation.zig").Signal, accounted.records.signals);
+        for (signals) |*signal| signal.value.generation_roles = &.{};
+        partial.references.records.signals = signals;
+        partial.references.records.assignments.checked.prior.prior.source.fields = &.{.{ .unit = .signals, .field = .relationship, .origin = origin }};
+        const gap = (try @import("../../../src/domain/specification_session.zig").initialize(scratch, .{ .bytes = "chosen" }, partial)).blocked;
+        retained[6] = try (Diagnostic{ .authoring_roles = gap }).copy(a);
     }
     for (retained) |diagnostic| {
-        const report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .invalid, .terminal_step = "native-validation", .candidate_error = diagnostic };
+        const report: c.Report = .{ .started_at_utc = "", .status = if (diagnostic == .authoring_roles) .workflow_blocked else .workflow_failed, .workflow_outcome = if (diagnostic == .authoring_roles) .blocked else .invalid, .terminal_step = "native-validation", .candidate_error = diagnostic };
         const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
         try std.testing.expectEqualDeep(report, decoded);
         try std.testing.expectEqualDeep(origin, decoded.candidate_error.?.origin().?);

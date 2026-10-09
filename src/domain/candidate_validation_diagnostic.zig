@@ -16,6 +16,7 @@ pub const Diagnostic = union(enum) {
     support: @import("specification_support.zig").Source.Rejection,
     principle_review: @import("specification_support.zig").Contract(.principles).Rejection,
     specification: @import("specification_candidate.zig").Rejection,
+    authoring_roles: @import("specification_source_binding.zig").Rejection,
 
     pub fn origin(self: Diagnostic) ?@import("model_candidate_origin.zig").Origin {
         return switch (self) {
@@ -28,6 +29,7 @@ pub const Diagnostic = union(enum) {
             .support => |value| if (value.selected()) |selected| selected.origin else null,
             .principle_review => |value| if (value.selected()) |selected| selected.origin else null,
             .specification => |value| value.origin,
+            .authoring_roles => |value| value.origin,
         };
     }
 
@@ -36,7 +38,7 @@ pub const Diagnostic = union(enum) {
     pub fn attribution(self: Diagnostic) Attribution {
         if (self.origin()) |value| return .{ .response = value };
         return switch (self) {
-            .coverage => .candidate,
+            .coverage, .authoring_roles => .candidate,
             .extraction_text,
             .reconciliation,
             .token_classifications,

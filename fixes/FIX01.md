@@ -11,10 +11,23 @@ compatible with the generic engine. It is feasible as a staged improvement
 programme, but is **not yet a complete implementation specification**. Several
 items already exist; source-association precision, semantic acceptance criteria,
 review grouping and disputed-verdict handling still need explicit decisions.
-The bounded R3 policy projection is complete within existing boundaries. The
-9 October live evidence confirms resolved inputs and no recurrence of the observed
+The bounded R3 policy projection and R4 shared family meanings are complete within
+existing boundaries, with full offline verification. The first 9 October live
+evidence for R3 confirms resolved inputs and no recurrence of the observed
 `singleton` confusion, but still ends at the token budget without publication or
 grading. Its remaining semantic and workload limits are recorded in R3 and R5.
+The later post-R4 run confirms delivery of the shared meanings but omits every
+functional-requirement record. Native validation rejects the candidate before
+policy review; no improvement in completion or rubric quality is established.
+R4 now implements the requiredness/collection projections identified by that run;
+their live effect remains unmeasured.
+The subsequent 09:07 run stopped earlier: role assignment omitted `entity_basis`
+despite unchanged request bytes, and generation initialization rejected the
+incomplete binding. R10 records this separate role-coverage handoff weakness;
+the latest R4 projections were not reached. R10 now implements an explicit typed
+blocking result with missing-role and producer evidence. The 11:53 post-R10 run
+confirms that handling and correct attribution to call 7, but the model again
+omits `entity_basis`; generation, publication and grading remain unachieved.
 A separate, confirmed
 clarification-answer lifecycle gap prevents
 claiming complete support for answer-derived requirements.
@@ -23,15 +36,17 @@ completed, faithful specification with the configured model and execution budget
 
 This review and tracking document introduces no engine policy, new test authority
 or live-run authorization. The original review changed only this file; folder
-cleanup is recorded in §8. The user subsequently authorized the bounded R3
-implementation. Its code, prompt, offline verification and subsequent retained
-live-run analysis are tracked in R3;
-the other findings remain separate work.
+cleanup is recorded in §8. The user subsequently authorized the bounded R3, R4
+and R10 implementations. Their code, prompt and offline verification are tracked
+below; R3, R4 and R10 also record subsequent retained live-run analysis. The other
+findings remain separate work.
 
 **Material revisions:** corrected overstatements about the handoff and current
 traceability, completed the clarification-path audit, separated implementation
 feasibility from semantic reliability, and added a research-backed evaluation
-method with explicit measurement limits.
+method with explicit measurement limits. R10 adds the observed incomplete-role
+handoff and implements its typed blocking contract. Automatic upstream correction
+remains a separate policy decision.
 
 ## 1. Scope, baseline and evidence
 
@@ -49,6 +64,15 @@ The original code assessment instead used HEAD
 `3bcba773a28cfc65b5d4de5cdba870fc5feb2b46` and its working tree. The subsequent
 R3 outcome analysis inspected HEAD `e0b86d15bf6e18927ac67d4c5bca3105056ff8b9`;
 the worktree was clean before this documentation update.
+The subsequent R4 analysis inspected HEAD
+`3be4b5f1c359268996bb399b68bcf386d02ad6c7`; the staged R4 implementation was
+preserved, and this analysis changes only FIX01.
+The subsequent R4 implementation preserves those staged changes and adds the
+bounded input projections recorded below.
+The subsequent R10 evidence update preserves that staged implementation and
+changes only this document; it authorizes no implementation or live execution.
+The subsequently authorized R10 implementation preserves those staged changes
+and implements the existing blocking option without adding automatic rework.
 
 Before the original review, the worktree contained an integration/build refactor in
 `README.md`, `build.zig`, `build.zig.zon`, `build/test_registration.zig`,
@@ -78,8 +102,11 @@ Authority consulted:
   [FIX_002's reassessment decision](archive/FIX_002.md#d2--reassessment-of-a-structurally-admitted-source-finding).
 
 The local raw run bundles are available, unlike the handoff's GitHub-only review.
-The most recent retained run started 9 October at **07:59:10 AEDT**
-(`2026-10-08T20:59:10Z`). The comparison baseline is 8 October at 20:52:37 AEDT:
+The most recent retained run started 9 October at **11:53:40 AEDT**
+(`2026-10-09T00:53:40Z`), after R10 implementation. The preceding run started at
+09:07:58 AEDT; the earlier post-R4 run started at 08:34:58 AEDT;
+its pre-R4 baseline started at 07:59:10 AEDT. The earlier R3 comparison uses
+8 October at 20:52:37 AEDT:
 
 | Evidence | Confirmed result | What it establishes |
 | --- | --- | --- |
@@ -87,15 +114,26 @@ The most recent retained run started 9 October at **07:59:10 AEDT**
 | [8 October, 20:52 run](../zig-out/e2e-spec/2026-10-08T09-52-37Z-975dd393a88db44ce1b06fb0f92fc8f4/report.json) | 39 exchanges; 101,476 / 100,000 tokens; no publication or rubric result. | Call 35 lacked final text; call 36 recovered JSON; call 39 hit the budget before admission. |
 | [Pre-R3 call 36](../zig-out/e2e-spec/2026-10-08T09-52-37Z-975dd393a88db44ce1b06fb0f92fc8f4/evidence/generation/call-000036/model_output.txt) | Admitted explanation treats internal `feature: singleton` as a “singleton implementation.” | Structurally admitted review can assess invented product meaning. |
 | [9 October, 07:59 run](../zig-out/e2e-spec/2026-10-08T20-59-10Z-043b83091ff4ee6016e285ca11a2af0c/report.json) | 37 exchanges; 105,735 / 100,000 tokens; seven policy findings admitted; no publication or rubric result. | R3's resolved inputs are in use; call 37 stops on budget without a correction retry or repair. |
+| [9 October, 08:34 post-R4 run](../zig-out/e2e-spec/2026-10-08T21-34-58Z-08faa42fc180e22e11a0e27cd7f459d0/report.json) | 34 exchanges; 59,850 / 100,000 tokens; `workflow_invalid` at omission authorization; no policy review, publication or rubric result. | Shared meanings reached generation and source review, but call 12 omitted functional requirements and the positive source review did not supply an eligible omission repair. |
+| [9 October, 09:07 run](../zig-out/e2e-spec/2026-10-08T22-07-58Z-81991f12973d8466095855fd3d3399e0/report.json) | 8 exchanges; 12,148 / 100,000 tokens; `workflow_failed` at generation initialization; no specification authoring, review, publication or rubric result. | Call 7 omitted `entity_basis` with byte-identical inputs to the preceding run; R10 traces the incomplete binding and generic failure. The latest R4 projections were not exercised. |
+| [9 October, 11:53 post-R10 run](../zig-out/e2e-spec/2026-10-09T00-53-40Z-ab59e9144c1aff2ce96a9816c782f782/report.json) | 8 exchanges; 12,123 / 100,000 tokens; `workflow_blocked` at generation initialization; no authoring, clarification, repair, publication or rubric result. | R10 retains missing `entity_basis`, source state/revision, eligible groups and call 7's origin. The same role omission persists; explicit handling improves, completed-spec outcomes do not. |
 | [Loan run](../zig-out/e2e-spec/2026-10-07T11-57-52Z-935b3be1a46109edb237ebb287867251/report.json), analysed in [FIX_003 §14.5](archive/FIX_003.md#145-three-approved-live-executions-after-fix3-0910) | An omission/localization sequence led to insertion of already-captured behavior and dependent rebuilding; terminal budget exhaustion. | Incorrect semantic premises can consume valid repair machinery. |
 
 Both 8 October reports identify modified builds at revision
 `dd5e6e80169c1c0ba359ca9951e222654e7edc6c`, with different source hashes.
-The 9 October report identifies a modified build at revision
+The 07:59 report identifies a modified build at revision
 `b021e9bfaeda53c6cda8c9896342a4776f77234b`, source hash
 `65fe4bb339e123f961c991d8a598c5def7c72519b1baaf7a3fd365f217b8b14e`.
+The 08:34 report identifies a modified build at revision
+`3be4b5f1c359268996bb399b68bcf386d02ad6c7`, source hash
+`cc09cc3999e374a0648ba243ca6b8c9be3413505673b43b639d13bd81faa1cc4`.
+The 09:07 report identifies the same revision with a modified build, source hash
+`d953c9cf8d0d7ffe431308802310f8667f78800882d339e7bc999c28c948bfe9`.
+The 11:53 report identifies the same revision with a modified build, source hash
+`e4e3ac20bf56d8c4c8c57a9f23994db2d8c161afe5f003e7366035feca4e4628`.
 These are different captured builds, not a controlled comparison of one code
-change. The latest request bytes independently establish that R3 was active.
+change. Captured request bytes independently establish the R3 and R4 projections
+in the respective runs; R10 distinguishes unchanged requests from changed builds.
 
 Call numbers are physical exchanges in those specific runs, not stable operation
 identities. The exact provider-side cause of reasoning-only output is unknown.
@@ -111,8 +149,8 @@ reasoning as the answer would not address the observed semantic or workload gaps
 | Construct known IDs, joins and citations natively. | Substantially implemented. Preserve and audit the current owners; this is not a missing subsystem. |
 | Require more than a document-level source citation. | Sound objective; current code already retains claim-to-span traceability. The remaining issue is whether each record's inherited claim set precisely describes its support. |
 | Use stable location-based source-requirement identities. | Underspecified. Existing identities are snapshot-bound; location does not determine semantic segmentation or continuity across edits. |
-| Define record-family contributions. | Useful remaining work. The proposed table omits two existing families and some shared guidance still collapses distinct meanings. |
-| Resolve policy assignments before asking the model. | R3 now implements scalar, record, collection and entity projections. Latest live packets confirm resolved business subjects; semantic reliability remains unproven. |
+| Define record-family contributions. | R4 implements shared meanings for all nine existing families, replacing generic and duplicated guidance. Semantic calibration remains R7 work. |
+| Resolve policy assignments before asking the model. | R3 now implements scalar, record, collection and entity projections. Retained post-R3 policy packets confirm resolved business subjects; semantic reliability remains unproven. |
 | Keep small calls as the default; group only with evidence. | Consistent with §12.5. A requirement cluster can be one responsibility; no fixed call size guarantees semantic reliability or budget feasibility. |
 | Require evidenced, scoped repair. | Mostly present mechanically. Correctness of the admitted semantic premise remains unproven. New reconsideration would change accepted policy. |
 | Add isolated semantic evaluation before full E2E. | Appropriate, and already contemplated by §28.8. Whole-spec rubric calibration alone does not evaluate production generation and review assignments. |
@@ -275,8 +313,8 @@ source and policy prompts own their respective review instructions. Initial
 review, correction, finding insertion and detail/citation repair use the same
 [packet dispatcher](../src/domain/specification_support.zig#L112). Selection,
 cardinality, request/subject/revision binding, admission, verdict retention,
-continuation and persistence are unchanged. R4's family-purpose improvements are
-still separate.
+continuation and persistence are unchanged. R4's separate family-purpose
+implementation is recorded below.
 
 Regression coverage includes two unrelated business domains, literal/exact/passive
 values, all nine record families, resolved conditions and entity relationships,
@@ -346,7 +384,8 @@ was entity applicability, but its
 [admitted response](../zig-out/e2e-spec/2026-10-08T20-59-10Z-043b83091ff4ee6016e285ca11a2af0c/evidence/generation/call-000028/model_output.txt)
 justified matching functional requirements instead. The source-review aggregate
 subject still uses `candidate_support`; R3 changed the policy projection, not this
-source-review path. Retain this as an R4/R7 generation-and-review evaluation case.
+source-review path. Retain this as an R7 generation-and-review evaluation case;
+R4's shared meanings do not establish that the model interprets them correctly.
 It is not an established cause of the terminal budget failure.
 
 Both runs used the same case, reference, principle chunks, response schema and
@@ -359,41 +398,223 @@ run pair, with no conflicting-policy cases or completed rubric, cannot establish
 accuracy or repeatability. R3 remains implementation-complete; R5 workload and R7
 semantic acceptance remain open.
 
-### R4 — Medium: the record-family proposal is incomplete and partly redundant
+### R4 — Explicit, shared record-family meanings
 
-The current [Kind enum](../src/domain/specification.zig#L9) has nine variants.
-The handoff lists seven, omitting `edge_case` and `entity`, and calls the existing
-`user_visible_outcome` family “Outcome.” Use existing names and meanings rather
-than adding aliases or a competing registry.
+**Status — 9 October: COMPLETE for shared meanings and the two input-projection
+follow-ups.** Semantic calibration remains R7 work. The 08:34 run below predates
+the follow-ups; the 09:07 run stopped before their affected calls (R10). Neither
+establishes their live improvement; offline verification is recorded separately.
 
-The [records prompt](../design/workflows/spec/records.prompt.md) already defines
-functional requirements and acceptance criteria, distinguishes assumptions,
-exclusions and prohibitions, and rejects filler. The real gap is the generic
-`.text` purpose in
-[required_authority_description](../src/domain/required_authority_description.zig#L35),
-and incomplete family guidance supplied by the records role. Generation, source
-review, policy review and selected repairs should project one coherent definition
-from their existing shared owners.
+The original gap was one generic `.text` description for several different
+families, a records role describing only functional requirements and acceptance
+criteria, and partial definitions repeated in the prompt. The handoff also omitted
+`edge_case` and `entity` from the nine existing
+[Kind variants](../src/domain/specification.zig#L9).
 
-Include edge cases as supported boundary/exceptional conditions and outcomes;
-include entities only under the current applicability decision, with their
-business meaning and relationships. Neither is permission to invent missing cases
-or data structures. Preserve legitimate overlap: acceptance criteria can test the
-same obligation that a functional requirement states.
+**Implemented owner:**
+[required_authority_description](../src/domain/required_authority_description.zig)
+now supplies family and field meanings, a selected-field task and whole-record
+catalogues. Field membership reuses the existing native authority predicate;
+catalogue field names derive from the canonical `Content` shape. No second kind,
+field-membership or requiredness registry was introduced. User-visible outcomes
+describe observable results/responses; business rules describe governing rules or
+constraints. Assumptions, exclusions and prohibitions retain distinct meanings.
 
-The handoff's business-rule and outcome descriptions still overlap ordinary
-requirements and the feature goal. Labels alone will not resolve this ambiguity;
-the human-labelled cases must show when a separate record adds supported meaning
-and when it only repeats another representation.
+The existing [generation role](../src/domain/reference_reconciliation.zig)
+projects all nine families and their fields into the bound source assignment.
+The [records prompt](../design/workflows/spec/records.prompt.md) retains authoring
+instructions, support/role preservation, legitimate requirement/criterion overlap
+and the fixed entity decision; its duplicate family definitions were removed.
+Focused source and policy review, correction, finding insertion and selected
+detail/evidence repair reuse the same `task` owner. Their respective prompts still
+own source support and policy assessment instructions.
 
-[equalContent](../src/domain/specification_generation.zig#L145) compares complete
-tagged content. Identical wording under different kinds is not automatically a
-native duplicate. The extra business rules in the 8 October, 20:52 run establish increased
-workload and a redundancy concern, not authority for cross-kind string deletion.
+[Native repair](../src/domain/specification_repair.zig) derives its field or
+permitted-family purpose from the authorized target. The
+[session packet owner](../src/domain/specification_session.zig) replaces the broad
+records purpose for an active repair while preserving its source selection. It
+does not repeat the full catalogue or add a second copy of the selected task.
+[Reviewed omission repair](../src/domain/specification_coverage_repair.zig)
+supplies the selected field or inserted family directly. Completed units retain
+`source_assignment: null`; their repair task does not revive a consumed authoring
+assignment. The superseded `packetForChoices` entry point was replaced by the
+single options-based packet builder, preserving exact-choice restriction behavior.
 
-**Feasibility:** high for complete shared purposes and calibration; conditional
-for any new semantic rejection, reclassification or deletion policy. Measure the
-generation improvement before adding a dedicated redundancy-review call.
+Coverage exercises all nine families and every field/relationship across two
+unrelated mock domains, generation, native value and membership repair, completed
+omission value/insertion repair, and source/policy initial, correction, insertion,
+detail and evidence repair. Allocation-failure coverage exercises the shared
+descriptions. Negative cases reject invalid family/slot pairs and preserve ordinary
+repair/provenance checks. Sparse required-family content remains accepted, and
+identical wording across kinds remains structurally allowed. These tests establish
+guidance delivery and unchanged native enforcement, not semantic correctness of
+the mocked content.
+
+Optional families remain optional. Entity applicability, native IDs, provenance,
+schemas, cardinality, repair targets, retry allowances and continuation policy keep
+their existing owners. No semantic reclassification, cross-kind deletion,
+redundancy-review call or additional model call was added. Human-labelled cases
+under R7 still need to distinguish useful records from unsupported repetition;
+R5's observed token-budget failure remains separate.
+
+**Original shared-definition verification — 9 October:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-specification-generation test-required-authority --summary all` | 403/403 passed: generation 253, required authority 150. |
+| `zig build test-model-request-workflow test-reference-reconciliation test-architecture lint --summary all` | 554/554 passed; lint passed. |
+| `zig build verify --summary all` | 130/130 steps and 1320/1320 tests passed, including separate offline integration, architecture, formatting and clean packaging checks. |
+
+Sandbox access to the compiler standard library and global cache required host
+access; no validator, assertion or check was weakened.
+`git diff --check`, 132 local documentation links with 84 heading/line anchors,
+and parsing of the changed JSON context passed. The complete diff was reviewed
+for scope, duplicate authority, obsolete paths and weakened enforcement. No live
+E2E invocation was made during implementation. The subsequently retained run is
+analysed below; calibrated model-quality improvement remains unestablished.
+
+#### Post-R4 live outcome — 9 October, 08:34 AEDT
+
+**Conclusion: guidance delivery improved; the run did not demonstrate a better
+workflow outcome.** The
+[records request, call 12](../zig-out/e2e-spec/2026-10-08T21-34-58Z-08faa42fc180e22e11a0e27cd7f459d0/evidence/generation/call-000012/context.json)
+contains all nine shared meanings and structured field purposes. Calls 21–29
+also carry the acceptance-criterion family plus selected-field purpose. Policy
+review and atomic repair were not reached, so this run supplies no live evidence
+for those R4 paths.
+
+The initiating candidate defect is visible in
+[call 12's output](../zig-out/e2e-spec/2026-10-08T21-34-58Z-08faa42fc180e22e11a0e27cd7f459d0/evidence/generation/call-000012/model_output.txt):
+three acceptance criteria cover startup, greeting and UTC output, but there are
+**zero functional requirements**. The immediate baseline returned one acceptance
+criterion and three functional requirements. Required family coverage regressed;
+the behavior still appears elsewhere, so this is not proof that the source's UTC
+meaning disappeared.
+
+The failure chain is:
+
+1. **Generation, call 12:** the missing family passes per-group field/duplicate
+   validation. Its response schema allows the record variants without an aggregate
+   family-presence constraint.
+2. **Source review, call 19 (logical request 18):** the
+   [assigned functional-requirement task](../zig-out/e2e-spec/2026-10-08T21-34-58Z-08faa42fc180e22e11a0e27cd7f459d0/evidence/generation/call-000019/context.json)
+   receives the whole candidate as `candidate_support`. Its
+   [response](../zig-out/e2e-spec/2026-10-08T21-34-58Z-08faa42fc180e22e11a0e27cd7f459d0/evidence/generation/call-000019/model_output.txt)
+   says `supported` because the behaviors occur in acceptance criteria and the
+   story. That judgment does not establish a populated functional-requirement
+   collection. All 20 source findings ultimately say `supported`.
+3. **Native gate:**
+   [specification_authority](../src/domain/specification_authority.zig#L67)
+   retains the engine-observed missing-family defect despite positive review.
+   [Events](../zig-out/e2e-spec/2026-10-08T21-34-58Z-08faa42fc180e22e11a0e27cd7f459d0/events.jsonl)
+   652–653 record an invalid gate; event 655 records invalid omission authorization
+   at `g14-g6-review-omit-authorize`.
+4. **Repair cannot be authorized:** a native absence has `support: null` until a
+   current `candidate_omission` supplies eligible evidence through the
+   [shared candidate-defect owner](../src/domain/required_authority.zig#L449).
+   [supportedOmission](../src/domain/required_authority.zig#L489) therefore supplies
+   no repairable evidence, and
+   [authorizeOmission](../src/domain/specification_coverage_repair.zig#L125) has no
+   eligible insertion. Its code returns `UnsafeSpecificationOmissionRepair` in
+   this case; the binding collapses domain errors to `invalid`. The report does
+   not retain the exact Zig error or missing requirement, so this explanation is
+   code-traced rather than a captured native diagnostic.
+
+The last exchange, call 34, returned a supported exact-token finding; it was not
+the initiating defect. The first protocol failure was call 14's reasoning-only
+answer; call 31 had the same missing-final-answer condition. Existing corrections
+recovered them at calls 15 and 32. Neither caused the terminal rejection. No
+semantic repair, clarification, policy review, publication or rubric ran.
+Call 11's entity basis remains the literal `Hello, World!`, unchanged from the
+baseline; its source review again cites general behavior rather than explaining
+entity applicability. That earlier R7 concern is not resolved by R4.
+
+| Observed workload | Pre-R4, 07:59 | Post-R4, 08:34 |
+| --- | ---: | ---: |
+| Acceptance criteria / functional requirements | 1 / 3 | 3 / 0 |
+| Record-field review assignments | 6 | 9 |
+| Reference preparation and generation tokens | 19,103 | 19,374 |
+| Distinct source findings / physical source calls | 17 / 17 | 20 / 22 |
+| Source-review tokens | 32,317 | 40,476 |
+| Policy calls / tokens | 8 / 54,315 | 0 / 0 |
+| Total calls / accounted tokens | 37 / 105,735 | 34 / 59,850 |
+| Terminal result | Token-budget failure | Invalid candidate; repair not authorized |
+| Publication / rubric | Not reached / not run | Not reached / not run |
+
+Fewer records created **more fields and source-review work**. The lower whole-run
+total reflects stopping before policy review, not a demonstrated cost reduction.
+Both runs use the same case, source, configuration, model settings, principle
+chunks and evaluator settings. Among captured input files only `records.prompt.md`
+and `generation.context.json` changed; compiled code/build identity and generated
+text also differ. This single uncontrolled pair shows the observed regression,
+but cannot isolate R4 as its cause or establish a success rate.
+
+**Bounded follow-ups implemented after this run:**
+
+- **Project existing requiredness alongside meanings.** The
+  [session packet owner](../src/domain/specification_session.zig) now supplies
+  `record_requirements` with `assembled_specification` scope and mandatory
+  families from [the canonical specification contract](../src/domain/specification.zig#L51).
+  The records prompt explains aggregate scope without repeating the family list.
+  Bound source groups may supply different families; their schemas and admission
+  checks impose no new per-group floor. Atomic repairs omit this aggregate
+  authoring guidance and retain only their authorized task.
+- **Resolve source collection assignments explicitly.** The shared
+  [review subject](../src/domain/specification_review_subject.zig) now carries
+  `collection.slot`, selected resolved `records` (including `[]`) and the complete
+  business context. Source and policy reviews reuse that projection. Selection and
+  [source-evidence aggregation](../src/domain/specification_support_evidence.zig)
+  use one [native collection lens](../src/domain/specification_authority.zig),
+  preserving AC/FR membership and the existing AC/edge-case/outcome scenario set.
+  The source prompt distinguishes selected records from surrounding context.
+  Initial/correction/insertion/detail/evidence requests retain the same source
+  evidence and currentness rules. Partial pre-authoring assessments and separate
+  dependency localization retain their existing projections.
+
+The [aggregate-generation regressions](../src/specification_generation_test.zig#L820)
+and [collection regressions](../src/specification_generation_test.zig#L4364) use
+unrelated mock domains, split-family source groups, optional omissions, explicit
+populated/empty collections despite matching prose elsewhere, legitimate
+criterion/requirement overlap, and all nine kinds against the shared collection
+lens. Disjoint per-family claims verify evidence selection independently; source
+catalogues remain intact through correction and review repair. The tests preserve
+rejection of missing mandatory families, invalid collection slots and repair based
+only on a positive finding. No response schema, model call, retry allowance or new
+recovery route was added.
+
+**Follow-up verification — 9 October:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-specification-generation test-required-authority --summary all` | 405/405 passed: generation 255, required authority 150. |
+| `zig build test-model-request-workflow test-reference-reconciliation test-architecture lint --summary all` | 554/554 passed; lint passed. |
+| `zig build verify --summary all` | 130/130 steps and 1322/1322 tests passed, including 84 separate offline integration tests and clean native packaging checks. |
+
+Compiler/cache access and packaging checks used host access. The complete staged
+and unstaged diff was reviewed for scope, duplicate authority, obsolete paths and
+weakened enforcement. `git diff HEAD --check`, local documentation targets/anchors
+and JSON context parsing passed. These are offline contract checks, not semantic
+quality evidence.
+
+The missing-family guard and refusal to invent repair evidence are correct safety
+behavior. Native absence proves cardinality, not which source group supports a
+replacement. Any new recovery from native-only absence requires a separate
+evidence/authorization decision under R6; do not convert `supported` to omission,
+clear the native defect, insert arbitrary filler or add a caller-local fallback.
+Existing [mandatory-family negative tests](../src/specification_generation_test.zig#L1657)
+already prove that an AC-only candidate remains invalid after positive review
+across unrelated sources; the
+[omission-repair tests](../src/specification_generation_test.zig#L4017) deliberately
+reject insertion based only on that positive review. Passing offline checks are
+therefore consistent with this live failure: they verify enforcement, not that
+the model authors both families or recognizes the missing collection.
+R4's shared meanings and these bounded projections are implementation-complete.
+Successful live output, R5 workload feasibility and R7 semantic calibration remain
+open. The retained failure is evidence for the pre-follow-up build, not a live
+validation of the new inputs. No live E2E run was invoked during implementation.
+The subsequently retained 09:07 run failed before authoring or review, so it also
+leaves these inputs' live effect unmeasured; see R10. Its lower usage reflects an
+earlier stop, not improved quality or efficiency.
 
 ### R5 — High: workload feasibility needs its own demonstration
 
@@ -435,7 +656,7 @@ repair or clarification explains this failure.
 | Total calls / accounted tokens | 39 / 101,476 | 37 / 105,735 |
 | Publication / rubric | Not reached / not run | Not reached / not run |
 
-The latest candidate has one acceptance criterion and three functional
+The post-R3, pre-R4 candidate has one acceptance criterion and three functional
 requirements. Its 14 policy subjects comprise eight feature/entity obligations
 and six record fields. All 17 source findings were admitted; seven policy findings
 were admitted, the eighth was budget-stopped, and six further subjects were never
@@ -446,6 +667,13 @@ work independently of R3's later policy projection. The latest budget failure
 without retries confirms that retry removal alone is insufficient. Prioritize
 measuring complete review cost and designing the R5 coverage-preserving workload
 change; do not treat more prompt wording or a higher budget as demonstrated fixes.
+
+**Post-R4 evidence — 9 October, 08:34:** this run stopped on a missing mandatory
+family before any policy request, at 59,850 tokens. Its source-review cost rose to
+40,476 tokens across 22 calls. The R4 comparison above therefore neither resolves
+R5 nor establishes that budget exhaustion would disappear for a valid candidate.
+Address the newly observed authoring/collection projection gaps separately from
+the still-unmeasured cost of a completed review and published specification.
 
 Focused subjects may reduce ambiguity, but the repeated policy catalogue dominates
 the request. The handoff appropriately treats grouping as conditional. A useful
@@ -628,6 +856,11 @@ Empirical success remains unknown. A failed pilot should constrain the claim or
 motivate a scoped revision, not automatically add a reviewer, upgrade the model,
 increase limits or expand the implementation.
 
+R10 supplies a concrete additional assignment pilot: authoring-role selection,
+including supported entity applicability, genuinely unsupported roles and repeated
+identical inputs. Score missing supported roles separately from invented support;
+measuring this variation does not itself provide a correction route.
+
 ### R8 — High: the proposed E2E quality gates need a test-policy contract
 
 The handoff's exit-code warning is accurate.
@@ -681,6 +914,14 @@ such as missing final text. The report also lacks a complete linked first-defect
 repair, invalidation/rebuild and outstanding-work projection. Reuse native evidence
 for those additions instead of inferring the missing data from prose.
 
+The 9 October, 08:34 run adds a concrete native-rejection example: the report names
+omission authorization but retains no missing-family requirement or exact domain
+cause. Its last model output is a successful exact-token finding, which does not
+identify the earlier generation defect. The
+[omission binding](../src/application/specification_omission_repair_workflow.zig#L25)
+maps non-allocation domain errors to `invalid`; retaining their typed cause belongs
+at that boundary and through its consumers, not in a guessed report explanation.
+
 The cause-loss claim is confirmed:
 [reference_reconciliation_workflow](../src/application/reference_reconciliation_workflow.zig#L137)
 collapses operational errors to `OperationExecutionFailed`, and
@@ -731,6 +972,201 @@ for raw per-call evidence instead of implementing another capture system.
 **Feasibility:** high for specific capture/report gaps; medium for preserving typed
 causes across the shared operation boundary and packaging reproducible dirty builds.
 
+### R10 — High: incomplete authoring-role coverage stops at the generation handoff
+
+**Status — COMPLETE for the typed blocking handoff; full offline verification
+passed on 9 October, and the 11:53 live run confirms that path. Successful
+specification generation and rubric acceptance remain unachieved.**
+The 9 October, 09:07 run exposes a dependency on variable model role selection
+before any specification is authored. The native guard correctly rejects an
+incomplete binding; the pre-implementation weakness was generic failure without
+its missing-role cause. The implementation uses §17's existing blocking option.
+It improves classification and diagnosis, not the model's role-selection accuracy.
+This is separate from R4's record-family input corrections.
+
+**Observed failure and attribution — before R10 implementation:**
+
+- [Call 7's response](../zig-out/e2e-spec/2026-10-08T22-07-58Z-81991f12973d8466095855fd3d3399e0/evidence/generation/call-000007/model_output.txt)
+  assigns signal 1 `title`, `description`, `primary_goal`, `primary_user_story`
+  and `records`, but omits `entity_basis`. Call 8 returns no conflicts and is
+  accepted. All eight model responses pass admission; no correction or repair runs.
+- [Events](../zig-out/e2e-spec/2026-10-08T22-07-58Z-81991f12973d8466095855fd3d3399e0/events.jsonl)
+  222 and 228 record successful role validation and source readiness. Event 230
+  fails at `g8-generate-initialize-specification` with generic `operation_failed`.
+  No authoring, semantic review, clarification, publication or rubric follows.
+- The preceding run's [call 7](../zig-out/e2e-spec/2026-10-08T21-34-58Z-08faa42fc180e22e11a0e27cd7f459d0/evidence/generation/call-000007/model_output.txt)
+  includes all six roles. Captured `context.json` and provider `request.json`
+  files for calls 1–7 are byte-identical across the two runs. The extracted
+  `model_output.txt` files for calls 1–6 and 8 are also byte-identical; raw provider
+  responses differ. Case, source and model settings match.
+  Only `records.prompt.md` and `support.prompt.md` changed among captured resource
+  bytes; neither prompt was invoked. Build hashes differ as recorded in §1.
+- R4's earlier nine-family role catalogue is present in both requests. The new
+  aggregate `record_requirements` and explicit collection projection were never
+  reached. This establishes output variation with unchanged reached inputs, not
+  a causal regression from those new R4 paths. The exact reason the model omitted
+  the role is not established. Lower whole-run usage is early termination: the
+  first eight calls cost 12,148 tokens versus 12,054 previously.
+
+**Coverage ownership and previous failure path:**
+
+1. [Role admission](../src/domain/reference_reconciliation_validation.zig#L510)
+   checks submitted assignments for eligible groups and unique roles/selections;
+   it does not require every role to be assigned. This follows
+   [§17.3](../design/contracts/17-specify.md#173-llm-work): unsupported roles may
+   remain unassigned, while mandatory coverage blocks authoring.
+2. [Source readiness](../src/domain/specification_provenance.zig#L38) checks
+   complete accounting and at least one eligible claim. Its success deliberately
+   does not establish support for every authoring role.
+3. [Generation initialization](../src/domain/specification_session.zig)
+   uses the [source-binding coverage owner](../src/domain/specification_source_binding.zig),
+   which requires an active eligible selection for every `GenerationRole`.
+   Previously, missing coverage raised `InvalidSpecificationBinding`, collapsed
+   by the application binding into `OperationExecutionFailed`. The historical
+   cause was code-traced rather than retained in that run's report. R10 now
+   returns a typed `blocked` result for this expected domain rejection.
+
+`entity_basis` supplies evidence for the required entity-applicability decision,
+including a supported `not_applicable`; it does not require entity records. Its
+supplied purpose already explains that behavior may support that decision without
+an explicit declaration of absence. Native absence of a role proves incomplete
+coverage, not whether the model overlooked support or the source lacks it.
+Prior model assignment alone is not semantic proof of the correct replacement.
+The [negative tests](../src/specification_generation_test.zig) still remove every
+role individually across unrelated sources. Canonical validation continues to
+reject the binding; initialization now identifies exactly which roles are absent.
+
+**Implemented contract — 9 October:**
+
+- `specification_source_binding.missingRoles` is the single coverage owner for
+  initialization and canonical readback. It derives all missing roles from the
+  existing `GenerationRole` enum and existing active-selection eligibility.
+  Invalid or foreign evidence remains an error; incomplete valid assignments
+  produce a gap. No role registry or completeness policy is duplicated.
+- `specification_session.initialize` returns `ready` or `blocked`. The rejection
+  retains every missing role in enum order, reference state, partition, current
+  reconciliation revision, the roles field's producer request/attempt, and all
+  current eligible signal IDs with their canonical claim selections. The later
+  conflicts call does not replace role-selection attribution. The evidence is
+  diagnostic, not an authorized replacement or semantic proof of support.
+- The existing initialization action and application binding publish that typed
+  result. The [workflow](../design/workflows/spec.workflow.yaml) explicitly routes
+  `blocked` to `end.blocked` before brief/story/entity/record authoring. A blocked
+  payload cannot be read as a generation session. Structural source readiness
+  and role-admission rules remain unchanged.
+- The shared `candidate_validation_diagnostic` gains `authoring_roles`, read
+  through the existing application diagnostic owner. Existing telemetry and
+  harness capture retain its producer attribution; harness JSON/Markdown/terminal
+  reports retain the complete payload. The production invocation report copies
+  candidate diagnostics before releasing source owners, and the CLI prints them
+  for unsuccessful execution. This handles the expected handoff rejection without
+  a new error channel or the broader operational-error redesign proposed in R9.
+- Initial assignments, repaired reconciliation and source invalidation still
+  converge on this same initialization check. Canonical readback uses its strict
+  `validate` wrapper; it cannot load incomplete coverage as successful authority.
+  No prompt, schema, model slot, repair allowance, default assignment, fallback or
+  internal-gap clarification was added.
+
+**Automatic correction is outside this blocking contract.** Before adding an
+upstream route, define its trigger, authorized unit, evidence, closed outcomes,
+dependency invalidation and runner-owned allowance. Existing §17 permits blocking
+or upstream rework but supplies no retry trigger or budget for this gap. R6's
+disputed-review-premise proposal supplies no role-retry authority. A future route
+must revalidate coverage before authoring and retain typed exhaustion; it must not
+invent roles/entities, promote literal-only groups or retry until positive.
+
+**Regression evidence:** generation unit tests cover each missing role, multiple
+missing roles, no assignments, complete coverage split across eligible groups,
+superseded-group exclusion, stale states and foreign claims across startup and
+loan sources. They check revision/producer retention, diagnostic deep copying
+after source release and allocation failures. Offline workflow integration injects
+the observed missing `entity_basis` and an unrelated loan case with no roles;
+both end `blocked` with the typed cause, no generation/review/repair calls, no
+clarification or publication, and no active repair permit. Existing successful,
+repair and upstream-rebuild scenarios remain in the separate integration suite.
+Harness tests round-trip and render the rejection after releasing source memory.
+
+**Verification — 9 October:**
+
+- `zig build test-specification-generation --summary all`: **257/257 passed**.
+- `zig build test-integration test-reference-model-input test-reference-reconciliation test-model-request-workflow test-architecture --summary all`: **passed**.
+- `zig build verify --summary all`: **130/130 steps succeeded; 1,324/1,324 tests
+  passed**, including formatting/AST checks, architecture tests, the separate
+  offline integration suite and clean native packaging/runtime smoke tests.
+- `git diff --check` and `git diff --cached --check`: **passed**.
+
+No live run was launched during implementation. The subsequently retained live
+run is analysed below. R7's approved repeated live trials must establish any
+reduction in role omissions or improvement in completed, rubric-assessed
+specifications; typed blocking alone establishes neither.
+
+**Post-R10 live-result analysis — 9 October, 11:53 AEDT:**
+
+The [report](../zig-out/e2e-spec/2026-10-09T00-53-40Z-ab59e9144c1aff2ce96a9816c782f782/report.json)
+ends `workflow_blocked` at `g8-generate-initialize-specification`. This is R10's
+expected result for incomplete coverage, not a new operational failure.
+
+| Observation | Before R10, 09:07 | After R10, 11:53 |
+| --- | --- | --- |
+| Role assignment | Call 7 assigns five roles, omitting `entity_basis`. | The same five roles, again omitting `entity_basis`. |
+| Terminal classification | `workflow_failed`; generic `failed` diagnostic. | `workflow_blocked`; typed `authoring_roles` diagnostic. |
+| Retained cause | No `candidate_error` or attributed producer call. | `missing_roles: [entity_basis]`, reference state, partition 3, revision 1, eligible groups 1/2 and request 7 / attempt 1. |
+| Origin attribution | Last model exchange is call 8, the conflicts request. | Last exchange is still call 8; `candidate_model_call: 7` correctly identifies the roles request. |
+| Complete output | No authoring, publication or rubric grade. | No authoring, publication or rubric grade. |
+| Calls / tokens | 8 / 12,148. | 8 / 12,123. |
+
+**Where the gap originates:**
+
+1. Call 1 extracts all three requested behaviors; calls 3/4 retain them, call 5
+   retains all four native claims including the exact greeting token, and
+   [call 6](../zig-out/e2e-spec/2026-10-09T00-53-40Z-ab59e9144c1aff2ce96a9816c782f782/evidence/generation/call-000006/model_output.txt)
+   groups the three behavior claims. No earlier loss of behavior needed for the
+   entity-applicability assessment is observed. Generated wording adds `the
+   current` to the date/time claim; this is a captured variation, not evidence
+   that it caused the role omission.
+2. [Call 7's input](../zig-out/e2e-spec/2026-10-09T00-53-40Z-ab59e9144c1aff2ce96a9816c782f782/evidence/generation/call-000007/context.json)
+   contains those behaviors and the existing `entity_basis` purpose: it supplies
+   evidence to decide whether entities are required **or not applicable**.
+   The prompt, all six purposes and selected response schema are unchanged from
+   09:07. The [provider response](../zig-out/e2e-spec/2026-10-09T00-53-40Z-ab59e9144c1aff2ce96a9816c782f782/evidence/generation/call-000007/response.json)
+   includes an explanation treating entity applicability as not applicable, then
+   excludes that role from its final assignment. This supports a specific
+   interpretation error: treating a negative applicability decision as absence
+   of evidence for making that decision. The provider's explanation is evidence
+   of its reported interpretation, not proof of its internal causal mechanism.
+3. The [returned assignment](../zig-out/e2e-spec/2026-10-09T00-53-40Z-ab59e9144c1aff2ce96a9816c782f782/evidence/generation/call-000007/model_output.txt)
+   already omits `entity_basis`; no native handoff or diagnostic projection
+   removes it. Role admission accepts supported submitted assignments without
+   asserting completeness, as required by §17. Call 8 finds no conflicts.
+4. [Event 230](../zig-out/e2e-spec/2026-10-09T00-53-40Z-ab59e9144c1aff2ce96a9816c782f782/events.jsonl)
+   is the first non-`ok`/`more` outcome: typed `blocked` with the exact missing
+   role and call 7 attribution. Events 193/201/222 confirm role admission and
+   validation; event 228 confirms structural source readiness. None claims
+   complete authoring-role support. Provider prefixes were normalized and all
+   eight responses admitted on their first attempts; JSON correction, retry
+   exhaustion and the token budget did not stop this run.
+
+**Causal comparison and limits:** the selected case is byte-identical. Captured
+sources, configuration, model settings, prompts and context resources match;
+the only changed captured input resource is the workflow's explicit `blocked`
+edge. Call 1's context and provider request are byte-identical. Its output varies
+in the date/time wording, which propagates into later request bytes: this is
+**not** an unchanged-request comparison for calls 2–8. In call 7's dynamic data,
+only that claim and its signal rendering differ. Both runs nevertheless return
+the same role set. Both use `openai.gpt-oss-20b-1:0`, captured reasoning effort
+`low`, native-schema mode and unchanged region/settings. Different build hashes
+and one post-change observation do not establish a model success rate.
+
+**Assessment:** R10 improved rejection classification, retained evidence and
+producer attribution in live execution. It did not improve role selection or
+completion, and was never an automatic-correction implementation. Its guard
+already blocked the same incomplete coverage before R10. No R10 regression or
+reason to weaken/revert the guard is supported by this run. The 25-token decrease
+is generation variation during the same early stop, not an efficiency gain.
+The remaining work is semantic calibration of role selection (R7), including
+negative applicability versus missing support. Any automatic return to
+reconciliation still needs the separate bounded correction policy above.
+
 ## 4. Feasibility and decision matrix
 
 Feasibility ratings above describe structural reuse and coupling, not delivery
@@ -743,9 +1179,10 @@ in every package. No numerical effort estimate is defensible from this review.
 | --- | --- | --- |
 | 1 — Define/calibrate assignments | A bounded pilot is practical; full calibration is real remaining work. Existing whole-spec examples are insufficient and outdated. | Labels, task-specific metrics and a comparison plan for the pilot; approved thresholds/live allowance before live acceptance claims. Expand to all nine existing families before full-scope claims, without requiring each family in every spec. |
 | 2 — Native traceability | Existing group provenance can be audited immediately. Narrower association and complete answer authority are separate coordinated changes. | Define precision and identity lifetime; amend ADR 0020 only if changing binding. Complete the separate authentication/answer/currentness contract before claiming answer-supported generation. |
-| 3 — Resolved projections/workload | R3's resolved policy inputs are implemented and observed live. Complete workload feasibility remains unmet; grouping is a distinct, conditional experiment. | Preserve resolved scalar/record/collection/entity facts and separate instructions. A production cardinality or policy-selection change needs an explicit amendment and negative tests. |
+| 3 — Resolved projections/workload | R3's resolved policy inputs are implemented and observed live; R4 supplies shared family meanings. Complete workload feasibility remains unmet; grouping is a distinct, conditional experiment. | Preserve resolved scalar/record/collection/entity facts and separate instructions. A production cardinality or policy-selection change needs an explicit amendment and negative tests. |
 | 4 — Evidenced repair | Projection/evidence improvements can preserve current policy. New premise reassessment is not active authority. | Define trigger, closed outcomes, currentness, one active finding and conserved allowance; obtain the required amendment before adding reconsideration. |
 | 5 — Layered acceptance/reporting | Specific reporting gaps are bounded. Rich operation causes, dirty-source reconstruction and new acceptance rules have broader surfaces. | Extend existing capture first; separately design shared failure propagation and the development acceptance contract. A complete diagnostic redesign is not a prerequisite for the bounded projection pilot. |
+| R10 role-coverage handoff | Typed blocking and evidence propagation are implemented using the existing coverage/diagnostic owners. | No new decision for blocking. Automatic upstream correction needs its own trigger, authorization and allowance contract; R7 owns live measurement. |
 
 No engine replacement is indicated. The largest uncertainty is measured semantic
 reliability under the chosen model and budget, not whether Zig can represent the
@@ -768,27 +1205,33 @@ All are feasible in principle; none should be hidden inside a prompt cleanup.
    policy responsibilities separate. Measure projection and family-purpose changes
    independently so semantic improvements and record/call growth remain attributable.
    R3's resolved projection is complete, with the narrow live observation recorded
-   above; R4's family-purpose work remains open. These implementation steps can
-   progress while separate acceptance decisions are pending; generalized claims
-   of live improvement still require the declared, approved comparison.
-3. **Decide traceability precision using the observed gap.** Keep current lineage
+   above; R4's shared meanings and the requiredness/source-collection follow-ups
+   are complete with regression coverage preserving existing authority.
+   Generalized claims of live improvement still require the declared, approved
+   comparison.
+3. **R10 typed blocking is implemented.** The existing native guard now returns
+   missing-role and producer evidence before authoring, verified across unrelated
+   sources. Measure its live behavior separately from R4. Any automatic upstream
+   correction still needs an explicit authorization and allowance contract; it is
+   not part of the selected blocking behavior.
+4. **Decide traceability precision using the observed gap.** Keep current lineage
    machinery. If group-level attribution is insufficient, amend the binding/selection
    contract and update its complete consumer surface together; do not add metadata
    that only makes broad attribution look more precise. Scope the confirmed answer
    lifecycle gap separately; it is required for full clarification recovery, not
    for diagnosing the already observed no-answer budget failure.
-4. **Decide workload and disputed-premise changes separately.** Approve a concrete
+5. **Decide workload and disputed-premise changes separately.** Approve a concrete
    focused-review amendment before implementing production grouping; preserve
    per-member findings, correction scope and retry identity. Add no reassessment
    call until its authority and stable limit are explicitly approved. Prefer better
    generation and assignment interpretation before more review layers. Stop a
    proposed extension that fails its declared semantic/cost comparison; do not
    weaken required coverage to obtain a pass.
-5. **Complete the applicable lifecycle and diagnostic work.** If claiming full
+6. **Complete the applicable lifecycle and diagnostic work.** If claiming full
    answer-supported Spec execution, demonstrate authenticated answer acceptance
    through generation and readback, including source refresh and invalidation.
    Handle shared operational-cause changes as their own reviewed contract change.
-6. **Complete layered verification and approved live acceptance.** Use the current
+7. **Complete layered verification and approved live acceptance.** Use the current
    repository build steps, preserve separate unit/integration/live layers, and then
    run the explicitly approved E2E cases with actual publication and rubric evidence.
    Record failures and unresolved quality decisions without substituting another
@@ -807,6 +1250,7 @@ those records does not establish live acceptance or approve their proposals.
 | Boundary | Accepted cases | Rejected/unresolved cases and required distinction |
 | --- | --- | --- |
 | Native source binding and lineage | Legitimate one-to-many/many-to-one groups; precise existing occurrences; exact and passive text. | Foreign/stale claims, invalid spans, changed source state, fabricated associations and unsupported reassociation. Valid broad links with distorted prose remain semantic negatives. |
+| Role-coverage handoff (R10) | Complete eligible coverage across one or several groups; unchanged repaired/upstream paths re-enter the same check. | Every missing role and unassigned coverage ends typed `blocked`; stale/foreign evidence remains an error, ineligible groups do not count. No authoring/default assignment, retry or internal-gap clarification. Retain state, revision, role producer and eligible groups after source release. Any future correction route needs separate authorization/exhaustion tests. |
 | Production trace precision | Real binding/parsing/readback/rendering under the current group-attribution contract; narrower support only after an approved change. | Directly constructing ideal test provenance proves neither production precision nor a violation of the accepted broad-binding contract. Include omitted meaning with apparently complete link coverage. |
 | Clarification answer lifecycle | Authenticated close, durable response before refresh, exact protected bytes, current applicability, response-owned passive text and answer-supported generation/readback. | Unauthenticated/empty close, stale/foreign response or revision, changed source/policy and unsafe applicability. Prebuilt recorded-answer preservation does not demonstrate acceptance and resolution. |
 | Review projection | Scalars, records with necessary siblings, collections, entity applicability and cross-requirement dependencies. | Internal identities treated as business text; source instructions leaking into policy review; stale/foreign assignments; accidental loss of required context. |
@@ -823,7 +1267,7 @@ The repository-owned targeted steps include `test-specification-generation`,
 `test-architecture` and `lint`, followed by the applicable full `verify` and native
 packaging checks. Discover current commands from `build.zig`. No such test was
 executed during the original documentation review or this retained-run analysis;
-the separate R3 implementation verification is recorded above.
+the subsequent R3, R4 and R10 implementation verification is recorded above.
 
 The two live case commands in the handoff exist, but no invocation is authorized
 by this document. Isolated live comparisons require a bounded approval under
@@ -835,12 +1279,15 @@ scripted integration results remain distinct evidence.
 
 The handoff is a useful direction for the next iteration and explicitly calls for
 reuse of existing provenance and repair owners. Distinguish those implemented
-protections from unresolved precision and semantic reliability gaps. Complete the
-record-family scope, define the claimed source-association precision and settle
-the applicable acceptance and disputed-premise decisions. R3 has resolved the
-policy projection defect; shared purpose clarity and complete workload feasibility
-remain. Neither requires replacing the generic engine or inventing another
-authority system.
+protections from unresolved precision and semantic reliability gaps. R3 resolves
+the policy projection defect, and R4 supplies shared purposes for every existing
+record family, aggregate requiredness and explicit reviewed collections. R10
+makes incomplete authoring roles an explicit blocked result with producer evidence.
+Any automatic upstream correction requires its own bounded policy. Define the
+claimed source-association precision and settle the applicable acceptance and
+disputed-premise decisions. Semantic calibration and
+complete workload feasibility remain; they do not require replacing the generic
+engine or inventing another authority system.
 
 The completed clarification audit adds a separate implementation gap: production
 Spec execution does not accept and apply newly submitted answers. Preserve its
@@ -876,6 +1323,34 @@ test execution or new live invocation were needed for this evidence analysis.
 All 101 local links, including 73 heading/line anchors, and `git diff --check`
 passed for this update.
 
+**R4 live-result analysis — 9 October:** inspected the 08:34 run and immediate
+07:59 baseline, compared captured case/configuration/resources and model settings,
+verified shared purposes in actual generation/source requests, recomputed stage
+usage and subject counts, and traced missing-family validation and omission
+authorization against the accepted contracts and existing negative tests. The
+observed coverage regression and early stop establish no improved completion or
+budget feasibility. This analysis changes only FIX01, preserves the staged R4
+implementation, and performs no code changes, test execution or new live call.
+All 119 local documentation targets, including 80 heading/line anchors, and
+`git diff --check` / `git diff --cached --check` passed.
+
+**R10 evidence update — 9 October:** compared the 09:07 and 08:34 retained cases,
+resources, request/response bytes and usage; traced role admission, readiness,
+initialization and cause loss against §17.3 and existing missing-role tests.
+Independent read-only review checked attribution and policy limits. This update
+changes only FIX01 and preserves all staged implementation changes. No code tests
+or live executions were run for this documentation task.
+All 135 local links, including 88 heading/line anchors, and `git diff --check` /
+`git diff --cached --check` passed.
+
+**R10 post-implementation live-result analysis — 9 October:** inspected the
+11:53 report, all eight captured exchanges, provider explanation, 230 step events
+and terminal diagnostic; compared case/configuration/resources and reached
+requests against 09:07; and checked coverage ownership, admission and YAML
+termination. Only this document changed during the analysis. No new live run or
+code-test invocation was needed; the implementation verification above remains
+historical evidence for the preceding code change.
+
 ## 8. Outstanding scope preserved during cleanup
 
 The following work from the older records is not completed by the implemented
@@ -891,8 +1366,8 @@ beyond the projection and semantic-quality work above.
 
 Optional provider-diagnosis, reasoning-setting and principle-passage experiments
 remain historical proposals. They are not current implementation tasks or live
-authorizations. Existing R1–R9 and §6 retain the unresolved clarification,
-publication, calibration, workload and live repeatability requirements.
+authorizations. Existing R1–R10 and §6 retain the unresolved clarification,
+role-coverage, publication, calibration, workload and live repeatability requirements.
 
 **Cleanup validation — 9 October 2026:** checked repository Markdown links against
 the pre-move baseline; no new unavailable targets. FIX01's 98 local links and 76

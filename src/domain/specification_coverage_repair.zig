@@ -9,6 +9,7 @@ const p = @import("specification_provenance.zig");
 const r = @import("reference_reconciliation.zig");
 const shared = @import("atomic_repair.zig");
 const authority = @import("required_authority.zig");
+const descriptions = @import("required_authority_description.zig");
 const retry = @import("workflow_retry.zig");
 const RepairSubject = union(enum) { token: coverage.TokenSubject, requirement: authority.Id };
 pub const Support = struct { inputs: authority.Inputs, observations: authority.Observations, result: authority.Result };
@@ -203,7 +204,11 @@ pub fn omissionPacket(a: std.mem.Allocator, current: sessions.Session, context: 
         const selected = authorization.target.part.value;
         break :allowed try effectiveTarget(a, current.units[authorization.target.unit].?, selected.subject, selected.field);
     } else null;
-    const base = try sessions.packetForChoices(a, current, context, authorization.target.unit, allowed);
+    const task = if (authorization.target.part == .record)
+        try descriptions.record(arena.allocator(), try omissionRecordKind(authorization.rule.omission.requirement))
+    else
+        try descriptions.task(arena.allocator(), authorization.rule.omission.requirement);
+    const base = try sessions.packetForOptions(a, current, context, authorization.target.unit, .{ .exact_claims = allowed, .task = task });
     defer packets.release(base);
     const contextual = try packets.withContext(g.spec.IdentifiedContent, a, base, "candidate", candidate);
     defer packets.release(contextual);

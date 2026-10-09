@@ -81,6 +81,12 @@ routes through source review and the authority gate.
 
 ## Specification generation and review
 
+Native generation initialization checks all authoring roles before the first
+authoring request. Incomplete coverage ends `blocked`, retaining the missing roles,
+reference state/revision, role-selection request origin and eligible groups in the
+shared candidate diagnostic. It adds no model call, automatic role assignment or
+correction allowance. Source readiness remains a separate structural check.
+
 Generation runs **brief → primary user story → entities → record groups**.
 After assembly and deterministic coverage validation, source review runs before
 applicable principle review. Each review request assesses one native subject;

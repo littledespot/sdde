@@ -108,11 +108,7 @@ pub const GenerationRole = enum {
     pub fn purpose(self: GenerationRole, allocator: std.mem.Allocator) @import("required_authority.zig").Error![]const u8 {
         const authority = @import("required_authority.zig");
         const descriptions = @import("required_authority_description.zig");
-        if (self == .records) {
-            const requirements = try descriptions.task(allocator, .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .functional_requirements });
-            const criteria = try descriptions.task(allocator, .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .acceptance_criteria });
-            return std.fmt.allocPrint(allocator, "{s} {s}", .{ requirements, criteria });
-        }
+        if (self == .records) return descriptions.records(allocator);
         const slot: authority.Slot = switch (self) {
             .title => .display_name,
             .description => .description,

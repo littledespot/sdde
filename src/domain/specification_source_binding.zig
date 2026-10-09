@@ -7,6 +7,17 @@ const spec = @import("specification.zig");
 const evidence = @import("reference_evidence.zig");
 
 pub const Error = r.Error || spec.Error || error{InvalidSpecificationBinding};
+pub const MissingRoles = std.enums.EnumSet(r.GenerationRole);
+pub const EligibleSignal = struct { signal_id: r.SignalId, claim_ids: []const r.ClaimId };
+/// An observed binding gap, never authority to assign a role or retry a model.
+pub const Rejection = struct {
+    state_id: evidence.identity.StateId,
+    partition_id: r.PartitionId,
+    revision: u64,
+    origin: ?@import("model_candidate_origin.zig").Origin,
+    missing_roles: []const r.GenerationRole,
+    eligible_signals: []const EligibleSignal,
+};
 pub const Unit = union(enum) { brief, primary_user_story, entities, records };
 pub const Bound = union(enum) {
     brief: struct { title: spec.Selection, description: spec.Selection, primary_goal: spec.Selection },
@@ -126,18 +137,11 @@ pub fn forUnit(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inp
     };
 }
 
-/// Validate role coverage and stale or ineligible groups before any model call.
-pub fn validate(records: refs.Records, inputs: evidence.Inputs) Error!void {
+/// The single native coverage check for authoring and canonical readback.
+/// Invalid evidence is an error; a valid but incomplete assignment is a gap.
+pub fn missingRoles(records: refs.Records, inputs: evidence.Inputs) Error!MissingRoles {
     if (!records.items.state_id.eql(inputs.corpus.state_id)) return error.InvalidSpecificationBinding;
-    inline for (std.meta.tags(r.GenerationRole)) |role| {
-        var found = false;
-        for (records.signals) |signal| if (hasRole(signal, role)) {
-            if (!try activeSignal(records, signal)) continue;
-            found = true;
-            break;
-        };
-        if (!found) return error.InvalidSpecificationBinding;
-    }
+    var covered: MissingRoles = .initEmpty();
     for (records.signals) |signal| {
         if (signal.value.generation_roles.len == 0) continue;
         if (signal.value.claim_ids.len == 0) return error.InvalidSpecificationBinding;
@@ -147,5 +151,36 @@ pub fn validate(records: refs.Records, inputs: evidence.Inputs) Error!void {
             const item = try r.item(records.items, id);
             _ = evidence.resolve(inputs, .{ .state_id = records.items.state_id, .chunk_id = item.claim.chunk_id }) catch return error.InvalidSpecificationBinding;
         }
+        for (signal.value.generation_roles) |role| covered.insert(role);
     }
+    return covered.complement();
+}
+
+/// Persisted authority requires complete coverage; it cannot retain a gap.
+pub fn validate(records: refs.Records, inputs: evidence.Inputs) Error!void {
+    if ((try missingRoles(records, inputs)).count() != 0) return error.InvalidSpecificationBinding;
+}
+
+pub fn rejection(a: std.mem.Allocator, references: r.Accounted, missing: MissingRoles) Error!Rejection {
+    if (missing.count() == 0) return error.InvalidSpecificationBinding;
+    const records = refs.records(references);
+    const prior = references.records.assignments.checked.prior.prior;
+    const roles = try a.alloc(r.GenerationRole, missing.count());
+    errdefer a.free(roles);
+    var iterator = missing.iterator();
+    var index: usize = 0;
+    while (iterator.next()) |role| : (index += 1) roles[index] = role;
+    var eligible: std.ArrayList(EligibleSignal) = .empty;
+    errdefer eligible.deinit(a);
+    for (records.signals) |signal| if (try activeSignal(records, signal)) {
+        try eligible.append(a, .{ .signal_id = signal.id, .claim_ids = signal.value.claim_ids });
+    };
+    return .{
+        .state_id = records.items.state_id,
+        .partition_id = prior.input.partition.id,
+        .revision = prior.source.revision,
+        .origin = prior.source.at(.signals, .relationship),
+        .missing_roles = roles,
+        .eligible_signals = try eligible.toOwnedSlice(a),
+    };
 }

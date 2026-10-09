@@ -32,11 +32,15 @@ pub fn unit(index: usize) error{InvalidSpecificationUnit}!g.Unit {
     };
 }
 
-pub fn initialize(feature: @import("feature_identity.zig").FeatureId, context: p.Context) Error!Session {
+pub const Initialization = union(enum) { ready: Session, blocked: binding.Rejection };
+
+pub fn initialize(a: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, context: p.Context) Error!Initialization {
     if (@import("feature_identity.zig").FeatureId.parse(feature.bytes) == null or !p.generationReady(context.references)) return error.InvalidSpecificationUnit;
     _ = try p.items(context);
-    try binding.validate(@import("reference_support.zig").records(context.references), context.inputs);
-    return .{ .feature = feature, .reference_state = context.inputs.corpus.state_id, .record_group_count = try binding.recordCount(@import("reference_support.zig").records(context.references)) };
+    const records = @import("reference_support.zig").records(context.references);
+    const missing = try binding.missingRoles(records, context.inputs);
+    if (missing.count() != 0) return .{ .blocked = try binding.rejection(a, context.references, missing) };
+    return .{ .ready = .{ .feature = feature, .reference_state = context.inputs.corpus.state_id, .record_group_count = try binding.recordCount(records) } };
 }
 
 pub fn currentBinding(a: std.mem.Allocator, current: Session, context: p.Context) Error!binding.Bound {
@@ -64,12 +68,24 @@ pub fn packet(allocator: std.mem.Allocator, current: Session, context: p.Context
     return packetFor(allocator, current, context, current.completed);
 }
 pub fn packetFor(allocator: std.mem.Allocator, current: Session, context: p.Context, index: usize) Error!*packets.Packet {
-    return packetForChoices(allocator, current, context, index, null);
+    return packetForOptions(allocator, current, context, index, .{});
 }
 
+pub const PacketOptions = struct {
+    exact_claims: ?[]const @import("reference_reconciliation.zig").ClaimId = null,
+    task: ?[]const u8 = null,
+};
+
+/// Present the aggregate contract without imposing a floor on each source group.
+const RecordRequirements = struct {
+    scope: enum { assembled_specification } = .assembled_specification,
+    required_families: []const g.spec.Kind = &g.spec.required_record_families,
+};
+
 /// Repair retains all source claims but offers exact-copy choices only from the
-/// bound owning unit. Initial generation passes null and offers current claims.
-pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context: p.Context, index: usize, allowed: ?[]const @import("reference_reconciliation.zig").ClaimId) Error!*packets.Packet {
+/// bound owning unit. Its task replaces the broad records purpose while retaining
+/// the source binding. Completed units receive only their authorized repair task.
+pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context: p.Context, index: usize, options: PacketOptions) Error!*packets.Packet {
     if (!current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
     const all = try p.items(context);
     var arena: std.heap.ArenaAllocator = .init(allocator);
@@ -77,7 +93,10 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
     const a = arena.allocator();
     // Completed units are repaired under an atomic target and its evidence.
     // Their authoring cursor no longer selects a current source assignment.
-    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(index), current.record_cursor));
+    var assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(index), current.record_cursor));
+    if (options.task) |task| if (assigned) |*value| {
+        if (value.* == .records) value.records.purpose = task;
+    };
     var claims: std.ArrayList(@import("reference_reconciliation.zig").Item) = .empty;
     var scopes: std.ArrayList(@import("reference_evidence.zig").Scope) = .empty;
     for (context.references.records.assignments.checked.prior.prior.dispositions) |disposition| {
@@ -90,9 +109,9 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
     var exact_choices: std.ArrayList(@import("model_evidence.zig").Token) = .empty;
     for (projected.preserved_tokens) |token| {
         if (!p.permitsExactKind(token.kind)) continue;
-        if (allowed == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, allowed.?, token.claim_id)) try exact_choices.append(a, token);
+        if (options.exact_claims == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, options.exact_claims.?, token.claim_id)) try exact_choices.append(a, token);
     }
-    const offered_scopes = if (allowed) |ids|
+    const offered_scopes = if (options.exact_claims) |ids|
         (@import("reference_support.zig").select(a, all, context.inputs, ids) catch |err| switch (err) {
             error.InvalidReferenceState => return error.InvalidSpecificationUnit,
             else => |other| return other,
@@ -117,6 +136,11 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
         .records => "records",
     } });
     defer packets.release(result);
+    if (options.task) |task| if (assigned == null) {
+        const contextual = try packets.withContext([]const u8, allocator, result, "task", task);
+        packets.release(result);
+        result = contextual;
+    };
     // Only dependent units receive earlier drafts. The evidence catalogue and
     // native dependency snapshots remain complete for generation and repair.
     switch (selected) {
@@ -132,6 +156,11 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
     const input = @import("reference_model_input.zig");
     const passive_ids = try input.passiveIds(a, payload.passive_literals);
     if (selected == .records) {
+        if (assigned != null and options.task == null) {
+            const contextual = try packets.withContext(RecordRequirements, allocator, result, "record_requirements", .{});
+            packets.release(result);
+            result = contextual;
+        }
         const entities = current.units[2] orelse return error.InvalidSpecificationUnit;
         if (entities.unit != .entities or entities.response != .content or entities.response.content != .entities) return error.InvalidSpecificationUnit;
         const contextual = try packets.withContext(@TypeOf(entities.response.content.entities), allocator, result, "entities", entities.response.content.entities);

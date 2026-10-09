@@ -1,6 +1,84 @@
 //! Shared presentation of registered requirements; no requiredness or routing policy.
 const std = @import("std");
 const a = @import("required_authority.zig");
+const spec = @import("specification.zig");
+
+/// Business meanings shared by authoring and review; no applicability or verdict.
+pub fn recordFamily(kind: spec.Kind) []const u8 {
+    return switch (kind) {
+        .acceptance_criterion => "An observable pass/fail flow with a precondition, trigger and expected result.",
+        .user_visible_outcome => "A result, confirmation or response directly observable by the user.",
+        .edge_case => "A boundary or exceptional condition and its expected outcome.",
+        .functional_requirement => "Required application behavior, preserving its trigger, conditions and obligation strength.",
+        .business_rule => "A rule or constraint governing business decisions or outcomes.",
+        .assumption => "A supported premise on which the described behavior depends.",
+        .non_goal => "Behavior explicitly excluded from the feature's scope.",
+        .prohibited_behavior => "An action or behavior that must not occur.",
+        .entity => "A business data concept with its meaning and relationships.",
+    };
+}
+
+pub fn recordField(kind: spec.Kind, slot: a.Slot) a.Error![]const u8 {
+    if (!a.recordField(kind, slot)) return error.InvalidRequiredAuthority;
+    return switch (slot) {
+        .text => recordFamily(kind),
+        .given => "The precondition under which the behavior applies.",
+        .when => "The triggering action or event.",
+        .then, .expected_outcome => "The observable result, preserving conditions and obligations.",
+        .condition => "The boundary or exceptional condition.",
+        .name => "The business entity's name.",
+        .business_meaning => "The entity's business purpose.",
+        .relationship => "The business relationship to another entity, including its meaning.",
+        else => unreachable,
+    };
+}
+
+pub fn recordTask(allocator: std.mem.Allocator, kind: spec.Kind, slot: a.Slot) a.Error![]const u8 {
+    const field = try recordField(kind, slot);
+    if (slot == .text) return std.fmt.allocPrint(allocator, "{s}.{s}: {s}", .{ @tagName(kind), @tagName(slot), field });
+    return std.fmt.allocPrint(allocator, "{s}: {s} {s}: {s}", .{ @tagName(kind), recordFamily(kind), @tagName(slot), field });
+}
+
+/// Present a whole family for generation or a whole-record replacement.
+pub fn record(allocator: std.mem.Allocator, kind: spec.Kind) a.Error![]const u8 {
+    var result: std.ArrayList(u8) = .empty;
+    errdefer result.deinit(allocator);
+    try result.appendSlice(allocator, @tagName(kind));
+    try result.appendSlice(allocator, ": ");
+    try result.appendSlice(allocator, recordFamily(kind));
+    inline for (comptime std.meta.tags(spec.Kind)) |family| {
+        if (kind == family) {
+            inline for (@typeInfo(@FieldType(spec.Content(spec.BusinessValue), @tagName(family))).@"struct".fields) |field| {
+                const slot: a.Slot = @field(a.Slot, if (std.mem.eql(u8, field.name, "relationships")) "relationship" else field.name);
+                // A text-only family's definition already describes its sole field.
+                if (slot != .text) {
+                    try result.appendSlice(allocator, " ");
+                    try result.appendSlice(allocator, field.name);
+                    try result.appendSlice(allocator, ": ");
+                    try result.appendSlice(allocator, try recordField(kind, slot));
+                }
+            }
+        }
+    }
+    return result.toOwnedSlice(allocator);
+}
+
+pub fn records(allocator: std.mem.Allocator) a.Error![]const u8 {
+    return recordsFor(allocator, std.meta.tags(spec.Kind));
+}
+
+pub fn recordsFor(allocator: std.mem.Allocator, kinds: []const spec.Kind) a.Error![]const u8 {
+    var result: std.ArrayList(u8) = .empty;
+    errdefer result.deinit(allocator);
+    for (kinds) |kind| {
+        const description = try record(allocator, kind);
+        defer allocator.free(description);
+        if (result.items.len != 0) try result.appendSlice(allocator, "\n");
+        try result.appendSlice(allocator, description);
+    }
+    return result.toOwnedSlice(allocator);
+}
+
 pub fn question(allocator: std.mem.Allocator, id: a.Id) a.Error![]const u8 {
     if (a.policy(id) == null) return error.InvalidRequiredAuthority;
     if (id.unit == .feature) return switch (id.slot) {
@@ -26,23 +104,13 @@ pub fn task(allocator: std.mem.Allocator, id: a.Id) a.Error![]const u8 {
             .description => "A description of intended user-visible behavior.",
             .primary_goal => "The intended user benefit derived from the source-backed behavior and outcome.",
             .primary_user_story => "One narrative identifying a source-backed actor, action and intended result. The source need not use story format; preserve its conditions and obligations.",
-            .acceptance_criteria => "Observable pass/fail outcomes.",
-            .functional_requirements => "Required application behavior.",
+            .acceptance_criteria => recordFamily(.acceptance_criterion),
+            .functional_requirements => recordFamily(.functional_requirement),
             .scenario_coverage => "Source-required triggers, outcomes and exact copy.",
             .entities => "Whether source-backed behavior requires business entities or relationships. Behavior can support required or not_applicable without an explicit declaration of absence; displayed values alone do not establish entities.",
             else => error.InvalidRequiredAuthority,
         },
-        .record => |id_record| std.fmt.allocPrint(allocator, "{s} record, {s}: {s}", .{ @tagName(id_record.kind), @tagName(id.slot), switch (id.slot) {
-            .given => "The precondition under which the behavior applies.",
-            .when => "The triggering action or event.",
-            .then, .expected_outcome => "The observable result, preserving conditions and obligations.",
-            .condition => "The boundary or exceptional condition.",
-            .text => "The record's behavior or user-visible result.",
-            .name => "The business entity's name.",
-            .business_meaning => "The entity's business purpose.",
-            .relationship => "The relationship between business entities.",
-            else => return error.InvalidRequiredAuthority,
-        } }),
+        .record => |id_record| recordTask(allocator, id_record.kind, id.slot),
         .source => |source| std.fmt.allocPrint(allocator, "All meaningful facts in source {d} survive extraction and reconciliation, including identity, obligations, conditions and constraints. Preserve source uncertainty; assess loss, not whether specification fields can be generated.", .{source.ordinal}),
         .signal => |signal| std.fmt.allocPrint(allocator, "Source meaning preserved by signal {d}.", .{signal.ordinal}),
         .conflict => |conflict| std.fmt.allocPrint(allocator, "Source evidence and unresolved meaning of conflict {d}.", .{conflict.ordinal}),

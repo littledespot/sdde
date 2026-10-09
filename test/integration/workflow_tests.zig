@@ -1286,6 +1286,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         if (source_repair_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n" });
         if (reconciliation_scenario) switch (reconciliation_faults[scenario - reconciliation_start]) {
             .occupied_summary, .occupied_signals, .misbound_summary => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Display `Loan renewed!`.\n" }),
+            .unassigned_roles => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "MOCK borrower renews an eligible loan and sees its new deadline.\n" }),
             .misbound_signals => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "On startup display `Hello, World!` and the current UTC date and time.\n" }),
             .occupied_conflict => {
                 try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Renew the loan.\n" });
@@ -1476,7 +1477,8 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         const retained_repaired_source = reconciliation_scenario and (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition);
         const repaired_signal_coverage = driver.reconciliation_fault == .signal_coverage and driver.reconciliation_protocol_fault != .foreign_content_always;
         const review_scope_attack = fault != null and (fault.?.shape == .review_dropped or fault.?.shape == .review_changed);
-        const expected: workflow.OutcomeTag = if (membership_scenario) (if (driver.failed_repair) .failed else .ok) else if (principle_fault == .repeated or principle_fault == .alternating) .failed else if (applicability) |mode| switch (mode) {
+        const missing_roles = driver.reconciliation_fault == .missing_entity_role or driver.reconciliation_fault == .unassigned_roles;
+        const expected: workflow.OutcomeTag = if (missing_roles) .blocked else if (membership_scenario) (if (driver.failed_repair) .failed else .ok) else if (principle_fault == .repeated or principle_fault == .alternating) .failed else if (applicability) |mode| switch (mode) {
             .no_entities, .entities => .ok,
             .unjustified, .missing_decision, .missing_text => .needs_user,
             .inconclusive => .invalid,
@@ -1942,7 +1944,37 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             // Empty selections fail protocol admission. Persistent foreign
             // conflict handles exhaust without entering native reconciliation.
             const occupied = driver.reconciliation_fault == .occupied_conflict;
-            if (occupied) {
+            if (missing_roles) {
+                try std.testing.expect(result == .execution and result.execution == .blocked);
+                try std.testing.expect(diagnostic != null and diagnostic.? == .authoring_roles);
+                const gap = diagnostic.?.authoring_roles;
+                try std.testing.expectEqual(@as(usize, if (driver.reconciliation_fault == .missing_entity_role) 1 else std.meta.tags(@import("../../src/domain/reference_reconciliation.zig").GenerationRole).len), gap.missing_roles.len);
+                try std.testing.expect(std.mem.indexOfScalar(@import("../../src/domain/reference_reconciliation.zig").GenerationRole, gap.missing_roles, .entity_basis) != null);
+                try std.testing.expectEqual(@as(usize, 0), driver.generation_calls);
+                try std.testing.expectEqual(@as(usize, 0), driver.initial_source_review_calls);
+                try std.testing.expectEqual(@as(usize, 0), driver.candidate_review_calls);
+                try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
+                try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
+                try std.testing.expect(runner.repair_retry.currentPermit() == null);
+                const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+                try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
+                try std.testing.expectError(error.OperationExecutionFailed, @import("../../src/application/specification_workflow.zig").readSession(&view));
+                const accounted = (try @import("../../src/application/reference_extraction_workflow.zig").read(&view, @import("../../src/application/reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted)).payload().reconciliation_accounted;
+                const prior = accounted.records.assignments.checked.prior.prior;
+                try std.testing.expectEqualDeep(prior.source.at(.signals, .relationship).?, gap.origin.?);
+                try std.testing.expectEqualDeep(prior.input.progress.plan.layout.items.state_id, gap.state_id);
+                try std.testing.expectEqual(prior.source.revision, gap.revision);
+                try std.testing.expectEqual(prior.input.partition.id.ordinal, gap.partition_id.ordinal);
+                try std.testing.expect(gap.eligible_signals.len != 0);
+                const calls = runner.tokenLedger().accounted_operations.items;
+                const identities = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/model_request_workflow.zig").ledger_schema, @import("../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
+                var producer_found = false;
+                for (calls) |call| if (gap.origin.?.matches(identities, call.id)) {
+                    producer_found = true;
+                };
+                try std.testing.expect(producer_found);
+                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+            } else if (occupied) {
                 try std.testing.expect(diagnostic == null);
                 try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);

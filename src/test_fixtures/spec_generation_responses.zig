@@ -7,7 +7,7 @@ const g = @import("../domain/specification_generation.zig");
 const native = @import("../application/reference_extraction_workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
-pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text, occupied_summary, occupied_signals, occupied_conflict, permuted_disposition, permuted_conflict_disposition, misbound_summary, misbound_signals };
+pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text, occupied_summary, occupied_signals, occupied_conflict, permuted_disposition, permuted_conflict_disposition, misbound_summary, misbound_signals, missing_entity_role, unassigned_roles };
 pub const SupportFault = enum { inconclusive, missing_detail, foreign_source_single, foreign_sources, question_recover, question_exhaust, question_native_exhaust, question_mixed_exhaust, question_evidence_recover, question_evidence_exhaust, question_evidence_alternating };
 // Semantic outcomes remain scripted candidates, not native semantic proof.
 pub const Applicability = enum {
@@ -75,7 +75,7 @@ pub const Options = struct {
 };
 
 pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![]const u8 {
-    return partResponse(allocator, try requests.readCurrent(&view, requests.prepared_schema), try completeResponse(allocator, view, options));
+    return partResponse(allocator, try requests.readCurrent(&view, requests.prepared_schema), try completeResponse(allocator, view, options), options.reconciliation_fault);
 }
 
 fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Options) ![]const u8 {
@@ -266,7 +266,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const dispositions = try allocator.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
                 proposal.claim_dispositions = dispositions;
                 switch (fault) {
-                    .summary_membership, .summary_text, .occupied_summary, .misbound_summary => {},
+                    .summary_membership, .summary_text, .occupied_summary, .misbound_summary, .missing_entity_role, .unassigned_roles => {},
                     .misbound_signals => if (options.attempt == 1) {
                         const signals = try allocator.alloc(r.SignalProposal, proposal.signals.len + 1);
                         @memcpy(signals[0..proposal.signals.len], proposal.signals);
@@ -844,7 +844,7 @@ fn extractedClaim(allocator: std.mem.Allocator, chunk: r.evidence.identity.Chunk
 /// The scripted complete source remains one fixture; each provider call gets
 /// only its configured fields. Protocol faults are injected afterward
 /// by Driver, so this projection cannot repair or conceal a malformed response.
-fn partResponse(allocator: std.mem.Allocator, request: *const @import("../domain/model_request_handoff.zig").Request, body: []const u8) ![]const u8 {
+fn partResponse(allocator: std.mem.Allocator, request: *const @import("../domain/model_request_handoff.zig").Request, body: []const u8, fault: ?ReconciliationFault) ![]const u8 {
     const part = request.part() orelse {
         const bound = request.packet() orelse return body;
         const definition = bound.resultDefinition() orelse return body;
@@ -902,11 +902,12 @@ fn partResponse(allocator: std.mem.Allocator, request: *const @import("../domain
                 var assignments: std.array_list.Managed(std.json.Value) = .init(allocator);
                 var first = true;
                 for (groups) |group| {
+                    if (fault == .unassigned_roles) continue;
                     const content = group.object.get("value").?.object.get("content").?.object;
                     if (!std.mem.eql(u8, content.get("kind").?.string, "model") or !std.mem.eql(u8, content.get("model").?.object.get("kind").?.string, "business")) continue;
                     var assignment: std.json.ObjectMap = .{};
                     try assignment.put(allocator, "signal_id", group.object.get("signal_id").?);
-                    const roles = (try std.json.parseFromSlice(std.json.Value, allocator, if (first) "[\"title\",\"description\",\"primary_goal\",\"primary_user_story\",\"entity_basis\",\"records\"]" else "[\"records\"]", .{})).value;
+                    const roles = (try std.json.parseFromSlice(std.json.Value, allocator, if (first) (if (fault == .missing_entity_role) "[\"title\",\"description\",\"primary_goal\",\"primary_user_story\",\"records\"]" else "[\"title\",\"description\",\"primary_goal\",\"primary_user_story\",\"entity_basis\",\"records\"]") else "[\"records\"]", .{})).value;
                     first = false;
                     try assignment.put(allocator, "generation_roles", roles);
                     try assignments.append(.{ .object = assignment });

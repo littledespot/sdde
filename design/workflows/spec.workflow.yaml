@@ -744,7 +744,7 @@ subgraphs:
     steps:
       initialize-specification:
         use: initialize-specification-generation
-        on: {ok: brief, failed: end.failed}
+        on: {ok: brief, blocked: end.blocked, failed: end.failed}
       brief:
         call: generate-unit
         with: {prompt: generation-prompt}

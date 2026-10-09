@@ -27,6 +27,11 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
         if (value.payload().* == .reconciliation_rejected) return .{ .reconciliation = value.payload().reconciliation_rejected };
     }
     const spec = @import("specification_workflow.zig");
+    if (view.contains(spec.session_schema.key)) {
+        const storage = @import("specification_values.zig").storage;
+        const value = storage.payload(try values.read(view, spec.session_schema, storage.Value));
+        if (value.* == .binding_rejected) return .{ .authoring_roles = value.binding_rejected };
+    }
     if (view.contains(spec.checked_schema.key)) {
         const storage = @import("specification_values.zig").storage;
         const value = storage.payload(try values.read(view, spec.checked_schema, storage.Value));
