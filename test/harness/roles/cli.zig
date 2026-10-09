@@ -4,12 +4,12 @@ const files = @import("../files.zig");
 const score = @import("score.zig");
 const report = @import("report.zig");
 const debug = @import("../../../src/domain/request_debugger.zig");
-const ports = @import("../../../src/ports/request_replay.zig");
 const codec = @import("../../../src/domain/model_candidate_json.zig");
 const packets = @import("../../../src/domain/model_input_packet.zig");
 const directory = @import("../../../src/adapters/filesystem/directory_access.zig");
 const store_module = @import("../../../src/adapters/filesystem/request_debugger_store.zig");
 const provider_module = @import("../../../src/adapters/provider/request_replay.zig");
+const diagnostic_binding = @import("../diagnostic_binding.zig");
 pub const Options = struct {
     cohort: []const u8,
     output: []const u8,
@@ -92,16 +92,6 @@ pub fn roleInput(a: std.mem.Allocator, description: debug.Description) !@import(
     }
     return input;
 }
-const Authorization = struct {
-    binding: debug.Description,
-    fn authorize(context: *ports.Context, value: debug.Description) ports.Error!void {
-        const self: *Authorization = @ptrCast(@alignCast(context));
-        const expected = self.binding;
-        // Explicit diagnostic binding, not an imported workflow capability.
-        if (!std.mem.eql(u8, value.provider, expected.provider) or !std.mem.eql(u8, value.model, expected.model) or !std.meta.eql(value.provider_config, expected.provider_config) or
-            !std.meta.eql(value.controls, expected.controls) or !debug.sameOptional(value.reasoning_effort, expected.reasoning_effort) or value.response_mode != expected.response_mode or value.operation_kind != .inference) return error.ReplayUnauthorized;
-    }
-};
 pub fn responseFailure(a: std.mem.Allocator, response: debug.ResponseRecord) !?[]const u8 {
     if (response.outcome != .received) return response.diagnostic orelse @tagName(response.outcome);
     if (response.status != 200) return try std.fmt.allocPrint(a, "HTTP-{d}", .{response.status orelse 0});
@@ -136,15 +126,6 @@ pub fn capturedDescription(a: std.mem.Allocator, binding: debug.Description, gui
     defer packets.release(restricted);
     return controlledDescription(a, binding, restricted, guidance, canonical);
 }
-pub fn validateBinding(binding: debug.Description) !void {
-    if (binding.provider_config != .aws_bedrock) return error.InvalidEvaluationContract;
-    const identities = @import("../../../src/domain/llm_provider_identity.zig");
-    const provider = identities.ProviderId.parse(binding.provider) orelse return error.InvalidEvaluationContract;
-    const model = identities.ModelId.parse(binding.model) orelse return error.InvalidEvaluationContract;
-    const supported = @import("../../../src/composition/provider_model_contracts.zig").registry.resolve(provider, model) orelse return error.InvalidEvaluationContract;
-    if (!supported.acceptsConfig(binding.provider_config) or !supported.capabilities.supports(binding.response_mode, binding.controls) or
-        !@import("../../../src/domain/llm_provider_contracts.zig").supportsReasoningEffort(supported.supported_reasoning_efforts, binding.reasoning_effort)) return error.InvalidEvaluationContract;
-}
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const a = init.arena.allocator();
@@ -163,7 +144,7 @@ pub fn main(init: std.process.Init) !void {
     const binding_call = try captured(io, a, options.binding);
     const binding = binding_call.description.?;
     _ = try roleInput(a, binding);
-    try validateBinding(binding);
+    try diagnostic_binding.validateBinding(binding);
     var parser: @import("../../../src/adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const compiled = try parser.compiler().compile(a, try files.read(io, a, .cwd(), "design/workflows/spec/reconciliation.schema.json"));
     const canonical = compiled.select(.{ .bytes = "roles_assignment" }) orelse return error.InvalidEvaluationContract;
@@ -209,13 +190,13 @@ pub fn main(init: std.process.Init) !void {
     const run = try @import("../e2e/run_directory.zig").Run.create(io, output);
     defer run.close(io);
     var store: store_module.Store = .{ .io = io, .feature = run.dir };
-    var authority: Authorization = .{ .binding = binding };
+    var authority: diagnostic_binding.Authorization = .{ .binding = binding };
     var clock: @import("../../../src/adapters/system/provider_operation_clock.zig").Adapter = .{ .io = io };
     var transport: @import("../../../src/adapters/provider/bedrock_http.zig").Adapter = .{ .io = io, .clock = clock.clock(), .runtime = .{} };
     var environment: std.process.Environ.Map = .init(a);
     defer environment.deinit();
     if (options.live) try environment.put("AWS_BEARER_TOKEN_BEDROCK", try @import("../environment.zig").credential(init.environ_map, .bedrock_invoke));
-    var provider: provider_module.Adapter = .{ .authorization = .{ .context = @ptrCast(&authority), .authorize_fn = Authorization.authorize }, .environment = &environment, .transport = transport.port(), .clock = clock.clock(), .compiler = parser.compiler() };
+    var provider: provider_module.Adapter = .{ .authorization = .{ .context = @ptrCast(&authority), .authorize_fn = diagnostic_binding.Authorization.authorize }, .environment = &environment, .transport = transport.port(), .clock = clock.clock(), .compiler = parser.compiler() };
     const service: @import("../../../src/application/request_replay.zig").Service = .{ .provider = provider.provider(), .store = store.port() };
     const variants: usize = if (candidate != null) 2 else 1;
     const allowance = try std.math.mul(u64, try std.math.mul(u64, cases.items.len, options.repeats), variants);

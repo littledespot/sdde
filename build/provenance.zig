@@ -17,7 +17,7 @@ pub const Bundle = struct {
     complete: bool,
     compiler: []const u8 = @import("builtin").zig_version_string,
 };
-const roots = [_][]const u8{ "build_provenance.zig", ".zigversion", "build.zig", "build.zig.zon", "integration.zig", "role_calibration.zig", "build", "src", "test", "design", "scripts", "e2e.zig", "harness.zig", "tests.zig" };
+const roots = [_][]const u8{ "build_provenance.zig", ".zigversion", "build.zig", "build.zig.zon", "integration.zig", "role_calibration.zig", "build", "src", "test", "design", "scripts", "e2e.zig", "e2e_call.zig", "harness.zig", "tests.zig" };
 
 pub fn main(init: std.process.Init) !void {
     const a = init.arena.allocator();

@@ -177,8 +177,8 @@ pub const Trace = struct {
             errdefer self.store.allocator.free(request_step);
             try self.call_records.append(self.store.allocator, .{ .origin = origin, .step = request_step });
         }
-        const context = try std.json.Stringify.valueAlloc(self.store.allocator, .{
-            .schema = "model-call-evidence/v1",
+        const context = try std.json.Stringify.valueAlloc(self.store.allocator, @import("call_context.zig").CallContext{
+            .schema = .@"model-call-evidence/v1",
             .call = self.calls,
             .origin = origin,
             .request_step = request.binding_id.operation_id.workflow_step_id.bytes,

@@ -3,6 +3,10 @@ const c = @import("contracts.zig");
 const judgment = @import("judgment.zig");
 const packet = @import("packet.zig");
 test {
+    _ = @import("call/tests.zig");
+    _ = @import("call/capture_test.zig");
+    _ = @import("call/report_test.zig");
+    _ = @import("diagnostic_binding_test.zig");
     _ = @import("roles/tests.zig");
     _ = @import("records/tests.zig");
     _ = @import("signals/tests.zig");

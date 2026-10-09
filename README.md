@@ -203,6 +203,27 @@ The launcher requires an explicit case and loads the checkout's optional
 specification; it cannot establish engine-generation success. Neither harness
 ships with the production executable.
 
+To test one captured generation request, use the separate
+[call diagnostic](design/harness/e2e.md#test-one-captured-call) with an explicit
+retained run, workflow ID, physical call ordinal, registered model and reasoning
+effort:
+
+```sh
+./scripts/e2e-call.sh \
+  --run 'zig-out/e2e-spec/<UTC-date-time>-<unique-id>' \
+  --workflow spec-generation --call 1 \
+  --model openai.gpt-oss-20b-1:0 --reasoning-effort high --repeats 3
+```
+
+Replace the run placeholder with a real capture; the command never selects the
+latest run automatically. Each repeat sends one request, with no automatic retry,
+repair, workflow execution, publication or grading. It preserves source captures
+and saves protocol/schema inspection and usage beneath `zig-out/e2e-call/`;
+semantic quality is not assessed. The launcher shares `.env.e2e` setup with
+`e2e-spec.sh`; `--help` and offline builds make no API calls. Live diagnostics
+require explicit approval for the selected calls and repeat count. They do not
+establish full-workflow E2E acceptance or change browser replay behavior.
+
 The separate [authoring-role calibration](test/calibration/authoring-roles/README.md)
 uses `zig build calibrate-roles` to prepare explicit controlled/captured assignment
 comparisons without API calls. Human-reviewed labels and bounded approval precede

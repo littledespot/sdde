@@ -41,6 +41,87 @@ separate sources and rubrics and reference the same workflow/model configuration
 - Direct `zig build e2e-spec` requires explicit shell environment setup, such as
   `. ./.env.e2e`.
 
+## Test one captured call
+
+`e2e-call` is a development diagnostic within the E2E harness. It selects one
+captured generation call from an explicitly supplied prior E2E run and sends that
+request with an explicit registered model and reasoning effort. The full workflow
+command above remains the generation, publication and rubric-evaluation path.
+
+After obtaining explicit approval for the selected live diagnostic and repeat count:
+
+```sh
+./scripts/e2e-call.sh \
+  --run 'zig-out/e2e-spec/<UTC-date-time>-<unique-id>' \
+  --workflow spec-generation \
+  --call 1 \
+  --model openai.gpt-oss-20b-1:0 \
+  --reasoning-effort high \
+  --repeats 3
+```
+
+Replace the quoted run placeholder with an actual retained run directory. `--run`
+is repository-relative; there is no automatic latest-run selection. `--workflow`
+is the captured workflow ID: the supplied Spec definition uses `spec-generation`.
+`--call` is the positive physical call ordinal in the selected run, not a YAML step
+number. All five selectors are required. `--repeats` is an optional positive
+count and defaults to `1`. `--reasoning-effort none` explicitly omits reasoning
+effort; other values must be supported by the selected model.
+
+The selected run must retain its project/configuration, generation context and
+request, and a complete current-format debug/trace request capture. Missing,
+ambiguous, redacted or inconsistent captures reject before dispatch. Current
+workflow sources cannot replace missing historical request data.
+
+The launcher loads the same optional `.env.e2e` as `e2e-spec.sh`, with the same
+local-file override behavior. It uses `TEST_AWS_BEARER_TOKEN_BEDROCK` for the
+captured Bedrock provider; evaluator settings are not required. A direct invocation
+uses the caller's environment:
+
+```sh
+zig build e2e-call -- \
+  --run 'zig-out/e2e-spec/<UTC-date-time>-<unique-id>' \
+  --workflow spec-generation --call 1 \
+  --model openai.gpt-oss-20b-1:0 --reasoning-effort high
+```
+
+The selected model must resolve through the selected run's retained provider
+catalogue and the current registered model-binding contracts. The diagnostic
+creates an ephemeral in-memory binding:
+it inherits the captured provider and takes the selected model's region from the
+catalogue. Captured response mode and other inference controls, including an
+optional output allowance, are preserved. Unsupported combinations reject before
+dispatch; no model, response mode or control silently falls back. The capture and
+its configuration remain unchanged. Browser exact and modified replay retain
+their existing model/settings restrictions.
+
+The launcher adds no model-family encoders. The current Bedrock request encoder
+uses the GPT-OSS wire format; the registered Claude entry does not establish
+Claude wire compatibility. Comparing additional model families requires support
+in the shared provider adapter, not a harness-specific serializer.
+
+Each dispatched repeat makes exactly one provider request. There are no automatic
+retries, repairs, upstream nodes, workflow continuation, publication or evaluator
+calls. Repeats are independent diagnostics against the selected captured request.
+Responses remain untrusted diagnostic data and never become workflow authority.
+Transport failure, cancellation or storage failure stops the remaining repeats;
+the report records the completed count and incomplete result. A failed exchange
+is never retried to fill that count.
+
+Each invocation retains dated `report.json` and `report.md` beneath
+`zig-out/e2e-call/<UTC-date-time>-<unique-id>/`, with immutable debugger request and
+available response records linked to the source call. Reports expose protocol and
+schema inspection, provider outcomes and actual usage. Semantic validation and
+rubric quality assessment are **not assessed**. A schema-valid response does not
+establish workflow success, publication, semantic correctness or complete E2E
+acceptance. Compare every requested repeat, including failed exchanges.
+
+`./scripts/e2e-call.sh --help` and building the harness make no provider calls;
+help does not source `.env.e2e`. Offline integration tests use fake transport and
+launcher probes. Approval to implement or test this command offline does not
+authorize paid calls; each live diagnostic needs explicit bounded approval under
+the [model-conformance contract](../contracts/28-testing.md#288-model-conformance-comparisons).
+
 ## Environment setup
 
 1. From the repository root, create the optional local credential file:
@@ -385,6 +466,13 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
   launcher cases, including argument forwarding, publication identity, evidence
   capture and failure reports. It makes no provider calls.
 - `zig build test-rubric-evaluator --summary all` checks judge mechanics offline.
+- `zig build test-e2e-call --summary all` checks captured-call selection, diagnostic
+  bindings, dispatch and report behavior offline.
+- `zig build test-e2e-call-launcher --summary all` checks argument forwarding,
+  checkout discovery and environment handling with fake Zig.
+- `zig build build-e2e-call` builds the call diagnostic without API calls;
+  `zig build smoke-e2e-call --summary all` checks its standalone startup and
+  required selectors without live connections.
 - These results establish integration and evaluator behavior, not prompt quality.
   Live generation and grading run separately through `./scripts/e2e-spec.sh`.
 - `zig build smoke-e2e-harness --summary all` checks the standalone executable's startup

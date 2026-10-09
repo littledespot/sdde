@@ -124,6 +124,21 @@ pub fn build(b: *std.Build) void {
     if (b.args) |args| run_roles.addArgs(args);
     b.step("calibrate-roles", "Prepare or run explicitly selected diagnostic role trials (not E2E)").dependOn(&run_roles.step);
     b.step("build-role-calibration", "Build role calibration without an API call").dependOn(&role_calibration.step);
+    const call_module = b.createModule(.{
+        .root_source_file = b.path("e2e_call.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    });
+    const call_executable = b.addExecutable(.{ .name = "sdde-e2e-call", .root_module = call_module });
+    const run_call = b.addRunArtifact(call_executable);
+    run_call.has_side_effects = true;
+    if (b.args) |args| run_call.addArgs(args);
+    b.step("e2e-call", "Run an explicitly selected captured call with diagnostic model settings").dependOn(&run_call.step);
+    b.step("build-e2e-call", "Build the call diagnostic harness without API calls").dependOn(&call_executable.step);
+    const call_tests = b.addRunArtifact(b.addTest(.{ .root_module = call_module }));
+    call_tests.setCwd(b.path("."));
+    b.step("test-e2e-call", "Test captured-call selection, binding and reporting offline").dependOn(&call_tests.step);
     const e2e_module = b.createModule(.{
         .root_source_file = b.path("e2e.zig"),
         .target = target,
@@ -177,6 +192,12 @@ pub fn build(b: *std.Build) void {
     integration_step.dependOn(&run_integration_tests.step);
     integration_step.dependOn(&launcher_tests.step);
     integration_step.dependOn(&integration_script_tests.step);
+    const call_launcher_tests = b.addSystemCommand(&.{"sh"});
+    call_launcher_tests.addFileArg(b.path("test/harness/integration/call_launcher_test.sh"));
+    call_launcher_tests.addFileArg(b.path("scripts/e2e-call.sh"));
+    integration_step.dependOn(&call_launcher_tests.step);
+    b.step("test-e2e-call-launcher", "Test call launcher arguments and environment offline").dependOn(&call_launcher_tests.step);
+
     const e2e_executable = b.addExecutable(.{ .name = "sdde-e2e-spec", .root_module = e2e_module });
     const run_e2e = b.addRunArtifact(e2e_executable);
     run_e2e.has_side_effects = true;
@@ -214,6 +235,28 @@ pub fn build(b: *std.Build) void {
     e2e_extra_case.expectStdErrEqual("Select exactly one E2E case with --case; use --help.\n");
     e2e_smoke.dependOn(&e2e_extra_case.step);
     test_step.dependOn(e2e_smoke);
+    const call_directory = b.addTempFiles();
+    const call_offline = offlineExecutable(b, call_executable);
+    const call_binary = call_directory.addCopyFile(call_offline.getEmittedBin(), call_offline.out_filename);
+    const call_help = std.Build.Step.Run.create(b, "run standalone call diagnostic help without credentials");
+    call_help.addFileArg(call_binary);
+    call_help.addArg("--help");
+    call_help.setCwd(call_directory.getDirectory());
+    call_help.clearEnvironment();
+    call_help.expectExitCode(0);
+    call_help.expectStdErrEqual("");
+    const call_denied = std.Build.Step.Run.create(b, "reject call diagnostics without explicit capture and model settings");
+    call_denied.addFileArg(call_binary);
+    call_denied.setCwd(call_directory.getDirectory());
+    call_denied.clearEnvironment();
+    call_denied.expectExitCode(1);
+    call_denied.expectStdOutEqual("");
+    call_denied.expectStdErrEqual("Invalid arguments; use --help. No API call made.\n");
+    const call_smoke = b.step("smoke-e2e-call", "Test standalone call diagnostic startup without API calls");
+    call_smoke.dependOn(&call_executable.step);
+    call_smoke.dependOn(&call_help.step);
+    call_smoke.dependOn(&call_denied.step);
+    test_step.dependOn(call_smoke);
     const evaluator_directory = b.addTempFiles();
     const evaluator_offline = offlineExecutable(b, evaluator_exe);
     const evaluator_binary = evaluator_directory.addCopyFile(evaluator_offline.getEmittedBin(), evaluator_offline.out_filename);
@@ -646,6 +689,7 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("harness.zig"));
     lint_command.addFileArg(b.path("role_calibration.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));
+    lint_command.addFileArg(b.path("e2e_call.zig"));
     lint_command.addFileArg(b.path("tests.zig"));
     lint_command.addFileArg(b.path("integration.zig"));
     lint_command.addDirectoryArg(b.path("build"));
@@ -671,7 +715,7 @@ pub fn build(b: *std.Build) void {
             std.mem.eql(u8, name, "smoke") or std.mem.startsWith(u8, name, "test-") or
             std.mem.startsWith(u8, name, "smoke-"))
         {
-            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step, &run_roles.step }) catch |err|
+            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step, &run_roles.step, &run_call.step }) catch |err|
                 std.debug.panic("automated step {s} violates manual-only model execution: {s}", .{ name, @errorName(err) });
         }
     }

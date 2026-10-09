@@ -332,7 +332,7 @@ test "prepared calibration descriptions retain distinct case inputs after packet
         .reasoning_effort = "low",
         .operation_kind = .inference,
     };
-    try cli.validateBinding(binding);
+    try @import("../diagnostic_binding.zig").validateBinding(binding);
     for (0..3) |invalid| {
         var rejected = binding;
         switch (invalid) {
@@ -347,7 +347,7 @@ test "prepared calibration descriptions retain distinct case inputs after packet
             },
             else => unreachable,
         }
-        try std.testing.expectError(error.InvalidEvaluationContract, cli.validateBinding(rejected));
+        try std.testing.expectError(error.InvalidEvaluationContract, @import("../diagnostic_binding.zig").validateBinding(rejected));
     }
     const texts = [_][]const u8{ "MOCK Display UTC time.\n", "MOCK Renew a loan.\n", "MOCK Store an item.\n" };
     var descriptions: [texts.len]debug.Description = undefined;
