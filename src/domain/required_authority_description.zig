@@ -22,9 +22,10 @@ pub fn recordField(kind: spec.Kind, slot: a.Slot) a.Error![]const u8 {
     if (!a.recordField(kind, slot)) return error.InvalidRequiredAuthority;
     return switch (slot) {
         .text => recordFamily(kind),
-        .given => "The precondition under which the behavior applies.",
-        .when => "The triggering action or event.",
-        .then, .expected_outcome => "The observable result, preserving conditions and obligations.",
+        .given => "The starting situation before the trigger, without assuming the result being tested or inventing prerequisites.",
+        .when => "The action or event that triggers the behavior.",
+        .then => "The observable consequences after the trigger, including the obligations being tested.",
+        .expected_outcome => "The observable result, preserving conditions and obligations.",
         .condition => "The boundary or exceptional condition.",
         .name => "The business entity's name.",
         .business_meaning => "The entity's business purpose.",

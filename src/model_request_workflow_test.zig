@@ -142,10 +142,18 @@ test "static context rejects missing resources and conflicting resource kinds be
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compileWithContext(missing, true));
 }
 
-test "protocol corrections retain the selected static JSON context and original dynamic input" {
+test "protocol corrections retain static context dynamic input and configured output allowance" {
     var fixture: Fixture = undefined;
-    try fixture.init(std.testing.allocator);
+    try fixture.initWithProvider(std.testing.allocator, 0, true);
     defer fixture.deinit();
+    var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
+    defer models.slots.deinit(std.testing.allocator);
+    const model = @import("composition/provider_model_contracts.zig").registry.entries[0];
+    try models.slots.map.put(std.testing.allocator, "selected", .{ .provider = model.provider.bytes, .model = model.model.bytes, .maxOutputTokens = 16384 });
+    const allowlist = @import("domain/repository_model_allowlist.zig");
+    const owner = try allowlist.createValidated(std.testing.allocator, &models, fixture.services.registry());
+    allowlist.deinitOwner(fixture.services.allowlist_owner);
+    fixture.services.allowlist_owner = owner;
     const graph = try fixture.compileWithContext(try withStaticContext(fixture.arena.allocator(), try protocolRetryYaml(&fixture)), true);
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
@@ -154,10 +162,14 @@ test "protocol corrections retain the selected static JSON context and original 
     fake.invocation_plan.complete.content = malformed_protocol_items;
     try prepareProtocolAttempt(&runner, false);
     const original = (try currentRequest(&runner)).id();
+    const original_controls = (try currentRequest(&runner)).prepared().?.controls;
+    try std.testing.expectEqual(@as(u32, 16384), original_controls.max_output_tokens.?.value);
     try rejectProtocolResponse(&runner, false);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
     const corrected = try currentRequest(&runner);
     try std.testing.expect(corrected.id() == original);
+    try std.testing.expectEqualDeep(original_controls, corrected.prepared().?.controls);
+    try std.testing.expectEqualDeep(original_controls, corrected.prepared().?.binding_id.controls);
     try std.testing.expectEqualStrings("context", corrected.sourceResources().context.?.bytes);
     const parts = corrected.prepared().?.content;
     try std.testing.expectEqualStrings(context_bytes, parts[0].guidance);
@@ -7724,68 +7736,81 @@ test "protocol correction retains native singleton authority and rejects echoed 
     try std.testing.expectEqual(@as(usize, 2), fake.effect_count);
 }
 
-test "protocol correction retains native signal selection bounds categories and evidence" {
-    const references = @import("test_fixtures/reference_reconciliation.zig");
-    const r = references.r;
-    const stage = @import("domain/reference_reconciliation_stage.zig");
-    const schema = @import("domain/model_result_schema.zig");
-    var fixture: Fixture = undefined;
-    try fixture.init(std.testing.allocator);
-    defer fixture.deinit();
-    const a = fixture.arena.allocator();
-    const source = try std.mem.replaceOwned(u8, a, try protocolRetryYaml(&fixture), ", input: input.txt", "");
-    const definition = try std.mem.replaceOwned(u8, a, source, ", input: input }", ", result-selection: input }");
-    const schema_source = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited);
-    const graph = try fixture.compileWithAssets(definition, schema_source, false);
-    var runner = fixture.runner(graph, std.testing.allocator);
-    defer runner.deinit();
-    const evidence = try @import("reference_reconciliation_test.zig").prepare(a, &.{"MOCK Renew and display `MOCK Renewed!`.\n"});
-    defer evidence.deinit();
-    const global = try references.summaries(a, try references.initialize(a, evidence.inputs, evidence.extracted, 2), evidence.context());
-    var proposal = try references.global(a, global);
-    proposal.signals = &.{};
-    const parsed: r.Parsed = .{ .phase = .dispositions, .input = global, .proposal = .{ .global = proposal } };
-    const dispositions = (try references.validate_dispositions.execute(a, parsed)).valid;
-    const packet = try stage.packet(std.testing.allocator, .{ .signals = dispositions }, evidence.inputs, evidence.text.registry);
-    runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
-    var fake = invocationProvider(&runner, std.testing.allocator);
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-    const semantic = for (global.items) |item| {
-        if (item.claim.content == .model) break item.claim.id;
-    } else return error.MissingSemanticClaim;
-    const response = try std.fmt.allocPrint(a, "{{\"signals\":[{{\"claim_ids\":[{d},{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"business\",\"segments\":[\"MOCK renewal outcome\"]}}}}}}]}}", .{ semantic.ordinal, semantic.ordinal });
-    fake.invocation_plan.complete.content = response;
-    try prepareProtocolAttempt(&runner, false);
-    const initial = try currentRequest(&runner);
-    const original_id = initial.id();
-    const original = initial.prepared().?;
-    const original_parts = try a.dupe(provider.ModelVisibleContent, original.content);
-    const selected = original.response_schema;
-    const record = schema.findProperty(selected.root().object, "signals").?.schema.array.items;
-    try std.testing.expectEqual(@as(u32, 1), schema.findProperty(record.object, "claim_ids").?.schema.array.maximum);
-    const content = schema.findProperty(record.object, "content").?.schema;
-    const model = schema.findProperty(content.object, "model").?.schema;
-    try std.testing.expectEqualStrings("business", schema.findProperty(model.object, "kind").?.schema.constant.string);
-    try std.testing.expectEqualStrings(packet.body(), original_parts[1].user);
-    try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Other claims are supporting evidence and cannot be selected.") != null);
-    try std.testing.expect(std.mem.indexOf(u8, packet.body(), "MOCK Renewed!") != null);
-    for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode" }) |step|
-        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
-    try std.testing.expectEqual(.invalid, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
-    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
-    const correction = try currentRequest(&runner);
-    try std.testing.expect(correction.id() == original_id);
-    try std.testing.expect(correction.packet() == packet);
-    try std.testing.expect(correction.prepared().?.response_schema == selected);
-    try std.testing.expectEqualDeep(original_parts, correction.prepared().?.content[0..original_parts.len]);
-    // The corrected request cannot silently broaden either the eligible IDs or
-    // the semantic categories while fixing the original collection rejection.
-    const wrong_kind = try std.fmt.allocPrint(a, "{{\"signals\":[{{\"claim_ids\":[{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"scope_guard\",\"segments\":[\"MOCK unrelated scope\"]}}}}}}]}}", .{semantic.ordinal});
-    const invalid = try std.json.parseFromSlice(std.json.Value, a, wrong_kind, .{ .parse_numbers = false });
-    try std.testing.expect(payload_validation.validateValue(@import("domain/model_envelope.zig").value(&invalid.value), correction.prepared().?.response_schema.root()) != null);
-    try prepareProtocolAttempt(&runner, true);
-    fake.invocation_plan.complete.content = try std.fmt.allocPrint(a, "{{\"signals\":[{{\"claim_ids\":[{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"business\",\"segments\":[\"MOCK renewal outcome\"]}}}}}}]}}", .{semantic.ordinal});
-    for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode", "validate-payload", "close-request" }) |step|
-        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
-    try std.testing.expectEqual(@as(usize, 2), fake.effect_count);
+test "protocol correction retains summary and signal guidance selection bounds categories and evidence" {
+    for ([_]enum { summary, signals }{ .summary, .signals }) |kind| {
+        const references = @import("test_fixtures/reference_reconciliation.zig");
+        const r = references.r;
+        const stage = @import("domain/reference_reconciliation_stage.zig");
+        const schema = @import("domain/model_result_schema.zig");
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const a = fixture.arena.allocator();
+        const source = try std.mem.replaceOwned(u8, a, try protocolRetryYaml(&fixture), ", input: input.txt", "");
+        const definition = try std.mem.replaceOwned(u8, a, source, ", input: input }", ", result-selection: input }");
+        const schema_source = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited);
+        const graph = try fixture.compileWithAssets(definition, schema_source, false);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        const evidence = try @import("reference_reconciliation_test.zig").prepare(a, &.{"MOCK Renew and display `MOCK Renewed!`.\n"});
+        defer evidence.deinit();
+        const progress = try references.initialize(a, evidence.inputs, evidence.extracted, 2);
+        const current = if (kind == .summary) try references.build_input.execute(a, progress) else try references.summaries(a, progress, evidence.context());
+        const packets = @import("domain/model_input_packet.zig");
+        const packet = if (kind == .summary) summary: {
+            const base = try @import("domain/reference_model_input.zig").reconciliationCompositionPacket(std.testing.allocator, current, evidence.inputs, evidence.text.registry);
+            defer packets.release(base);
+            break :summary try packets.withAssignmentContext(std.testing.allocator, base, .{ .bytes = "summary" });
+        } else signals: {
+            var proposal = try references.global(a, current);
+            proposal.signals = &.{};
+            const parsed: r.Parsed = .{ .phase = .dispositions, .input = current, .proposal = .{ .global = proposal } };
+            const dispositions = (try references.validate_dispositions.execute(a, parsed)).valid;
+            break :signals try stage.packet(std.testing.allocator, .{ .signals = dispositions }, evidence.inputs, evidence.text.registry);
+        };
+        const collection = if (kind == .summary) "statements" else "signals";
+        runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        const semantic = for (current.items) |item| {
+            if (item.claim.content == .model) break item.claim.id;
+        } else return error.MissingSemanticClaim;
+        const response = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d},{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"business\",\"segments\":[\"MOCK renewal outcome\"]}}}}}}]}}", .{ collection, semantic.ordinal, semantic.ordinal });
+        fake.invocation_plan.complete.content = response;
+        try prepareProtocolAttempt(&runner, false);
+        const initial = try currentRequest(&runner);
+        const original_id = initial.id();
+        const original = initial.prepared().?;
+        const original_parts = try a.dupe(provider.ModelVisibleContent, original.content);
+        const selected = original.response_schema;
+        const record = schema.findProperty(selected.root().object, collection).?.schema.array.items;
+        try std.testing.expectEqual(@as(u32, 1), schema.findProperty(record.object, "claim_ids").?.schema.array.maximum);
+        const content = schema.findProperty(record.object, "content").?.schema;
+        const model = schema.findProperty(content.object, "model").?.schema;
+        try std.testing.expectEqualStrings("business", schema.findProperty(model.object, "kind").?.schema.constant.string);
+        try std.testing.expectEqualStrings(packet.body(), original_parts[1].user);
+        try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Other claims are supporting evidence") != null);
+        try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "summary_purpose") != null);
+        try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "every assigned claim ID exactly once") != null);
+        try std.testing.expect(std.mem.indexOf(u8, packet.body(), "MOCK Renewed!") != null);
+        for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode" }) |step|
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        try std.testing.expectEqual(.invalid, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+        const correction = try currentRequest(&runner);
+        try std.testing.expect(correction.id() == original_id);
+        try std.testing.expect(correction.packet() == packet);
+        try std.testing.expect(correction.prepared().?.response_schema == selected);
+        try std.testing.expectEqualDeep(original_parts, correction.prepared().?.content[0..original_parts.len]);
+        // The corrected request cannot silently broaden either the eligible IDs or
+        // the semantic categories while fixing the original collection rejection.
+        const wrong_kind = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"scope_guard\",\"segments\":[\"MOCK unrelated scope\"]}}}}}}]}}", .{ collection, semantic.ordinal });
+        const invalid = try std.json.parseFromSlice(std.json.Value, a, wrong_kind, .{ .parse_numbers = false });
+        try std.testing.expect(payload_validation.validateValue(@import("domain/model_envelope.zig").value(&invalid.value), correction.prepared().?.response_schema.root()) != null);
+        try prepareProtocolAttempt(&runner, true);
+        fake.invocation_plan.complete.content = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"business\",\"segments\":[\"MOCK renewal outcome\"]}}}}}}]}}", .{ collection, semantic.ordinal });
+        for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode", "validate-payload", "close-request" }) |step|
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        try std.testing.expectEqual(@as(usize, 2), fake.effect_count);
+    }
 }

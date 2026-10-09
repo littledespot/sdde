@@ -2992,3 +2992,299 @@ diagnostic execution requires bounded approval under §28.8; actual E2E publicat
 and rubric quality remain separate acceptance evidence. The shared description
 also reaches authoring-role selection; isolated entity diagnostics do not prove
 that earlier role coverage or later workflow completion remains reliable.
+
+### 9.15 Story and record authoring guidance — 10 October 2026
+
+**Scope and authority:** implement the small shared-input candidate for physical
+calls 10 and 12, preserving their current generation boundaries. The owners are
+the existing generation context, requirement-description module and records task
+prompt. This is presentation under §§12/17/21, consistent with design §§1/3/4/30
+and §31 acceptance items 17, 18, 20, 21, 39 and 40. Semantic judgments remain
+model-assisted; the generic engine, schemas, validators, provider settings, retry
+rules and repair permissions are unchanged.
+
+**Latest evidence:** the [20:25 run](../zig-out/e2e-spec/2026-10-09T20-25-01Z-114a71784dee27afd412beda5af561dd/report.md)
+stopped after 12 calls, before source/policy review, publication or rubric grading.
+Call 11 now gave a relevant explanation for `not_applicable`; that is an observed
+improvement in this run, with review accuracy still untested. Calls 10 and 12
+reproduced the greeting inside prose strings rather than selecting an exact-copy
+fragment. Their responses passed individual admission. Aggregate coverage then
+reported token claim 4 as `missing_business_mapping` (event 306), and repair
+authorization returned `no_independent_supported_target` (event 307).
+
+The earlier 08:54 call 12 already had the same literal-representation defect and
+treated startup success as the acceptance criterion's precondition. That run's
+story and irrelevant entity basis contained exact references, satisfying aggregate
+token coverage elsewhere. The later loss of those references exposed the coverage
+failure; it does not establish that the entity-basis improvement caused it.
+The shared context changed between runs, and records also received changed
+dependent business context. These are not identical-input repetitions.
+
+**Implemented candidate:**
+
+- `generation.context.json` describes the composition operation explicitly:
+  insert the supplied preserved literal as an exact-copy object, with any
+  surrounding prose in separate strings. Selector fields remain determined by
+  the selected schema. The same context reaches initial authoring, immutable
+  protocol correction and existing authorized repairs. It does not require
+  every field to use every token or prohibit legitimate literal-only values.
+- `required_authority_description.recordField` distinguishes a starting situation
+  before the trigger from the observable consequences after it. A precondition
+  must not assume the result being tested or invent prerequisites. These shared
+  descriptions already reach role selection, authoring, source/policy review and
+  selected repair; no definitions were copied into sibling prompts or schemas.
+  Other record-family fields retain their purposes.
+- `records.prompt.md` explicitly asks the collection to preserve all assigned
+  obligations. This is an authoring instruction, not permission for scalar repair
+  to rewrite siblings or a requirement to repeat every obligation in every field.
+  Story purpose and the one-call record-generation boundary remain intact.
+
+The prior prompt already requested exact-copy fragments; no direct contradiction
+was found. This candidate reduces interpretation rather than establishing that
+the instructions were absent or guaranteeing that a less capable model complies.
+A schema-aware example remains conditional on comparison evidence; no new
+schema-to-example generator, mandatory prose count or token-matching heuristic is
+introduced.
+
+**Recovery remains a separate contract gap:** plain text does not select a source
+occurrence. The coverage owner derives membership from explicit semantic bindings
+and actual exact-copy segments, so `missing_business_mapping` precedes an exact-copy
+check when no target selects the token. Existing native coverage repair requires
+independently selected evidence and whole-field display equality. Current scalar
+repair also preserves the old effective claim/citation sets under ADR 0020.
+Adding claim 4 to a sentence with evidence `[1,2,3]` exceeds those permissions.
+
+A future coupled repair proposal must establish independent target ownership,
+permitted exact occurrence and evidence changes, old-value/revision preconditions,
+dependent invalidation, full validation and blocking when no safe target exists.
+Reuse the current repair machinery after that authority is defined. Reordering
+diagnostics, admitting the entire literal catalogue, guessing from substrings or
+silently widening value repair would bypass §22 and ADR 0020; none is part of this
+implementation.
+
+**Evidence plan:** the [authoring-guidance comparison](../test/calibration/authoring-guidance/README.md)
+holds evidence, schema and model settings fixed within each pair. Separate
+contrasts measure fragment guidance and record-purpose/collection guidance, with
+the captured failures, unrelated inputs and unchanged repeats: seven cases × two
+arms × two repeats, bounded to **28 physical diagnostic calls** (16 fragment,
+12 record-purpose trials). The user approved this exact batch and all 28 calls
+executed; results are recorded below. Score field purpose,
+aggregate obligations and typed exact-reference use separately; correct bytes and
+schema admission cannot substitute for any of them. Historical calibration arms
+remain immutable, with their pinned guidance rather than today's production text.
+No semantic improvement, successful recovery or E2E completion is claimed from
+offline checks. Live diagnostics require bounded approval under §28.8; publication
+and rubric quality require separate live E2E evidence.
+The isolated comparisons also leave the combined changes' interaction and earlier
+role selection unmeasured: role selection consumes the same field descriptions.
+
+**Offline verification:** the extended existing regression covers two business
+domains and proves that identical rendered narrative bytes do not establish the
+same lineage as typed exact references. It also proves that a story reference can
+satisfy aggregate coverage while raw-copy records remain unchanged. Existing
+tests cover common purpose/context delivery, zero/single/multiple eligible
+occurrences, identical token bytes from different sources, literal-only values,
+immutable correction and authorized repair isolation.
+
+- `zig build test-specification-generation --summary all`: **254/254** tests.
+- `zig build test-model-request-workflow test-reference-model-input test-architecture test-required-authority test-model-result-schema --summary all`:
+  **890/890** tests.
+- `zig build test-rubric-evaluator --summary all`: **154/154** tests, including
+  frozen factor isolation and production-derived selected schemas.
+- `zig build verify --summary all`: **135/135** steps, **1,378/1,378** tests,
+  including lint, separate offline integration and packaged clean-environment
+  smoke checks. Tests needed permission to access the installed Zig compiler/cache
+  after the initial sandbox denied those reads/writes.
+- `zig build --summary all`: passed; native executable installed.
+- `git diff --check`: passed; new documentation links and comparison shell
+  syntax checked. Offline commands made no live calls.
+
+**Approved live comparison:** [retained report and per-trial evidence](../zig-out/authoring-guidance-comparison/2026-10-09T20-49-59Z-e95af2cbb164/report.md).
+Exactly **28/28** physical calls completed, with no retries, repair, replacement,
+extra judge calls or E2E invocation. All returned HTTP 200 and passed JSON/schema
+admission. Actual usage was **46,952 input + 4,541 output = 51,493 tokens**;
+the debugger did not provide latency measurements. Both original parents,
+frozen inputs and model bindings were verified before dispatch. The debugger
+was stopped afterwards.
+
+| Change / case | Baseline versus candidate observations |
+| --- | --- |
+| Fragment guidance: captured story | Neither arm correctly embeds the greeting reference in either repeat. Both candidate responses prepend an exact-copy object and then repeat the greeting in prose, yielding `Hello, World!The application…`. Reference presence would misleadingly count this as a fix. |
+| Fragment guidance: captured records | Both arms still use plain strings for the greeting in both repeats and assume startup success in `given`. |
+| Fragment guidance: unrelated inputs | Room-notification obligations survive both repeats in both arms. One panel candidate repeat improves contextual selection of three exact references; the other emits status values without behavior. Retry permission remains omitted, and the improved repeat leaves success conditions implicit. |
+| Record purposes: captured startup | Candidate `given` describes the before-start situation in **2/2**, versus a success requirement in baseline **2/2**. Successful launch is still implicit in the produced outputs, rather than separately testable. Exact copies remain plain strings in both arms. |
+| Record purposes: buzzer | Candidate separates button state before the trigger from press/release in **2/2**. Sound/silence obligations survive both arms. |
+| Record purposes: chamber | Close/lock/start/unlock obligations and legitimate closed/locked prerequisites survive both arms. Some outputs additionally promise that a cycle runs to completion, which the source does not guarantee. |
+
+The startup coverage concern is semantic, not a requirement to repeat particular
+words: displayed outputs can imply successful launch. The assessment records that
+uncertainty; it creates no deterministic phrase or field rule. Literal-only status
+outcomes can be adequate when surrounding criteria establish their meaning.
+
+**Conclusion:** the shared GWT-purpose clarification has measured support for its
+narrow purpose. The fragment wording has **not resolved the captured exact-copy
+failure**, and the collection instruction has not established complete obligation
+coverage. It remains an input candidate, not a proven recovery fix. A further
+composition-example experiment is now justified for consideration, using existing
+selected-schema choice facts without hardcoded IDs, a parallel schema authority,
+mandatory prose or substring-derived references. Broader recovery still needs the
+separate coupled-repair contract above.
+
+The [combined scorecard](../zig-out/authoring-guidance-comparison/2026-10-09T20-49-59Z-e95af2cbb164/scorecard.json)
+retains every trial and separate field-purpose, collection and reference judgments.
+Assessment is model-assisted and non-blinded, with two repeats and visible
+development cases. Native admission, combined-candidate behavior, earlier role
+selection, publication and rubric quality remain unmeasured by this replay. These
+results do not establish E2E success or reliability.
+
+### 9.16 Call-10 composition example experiment — 10 October 2026
+
+**Scope:** act on §9.15's next input experiment before deciding whether to add a
+shared production example. Story authoring remains one source-backed narrative
+task. The previous comparison preserved narrative meaning but returned detached
+references plus raw literal copies, so another abstract instruction is not the
+next candidate. No new workflow stage, semantic validator, repair authority or
+provider behavior is introduced.
+
+The [frozen comparison](../test/calibration/authoring-guidance/composition-example/README.md)
+prepared **16 diagnostic calls**, subsequently approved and completed: four story
+cases × two arms × two unchanged repeats. Baseline uses the current shared
+fragment guidance; candidate adds one
+`composition_example` to the dynamic user packet. The example shows a prose
+prefix, an exact-copy object at the literal's position, a suffix and their
+concatenated display. It is labelled formatting guidance, not target content.
+Static guidance, task, requirements, sources, offered occurrences and schema stay
+identical within each pair. Zero eligible exact occurrences omit the example;
+singleton and multiple-choice examples follow their respective selected schemas.
+
+Cases cover the captured startup narrative, an unrelated airflow-pause narrative,
+an identical-arm zero-literal control, and north/south valve statuses with equal
+literal bytes from different source occurrences and legitimate repeated use.
+The example uses the first offered occurrence illustratively; it supplies no
+authority to choose that occurrence elsewhere. Assessment explicitly checks this
+bias, example contamination, raw duplication, detached references, narrative
+adequacy and preservation of each assigned obligation. No fixed phrase, reference
+count or mandatory-prose rule is added to production admission.
+
+**Reuse and architecture:** the existing comparison manifest, debugger, scorecard
+and offline test module are reused. Tests now take a comparison directory rather
+than copying the prior verification path. Example values pass the production
+selected schema, singleton construction and typed-text decoder; their displayed
+text is checked against the selected catalogue occurrence and surrounding
+strings. Historical edits/hashes remain unchanged.
+
+Any later production adoption must derive its example from current native choice
+facts and the trusted literal catalogue. Dynamic data belongs in the packet:
+the existing handoff cannot supply per-request guidance-role content without a
+broader change. Initial authoring and authorized repair must share one presentation
+owner, with examples recomputed or omitted after evidence/choice narrowing.
+Attaching an initial example and leaving it unchanged in narrower repair packets
+would expose stale or unauthorized IDs. Protocol corrections retain the prepared
+request. Review-verdict repair does not author BusinessText and must not inherit
+an unrelated example. The generic engine and ADR 0020 remain unchanged.
+
+**Predeclared decision:** adopt only if the candidate demonstrates meaningful
+in-place composition in both captured and unrelated singleton repeats, correct
+occurrence identity in the multi-occurrence repeats, no example contamination or
+source-obligation regression, and no invented references in the zero control.
+There must be an improvement against the paired baseline; tie, inconclusive or
+failed results do not justify promotion. This is an experiment decision criterion,
+not an engine validator or a reliability guarantee. Shared effects on other field
+purposes and complete E2E publication still require separate evidence.
+
+**Live result:** all 16 approved calls completed exactly once, with zero retries,
+uncertain sends or unrun trials. The debugger was stopped. All answers passed
+JSON/schema checks. Actual usage was 13,876 input + 1,794 output = **15,670 tokens**;
+provider latency was unavailable. The
+[retained run](../zig-out/authoring-composition-comparison/2026-10-09T21-16-40Z-f080299c445f/)
+contains frozen inputs, raw exchanges, native debugger records, operational
+accounting and the [per-trial assessment](../zig-out/authoring-composition-comparison/2026-10-09T21-16-40Z-f080299c445f/assessment.md).
+
+Correct in-place composition improved from baseline **0/6** to candidate **6/6**
+literal-bearing answers. Both singleton cases embedded their references in the
+sentence in both repeats. Both multiple-occurrence answers selected the correct
+north/south identities and preserved the distinct displays and failed-test
+behavior. The baseline returned detached references with raw/stringified copies,
+or a reference-only value. The zero-literal control retained identical coherent
+content in both arms. Candidate repetitions were identical parsed values in
+every case; no candidate copied the example's sentence into its narrative.
+
+**Promotion gate: withhold.** All 22 listed obligation judgments across the eight
+candidate answers were preserved, but the startup candidate says the greeting is
+“followed by” the date and time. The source requires both outputs without
+specifying their order. Its second repeat adds that sequence relative to its
+paired baseline. Baseline repeat 1 also adds ordering and other unsupported
+details; that does not excuse the candidate's addition in repeat 2. The materiality
+is uncertain, so the predeclared no-regression condition is not established.
+Reference-composition improvement is demonstrated in this small comparison;
+complete source fidelity and a production-ready fix are not.
+
+**Status:** comparison implementation, live execution and assessment are complete.
+The 16-call approval is consumed. The example remains diagnostic; no production
+packet, prompt, schema, validator or repair authority is changed by this experiment.
+Further production adoption requires evidence of improved composition without
+added obligations or conditions, then the shared lifecycle integration described
+above. A greeting-specific ordering ban or automatic prose rewrite would be an
+unsupported local fix. Assessments are model-assisted and non-blinded, with two
+repeats and visible cases. Native admission, sibling field purposes, repair,
+publication and rubric quality remain unmeasured.
+
+**Offline verification:** `zig build test-rubric-evaluator --summary all` passed
+154/154 tests; `zig build lint --summary all` and `git diff --check` passed.
+These checks cover the prepared comparison and its shared offline verifier.
+They establish no improvement in model output; production code is unchanged by
+this experiment preparation.
+
+### 9.17 Shared reconciliation-summary guidance — 10 October 2026
+
+**Observed failure:** the latest retained run,
+[`2026-10-09T22-03-54Z-1029a28a123b9ecb26e9367ff706d01c`](../zig-out/e2e-spec/2026-10-09T22-03-54Z-1029a28a123b9ecb26e9367ff706d01c/report.md),
+stopped at the cross-source summary (physical call 4). The captured request used
+the same GPT-OSS 20B model with high reasoning and an explicit 16,384-token output
+allowance. The response repeated formatting checks and ended with `length`, with
+no final answer. The preceding high-reasoning run stopped at the same call after
+8,192 output tokens. The larger allowance reached the provider but did not improve
+completion. Calls 1–3 were admitted; original startup, greeting and UTC claims
+were available to call 4. These observations do not establish why repetition
+began or prove a prompt change will prevent it.
+
+**Clarity gaps and implementation:** the shared reference-input projection now
+supplies a single summary purpose to initial summary generation and scoped summary
+repairs. It explains preservation of selected meaning, conditions, triggers and
+obligation strength; original claims and cited source text govern earlier summary
+wording, and incompatible meanings remain distinct without selecting a winner.
+The Markdown template requests the assigned summary without duplicating those
+rules. Protocol correction retains the same prepared guidance and evidence.
+
+The existing selection constraint now states whole-summary coverage explicitly:
+each assigned semantic claim ID appears exactly once across returned statements.
+Native token statements remain native. The redundant generic ID-uniqueness
+instruction is omitted from this assignment only. The native membership validator,
+response schema and all repair permissions are unchanged. Partial repairs still
+return only their authorized replacement; signals retain overlapping groups.
+No source, fixture, model or call-number special case was added.
+
+**Scope and authority:** this presents the existing §§16.4/17 reconciliation and
+§22 repair contracts. Within-source, cross-source and intermediate group summaries
+share the same owner. Group planning, final dispositions, downstream role selection,
+persisted records, model settings and provider-stop handling remain unchanged.
+The single-child cross-source stage and the report's outdated output-limit
+explanation are separate findings, not part of this guidance change.
+
+**Validation:** offline checks cover request construction, protocol correction,
+scoped content/selection repair, complete-summary membership and preserved signal
+overlap. The global-packet exclusion tests caught a nullable-field projection;
+the final implementation uses the existing context attachment only for summaries,
+leaving unrelated packets unchanged. Independent scope review found no remaining
+issues. Verification passed:
+
+- `zig build test-reference-model-input test-reference-reconciliation test-model-request-workflow --global-cache-dir .zig-cache/global --summary all`:
+  **676/676 tests**.
+- `zig build lint --global-cache-dir .zig-cache/global --summary all`: passed.
+- `zig build verify --global-cache-dir .zig-cache/global --summary all`:
+  **135/135 steps, 1,387/1,387 tests**, including separate offline integration and
+  packaged clean-environment smoke checks.
+- `git diff HEAD --check`: passed.
+
+No live comparison or E2E run was performed. Improved semantic fidelity, avoidance
+of repetition, downstream publication and rubric quality remain unproven.

@@ -316,8 +316,10 @@ native collection validation permits authority advancement.
 - Missing operations, resources, slots, outcome mappings, or unsupported controls fail
   compilation or run preparation before provider I/O.
 - Provider APIs own request, response and context-size limits under ADR 0011.
-- The engine, operation, slot and model contract add no byte/token ceilings, capacity
-  intersections or size-fit gates.
+- The engine, operation, slot and model contract add no engine-enforced byte/token
+  capacity ceilings, intersections or size-fit gates. Optional slot `maxOutputTokens`
+  is instead a retained provider-request control under
+  [ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance).
 
 - Model-operation identity is the compiled `(workflowId, workflowVersion,
   originatingWorkflowStepId)` tuple retained across consumer steps.

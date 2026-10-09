@@ -263,9 +263,15 @@ test "production E2E binding honors configured models and cannot succeed without
         try fixture.materialize(io, project.dir, captured);
         const model = if (example == 0) "openai.gpt-oss-20b-1:0" else "anthropic.claude-3-5-haiku-20241022-v1:0";
         if (example == 1) {
-            const model_config = try std.mem.replaceOwned(u8, a, captured.config, "openai.gpt-oss-20b-1:0", model);
-            // Claude has no registered reasoning-effort control.
-            try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.mem.replaceOwned(u8, a, model_config, "\"reasoningEffort\": \"low\"", "\"reasoningEffort\": null") });
+            var model_config = try std.json.parseFromSlice(std.json.Value, a, captured.config, .{});
+            defer model_config.deinit();
+            for (model_config.value.object.get("models").?.object.get("slots").?.object.values()) |*slot| {
+                try slot.object.put(a, "model", .{ .string = model });
+                // This registered model supports neither optional control.
+                _ = slot.object.swapRemove("reasoningEffort");
+                _ = slot.object.swapRemove("maxOutputTokens");
+            }
+            try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, model_config.value, .{}) });
             const catalogue = try @import("../files.zig").read(io, a, project.dir, ".sddtoolkit/providers/.sddproviders.json");
             const model_catalogue = try std.mem.replaceOwned(u8, a, catalogue, "openai.gpt-oss-20b-1:0", model);
             // This registered model only supports prompt guidance.

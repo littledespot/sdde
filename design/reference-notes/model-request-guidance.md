@@ -3,6 +3,7 @@
 Companion to the [request-flow diagram](../diagrams/17-model-prompt-response-flow.md).
 This summarizes the existing contracts in
 [ADR 0006](../decisions/0006-minimal-model-response.md),
+[ADR 0011](../decisions/0011-provider-owned-request-limits.md),
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md) and
 [ADR 0014](../decisions/0014-universal-response-format-guidance.md).
 
@@ -23,6 +24,14 @@ This summarizes the existing contracts in
   they do not request whole-result coverage. Different signal groups may overlap.
   Reference repair `failed_requirement` describes the rejected candidate; the
   repair target and scoped constraints describe the permitted replacement.
+- Summary packets carry one shared `summary_purpose` for generation and scoped
+  repair: preserve selected meaning, conditions, triggers and obligation strength;
+  original claims and cited sources govern earlier summaries, and incompatible
+  meanings remain distinct. Complete-summary assignments require every assigned
+  semantic claim ID exactly once across statements; native code adds token
+  statements. This coverage instruction is absent from partial repairs and signal
+  assignments. Protocol correction retains the original packet. These are semantic
+  directions, not native proof of preservation or permission to enlarge a repair.
 - Content references preserved-token IDs; `preserved_tokens` retains exact values
   and citations across reconciliation, generation, review and repair.
 - Extraction selects source lines as `{first: {ordinal}, last: {ordinal}}`, with
@@ -62,6 +71,9 @@ for every workflow and both response modes:
 - The schema defines allowed properties, required fields, types, bounds and variants.
 - Universal framing adds no schema, business rules or workflow authority. Templates
   and the evaluator do not supply independent copies.
+- Selected reasoning effort and optional output allowance are retained request
+  controls, not model-visible task guidance. Corrections and diagnostic replay
+  preserve their originating binding under ADR 0011.
 
 **Protocol correction** receives:
 
@@ -165,11 +177,15 @@ currentness, evidence admission and retained verdicts keep their existing owners
 
 **Specification record meanings** come from the shared
 [requirement descriptions](../../src/domain/required_authority_description.zig).
-Generation receives all nine family meanings and their fields through its source
+Generation receives eligible family meanings and their fields through its source
 assignment; focused source and policy reviews receive the selected family/field
 purpose. Records authoring also receives `record_requirements`, projecting the
 canonical mandatory families with `assembled_specification` scope. Requiredness
 applies across bound source-group batches; optional families need no filler.
+The authoring prompt asks the collection to preserve all assigned obligations.
+The shared acceptance-criterion field descriptions distinguish the situation
+before the trigger, the trigger itself and its observable consequences. They
+also reach focused review and repair; those paths have no separate definitions.
 Atomic repair omits that aggregate authoring guidance and retains its selected
 target. Specification content repair presents its authorized `task` once; active source
 assignments retain their claim/signal selections and omit authoring purposes.
@@ -189,9 +205,15 @@ cross-kind deduplication rule.
 The shared generation context describes fragments by their assigned field purpose:
 a title names, a basis explains, and behavioral fields express requirements.
 Exact-copy/reference fragments insert display values; any required explanation or
-behavioral meaning comes from the surrounding text. Literal-only values remain
+behavioral meaning comes from the surrounding text. The shared context directs
+authors to insert an exact-copy object instead of retyping a supplied preserved
+literal inside prose, with any surrounding prose in separate string fragments.
+Its selector fields still come from the selected schema. Literal-only values remain
 structurally valid where the selected schema permits them. Schema admission and
 valid provenance do not establish that a field fulfils its semantic purpose.
+The [authoring-guidance comparison](../../test/calibration/authoring-guidance/README.md)
+separates this representation change from record-purpose/collection guidance;
+offline conformance is not evidence of semantic improvement.
 
 **Determined exact references** follow ADR 0020. A single eligible occurrence is
 constructed by native code: the model returns `{"kind":"exact_copy"}` and must

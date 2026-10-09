@@ -1946,10 +1946,30 @@ test "meaningful requirements and observable criteria preserve exact output thro
         records[0].proposal = admitted.response.content.records[0];
         var incomplete = content;
         incomplete.records = records;
+        var referenced_story = story;
+        referenced_story.value = .{ .segments = &.{
+            .{ .literal = .{ .value = try std.fmt.allocPrint(a, "{s} The required output is ", .{example.story}) } },
+            .{ .exact_copy = .{ .claim_id = token_claim.id } },
+            .{ .literal = .{ .value = "." } },
+        } };
+        const linked_story = try provenance.checkAttributed(.model, a, text.validator, fixture.context, referenced_story);
+        const displayed_story = try projection.scalar(a, fixture.context, linked_story);
+        incomplete.primary_user_story = try provenance.checkAttributed(.model, a, text.validator, fixture.context, try fixture.proposal(displayed_story.bytes));
+        try std.testing.expectEqualStrings(displayed_story.bytes, (try projection.scalar(a, fixture.context, incomplete.primary_user_story)).bytes);
+        // Identical displayed bytes do not construct an exact-reference edge.
         const uncovered = (try coverage.check(a, fixture.context.references, brief, incomplete)).invalid;
         try std.testing.expectEqual(.missing_business_mapping, uncovered.issue);
         try std.testing.expectEqualDeep(token_claim.id, uncovered.claim_id);
         try std.testing.expectEqualDeep(content.records[1..], incomplete.records[1..]);
+        // Coverage is aggregate: one correctly referenced story can satisfy the
+        // token obligation while raw-copy records remain unchanged. Passing this
+        // gate does not prove every authored value followed the shared guidance.
+        var referenced = incomplete;
+        referenced.primary_user_story = linked_story;
+        const restored = try coverage.validate(a, fixture.context.references, brief, referenced);
+        try std.testing.expectEqual(@as(usize, 1), restored.obligations[0].exact_targets.len);
+        try std.testing.expect(restored.obligations[0].exact_targets[0] == .primary_user_story);
+        try std.testing.expectEqualDeep(incomplete.records, referenced.records);
     }
 }
 

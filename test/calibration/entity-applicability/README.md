@@ -46,7 +46,8 @@ zig build test-rubric-evaluator --summary all
 
 The existing build entry point checks strict edit/manifest decoding, frozen
 hashes, evidence equality, repeat identity, label isolation and production schema
-selection. Candidate task text is checked against its shared production owner.
+selection. Candidate task text and prompts are checked for consistency across the frozen
+requests; their hashes retain historical wording when production guidance changes.
 Review subjects receive native structural validation. Exact-copy-only bases
 remain schema-admissible where the literal catalogue permits them; this is not
 an assertion that they explain anything. Unknown response fields remain rejected.

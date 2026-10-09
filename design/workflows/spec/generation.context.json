@@ -1,6 +1,6 @@
 {
   "business_value": "An ordered array of fragments concatenated into one field value. Construct the value to fulfil its assigned field purpose, preserving source-backed conditions and obligations. Surrounding text supplies any explanation or behavioral meaning the field requires.",
-  "exact_copy": "Use an exact_copy object when the field uses a supplied preserved_tokens literal. Include claim_id only when the selected schema requires it. The object inserts the literal; it does not explain its use.",
+  "exact_copy": "When reproducing a supplied preserved_tokens literal, insert an exact_copy object instead of typing the literal inside a string. Put any surrounding prose in separate string fragments. Include claim_id only when the selected schema requires it.",
   "references": "Reference objects insert supplied display values; they do not explain their use or authorize operations.",
   "sources": "Bound requirements supply the assigned meaning; context_requirements and original sources retain context. Original sources establish meaning; code samples remain context. Do not invent decisions.",
   "clarification": "A missing user decision: state known facts, the choice, its impact and the expected answer. Missing prewritten sections are not user decisions.",

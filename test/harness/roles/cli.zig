@@ -136,6 +136,15 @@ pub fn capturedDescription(a: std.mem.Allocator, binding: debug.Description, gui
     defer packets.release(restricted);
     return controlledDescription(a, binding, restricted, guidance, canonical);
 }
+pub fn validateBinding(binding: debug.Description) !void {
+    if (binding.provider_config != .aws_bedrock) return error.InvalidEvaluationContract;
+    const identities = @import("../../../src/domain/llm_provider_identity.zig");
+    const provider = identities.ProviderId.parse(binding.provider) orelse return error.InvalidEvaluationContract;
+    const model = identities.ModelId.parse(binding.model) orelse return error.InvalidEvaluationContract;
+    const supported = @import("../../../src/composition/provider_model_contracts.zig").registry.resolve(provider, model) orelse return error.InvalidEvaluationContract;
+    if (!supported.acceptsConfig(binding.provider_config) or !supported.capabilities.supports(binding.response_mode, binding.controls) or
+        !@import("../../../src/domain/llm_provider_contracts.zig").supportsReasoningEffort(supported.supported_reasoning_efforts, binding.reasoning_effort)) return error.InvalidEvaluationContract;
+}
 pub fn main(init: std.process.Init) !void {
     const io = init.io;
     const a = init.arena.allocator();
@@ -154,12 +163,7 @@ pub fn main(init: std.process.Init) !void {
     const binding_call = try captured(io, a, options.binding);
     const binding = binding_call.description.?;
     _ = try roleInput(a, binding);
-    if (binding.provider_config != .aws_bedrock) return error.InvalidEvaluationContract;
-    const identities = @import("../../../src/domain/llm_provider_identity.zig");
-    const supported = @import("../../../src/composition/provider_model_contracts.zig").registry.resolve(identities.ProviderId.parse(binding.provider).?, identities.ModelId.parse(binding.model).?) orelse return error.InvalidEvaluationContract;
-    if (!supported.acceptsConfig(binding.provider_config) or !supported.capabilities.supports(binding.response_mode, binding.controls) or
-        !std.meta.eql(supported.capabilities.inferenceControls(), binding.controls) or
-        !@import("../../../src/domain/llm_provider_contracts.zig").supportsReasoningEffort(supported.supported_reasoning_efforts, binding.reasoning_effort)) return error.InvalidEvaluationContract;
+    try validateBinding(binding);
     var parser: @import("../../../src/adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const compiled = try parser.compiler().compile(a, try files.read(io, a, .cwd(), "design/workflows/spec/reconciliation.schema.json"));
     const canonical = compiled.select(.{ .bytes = "roles_assignment" }) orelse return error.InvalidEvaluationContract;

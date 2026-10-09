@@ -1,0 +1,644 @@
+{
+  "schema": "authoring-guidance-scorecard/v1",
+  "comparison_sha256": "a118d816d502e736649158049ca4b7d21de4724aa20021475273984bb56be6fb",
+  "status": "not_run",
+  "reviewer": null,
+  "trials": [
+    {
+      "id": "captured-startup-baseline-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-3",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "captured-startup-candidate-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-3",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "airflow-pause-baseline-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-3",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [
+        {
+          "claim_id": 11,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "airflow-pause-candidate-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-3",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [
+        {
+          "claim_id": 11,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "room-notification-baseline-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "room-notification-candidate-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "valve-status-baseline-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-3",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [
+        {
+          "claim_id": 201,
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "claim_id": 202,
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "claim_id": 203,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "valve-status-candidate-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-3",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [
+        {
+          "claim_id": 201,
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "claim_id": 202,
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "claim_id": 203,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "captured-startup-candidate-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-3",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "captured-startup-baseline-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-3",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "airflow-pause-candidate-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-3",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [
+        {
+          "claim_id": 11,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "airflow-pause-baseline-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-3",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [
+        {
+          "claim_id": 11,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "room-notification-candidate-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "room-notification-baseline-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "valve-status-candidate-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-3",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [
+        {
+          "claim_id": 201,
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "claim_id": 202,
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "claim_id": 203,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "valve-status-baseline-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_admission": "not_assessed",
+      "field_purposes": [],
+      "collection_obligations": [
+        {
+          "id": "obligation-1",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-2",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "obligation-3",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_occurrences": [],
+      "literal_expectations": [
+        {
+          "claim_id": 201,
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "claim_id": 202,
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "claim_id": 203,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "required_family_coverage": null,
+      "invented_prerequisites": [],
+      "false_user_gap": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    }
+  ]
+}

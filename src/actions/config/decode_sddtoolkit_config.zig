@@ -21,20 +21,44 @@ pub const Action = struct {
         var owned = config.Owned.init(allocator);
         errdefer owned.deinit();
 
-        owned.config = std.json.parseFromSliceLeaky(
-            config.SDDToolKitConfig,
+        const raw = std.json.parseFromSliceLeaky(
+            std.json.Value,
             owned.allocator(),
             bytes,
             .{
                 .duplicate_field_behavior = .@"error",
                 .ignore_unknown_fields = false,
                 .allocate = .alloc_always,
+                .parse_numbers = false,
             },
         ) catch return error.EngineConfigParseError;
+        try validateOutputAllowances(raw);
+        owned.config = std.json.parseFromValueLeaky(config.SDDToolKitConfig, owned.allocator(), raw, .{
+            .ignore_unknown_fields = false,
+            .allocate = .alloc_always,
+        }) catch return error.EngineConfigParseError;
 
         return owned;
     }
 };
+
+// Optional means absent, not null. Inspect the JSON number before native decoding
+// so quoted numbers and fractional values cannot be coerced into an allowance.
+fn validateOutputAllowances(raw: std.json.Value) Error!void {
+    if (raw != .object) return error.EngineConfigParseError;
+    const models = raw.object.get("models") orelse return error.EngineConfigParseError;
+    if (models != .object) return error.EngineConfigParseError;
+    const slots = models.object.get("slots") orelse return error.EngineConfigParseError;
+    if (slots != .object) return error.EngineConfigParseError;
+    for (slots.object.values()) |slot| {
+        if (slot != .object) return error.EngineConfigParseError;
+        const value = slot.object.get("maxOutputTokens") orelse continue;
+        if (value != .number_string) return error.EngineConfigParseError;
+        const integer = @import("../../domain/model_payload_schema.zig").exactInteger(value.number_string) catch return error.EngineConfigParseError;
+        const positive = std.math.cast(u32, integer) orelse return error.EngineConfigParseError;
+        _ = @import("../../domain/model_controls.zig").OutputTokenAllowance.init(positive) orelse return error.EngineConfigParseError;
+    }
+}
 
 const valid_config =
     \\{
@@ -57,6 +81,37 @@ test "decodes the closed structure directly into the owned type" {
     try std.testing.expect(decoded.value().logs.console);
     try std.testing.expectEqual(@as(usize, 1), decoded.value().models.slots.map.count());
     try std.testing.expect(!decoded.value().validation.sourcePreservationCheck);
+    try std.testing.expect(decoded.value().models.slots.map.get("implementation").?.maxOutputTokens == null);
+}
+
+test "output allowance is an optional positive integer without coercion or provider ceiling" {
+    const a = std.testing.allocator;
+    const cases = [_]struct { raw: []const u8, expected: ?u32 }{
+        .{ .raw = "1", .expected = 1 },
+        .{ .raw = "32768", .expected = 32768 },
+        .{ .raw = "4294967295", .expected = std.math.maxInt(u32) },
+        .{ .raw = "1.0", .expected = 1 },
+        .{ .raw = "1e3", .expected = 1000 },
+        .{ .raw = "0", .expected = null },
+        .{ .raw = "-1", .expected = null },
+        .{ .raw = "1.5", .expected = null },
+        .{ .raw = "\"32768\"", .expected = null },
+        .{ .raw = "4294967296", .expected = null },
+        .{ .raw = "null", .expected = null },
+        .{ .raw = "true", .expected = null },
+        .{ .raw = "32768,\"maxOutputTokens\":65536", .expected = null },
+    };
+    for (cases) |case| {
+        const replacement = try std.fmt.allocPrint(a, "\"model\": \"gpt-5.4-mini\", \"maxOutputTokens\": {s}", .{case.raw});
+        defer a.free(replacement);
+        const bytes = try std.mem.replaceOwned(u8, a, valid_config, "\"model\": \"gpt-5.4-mini\"", replacement);
+        defer a.free(bytes);
+        if (case.expected) |expected| {
+            var decoded = try (Action{}).execute(a, bytes);
+            defer decoded.deinit();
+            try std.testing.expectEqual(expected, decoded.value().models.slots.map.get("implementation").?.maxOutputTokens.?);
+        } else try std.testing.expectError(error.EngineConfigParseError, (Action{}).execute(a, bytes));
+    }
 }
 
 fn configurationWithValidation(allocator: std.mem.Allocator, section: []const u8) ![]u8 {

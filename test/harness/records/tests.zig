@@ -100,7 +100,7 @@ test "record comparison freezes paired facts guidance schema and unchanged repea
             // Historical arms retain their hashed guidance when production
             // guidance changes; this comparison varies only the packet projection.
             try std.testing.expectEqualStrings(baseline_edit.content[0].guidance, edit.content[0].guidance);
-            try std.testing.expectEqualStrings(try files.read(std.testing.io, a, .cwd(), "design/workflows/spec/records.prompt.md"), edit.content[1].guidance);
+            try std.testing.expectEqualStrings(baseline_edit.content[1].guidance, edit.content[1].guidance);
             try hash(entry.schema_sha256, edit.schema);
             try std.testing.expectEqualStrings(baseline_edit.schema, edit.schema);
             var repeats: u32 = 0;
@@ -150,7 +150,20 @@ test "record comparison schemas derive from production zero singleton and multip
             try kinds.append(a, kind);
         }
         const candidate = try @import("../contracts.zig").decode(std.json.Value, a, body);
-        try std.testing.expectEqualStrings(try @import("../../../src/domain/required_authority_description.zig").recordsFor(a, kinds.items), candidate.object.get("source_assignment").?.object.get("purpose").?.string);
+        const baseline_edit = try @import("../contracts.zig").decode(debug.Edit, a, try read(a, entry.baseline_edit));
+        const baseline = try @import("../contracts.zig").decode(std.json.Value, a, baseline_edit.content[2].user);
+        // Compare frozen family definitions, not mutable production wording.
+        // The candidate removes only the excluded entity family.
+        var old_lines = std.mem.splitScalar(u8, baseline.object.get("source_assignment").?.object.get("purpose").?.string, '\n');
+        var new_lines = std.mem.splitScalar(u8, candidate.object.get("source_assignment").?.object.get("purpose").?.string, '\n');
+        for (kinds.items) |kind| {
+            const old_line = old_lines.next().?;
+            try std.testing.expect(std.mem.startsWith(u8, old_line, try std.fmt.allocPrint(a, "{s}:", .{@tagName(kind)})));
+            try std.testing.expectEqualStrings(old_line, new_lines.next().?);
+        }
+        try std.testing.expect(std.mem.startsWith(u8, old_lines.next().?, "entity:"));
+        try std.testing.expect(old_lines.next() == null);
+        try std.testing.expect(new_lines.next() == null);
         const prose = "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"functional_requirement\",\"text\":[\"MOCK required behavior\"]}}]}";
         try @import("../../../src/model_payload_schema_test.zig").checkDocument(restricted.selected().modelBytes(), .{ .bytes = prose });
         const reference = "{\"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"functional_requirement\",\"text\":[{\"kind\":\"exact_copy\"}]}}]}";

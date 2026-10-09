@@ -1474,7 +1474,7 @@ an earlier extended sample whose fields F0001 rejects.
 ```text
 SDDToolKitConfig {
   logs: { level, console },
-  models: { slots: map<slotName, { provider, model, reasoningEffort? }> },
+  models: { slots: map<slotName, { provider, model, reasoningEffort?, maxOutputTokens? }> },
   paths: {
     specs, references, specsArchive, workflows,
     toolchainPreset, principles, templates, providers
@@ -1487,6 +1487,9 @@ SDDToolKitConfig {
 
 - Fixed objects are closed; decoding yields immutable data.
 - Owning consumers validate path, model and logging authority.
+- Optional positive `maxOutputTokens` is the provider-request allowance defined by
+  [ADR 0011](decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance),
+  not an engine capacity limit.
 - Read only the invocation directory's exact `.sddtoolkit.json`; no search or
   example/default fallback.
 - The 1 MiB configuration-read guard is unrelated to provider-owned call limits.

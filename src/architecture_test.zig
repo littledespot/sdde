@@ -429,11 +429,13 @@ test "provider catalogue and repository allowlist have one immutable authority e
     try expectAbsent(registry, "anyopaque");
 
     const allowlist_fields = @typeInfo(repository_model_allowlist.Entry).@"struct".fields;
-    try std.testing.expectEqual(@as(usize, 3), allowlist_fields.len);
+    try std.testing.expectEqual(@as(usize, 4), allowlist_fields.len);
     try std.testing.expectEqualStrings("slot_id", allowlist_fields[0].name);
     try std.testing.expect(allowlist_fields[0].type == @import("domain/llm_provider_identity.zig").ModelSlotId);
     try std.testing.expectEqualStrings("registry_entry_id", allowlist_fields[1].name);
     try std.testing.expectEqualStrings("reasoning_effort", allowlist_fields[2].name);
+    try std.testing.expectEqualStrings("controls", allowlist_fields[3].name);
+    try std.testing.expect(allowlist_fields[3].type == @import("domain/model_controls.zig").InferenceControls);
     try std.testing.expect(allowlist_fields[1].type == llm_provider_registry.RegistryEntryId);
 
     const allowlist = @embedFile("domain/repository_model_allowlist.zig");

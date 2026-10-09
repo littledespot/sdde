@@ -95,7 +95,10 @@ test "entity comparison freezes source facts schemas labels and repeats while ch
         try std.testing.expectEqualStrings("not_run", scored_trials[index].object.get("transport").?.string);
         try std.testing.expectEqualStrings("not_assessed", scored_trials[index].object.get("native_admission").?.string);
     }
-    const task = try @import("../../../src/domain/required_authority_description.zig").task(a, .{ .kind = .entity_applicability, .unit = .feature, .slot = .entities });
+    // These hashed historical requests retain their guidance after production changes.
+    const frozen = try contracts.decode(debug.Edit, a, try read(a, cohort.cases[0].candidate_edit));
+    const frozen_body = try contracts.decode(std.json.Value, a, frozen.content[2].user);
+    const task = purpose(frozen_body, .authoring);
     for (cohort.cases) |entry| {
         const before = try contracts.decode(debug.Edit, a, try read(a, entry.baseline_edit));
         const after = try contracts.decode(debug.Edit, a, try read(a, entry.candidate_edit));
@@ -111,8 +114,8 @@ test "entity comparison freezes source facts schemas labels and repeats while ch
         withoutPurpose(&new_body, entry.phase);
         try same(a, old_body, new_body);
         if (entry.phase == .authoring) {
-            try std.testing.expectEqualStrings(try files.read(std.testing.io, a, .cwd(), "design/workflows/spec/generation.context.json"), after.content[0].guidance);
-            try std.testing.expectEqualStrings(try files.read(std.testing.io, a, .cwd(), "design/workflows/spec/entities.prompt.md"), after.content[1].guidance);
+            try std.testing.expectEqualStrings(frozen.content[0].guidance, after.content[0].guidance);
+            try std.testing.expectEqualStrings(frozen.content[1].guidance, after.content[1].guidance);
         } else {
             try std.testing.expectEqualStrings(before.content[0].guidance, after.content[0].guidance);
             const subject = try @import("../../../src/domain/model_candidate_json.zig").decode(@import("../../../src/domain/specification_review_subject.zig").Subject, a, try std.json.Stringify.valueAlloc(a, new_body.object.get("subject").?, .{}));

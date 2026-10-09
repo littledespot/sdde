@@ -19,7 +19,7 @@ const description: debug.Description = .{
     .protocol_prompt = @import("domain/model_controls.zig").response_format_guidance,
     .schema = schema,
     .response_mode = .prompt_only,
-    .controls = .{ .temperature = .zero },
+    .controls = .{ .temperature = .zero, .max_output_tokens = .{ .value = 16384 } },
     .reasoning_effort = "low",
     .operation_kind = .inference,
 };
@@ -88,6 +88,11 @@ test "exact replay retains byte equality and modified replay changes only select
     try std.testing.expect(std.mem.indexOf(u8, parent.request.?, "edited task prompt") == null);
     try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
     try std.testing.expectEqualStrings(description.model, modified.request.description.model);
+    try std.testing.expectEqualDeep(description.controls, result.request.description.controls);
+    try std.testing.expectEqualDeep(description.controls, modified.request.description.controls);
+    var parsed = try std.json.parseFromSlice(std.json.Value, a, modified.request.body, .{});
+    defer parsed.deinit();
+    try std.testing.expectEqual(@as(i64, 16384), parsed.value.object.get("max_completion_tokens").?.integer);
     try std.testing.expectEqual(@as(u64, 2), fixture.saved.?.sequence);
     try std.testing.expect(modified.request.source_overrides);
     try std.testing.expectEqualDeep(parent.source_snapshot, modified.request.source_snapshot);
@@ -98,6 +103,19 @@ test "exact replay retains byte equality and modified replay changes only select
     const exact_again = try fixture.replay().replay(a, replayIdentity("c" ** 32, 3), replayed_parent, .{ .call = 0, .mode = .exact });
     try std.testing.expect(exact_again.request.source_overrides);
     try std.testing.expectEqualDeep(parent.source_snapshot, exact_again.request.source_snapshot);
+}
+
+test "captured descriptions preserve positive output allowance and reject malformed values" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const bytes = try std.json.Stringify.valueAlloc(a, description, .{});
+    const restored = try debug.Description.decode(a, bytes);
+    try std.testing.expectEqualDeep(description.controls, restored.controls);
+    for ([_][]const u8{ "0", "-1", "1.5", "4294967296", "\"16384\"" }) |invalid| {
+        const malformed = try std.mem.replaceOwned(u8, a, bytes, "16384", invalid);
+        try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, malformed));
+    }
 }
 
 test "replay rejects redacted incomplete inconsistent and unauthorized requests before dispatch" {
@@ -403,8 +421,12 @@ test "captured production request reconstructs exactly in both schema modes" {
     production.registry_entry.model.bytes = description.model;
     production.registry_entry.config = description.provider_config;
     production.registry_entry.capabilities.structured_response = .bedrock_json_schema;
+    production.registry_entry.capabilities.supports_max_output_tokens = true;
     production.request.response_schema = try fixture.compiler.compiler().compile(production.schema_arena.allocator(), schema);
-    for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
+    for ([_]?u32{ null, 32768 }) |allowance| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
+        production.provider_binding.controls.max_output_tokens = if (allowance) |value| .{ .value = value } else null;
+        production.request.controls = production.provider_binding.controls;
+        production.request.binding_id = production.provider_binding.bindingId();
         production.request.response_guidance_mode = mode;
         production.registry_entry.json = mode == .native_schema;
         try std.testing.expect(production.request.matchesBinding(production.provider_binding));
@@ -412,8 +434,9 @@ test "captured production request reconstructs exactly in both schema modes" {
         const projection = debug.Description.from(&production.request, &production.provider_binding, .inference);
         const serialized = try std.json.Stringify.valueAlloc(a, projection, .{});
         const restored = try debug.Description.decode(a, serialized);
+        try std.testing.expectEqualDeep(production.request.controls, restored.controls);
         try std.testing.expectEqualStrings(captured, try fixture.provider.provider().prepare(a, restored));
-    }
+    };
 }
 
 test "events join the exact operation kind as well as request and attempt" {
@@ -704,7 +727,7 @@ test "selected request schemas survive capture and graph release without whole-s
         try std.testing.expectEqualStrings(parent.id, replayed.request.parent_call);
         _ = try fixture.replay().replay(a, replayIdentity("b" ** 32, 2), parent, .{ .call = 0, .mode = .modified, .edit = .{ .content = &.{ .{ .guidance = "Recheck the selected response." }, .{ .user = "Generate the selected data." } }, .schema = selected.schema } });
         try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
-        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v2", "model-request-debug/v1");
+        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v3", "model-request-debug/v2");
         try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, obsolete));
     };
 }

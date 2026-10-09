@@ -12,7 +12,7 @@ pub const registry: contracts.Registry = .{ .entries = &.{
         .config_schema = .aws_bedrock,
         .bedrock_regions = &.{.@"ap-southeast-2"},
         .supported_reasoning_efforts = &.{ "low", "medium", "high" },
-        .capabilities = .{ .input_token_count = false, .inference = true, .exact_token_counter = .unavailable, .structured_response = .bedrock_json_schema, .temperature = true },
+        .capabilities = .{ .input_token_count = false, .inference = true, .exact_token_counter = .unavailable, .structured_response = .bedrock_json_schema, .temperature = true, .supports_max_output_tokens = true },
     },
     .{
         .provider = .{ .bytes = "aws-bedrock" },

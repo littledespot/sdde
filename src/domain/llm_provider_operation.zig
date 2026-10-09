@@ -114,6 +114,7 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
         if (!self.model_request_id.model_operation_id.eql(self.model_operation_id) or
             !self.binding_id.operation_id.eql(self.model_operation_id) or
             !self.binding_id.isValid() or
+            !self.controls.isValid() or !std.meta.eql(self.controls, self.binding_id.controls) or
             RequestSchemaId.parse(self.request_schema_id.bytes) == null or
             ResultSchemaId.parse(self.result_schema_id.bytes) == null or
             ModelVisibleInputId.parse(self.model_visible_input_id.bytes) == null or

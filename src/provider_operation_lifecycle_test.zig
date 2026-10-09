@@ -446,6 +446,7 @@ fn facts() lifecycle.Assignment {
             .slot_id = .{ .bytes = "slot" },
             .registry_entry_id = .{ .ordinal = 1 },
             .reasoning_effort = null,
+            .controls = .{},
         },
         .model_visible_input_id = .{ .bytes = "input" },
     };

@@ -102,6 +102,64 @@ test "reconciliation assignments scope instructions while retaining complete sou
     }
 }
 
+test "summary purpose and exact claim coverage apply across every summary level" {
+    const r = reconciliation.r;
+    const purpose = "Summary statements consolidate selected claims without adding or dropping meaning. Preserve conditions, triggers and obligation strength. Original claims and their cited source text govern; earlier summaries are supporting context. Keep incompatible meanings distinct without choosing a winner.";
+    const coverage = "Each statement must select a nonempty, unique subset of assignment.claim_ids. Across the returned statements, include every assigned claim ID exactly once. Other claims are supporting evidence; native code adds preserved-token statements.";
+    for ([_][5][]const u8{
+        .{ "MOCK Start the application.\n", "MOCK Display the greeting.\n", "MOCK Show the UTC time.\n", "MOCK Refresh when requested.\n", "MOCK Display `Ready!`.\n" },
+        .{ "MOCK Renew eligible loans.\n", "MOCK Keep overdue loans unchanged.\n", "MOCK Show the new deadline.\n", "MOCK Notify the borrower after renewal.\n", "MOCK Display `Renewed!`.\n" },
+    }) |sources| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try @import("reference_reconciliation_test.zig").prepare(a, &sources);
+        defer fixture.deinit();
+        var progress = try reconciliation.initialize(a, fixture.inputs, fixture.extracted, 2);
+        var levels = std.EnumSet(r.Level).initEmpty();
+        while (true) {
+            const current = try reconciliation.build_input.execute(a, progress);
+            if (current.purpose == .global) break;
+            levels.insert(current.partition.group.level);
+            const packet = try input.reconciliationCompositionPacket(std.testing.allocator, current, fixture.inputs, fixture.text.registry);
+            defer packets.release(packet);
+            const selected = try packets.withAssignmentContext(std.testing.allocator, packet, .{ .bytes = "summary" });
+            defer packets.release(selected);
+            const body = (try std.json.parseFromSlice(std.json.Value, a, selected.body(), .{})).value.object;
+            try std.testing.expectEqualStrings(purpose, body.get("summary_purpose").?.string);
+            try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, selected.body(), purpose));
+            const assignment = body.get("assignment").?.object;
+            const constraints = assignment.get("constraints").?.array.items;
+            var found_coverage = false;
+            for (constraints) |constraint| {
+                const name = constraint.object.get("constraint").?.string;
+                try std.testing.expect(!std.mem.eql(u8, name, "unique_nonzero"));
+                if (std.mem.eql(u8, name, "nonempty_unique_allowed_claims")) {
+                    found_coverage = true;
+                    try std.testing.expectEqualStrings(coverage, constraint.object.get("requirement").?.string);
+                }
+            }
+            try std.testing.expect(found_coverage);
+            try checkSemanticAssignment(a, selected, current.items, null);
+            try checkProjectedPacket(a, selected.body());
+            try std.testing.expectEqual(current.items.len, body.get("claims").?.array.items.len);
+            if (current.partition.group.level != .within_source) try std.testing.expect(assignment.get("summaries").?.array.items.len != 0);
+
+            const shared = try input.reconciliationPacket(std.testing.allocator, current, fixture.inputs, fixture.text.registry, .all);
+            defer packets.release(shared);
+            const shared_body = (try std.json.parseFromSlice(std.json.Value, a, shared.body(), .{})).value.object;
+            try std.testing.expectEqualStrings(purpose, shared_body.get("summary_purpose").?.string);
+            const shared_rules = try std.json.Stringify.valueAlloc(a, shared_body.get("constraints").?, .{});
+            try std.testing.expect(std.mem.indexOf(u8, shared_rules, "unique_nonzero") != null);
+            try std.testing.expect(std.mem.indexOf(u8, shared_rules, "every assigned claim ID exactly once") == null);
+
+            const checked = (try reconciliation.validate_summary.execute(a, .{ .input = current, .proposal = .{ .summary = try reconciliation.summary(a, current) } }, fixture.context())).valid;
+            progress = try reconciliation.build_summary.execute(a, try reconciliation.assign_summary.execute(a, checked));
+        }
+        for (std.enums.values(r.Level)) |level| try std.testing.expect(levels.contains(level));
+    }
+}
+
 test "role handoffs offer and accept the same retained groups as authoring and readback" {
     const r = reconciliation.r;
     const stage = @import("domain/reference_reconciliation_stage.zig");
@@ -205,12 +263,14 @@ fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const 
     defer packets.release(full);
     const full_json = try std.json.parseFromSlice(std.json.Value, a, full.body(), .{});
     defer full_json.deinit();
+    try std.testing.expect(!full_json.value.object.contains("summary_purpose"));
     for ([_][]const u8{ "dispositions", "signals", "roles", "conflicts" }) |id| {
         const prior: stage.Prior = if (std.mem.eql(u8, id, "dispositions")) .{ .dispositions = global } else if (std.mem.eql(u8, id, "signals")) .{ .signals = dispositions } else if (std.mem.eql(u8, id, "roles")) .{ .roles = signals } else .{ .conflicts = roles };
         const selected = try stage.packet(allocator, prior, fixture.inputs, fixture.text.registry);
         defer packets.release(selected);
         const parsed = try std.json.parseFromSlice(std.json.Value, a, selected.body(), .{});
         defer parsed.deinit();
+        try std.testing.expect(!parsed.value.object.contains("summary_purpose"));
         try checkProjectedPacket(a, selected.body());
         for ([_][]const u8{ "claims", "citations", "preserved_tokens", "passive_literals" }) |field| {
             try std.testing.expectEqualStrings(
@@ -242,6 +302,8 @@ fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const 
                 try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "exact_selected_token") == null);
                 try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "assignment.claim_ids") != null);
                 try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "accepted.signals") != null);
+                try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "every assigned claim ID exactly once") == null);
+                try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "Different sets may overlap") != null);
                 try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, encoded_rules, "native code"));
                 try checkSemanticAssignment(a, selected, global.items, dispositions.dispositions);
             }

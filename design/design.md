@@ -224,8 +224,11 @@ references, and normative resolutions are retained in the linked sections.
       unresolved clarification forms at the same paths. Form replacement retains the subject
       ID, not the old form bytes.
     - Section 23.2 owns rerun replacement and protection.
-32. Provider APIs own model-call size limits. SDDE adds no request/response
-    byte or per-call token ceilings, including renamed transport/memory budgets.
+32. Provider APIs own model-call size limits. SDDE adds no engine-enforced
+    byte/token capacity ceilings, including renamed transport/memory budgets.
+    An optional slot `maxOutputTokens` requests a provider-enforced output allowance
+    under [ADR 0011](decisions/0011-provider-owned-request-limits.md); omission
+    delegates the provider default without a size-fit check or reservation.
     It records and propagates provider failures/stops and accounts actual input
     plus output tokens against only the execution's total-token budget. Calls
     at or above that budget are prohibited; retries remain explicitly local.
@@ -876,6 +879,9 @@ The new engine is ready for production evaluation when all of the following are 
       complete raw-fallback rules are never truncated.
     - Provider APIs own model-call size limits; no engine/operation/slot byte ceilings, size
       estimates or static-capacity checks gate calls.
+    - Optional positive slot output allowances retain their exact presence/value through
+      binding, request authorization, correction, capture and replay; omission delegates
+      the provider default. Unsupported or substituted controls reject without clamping.
     - Actual reported input/output usage is retained even on budget overshoot, and no subsequent
       call is allowed at or above the execution budget.
     - Configured response parts follow [ADR 0016](decisions/0016-configured-json-response-composition.md):
@@ -1072,7 +1078,7 @@ decision history:
 | [0008](decisions/0008-feature-naming-policy.md) | Superseded by 0010; reference-derived naming is withdrawn. |
 | [0009](decisions/0009-atomic-workflow-execution.md) | Whole-execution validation, fresh reruns, protected clarifications and explicit publication-failure semantics; no recovery transactions. |
 | [0010](decisions/0010-explicit-feature-directory.md) | The supplied validated directory identifies the feature. |
-| [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned per-call limits and actual execution-token accounting. |
+| [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned limits, optional requested output allowances and actual execution-token accounting. |
 | [0012](decisions/0012-workflow-owned-model-request.md) | Retain one execution-owned request/binding/resource identity across explicit YAML operations. |
 | [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |

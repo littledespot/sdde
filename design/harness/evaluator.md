@@ -141,7 +141,8 @@ The internal test environment supplies the evaluation selection:
 - Complete local judgment validation still owns criterion coverage, score bounds,
   dispositions and exact source/specification evidence. Native schema requests do
   not authorize accepting malformed or unsupported judgments.
-- No tools, `max_completion_tokens`, truncation or provider-specific retry policy is added.
+- The evaluator supplies no output allowance, so its requests omit
+  `max_completion_tokens`. No tools, truncation or provider-specific retry policy is added.
 - Stopped and malformed output never becomes a grade; validated usage is retained even
   when content is rejected.
 

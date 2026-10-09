@@ -265,9 +265,11 @@ ProviderModelDefinition {
 - The current source example selects the registered Sydney Bedrock model; it is still
   not an automatic runtime configuration or fallback.
 
-- There are no common project-authored `endpoint`, `contextWindow`, `maxOutputTokens`,
+- There are no common provider-catalogue `endpoint`, `contextWindow`, `maxOutputTokens`,
   `supportsTemperature`, `structuredOutput`, `tokenizer`, or wire-parameter fields.
-- Those are trusted compiler-registered model-contract facts described in Section 4.
+- Endpoint and supported-control facts come from the compiled contracts in Section 4.
+  The optional slot `maxOutputTokens` request control is separate from catalogue
+  configuration and provider capacity facts; Section 6 owns its binding.
 - The provider catalogue may declare only a known provider, known model, explicit `json` selection, and the fields
   permitted by that provider's closed `config` variant.
 - Catalogue membership alone does not make that model repository-authorized.
@@ -478,8 +480,8 @@ outcome through runner-owned child bindings:
    compiled model contract, without storing a concrete adapter;
 3. its provider-specific configuration, target, source region, destination
    policy and selected operation support are valid; counting support is optional;
-4. every selected option, including `reasoningEffort`, is explicitly supported
-   and representable rather than silently ignored;
+4. every selected option, including `reasoningEffort` and `maxOutputTokens`, is
+   explicitly supported and representable rather than silently ignored;
 5. the request retains the complete compiled result schema under ADR 0006;
    native generation constraints derive from it through the registered profile.
 
@@ -502,14 +504,19 @@ Resources and outcomes remain in the existing concise workflow structure.
 - They grant immutable binding data, not a provider port.
 - Provider-call capabilities remain independently derived from narrow ports and
   constrained by the selected policy.
-- No capacity field, second flag or registry is needed to derive binding requirements.
+- No capacity fact, second flag or registry is needed to derive binding requirements.
 
 **Provider-owned size limits**
 
 - Under ADR 0011, registration, compilation and preparation require no byte ceilings or
   size estimates.
 - Retired `input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters
-  reject; do not replace them with another size knob.
+  reject; do not replace them with another engine capacity limit.
+- The optional slot `maxOutputTokens` allowance follows the
+  [2026-10-10 amendment to ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance).
+  Its exact presence/value flows through validated slot options, binding, request
+  controls and authorization, including correction, capture and replay. Omission
+  adds no local default or fit check.
 - The runner checks identity, slot, schema, response mode and supported controls against
   the compiled contract and retains those facts for exact single-use authorization.
 - Providers report oversized requests, output stops and context errors through the
@@ -1199,7 +1206,7 @@ F0006 does not:
      provider configuration or contract facts.
    - No adapter/client is stored in registry or pipeline data.
 9. Project configuration contains no secret, executable behavior, arbitrary
-   endpoint, retry policy, header, wire parameter, or capability claim.
+   endpoint, retry policy, header, arbitrary wire parameter, or capability claim.
 10. Registration and request preparation require no capacity configuration.
 
     - There are no additional canonical, serialized request/header, response or
@@ -1207,6 +1214,8 @@ F0006 does not:
       reservations.
     - Reject retired size parameters.
     - Provider APIs own their size limits and the engine propagates their errors/stops.
+    - Optional slot output allowances are validated supported controls, sent unchanged
+      or omitted, never capacity estimates, reservations or budget-derived limits.
     - Model-request IDs are engine-assigned from one immutable run-local ledger by exact
       revision; execution, originating compiled step, unit/purpose authority where
       required, and ordinal validate before construction.
@@ -1406,6 +1415,8 @@ Implementation evidence must cover:
 - one invalid slot rejecting the complete allowlist
 - unauthorized unreferenced models
 - unsupported options, targets, data policy and structured schemas
+- omitted and positive output allowances, unsupported selections and altered controls
+  across binding, authorization, correction, capture and replay
 - registration without capacity fields
 - rejected legacy size parameters
 - exact serialization and complete valid responses beyond former byte ceilings

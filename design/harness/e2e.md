@@ -107,7 +107,9 @@ credentials. No model answer means no evidence yet about schema conformance.
   total-budget settings; no provider or model is selected by a fallback.
 - Judge settings and credentials are validated before generation starts.
 
-- Neither generation nor evaluation sends a per-call output token cap.
+- Generation retains the selected slot's optional output allowance under
+  [ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance).
+  The evaluator supplies no output allowance and delegates the provider default.
 - The engine enforces the workflow's cumulative actual-token budget; the evaluator has
   its separate cumulative budget.
 - Provider-owned response limits still apply and are reported as provider stops.

@@ -82,6 +82,10 @@ exists.
   and `validation`;
   fixed records reject missing required, duplicate and unknown members.
 - `models.slots` and `principles.filenameHints` are keyed collections; each model slot has the closed slot shape.
+- A slot may supply positive integer `maxOutputTokens`, representable by the native
+  control type. It requests a provider output allowance; omission delegates the
+  provider default. [ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance)
+  owns its validation, retention and distinction from engine capacity limits.
 - The `logs` object contains exactly the F0002 threshold and optional console-mirror boolean.
   The threshold alone selects prompt capture under ADR 0018.
 - File logging is mandatory and has no configuration switch.
@@ -266,7 +270,7 @@ when:
   resolve through the validated repository allowlist; or an operation attempts
   to use an undeclared packaged/default resource; a consumer lacks the typed
   retained-request dependency or attempts to reselect its binding/resources;
-- a numeric limit is negative, zero where prohibited, or above an engine safety maximum;
+- an engine-owned numeric limit is negative, zero where prohibited, or above its engine safety maximum;
 - `references.followSymlinks` is anything other than the required v1 constant `false`; followed reference symlinks are deliberately unsupported until a separate version defines containment, loop, depth, deduplication, and accounting semantics;
 - a reference traversal/decoder limit (`maxEntries`, directory depth, source/decoded byte totals, blocks, pages, cells, decoder time/memory, or archive expansion limits when applicable) is absent or exceeds the engine hard maximum;
 - a repository-discovery file/depth/time/memory limit is absent or exceeds the engine hard maximum;

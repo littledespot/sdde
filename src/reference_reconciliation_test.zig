@@ -522,6 +522,17 @@ test "summary signal and conflict repair packets retain precise shared text issu
                 const packet = try repair.packet(std.testing.allocator, parsed, fixture.context(), authorization);
                 defer packets.release(packet);
                 const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+                const repair_input = body.value.object.get("input").?.object;
+                try std.testing.expect(std.mem.indexOf(u8, packet.body(), "every assigned claim ID exactly once") == null);
+                if (stage == 0) {
+                    const initial_packet = try @import("domain/reference_model_input.zig").reconciliationCompositionPacket(std.testing.allocator, input, fixture.inputs, fixture.text.registry);
+                    defer packets.release(initial_packet);
+                    const initial_body = (try std.json.parseFromSlice(std.json.Value, a, initial_packet.body(), .{})).value.object;
+                    const purpose = initial_body.get("summary_purpose").?.string;
+                    try std.testing.expect(purpose.len != 0);
+                    try std.testing.expectEqualStrings(purpose, repair_input.get("summary_purpose").?.string);
+                    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, packet.body(), purpose));
+                } else try std.testing.expect(!repair_input.contains("summary_purpose"));
                 const rule = body.value.object.get("repair").?.object.get("rule").?.object;
                 try std.testing.expect(!rule.contains("requirement"));
                 try std.testing.expectEqualStrings(issue.description(), rule.get("failed_requirement").?.string);
@@ -1299,7 +1310,7 @@ test "reconciliation diagnostics retain native facts and origin while stale cont
     try std.testing.expectError(error.InvalidReferenceReconciliation, f.validate_dispositions.execute(a, .{ .input = changed, .proposal = .{ .global = proposal } }));
 }
 
-test "summary lineage and overlapping signal evidence are constructed from current selections" {
+test "summary exact coverage and overlapping signal evidence retain distinct native contracts" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1308,7 +1319,23 @@ test "summary lineage and overlapping signal evidence are constructed from curre
     var progress = try f.initialize(a, fixture.inputs, fixture.extracted, 2);
     while (progress.summary_count + 1 < progress.plan.partitions.len) {
         const input = try f.build_input.execute(a, progress);
-        const checked = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = try f.summary(a, input) } }, fixture.context())).valid;
+        const good = try f.summary(a, input);
+        const checked = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = good } }, fixture.context())).valid;
+        const missing = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = .{ .statements = good.statements[1..] } } }, fixture.context())).invalid;
+        try std.testing.expectEqual(.membership, missing.issue.rule);
+        try std.testing.expectEqualDeep(input.partition.group.claim_ids, missing.issue.expected.claims);
+        try std.testing.expectEqual(input.partition.group.claim_ids.len - 1, missing.issue.observed.claims.len);
+        const duplicates = try a.alloc(r.StatementProposal, good.statements.len + 1);
+        @memcpy(duplicates[0..good.statements.len], good.statements);
+        duplicates[good.statements.len] = good.statements[0];
+        const repeated = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = .{ .statements = duplicates } } }, fixture.context())).invalid;
+        try std.testing.expectEqual(.membership, repeated.issue.rule);
+        if (good.statements.len > 1) {
+            const overlapping = try a.dupe(r.StatementProposal, good.statements);
+            overlapping[0].claim_ids = &.{ good.statements[0].claim_ids[0], good.statements[1].claim_ids[0] };
+            const overlap = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = .{ .statements = overlapping } } }, fixture.context())).invalid;
+            try std.testing.expectEqual(.membership, overlap.issue.rule);
+        }
         progress = try f.build_summary.execute(a, try f.assign_summary.execute(a, checked));
         try std.testing.expectEqualDeep(input.partition.group.claim_ids, progress.latest.?.value.member_claim_ids);
         try std.testing.expectEqualDeep(input.member_summary_ids, progress.latest.?.value.member_summary_ids);
@@ -1403,11 +1430,15 @@ test "mixed claim kinds choose independent selection repair across summaries and
             const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
             const choices = body.value.object.get("repair").?.object.get("rule").?.object;
             try std.testing.expectEqual(@as(i64, business.ordinal), choices.get("selection").?.array.items[0].integer);
-            const constraints = body.value.object.get("input").?.object.get("constraints").?.array.items;
+            const repair_input = body.value.object.get("input").?.object;
+            try std.testing.expectEqual(!global, repair_input.contains("summary_purpose"));
+            try std.testing.expect(std.mem.indexOf(u8, packet.body(), "every assigned claim ID exactly once") == null);
+            const constraints = repair_input.get("constraints").?.array.items;
             var selection_rule = false;
             for (constraints) |constraint| {
                 const name = constraint.object.get("constraint").?.string;
                 selection_rule = selection_rule or std.mem.eql(u8, name, "nonempty_unique_allowed_claims");
+                if (std.mem.eql(u8, name, "nonempty_unique_allowed_claims")) try std.testing.expect(std.mem.indexOf(u8, constraint.object.get("requirement").?.string, "repair.rule.selection") != null);
                 try std.testing.expect(!std.mem.eql(u8, name, "matching_claim_content"));
                 try std.testing.expect(!std.mem.eql(u8, name, "exact_selected_token"));
             }

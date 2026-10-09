@@ -3,7 +3,7 @@ const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
 pub const Description = struct {
-    version: enum { @"model-request-debug/v2" } = .@"model-request-debug/v2",
+    version: enum { @"model-request-debug/v3" } = .@"model-request-debug/v3",
     provider: []const u8,
     model: []const u8,
     provider_config: @import("llm_provider_contracts.zig").ValidatedProviderConfig,
@@ -43,7 +43,7 @@ pub const Description = struct {
         const ids = @import("llm_provider_identity.zig");
         const workflow = @import("workflow.zig");
         if (ids.ProviderId.parse(value.provider) == null or ids.ModelId.parse(value.model) == null or ids.ModelSlotId.parse(value.model_slot) == null or
-            workflow.WorkflowId.parse(value.workflow_id) == null or workflow.WorkflowStepId.parse(value.request_step) == null or value.workflow_version == 0 or value.content.len == 0) return error.InvalidJsonDocument;
+            workflow.WorkflowId.parse(value.workflow_id) == null or workflow.WorkflowStepId.parse(value.request_step) == null or value.workflow_version == 0 or value.content.len == 0 or !value.controls.isValid()) return error.InvalidJsonDocument;
         return value;
     }
 };

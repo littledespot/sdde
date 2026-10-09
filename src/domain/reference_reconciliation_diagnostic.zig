@@ -77,7 +77,7 @@ pub const Constraint = enum {
             },
             .summary, .conflict_detail => false,
             .assignment => |assignment| switch (assignment) {
-                .summary => self != .exact_selected_token and self.appliesTo(.summary, .all),
+                .summary => self != .exact_selected_token and self != .unique_nonzero and self.appliesTo(.summary, .all),
                 .dispositions => self.appliesTo(purpose, .{ .disposition = .rules }),
                 .signals => switch (self) {
                     .nonempty_unique_allowed_claims, .matching_claim_content, .nonconflicting_claims, .unique_members, .retained_claim_covered, .token_projected => true,
@@ -101,6 +101,7 @@ pub const Constraint = enum {
         };
         if (scope == .assignment) switch (scope.assignment) {
             .summary, .signals => {
+                if (scope.assignment == .summary and self == .nonempty_unique_allowed_claims) return "Each statement must select a nonempty, unique subset of assignment.claim_ids. Across the returned statements, include every assigned claim ID exactly once. Other claims are supporting evidence; native code adds preserved-token statements.";
                 if (self == .nonempty_unique_allowed_claims) return "Select a nonempty, unique subset of assignment.claim_ids. Other claims are supporting evidence and cannot be selected.";
                 if (scope.assignment == .signals) return switch (self) {
                     .retained_claim_covered => "Cover every retained claim in assignment.claim_ids that is not already covered by accepted.signals.",

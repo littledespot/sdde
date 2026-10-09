@@ -57,6 +57,9 @@ pub fn reconciliationPhasePacket(allocator: std.mem.Allocator, prior: @import("r
     return reconciliationPacketFor(allocator, current, inputs, registry, .{ .composed = .{ .assignment = assignment, .claim_ids = ids } });
 }
 const Presentation = union(enum) { shared: Constraint.Scope, composed: struct { assignment: Constraint.Assignment, claim_ids: []const reconciliation.ClaimId } };
+// Semantic guidance for summary authoring and scoped repair, not a claim of
+// deterministic proof. Complete-result membership stays in scoped constraints.
+const summary_purpose = "Summary statements consolidate selected claims without adding or dropping meaning. Preserve conditions, triggers and obligation strength. Original claims and their cited source text govern; earlier summaries are supporting context. Keep incompatible meanings distinct without choosing a winner.";
 fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, presentation: Presentation) ReconciliationError!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
@@ -96,7 +99,12 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     const slot = try std.fmt.allocPrint(scratch, "reconciliation-{d}", .{input.partition.id.ordinal});
     const packet = try packets.create(allocator, body, .{ .reference_global = .{ .reference_state_id = .{ .bytes = inputs.corpus.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, .{ .bytes = @tagName(input.purpose) });
     defer packets.release(packet);
-    const selected = try withTextChoices(allocator, packet, try passiveIds(scratch, common.passive_literals), &.{});
+    const summary_context = if (input.purpose == .summary)
+        try packets.withContext([]const u8, allocator, packet, "summary_purpose", summary_purpose)
+    else
+        try packets.retain(packet);
+    defer packets.release(summary_context);
+    const selected = try withTextChoices(allocator, summary_context, try passiveIds(scratch, common.passive_literals), &.{});
     if (presentation == .shared) return selected;
     defer packets.release(selected);
     const assignment = presentation.composed.assignment;

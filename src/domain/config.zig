@@ -12,6 +12,7 @@ pub const ModelSlotConfig = struct {
     provider: []const u8,
     model: []const u8,
     reasoningEffort: ?[]const u8 = null,
+    maxOutputTokens: ?u32 = null,
 };
 
 pub const ModelsConfig = struct {

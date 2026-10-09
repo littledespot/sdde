@@ -1,4 +1,5 @@
 Write records using the assigned requirements, brief and record-family purposes.
+Preserve all assigned obligations across the record collection.
 When supplied, record_requirements applies across the assembled specification.
 Include only supported records; optional families need no filler. Preserve each
 statement's role and obligation strength. Do not relabel positive requirements as

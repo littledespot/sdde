@@ -328,10 +328,27 @@ test "prepared calibration descriptions retain distinct case inputs after packet
         .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
         .schema = "",
         .response_mode = .native_schema,
-        .controls = .{ .temperature = .zero },
+        .controls = .{ .temperature = .zero, .max_output_tokens = @import("../../../src/domain/model_controls.zig").OutputTokenAllowance.init(12288).? },
         .reasoning_effort = "low",
         .operation_kind = .inference,
     };
+    try cli.validateBinding(binding);
+    for (0..3) |invalid| {
+        var rejected = binding;
+        switch (invalid) {
+            0 => rejected.controls.max_output_tokens = .{ .value = 0 },
+            1 => rejected.controls.temperature = null,
+            2 => {
+                const unsupported = @import("../../../src/composition/provider_model_contracts.zig").registry.entries[1];
+                rejected.model = unsupported.model.bytes;
+                rejected.provider_config = .{ .aws_bedrock = .{ .region = unsupported.bedrock_regions[0] } };
+                rejected.response_mode = .prompt_only;
+                rejected.reasoning_effort = null;
+            },
+            else => unreachable,
+        }
+        try std.testing.expectError(error.InvalidEvaluationContract, cli.validateBinding(rejected));
+    }
     const texts = [_][]const u8{ "MOCK Display UTC time.\n", "MOCK Renew a loan.\n", "MOCK Store an item.\n" };
     var descriptions: [texts.len]debug.Description = undefined;
     for (texts, &descriptions) |text, *description| {
@@ -344,6 +361,7 @@ test "prepared calibration descriptions retain distinct case inputs after packet
         const input = try cli.roleInput(a, description);
         try std.testing.expectEqualStrings(text, input.claims[0].content.model.business.segments[0].literal.value);
         try std.testing.expectEqualStrings("MOCK guidance", description.content[0].guidance);
+        try std.testing.expectEqualDeep(binding.controls, description.controls);
     }
     const original = try cli.roleInput(a, descriptions[0]);
     // Historical schema and instructions remain unchanged; the declared diagnostic
@@ -354,6 +372,7 @@ test "prepared calibration descriptions retain distinct case inputs after packet
     historical.schema = "MOCK historical sparse schema bytes";
     historical.content = &.{ .{ .guidance = "MOCK guidance" }, .{ .user = try codec.encode(@TypeOf(stale_input), a, stale_input) } };
     const projected = try cli.capturedDescription(a, historical, "MOCK current guidance", canonical);
+    try std.testing.expectEqualDeep(binding.controls, projected.controls);
     try std.testing.expect(!std.mem.eql(u8, historical.content[1].user, projected.content[1].user));
     try std.testing.expectEqualStrings("MOCK guidance", historical.content[0].guidance);
     try std.testing.expectEqualStrings("MOCK historical sparse schema bytes", historical.schema);

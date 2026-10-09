@@ -47,7 +47,8 @@ zig build test-rubric-evaluator --summary all
 ```
 
 The tests check closed edit decoding, hashes, paired facts and guidance,
-unchanged repeats, label isolation and equality with the production compiler's
+unchanged repeats, label isolation, retained family definitions against the
+frozen baseline, and equality with the production compiler's
 selected zero/singleton/multiple-reference schemas. They also exercise native
 singleton construction without treating reference-only content as meaningful.
 Production generation tests separately cover the shared dependent-text projection,

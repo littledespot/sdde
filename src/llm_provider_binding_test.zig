@@ -169,6 +169,34 @@ test "binding omits unsupported temperature" {
     try std.testing.expect(resolved.controls.temperature == null);
 }
 
+test "slot output allowance is admitted unchanged and participates in immutable binding identity" {
+    var contract = provider_contracts.entries[0];
+    contract.capabilities.supports_max_output_tokens = true;
+    const allowance = @import("domain/model_controls.zig").OutputTokenAllowance;
+    for ([_]?u32{ null, 1, 32768, std.math.maxInt(u32) }) |configured| {
+        var fixture = try Fixture.initConfigured(.{ .entries = &.{contract} }, false, configured);
+        defer fixture.deinit();
+        const selected = try (resolve_binding.Action{}).execute(&model_graph, model_step.id, fixture.services.registry(), fixture.services.allowlist());
+        try std.testing.expectEqual(configured, if (selected.controls.max_output_tokens) |value| value.value else null);
+        const admitted = fixture.services.allowlist().resolveSlot(selected.slot_id).?;
+        try std.testing.expectEqualDeep(admitted.controls, selected.controls);
+        const id = selected.bindingId();
+        try std.testing.expect(id.isValid());
+        var changed = id;
+        changed.controls.max_output_tokens = if (configured == null) allowance.init(1).? else null;
+        try std.testing.expect(!id.eql(changed));
+        changed.controls.max_output_tokens = .{ .value = 0 };
+        try std.testing.expect(!changed.isValid());
+    }
+}
+
+test "allowlist rejects unsupported or invalid output allowances before resolving model work" {
+    try std.testing.expectError(error.InvalidRepositoryModelAllowlist, Fixture.initConfigured(provider_contracts, false, 32768));
+    var contract = provider_contracts.entries[0];
+    contract.capabilities.supports_max_output_tokens = true;
+    try std.testing.expectError(error.InvalidRepositoryModelAllowlist, Fixture.initConfigured(.{ .entries = &.{contract} }, false, 0));
+}
+
 test "runner rejects altered or missing compiled model controls before operation invocation" {
     var fixture = try Fixture.init();
     defer fixture.deinit();
@@ -301,8 +329,13 @@ const Fixture = struct {
     }
 
     fn initJSON(registered: contracts.Registry, json: bool) !Fixture {
+        return initConfigured(registered, json, null);
+    }
+
+    fn initConfigured(registered: contracts.Registry, json: bool, allowance: ?u32) !Fixture {
         var toolkit = try (decode_toolkit.Action{}).execute(std.testing.allocator, toolkit_config);
         errdefer toolkit.deinit();
+        toolkit.config.models.slots.map.getPtr("spec-generation").?.maxOutputTokens = allowance;
         var candidate = try provider_registry.Candidate.init(std.testing.allocator, 1);
         defer candidate.deinit();
         candidate.entries[0] = .{

@@ -18,6 +18,31 @@ test "temperature policy requires zero exactly when the registered model support
     }
 }
 
+test "output allowance preserves omission and requires positive supported provider control" {
+    const controls = @import("domain/model_controls.zig");
+    try std.testing.expect(controls.OutputTokenAllowance.init(0) == null);
+    for ([_]bool{ false, true }) |supported| {
+        var capabilities = fixture.capabilities;
+        capabilities.supports_max_output_tokens = supported;
+        var selected = capabilities.inferenceControls();
+        try std.testing.expect(selected.max_output_tokens == null);
+        try std.testing.expect(capabilities.supports(.prompt_only, selected));
+        for ([_]u32{ 1, 32768, std.math.maxInt(u32) }) |value| {
+            selected.max_output_tokens = controls.OutputTokenAllowance.init(value).?;
+            try std.testing.expectEqual(supported, capabilities.supports(.prompt_only, selected));
+        }
+        selected.max_output_tokens = .{ .value = 0 };
+        try std.testing.expect(!selected.isValid());
+        try std.testing.expect(!capabilities.supports(.prompt_only, selected));
+    }
+    var count_only = fixture.capabilities;
+    count_only.inference = false;
+    count_only.structured_response = .unavailable;
+    count_only.temperature = false;
+    count_only.supports_max_output_tokens = true;
+    try std.testing.expect(!count_only.isValid());
+}
+
 test "workflow requirements reject response mode overrides and duplicate parameters" {
     try std.testing.expect(model.resolve(&.{}) == null);
     const parameter = @import("domain/workflow_compilation.zig").CompiledParameter;

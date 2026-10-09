@@ -15,8 +15,26 @@ pub const Temperature = enum {
     }
 };
 
+/// An explicitly selected provider output allowance, not an engine capacity.
+pub const OutputTokenAllowance = struct {
+    value: u32,
+
+    pub fn init(value: u32) ?OutputTokenAllowance {
+        return if (value == 0) null else .{ .value = value };
+    }
+
+    pub fn isValid(self: OutputTokenAllowance) bool {
+        return init(self.value) != null;
+    }
+};
+
 pub const InferenceControls = struct {
     temperature: ?Temperature = null,
+    max_output_tokens: ?OutputTokenAllowance = null,
+
+    pub fn isValid(self: InferenceControls) bool {
+        return if (self.max_output_tokens) |allowance| allowance.isValid() else true;
+    }
 
     pub fn forTemperatureSupport(supported: bool) InferenceControls {
         return .{ .temperature = if (supported) .zero else null };

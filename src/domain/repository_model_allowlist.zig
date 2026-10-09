@@ -8,6 +8,7 @@ pub const Entry = struct {
     slot_id: identity.ModelSlotId,
     registry_entry_id: registry_contract.RegistryEntryId,
     reasoning_effort: ?[]const u8,
+    controls: @import("model_controls.zig").InferenceControls,
 };
 
 pub const ValidatedRepositoryModelAllowlist = opaque {
@@ -79,6 +80,12 @@ pub fn createValidated(
             selected.reasoningEffort,
         )) return error.InvalidRepositoryModelAllowlist;
 
+        var controls = catalogue_entry.capabilities.inferenceControls();
+        if (selected.maxOutputTokens) |value| {
+            controls.max_output_tokens = @import("model_controls.zig").OutputTokenAllowance.init(value) orelse return error.InvalidRepositoryModelAllowlist;
+            if (!catalogue_entry.capabilities.supports(catalogue_entry.responseMode(), controls)) return error.InvalidRepositoryModelAllowlist;
+        }
+
         destination.* = .{
             .slot_id = .{ .bytes = owner.arena.allocator().dupe(u8, slot_id.bytes) catch {
                 return error.InvalidRepositoryModelAllowlist;
@@ -90,6 +97,7 @@ pub fn createValidated(
                 }
             else
                 null,
+            .controls = controls,
         };
     }
     std.mem.sort(Entry, entries, {}, lessThan);

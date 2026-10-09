@@ -231,7 +231,10 @@ test "request validation rejects divergent binding controls and modes" {
         switch (variant) {
             0 => wrong.binding_id.registry_entry_id.ordinal += 1,
             1 => wrong.binding_id.slot_id.bytes = "another-slot",
-            2 => wrong.controls.temperature = null,
+            2 => {
+                wrong.controls.temperature = null;
+                wrong.binding_id.controls = wrong.controls;
+            },
             3 => wrong.response_guidance_mode = .native_schema,
             else => unreachable,
         }
@@ -241,6 +244,29 @@ test "request validation rejects divergent binding controls and modes" {
     try std.testing.expectError(error.ModelRequestBindingInvalid, preparation.validateRequest(selected, owned.request));
     fixture.registry_entry.capabilities.temperature = true;
     fixture.registry_entry.json = true;
+    try std.testing.expectError(error.ModelRequestBindingInvalid, (build.Action{}).execute(std.testing.allocator, selected, fixture.request.content));
+}
+
+test "output allowance survives preparation and rejects missing changed and unsupported controls" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    fixture.registry_entry.capabilities.supports_max_output_tokens = true;
+    fixture.provider_binding.controls.max_output_tokens = .{ .value = 16384 };
+    const resource = resultResource(&fixture);
+    const selected = try source(&fixture, &resource);
+    var owned = try (build.Action{}).execute(std.testing.allocator, selected, fixture.request.content);
+    defer owned.deinit();
+    try std.testing.expectEqual(@as(u32, 16384), owned.request.controls.max_output_tokens.?.value);
+    try std.testing.expectEqualDeep(fixture.provider_binding.controls, owned.request.binding_id.controls);
+    for ([_]?u32{ null, 8192 }) |replacement| {
+        var wrong = owned.request.*;
+        wrong.controls.max_output_tokens = if (replacement) |value| .{ .value = value } else null;
+        try std.testing.expectError(error.InvalidProviderNeutralModelRequest, preparation.validateRequest(selected, &wrong));
+        wrong.binding_id.controls = wrong.controls;
+        try std.testing.expectError(error.ModelRequestBindingInvalid, preparation.validateRequest(selected, &wrong));
+    }
+    fixture.registry_entry.capabilities.supports_max_output_tokens = false;
     try std.testing.expectError(error.ModelRequestBindingInvalid, (build.Action{}).execute(std.testing.allocator, selected, fixture.request.content));
 }
 
