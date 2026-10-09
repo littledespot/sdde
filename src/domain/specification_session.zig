@@ -91,22 +91,32 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    // Completed units are repaired under an atomic target and its evidence.
-    // Their authoring cursor no longer selects a current source assignment.
-    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(index), current.record_cursor), if (options.task != null) .repair else .authoring);
-    var claims: std.ArrayList(@import("reference_reconciliation.zig").Item) = .empty;
+    const projection = @import("model_evidence.zig");
+    var requirements: std.ArrayList(projection.Requirement) = .empty;
+    var exact_choices: std.ArrayList(projection.ExactLiteral) = .empty;
     var scopes: std.ArrayList(@import("reference_evidence.zig").Scope) = .empty;
     for (context.references.records.assignments.checked.prior.prior.dispositions) |disposition| {
         if (!@import("reference_support.zig").eligibleClaim(disposition.disposition)) continue;
         const item = try @import("reference_reconciliation.zig").item(all, disposition.claim_id);
-        try claims.append(a, item);
+        try requirements.append(a, try projection.requirement(a, item, context.inputs, context.registry));
         try scopes.append(a, .{ .state_id = all.state_id, .chunk_id = item.claim.chunk_id });
+        if (item.claim.content == .preserved_token) {
+            const token = item.claim.content.preserved_token;
+            if (p.permitsExactKind(token.value.kind) and (options.exact_claims == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, options.exact_claims.?, item.claim.id))) {
+                try exact_choices.append(a, .{ .claim_id = item.claim.id, .value = token.value.raw_value.bytes, .source_id = item.source_id });
+            }
+        }
     }
-    const projected = try @import("model_evidence.zig").project(a, claims.items);
-    var exact_choices: std.ArrayList(@import("model_evidence.zig").Token) = .empty;
-    for (projected.preserved_tokens) |token| {
-        if (!p.permitsExactKind(token.kind)) continue;
-        if (options.exact_claims == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, options.exact_claims.?, token.claim_id)) try exact_choices.append(a, token);
+    // Completed units are repaired under an atomic target and its evidence.
+    // Their authoring cursor no longer selects a current source assignment.
+    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(index), current.record_cursor), if (options.task != null) .repair else .authoring, requirements.items);
+    var contextual_requirements: std.ArrayList(projection.Requirement) = .empty;
+    for (requirements.items) |requirement| {
+        if (assigned) |selection| if (binding.assigns(selection, requirement.claim_id)) continue;
+        // Exact occurrences have one display catalogue; they are not additional
+        // behavioral requirements merely because their bytes are preserved.
+        if ((try @import("reference_reconciliation.zig").item(all, requirement.claim_id)).claim.content == .preserved_token) continue;
+        try contextual_requirements.append(a, requirement);
     }
     const offered_scopes = if (options.exact_claims) |ids|
         (@import("reference_support.zig").select(a, all, context.inputs, ids) catch |err| switch (err) {
@@ -117,10 +127,8 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         scopes.items;
     const selected = try unit(index);
     const payload = .{
-        .unit = selected,
         .source_assignment = assigned,
-        .claims = projected.claims,
-        .citations = projected.citations,
+        .context_requirements = contextual_requirements.items,
         .preserved_tokens = exact_choices.items,
         .sources = try @import("model_evidence.zig").sources(a, context.inputs),
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, offered_scopes),
@@ -135,6 +143,10 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     defer packets.release(result);
     if (options.task) |task| {
         const contextual = try packets.withContext([]const u8, allocator, result, "task", task);
+        packets.release(result);
+        result = contextual;
+    } else {
+        const contextual = try packets.withContext(enum { write }, allocator, result, "operation", .write);
         packets.release(result);
         result = contextual;
     }

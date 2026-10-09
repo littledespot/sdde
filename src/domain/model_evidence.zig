@@ -12,6 +12,35 @@ pub const Token = struct { claim_id: r.ClaimId, source_form: tokens.ExtractorId,
 pub const Projection = struct { claims: []const Claim, citations: []const r.extraction.Citation, preserved_tokens: []const Token };
 pub const Source = struct { id: r.extraction.identity.SourceId, text: []const u8 };
 
+/// Resolved source meaning for authoring. Native citations, token identity and
+/// dependency state remain in their existing owners, not in the prose task.
+pub const Requirement = struct { claim_id: r.ClaimId, kind: []const u8, meaning: []const u8, source_id: r.extraction.identity.SourceId };
+pub const ExactLiteral = struct { claim_id: r.ClaimId, value: []const u8, source_id: r.extraction.identity.SourceId };
+
+/// Caller owns an arena; projected text may borrow validated source bytes.
+pub fn requirement(a: std.mem.Allocator, item: r.Item, inputs: r.evidence.Inputs, registry: @import("passive_literals.zig").Registry) r.Error!Requirement {
+    const scope: r.evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = item.claim.chunk_id };
+    _ = try r.evidence.resolve(inputs, scope);
+    if (item.claim.content == .preserved_token) return .{ .claim_id = item.claim.id, .kind = "preserved_token", .meaning = item.claim.content.preserved_token.value.raw_value.bytes, .source_id = item.source_id };
+    var bytes: std.ArrayList(u8) = .empty;
+    errdefer bytes.deinit(a);
+    switch (item.claim.content.model) {
+        inline else => |value, kind| {
+            const nodes = if (comptime kind == .business or kind == .scope_guard) value.value.segments else value.value.nodes;
+            for (nodes) |node| switch (node) {
+                .literal => |literal| try bytes.appendSlice(a, literal.value),
+                .passive => |reference| try bytes.appendSlice(a, (try @import("passive_literals.zig").resolve(registry, inputs, scope, reference.passive_literal_id)).value),
+                inline else => |reference, tag| if (comptime std.mem.eql(u8, @tagName(tag), "source")) {
+                    const source = try r.evidence.resolve(inputs, scope);
+                    if (source.source.id.ordinal != reference.source_id.ordinal) return error.InvalidReferenceReconciliation;
+                    try bytes.appendSlice(a, source.source.path.bytes);
+                } else return error.InvalidReferenceReconciliation,
+            };
+        },
+    }
+    return .{ .claim_id = item.claim.id, .kind = @tagName(item.claim.content.model), .meaning = try bytes.toOwnedSlice(a), .source_id = item.source_id };
+}
+
 pub fn sources(a: std.mem.Allocator, inputs: r.evidence.Inputs) std.mem.Allocator.Error![]const Source {
     const result = try a.alloc(Source, inputs.corpus.sources.len);
     for (inputs.corpus.sources, result) |source, *copy| copy.* = .{ .id = source.id, .text = source.bytes };

@@ -150,10 +150,24 @@ target. Specification content repair presents its authorized `task` once; active
 assignments retain their claim/signal selections and omit authoring purposes.
 Native value and membership repairs describe only the selected field or permitted
 families. Completed-unit omission repair retains `source_assignment: null` without
-recreating a consumed authoring assignment. Prompts own the generation,
-review or repair instructions, rather than another copy of the definitions.
+recreating a consumed authoring assignment. Authoring resolves requirement meaning
+beside the bound purpose; remaining eligible requirements are context, not another
+assignment. These are projections of existing claims, not a new evidence ledger.
+Original source bytes remain available. Citation coordinates and extractor/token
+bookkeeping stay native; exact choices expose only the eligible occurrence, value
+and source. Initial requests use their authoring prompt; native replacements use
+the existing repair prompt and authorized task. Prompts own the generation, review
+or repair instructions, rather than another copy of the definitions.
 These descriptions add no optional-family requirement, semantic rejection or
 cross-kind deduplication rule.
+
+**Determined exact references** follow ADR 0020. A single eligible occurrence is
+constructed by native code: the model returns `{"kind":"exact_copy"}` and must
+not echo its determined `claim_id`. Multiple eligible occurrences retain the
+explicit selection. The selected schema and response construction use the same
+immutable native choice facts; protocol correction keeps that schema. Canonical
+segments and persisted lineage retain the occurrence ID. Matching literal text
+never reconstructs source identity, and this rule adds no semantic support.
 
 **Authoring-role assessment** remains one initial model call. Its `role_decisions`
 map requires one decision for every registered role: `supported` with nonempty

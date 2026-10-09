@@ -805,7 +805,7 @@ subgraphs:
         with:
           slot: repair
           context: generation-context
-          prompt: {param: prompt}
+          prompt: repair-prompt
           schema: generation-schema
           retry-limit: 1
         on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}

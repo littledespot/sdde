@@ -308,16 +308,18 @@ fn membershipTask(a: std.mem.Allocator, disposition: g.spec.Applicability) autho
 pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_value: *const packets.Packet, bytes: []const u8) Error!Replacement {
     const kind = try atomic.checkRequest(authorization, packet_value);
     const codec = @import("model_candidate_json.zig");
+    const canonical = try codec.constructBound(allocator, bytes, packet_value.integerChoices());
+    defer allocator.free(canonical);
     return switch (kind) {
         .provenance => error.InvalidSpecificationRepair,
-        .value => .{ .value = try codec.decode(g.spec.BusinessValue, allocator, bytes) },
+        .value => .{ .value = try codec.decode(g.spec.BusinessValue, allocator, canonical) },
         .attributed => blk: {
             if (authorization.operation != .replace or authorization.operation.replace != .attributed) return error.InvalidSpecificationRepair;
-            const value = try codec.decode(g.spec.Wire.AttributedValue, allocator, bytes);
+            const value = try codec.decode(g.spec.Wire.AttributedValue, allocator, canonical);
             break :blk .{ .attributed = .{ .value = value.value, .provenance = authorization.operation.replace.attributed.provenance } };
         },
         .record => blk: {
-            const value = try codec.decode(g.spec.Wire.RecordProposal, allocator, bytes);
+            const value = try codec.decode(g.spec.Wire.RecordProposal, allocator, canonical);
             const selected = switch (authorization.operation) {
                 .replace => |prior| if (prior == .record) prior.record.provenance else return error.InvalidSpecificationRepair,
                 .insert => blk_selection: {

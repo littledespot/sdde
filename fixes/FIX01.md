@@ -10,9 +10,14 @@ status statements are historical. This document owns the outstanding work below.
 forward: business subjects and family meanings are clearer, incomplete role coverage
 has a truthful typed outcome, and failure evidence is substantially better. They
 have **not demonstrated improved completion or specification quality**. The latest
-retained run still blocks before authoring; no published output or rubric result
-exists for that run. Offline correctness, a completed calibration pilot and better
-diagnostics are different outcomes from a reliable completed workflow.
+retained run, **9 October at 17:31:50 AEDT**, passed role selection, generated a
+candidate, merged an upstream repair and regenerated, then exceeded the token
+budget during its second source review. Its first clear content defect was call
+10's user story containing only three greeting references; call 17 then attributed
+that loss to an intact upstream signal. No specification was published or graded.
+[§9.10](#910-first-authoring-error-and-its-consequences--9-october-2026)
+records the evidence. Greater execution progress, offline correctness and completed
+calibration are different outcomes from a reliable completed workflow.
 
 The bounded R3 policy projection, R4 family meanings and R10 blocking handoff remain
 implemented. R7's focused pilot and broader 48-call routing comparison are complete;
@@ -24,6 +29,9 @@ below. The two subsequently authorized R4/§8 projection follow-ups are now
 implemented: selected repair tasks survive every assignment shape, and completed
 entity source review reuses the resolved business subject. Their implementation
 and offline verification do not establish improved live model outcomes.
+The authoring-input follow-up is also implemented and offline-verified (§9.11):
+resolved requirements, concise active instructions and native singleton exact
+references reduce work requested from the model. Live benefit remains unmeasured.
 
 The remaining brittleness is principally semantic selection and review reliability,
 repeated whole-context review cost, and incomplete answer recovery. The inspected
@@ -47,6 +55,11 @@ The mechanical cutover and comparison are tracked in
 [§9.9](#99-complete-role-decision-implementation--9-october-2026). The prepared
 48-call diagnostic comparison was subsequently approved explicitly; it grants
 no whole-workflow E2E invocation.
+The subsequent user-reported E2E failure is analysed in §9.10. That analysis changes
+only this document and runs no new E2E or diagnostic model calls.
+The subsequently requested authoring-input simplification is implemented in
+[§9.11](#911-authoring-input-simplification--9-october-2026); it is an engineering
+change with offline verification, not a demonstrated live semantic improvement.
 
 **Material revisions:** corrected overstatements about the handoff and current
 traceability, completed the clarification-path audit, separated implementation
@@ -114,9 +127,10 @@ Authority consulted:
 - [FIX_003 §15](archive/FIX_003.md#15-latest-evidence-and-critical-review--8-october-2026) and
   [FIX_002's reassessment decision](archive/FIX_002.md#d2--reassessment-of-a-structurally-admitted-source-finding).
 
-The most recent retained run started 9 October at **14:39:42 AEDT**
-(`2026-10-09T03:39:42Z`), after R9 implementation. The other locally inspectable
-E2E bundles started at 11:53:40 and 13:01:41 AEDT. Earlier R3/R4 and loan bundles
+The most recent retained run started 9 October at **17:31:50 AEDT**
+(`2026-10-09T06:31:50Z`), after the complete role-decision implementation. Six
+9 October bundles are now locally inspectable, starting at 11:53:40, 13:01:41,
+14:39:42, 15:19:22, 15:44:10 and 17:31:50 AEDT. Earlier R3/R4 and loan bundles
 referenced below are no longer present in this checkout; their findings are retained
 as dated review history, not independently revalidated raw evidence in this review.
 
@@ -131,6 +145,7 @@ as dated review history, not independently revalidated raw evidence in this revi
 | [9 October, 11:53 post-R10 run](../zig-out/e2e-spec/2026-10-09T00-53-40Z-ab59e9144c1aff2ce96a9816c782f782/report.json) | 8 exchanges; 12,123 / 100,000 tokens; `workflow_blocked` at generation initialization; no authoring, clarification, repair, publication or rubric result. | R10 retains missing `entity_basis`, source state/revision, eligible groups and call 7's origin. The same role omission persists; explicit handling improves, completed-spec outcomes do not. |
 | [9 October, 13:01 pre-R9 run](../zig-out/e2e-spec/2026-10-09T02-01-41Z-2abaff5b6f3e0d8e0604e340f9cfdcaa/report.json) | 31 exchanges; 54,298 tokens; `workflow_failed` at `g14-g6-review-omit-merge`; native cause rendered as `failed`. | Call 7 supplies all six roles under the same request used by the two blocked runs. The workflow reaches authoring and repair but still publishes no specification or rubric result. The thrown merge cause is unrecoverable from this old report. |
 | [9 October, 14:39 post-R9 run](../zig-out/e2e-spec/2026-10-09T03-39-42Z-932157c58a866f39133651ca3f3e8bbb/report.json) | 8 exchanges; 12,123 tokens; `workflow_blocked` at `g8-generate-initialize-specification`; first captured defect at event 231; no authoring, repair, publication or grading. | Missing `entity_basis` is correctly attributed to call 7 rather than the latest exchange, call 8. All eight contexts, serialized requests and projected outputs match 11:53 byte-for-byte. R9 improves evidence on the reached path; it neither changes nor repairs the role omission. |
+| [9 October, 17:31 post-role-contract run](../zig-out/e2e-spec/2026-10-09T06-31-50Z-d8b1413594de14f45b366c7242397e2e/report.json) | 55 exchanges; 100,043 / 100,000 tokens; `WorkflowTokenBudgetExceeded` during the second source review; no publication or rubric. | Calls 7 and 31 supply all six roles. Call 10 loses narrative meaning; call 17 selects an intact reconciliation signal for repair. Regeneration corrects the story but introduces literal-only records at call 35. Identical story request bytes produce different answers; §9.10 traces the shared boundaries and causal limits. |
 | [Loan run](../zig-out/e2e-spec/2026-10-07T11-57-52Z-935b3be1a46109edb237ebb287867251/report.json), analysed in [FIX_003 §14.5](archive/FIX_003.md#145-three-approved-live-executions-after-fix3-0910) | An omission/localization sequence led to insertion of already-captured behavior and dependent rebuilding; terminal budget exhaustion. | Incorrect semantic premises can consume valid repair machinery. |
 
 Both 8 October reports identify modified builds at revision
@@ -769,6 +784,14 @@ increase false repairs and cost; its benefit requires comparative evidence.
 **Feasibility:** high for better projection and diagnostics within existing rules;
 medium and approval-dependent for a new disputed-premise mechanism. No evidence
 yet establishes that an extra reviewer would improve the intended model's results.
+
+**New retained evidence — 9 October, 17:31:** §9.10 demonstrates a correct
+candidate-omission finding followed by incorrect upstream localization. Native
+source/claim joins admit the location but cannot prove that its content lost
+meaning. The existing candidate-local story repair is already covered by a mock
+regression; the observed failure is selection of the wrong repair path, not an
+absence of local repair machinery. Keep this distinct from reconsidering the
+correct omission verdict.
 
 ### R7 — High: focused role calibration complete; broader calibration remains open
 
@@ -1561,6 +1584,11 @@ create a second implementation checklist or amend accepted architecture.
 
 ### 9.1 Progress is real, but the product outcome remains unproved
 
+The comparisons in this subsection describe the earlier 14:39 reassessment.
+The later 17:31 run passes authoring-role coverage and reaches regeneration;
+§9.10 supersedes the early-stop description for the latest run. Neither run
+publishes a specification or supplies a rubric result.
+
 | Implemented item | Architectural progress | What remains unestablished |
 | --- | --- | --- |
 | R3 | Policy review receives resolved business fields, collections and entity applicability through one projection owner. Internal authority tuples are no longer the business subject. | Reliable semantic policy judgments and a completed review workload. Earlier live delivery observations cannot be rechecked against absent raw bundles here. |
@@ -1750,16 +1778,19 @@ or claiming that all existing brittleness has been repaired.
 
 ### 9.5 Suggested next work and feasibility
 
-The immediate model-outcome priority remains the role selector that currently stops
-authoring. Bounded native corrections can proceed independently; they must not be
-presented as solutions to that semantic failure. This order refines §5 without
-authorizing new code, model calls or architecture changes.
+The complete role-decision implementation and comparison are recorded in §9.9.
+The latest run now passes that handoff; its first demonstrated defect moves the
+immediate investigation to **shared business-text authoring and incorrect loss
+localization**, as specified in §9.10. Role-selection false negatives remain open
+calibration findings, but repeating the completed cutover will not repair this
+story. This order refines §5 without authorizing code, model calls or policy changes.
 
 | Priority and existing item | Smallest architecturally complete next step | Feasibility and required evidence |
 | --- | --- | --- |
 | R4 / §8 — missed packet paths | Implemented: one selected repair task across assignment shapes, and shared resolved entity applicability in completed source review. | Closed by boundary regressions and offline verification (§9.6). Live model improvement remains unmeasured; these changes do not address the earlier role-selection blocker. |
 | R9 — reopened evidence gaps | Complete evaluator response-prefix/completeness capture across both adapters; preserve simultaneous invocation/accounting/logging causes as evidence. Correct retention documentation. | High for adapter/trace capture; medium for shared dual-cause reporting. Fault tests must traverse native adapters/runner, not start with ideal populated observations. No scoring or terminal-precedence change. |
 | R7 / R10 — observed authoring blocker | The guidance-only comparison remains rejected (§9.7). The separately authorized complete role-decision contract and its subsequent 48-call comparison are complete (§9.9). | Complete representation and shared admission work. Wrong-group selections fall to zero and captured cases improve, but observed omissions rise and two answers lack final JSON. The declared semantic promotion criterion is not met. Publication/rubric quality remains unverified. |
+| R7 / R6 — literal-only authoring and incorrect localization | Compare complete authoring packets across story and record-field tasks; calibrate intact-upstream versus genuine-loss localization through existing packet/admission owners (§9.10). | Existing input and local repair machinery are usable. A new representation or stronger loss-evidence contract needs coordinated design and measured evidence; no greeting-specific guard, extra reviewer or new retry is justified by this run. |
 | R5 / §8 — complete-workflow feasibility | Measure the full selected-policy workload and memory; evaluate one bounded scheduling/grouping alternative only under an accepted contract. | Measurement is feasible now. Production grouping is conditional on policy amendment and per-member findings, retry identity, invalidation and full coverage evidence. |
 | R2 — answer recovery | Define and implement authenticated acceptance, durable/current applicability and response-backed generation/readback through existing lifecycle owners. | Medium; coordinated authority/state/typed-text work. Mandatory before claiming support for answer-dependent completion, independent of the latest no-answer failure. |
 | R1 / R6 / R8 — quality and repair acceptance | Define required association precision, bounded disputed-premise policy if needed, and development quality/expected-outcome rules. Calibrate review/localization/repair tasks against human labels, then evaluate actual published output. | Conditional decisions, not prompt cleanup. Preserve the distinction between evaluator completion, semantic acceptance and production authority. |
@@ -2453,3 +2484,281 @@ make these cases pass. The next semantic work needs a separately declared
 false-negative experiment on the shared authoring purposes, plus the existing
 generic missing-answer recovery investigation, with these regressions retained.
 That follow-up is outside this contract cutover and grants no additional model calls.
+
+### 9.10 First authoring error and its consequences — 9 October 2026
+
+**Scope and status:** detailed analysis of the user-reported
+[17:31:50 AEDT run](../zig-out/e2e-spec/2026-10-09T06-31-50Z-d8b1413594de14f45b366c7242397e2e/report.md),
+with documentation changes only. Current HEAD is
+`241a0c42653ecde998985548e1f86efe279cc0f5`. The executed build reports modified
+revision `6e7eec648185a9711284c25e2829892d0c1c9d9c`, source digest
+`34398c15ecfad9f2a0c44219c8154f7ff59eda561af321f8aa824997a596003f`.
+The inspected generation, typed-text, provenance, coverage, projection, schema,
+envelope and loss-admission source files, generation resources and workflow YAML
+match their captured bytes in `build-inputs.json`. This binds the following code
+analysis to the executed behavior without assuming that the two commit IDs match.
+
+**Finding:** the first clear authored-content failure is **call 10**, which replaces
+the user story with three exact references to the greeting. All required source
+meaning reached that request. Shape and reference validation admit the response;
+semantic review detects the omission at call 16. Incorrect localization at call
+17 then sends that candidate defect to upstream repair. The terminal error at
+call 55 is budget exhaustion, a consequence of the later workload rather than the
+origin of the story defect.
+
+The report's `first_observed_defect` names **call 26's missing final text**. That
+field is the first captured protocol/native rejection in its event chronology,
+not a claim that earlier authored content was semantically correct. Keep call 10's
+bad candidate, call 16's finding, call 26's recoverable response defect and call
+55's terminal budget rejection distinct.
+
+#### Input, actual answer and expected meaning
+
+[Call 10's captured context](../zig-out/e2e-spec/2026-10-09T06-31-50Z-d8b1413594de14f45b366c7242397e2e/evidence/generation/call-000010/context.json)
+contains:
+
+- Claims 1–3: successful startup, display `Hello, World!` when started, and output
+  date/time in UTC. The original reference and citations are also present.
+- Preserved-token claim 4: the exact greeting, available for insertion into prose.
+- A story purpose requiring a source-backed actor, action and intended result;
+  the source need not already use story format.
+- Shared guidance defining the array as concatenated fragments, strings as prose,
+  and an exact reference as an embedded literal that alone cannot express behavior.
+- The focused instruction to express the behavior in one coherent narrative.
+
+The normalized payload represented by the
+[raw model output](../zig-out/e2e-spec/2026-10-09T06-31-50Z-d8b1413594de14f45b366c7242397e2e/evidence/generation/call-000010/model_output.txt)
+is:
+
+```json
+{"kind":"primary_user_story","value":[
+  {"kind":"exact_copy","claim_id":4},
+  {"kind":"exact_copy","claim_id":4},
+  {"kind":"exact_copy","claim_id":4}
+]}
+```
+
+That resolves to `Hello, World!Hello, World!Hello, World!`. It contains neither a
+startup action nor the UTC obligation, and no coherent actor/action/result story.
+The expected result is meaningful source-backed prose with the literal inserted
+where needed; there is no single required sentence. The later
+[call 33](../zig-out/e2e-spec/2026-10-09T06-31-50Z-d8b1413594de14f45b366c7242397e2e/evidence/generation/call-000033/model_output.txt)
+supplies one acceptable example:
+
+```json
+{"kind":"primary_user_story","value":[
+  "As a user, when I start the application, it must start successfully and display ",
+  {"kind":"exact_copy","claim_id":4},
+  " and output the current date and time in UTC."
+]}
+```
+
+Call 40 subsequently assesses that story as supported. This is an observed
+semantic assessment, not deterministic proof or a new golden-output requirement.
+
+#### Why it passed the early boundaries
+
+| Boundary | Verified behavior | What it does not establish |
+| --- | --- | --- |
+| Shared text schema | [Business-value alternatives](../design/workflows/spec/generation.schema.json#L15) permit strings and eligible `exact_copy` objects. [Choice projection](../src/domain/reference_model_input.zig#L169) retains the string alternative. | A nonempty array need not contain prose or express its assigned purpose. |
+| Provider schema | The captured `request.json` retains both alternatives. [Schema projection](../src/domain/model_schema_projection.zig#L162) converts the disjoint `oneOf` branches to `anyOf`. | There is no evidence this conversion forced reference-only output. Both correct and defective responses fit the offered alternatives. |
+| Provider/envelope normalization | Call 10's raw provider response already contains the three references and no narrative in its final answer. The [prefix parser](../src/domain/model_envelope.zig#L29) slices the known malformed opening and preserves the remaining JSON. | Neither removal of leading reasoning nor prefix normalization explains missing prose; it was absent from the final payload before normalization. |
+| Native story admission | [Generation validation](../src/domain/specification_generation.zig#L125) calls the shared attributed-text validator. [Typed text](../src/domain/typed_text.zig#L147) accepts each eligible exact reference and marks it visible. | It does not establish narrative meaning, and repeated references are not invalid under the current text contract. |
+| Lineage and coverage | [Provenance](../src/domain/specification_provenance.zig#L81) combines bound claims 1–3 with referenced claim 4. [Coverage](../src/domain/specification_coverage.zig#L44) checks claim/token associations. | Attached lineage does not prove the text expresses each attached claim. Preserving the greeting is not preservation of the startup and UTC behavior. |
+| Resolved text | [Projection](../src/domain/specification_projection.zig#L42) concatenates the supplied segments in order. | It cannot invent the missing narrative. Repetition is in the model payload, not introduced by rendering. |
+
+These native checks enforce their current contracts. The architectural exposure
+is that a shape-valid, source-bound candidate can still carry almost none of the
+required meaning; its rejection depends on semantic review. Removing that
+distinction or presenting lineage as entailment would weaken the authority model.
+
+**What is known about the model's choice:** the retained
+[call 10 provider response](../zig-out/e2e-spec/2026-10-09T06-31-50Z-d8b1413594de14f45b366c7242397e2e/evidence/generation/call-000010/response.json)
+contains a reasoning summary recognizing the need for a narrative and both string
+and exact-reference fragments. Its final answer contradicts that description.
+That is evidence of an intention/output mismatch, not a reliable causal account
+of decoding or provider behavior. The trace cannot prove why the final answer
+chose only references, why it repeated them three times, or whether constrained
+generation contributed. Claims of missing directions, unavailable facts or
+adapter-deleted narrative are contradicted by the captured data.
+
+**Strong within-run comparison:** calls 10 and 33 have byte-identical serialized
+provider requests: **6,671 bytes**, SHA-256
+`ec6594144dbe7681cac331198b91c55f8ccd7be8e8581512f81de2bfc9849877`.
+Their context content and response schemas also match. Both use Bedrock
+`openai.gpt-oss-20b-1:0`, low reasoning and temperature 0. Their answers differ.
+Thus the upstream repair did not improve the story's instructions or data; the
+second answer demonstrates output variation under the same captured request.
+This pair cannot establish a failure rate or isolate the provider/model mechanism.
+
+#### Why the first defect caused unnecessary upstream work
+
+Call 16 correctly identifies a missing narrative, although its explanation also
+mentions that the source is not itself a narrative. The request explicitly allows
+deriving a story from requirements, so lack of prewritten story prose is not an
+upstream source defect.
+
+[Call 17's localization packet](../zig-out/e2e-spec/2026-10-09T06-31-50Z-d8b1413594de14f45b366c7242397e2e/evidence/generation/call-000017/context.json)
+shows all three requirements in the original source, extracted claims and
+reconciliation signal 1. Only the candidate story has collapsed to greetings.
+The existing [loss prompt](../design/workflows/spec/support-loss.prompt.md) already
+says to distinguish poor authoring from upstream loss and return `unlocalized`
+when meaning survives the producers. Nevertheless, the response selects
+`{"kind":"reconciliation_signal","ordinal":1}`. The supplied evidence supports
+a candidate-local omission, not loss at that signal.
+
+The code explains how this wrong attribution reaches repair:
+
+1. [Available locations](../src/domain/source_omission.zig#L222) enumerate
+   mechanically eligible producers, explicitly without judging semantic loss.
+2. [Location binding](../src/domain/specification_support_model.zig#L90) derives
+   diagnostic claims from the selected signal. The
+   [validator](../src/domain/source_omission.zig#L193) checks that the signal exists,
+   its claims match and they belong to the cited sources. It cannot prove the
+   claimed content loss. The localization response carries only a location,
+   without a distinct source-versus-producer loss explanation.
+3. [Repair authorization](../src/domain/reference_reconciliation_repair.zig#L710)
+   pins signal 1's content, old value, revision and dependencies. Those protections
+   work, but do not reassess whether that signal is the defective producer.
+4. Call 30 paraphrases the already-preserved requirements. The merge invalidates
+   dependent role decisions, generation and review; it remains pending dependent
+   validation rather than proving successful repair. Calls 31–35 rebuild them.
+
+The existing candidate-local route is not missing. The
+[repeated-display-text regression](../src/specification_generation_test.zig#L4251)
+supplies a **mock** omission with no established upstream loss, selects a story-only
+repair and verifies that sibling units remain unchanged. The
+[workflow handoff](../design/workflows/spec.workflow.yaml#L850) already distinguishes
+that route from upstream repair. This test proves the mechanics conditional on
+correct review/localization; it cannot prove that the live model chooses them.
+
+Regeneration fixes the story in this run but harms previously usable records:
+call 12 wrote meaningful acceptance and functional text; call 35 replaces every
+`given`/`when`/`then` and functional `text` field with the greeting reference alone.
+Those requests share guidance, schemas, bound claims, original sources and record
+purposes; only regenerated brief and entity-basis wording differs. Neither packet
+contains the repaired signal's text. This is a second manifestation of the shared
+authoring failure class, not evidence that a story-only patch would suffice.
+
+Across the run, source review and localization consume **69,499 tokens in 37
+calls**; three missing-final-text responses recover through correction. Call 55
+adds 2,424 tokens to 97,619 already used, crossing 100,000. ADR 0011 requires that
+accounted stop. Publication and rubric evaluation are not reached. Raising the
+budget might permit more work; it would not establish valid content or correct
+repair attribution.
+
+#### Required follow-up and feasibility
+
+These findings refine **R7, R6 and R5**, without reopening completed role-contract
+mechanics or introducing another implementation checklist:
+
+1. **R7 — investigate the shared authoring failure first.** Reuse production
+   packet/schema/admission capture for a bounded comparison of complete story and
+   record-field assignments. Include this failure, unchanged repeats, unrelated
+   business domains, prose-only behavior, embedded literals and legitimate repeated
+   literals. Label preservation of actor/action/outcome, conditions and obligations,
+   separately from JSON admission and exact-byte preservation. Existing fake tests
+   remain mechanical evidence, not semantic ground truth. Freeze one proposed
+   change and its success criteria before approved live trials; do not claim a
+   prompt, reasoning setting or schema rewrite is already a fix.
+2. **R6 — measure and strengthen loss attribution through its existing owner.**
+   Include intact producers with candidate-only loss, genuine extraction and signal
+   loss, ambiguous ownership, and source-only meaning absent from all claims.
+   Preserve the fixed correct omission verdict and use the existing candidate-local
+   repair where no upstream defect is established. A richer closed loss-evidence
+   response may make the comparison inspectable, but does not prove semantic truth;
+   any proposed contract change must cover initial collection, correction, evidence
+   validation, repair, invalidation and readback. New adjudication or retry policy
+   still requires the R6 design decision. Another reviewer is not an established fix.
+3. **R5 — measure the downstream cost and actual completion.** Compare unnecessary
+   upstream repairs, regenerated valid siblings, repeated review and actual tokens
+   as well as first-pass meaning. A diagnostic improvement must still be followed
+   by separately approved E2E publication and rubric evaluation. Do not remove
+   required validation, reuse stale findings or increase allowances to manufacture
+   a passing result.
+
+**Avoid brittle repairs:** do not ban this greeting, impose a specific story phrase,
+deduplicate exact references, or require a prose fragment in every business value.
+[ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md#L26)
+explicitly preserves repeated text while deduplicating dependencies; legitimate
+exact-only titles are covered by existing tests. A required string could contain
+irrelevant prose and still omit behavior. Any justified representation change
+belongs to the shared business-text/schema/codec boundary across initial authoring,
+selected repairs and sibling fields, with explicit exceptions derived from field
+purpose rather than this example. More instructions alone are unsupported as the
+answer: the captured requests already state the rules that were violated.
+
+**Validation of this analysis:** inspected both raw and projected responses,
+captured contexts/provider schemas, report/attempt accounting and repair events;
+compared call 10/33 request bytes and call 12/35 packet components; matched the
+relevant code/resources to captured build inputs; independently audited authoring
+admission and loss routing. Only FIX01 is changed. `git diff --check` and all 25
+new local link/anchor checks passed; no implementation tests, new model calls or
+E2E runs are claimed. The exact provider/model cause of the divergent final
+answers and a proven production remedy remain unresolved.
+
+### 9.11 Authoring-input simplification — 9 October 2026
+
+**Scope:** implement the user's requested clearer inputs for less capable models,
+while keeping the engine generic. This addresses the presentation and unnecessary
+reference-selection work identified after §9.10. It does not claim to establish
+the internal cause of call 10's answer or to fix semantic loss attribution.
+
+**Implementation:**
+
+| Change | Owning implementation and resulting behavior |
+| --- | --- |
+| Resolve assigned meaning beside field purpose | `model_evidence.requirement` resolves each validated claim into `claim_id`, semantic `kind`, `meaning` and `source_id`. `specification_source_binding.guidance` places these requirements beside the existing shared field purpose. It derives them from the retained ledger; it does not create another source of support. |
+| Remove authoring bookkeeping | `specification_session.packetForOptions` presents unassigned semantic claims as `context_requirements`, excludes assigned duplicates from that list, and retains complete original source bytes. Citation coordinates, extractor identities and token bookkeeping stay native. Exact literals have one compact `preserved_tokens` catalogue with occurrence ID, value and source ID. |
+| Give one active operation | Initial prompts say to write their assigned unit. Native unit repair selects the configured repair prompt and retains only its authorized task purpose. Protocol correction preserves the same operation, packet and selected schema. Repair insertion/replacement remains determined by its existing authorization. |
+| Clarify narrative and text responsibilities | The shared purpose owner identifies a source-backed actor **or system**, action and result, without requiring a prewritten story or inventing a persona/benefit. Shared context explains ordered prose/reference fragments and the distinction between exact display values and behavior; it no longer carries simultaneous authoring/repair commands. |
+| Construct a determined exact handle | The existing integer-choice contract explicitly marks native singleton construction. With exactly one eligible occurrence the selected schema omits `claim_id`, and the shared codec constructs it from the retained choices. Echoed IDs reject. With multiple eligible occurrences the model still selects an eligible ID; with none the exact-reference alternative is unavailable. Other singleton selectors are unchanged unless their owning contract explicitly opts in. |
+| Apply the wire contract throughout its lifecycle | Initial generation collection, selected native repair, reviewed omission repair and generic atomic repair use the shared construction function. Composition retains canonical constructed content separately from immutable raw provider evidence; correction retains the original choices. Scripted offline fixture responses use the new wire form. Canonical/persisted values keep their existing exact claim IDs. |
+
+The singleton rule implements the already accepted
+[ADR 0020 representation](../design/decisions/0020-derived-exact-reference-lineage.md#boundary-and-representation).
+It selects neither semantic support nor among several occurrences and does not
+infer identity from matching text. The implementation uses the existing schema,
+packet, codec and reference owners; no new model call, cache behavior, repair
+policy, state version, compatibility reader or provider-specific branch is added.
+The governing [§17](../design/contracts/17-specify.md),
+[§22](../design/contracts/22-repair.md),
+[request guidance](../design/reference-notes/model-request-guidance.md) and
+[call tree](../design/diagrams/21-spec-model-call-tree.md) reflect the new projection
+and active prompt selection. Historical references to combined writing/repair
+prompts are superseded by this implementation.
+
+**Offline evidence:** the regression suite checks resolved passive/source display
+values, unchanged original sources and native bindings, absence of redundant
+authoring bookkeeping, and shared purposes across authoring and selected repair.
+Exact-reference coverage includes no/single/multiple choices, echoed and foreign
+IDs, repeated exact segments, immutable protocol correction, composition and
+allocation failures. Direct repair tests use literal shorthand payloads, verify
+the reconstructed canonical ID and reject echoed handles. Omission repair proves
+that the selected story changes while sibling units and lineage remain intact.
+Unrelated sources are included; fake outputs establish mechanics only.
+
+Targeted commands passed:
+
+- `zig build test-reference-model-input --summary all`: **165/165** tests.
+- `zig build test-model-result-schema test-model-candidate-json --summary all`:
+  **119/119** tests; the final composition adjustment was rechecked through
+  `zig build test-model-result-schema --summary all`: **55/55** tests.
+- `zig build test-model-request-workflow --summary all`: **355/355** tests.
+- `zig build test-specification-generation --summary all`: **251/251** tests.
+
+**Status: implemented and offline-verified.** `zig build verify --summary all`
+completed successfully (exit 0), including the complete unit suite, separate
+offline integration harness, formatting/architecture checks and native packaged
+clean-environment smoke checks. `git diff --check` passed. No tests or validators
+were disabled or weakened. Initial sandbox restrictions on the installed Zig
+compiler/cache required an approved tool escalation for offline verification.
+
+**Remaining uncertainty:** a model can still return exact references without the
+required narrative, or choose the wrong reference when several are eligible.
+Repeated references and legitimate exact-only values remain legal; there is no
+mandatory prose-fragment workaround. Source review, R10, exact coverage and
+publication gates remain required. The new inputs reduce lookup and formatting
+work, but improved first-pass meaning, repair routing, publication and rubric
+quality require the separately approved comparisons described in §9.10. No live
+model calls or E2E runs were made for this implementation.

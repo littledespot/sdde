@@ -1,2 +1,2 @@
-Write or repair the primary user story for its supplied purpose, using bound claims
-and original sources. Express the required behavior in one coherent narrative.
+Write the primary user story for its assigned purpose and requirements.
+Express the required behavior in one coherent narrative.

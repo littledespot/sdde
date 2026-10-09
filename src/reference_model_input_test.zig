@@ -8,6 +8,66 @@ const reconciliation = @import("test_fixtures/reference_reconciliation.zig");
 const text = @import("test_fixtures/reference_text.zig");
 const tokens = @import("test_fixtures/reference_tokens.zig");
 
+test "authoring evidence resolves typed meaning without exposing citation or extractor bookkeeping" {
+    const projection = @import("domain/model_evidence.zig");
+    const r = reconciliation.r;
+    for ([_][]const u8{
+        "MOCK Display status from src/status.zig with `Ready!`.\n",
+        "MOCK Confirm a queued job from src/queue.zig with `Queued!`.\n",
+    }) |source_text| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try @import("reference_reconciliation_test.zig").prepare(a, &.{source_text});
+        defer fixture.deinit();
+        const progress = try reconciliation.initialize(a, fixture.inputs, fixture.extracted, 2);
+        const items = progress.plan.layout.items.entries;
+        var item = for (items) |entry| {
+            if (entry.claim.content == .model) break entry;
+        } else return error.TestUnexpectedResult;
+        const original = item;
+        const scope: r.evidence.Scope = .{ .state_id = fixture.inputs.corpus.state_id, .chunk_id = item.claim.chunk_id };
+        const literal = fixture.text.registry.records[0];
+        const validation_context: r.text.Context = .{ .registry = fixture.text.registry, .current = text.safety.value(fixture.text.owner), .inputs = fixture.inputs, .scope = scope };
+        item.claim.content = .{ .model = .{ .business = try text.validator.business(a, validation_context, .{ .segments = &.{
+            .{ .literal = .{ .value = "MOCK Display " } },
+            .{ .passive = .{ .passive_literal_id = literal.id } },
+            .{ .literal = .{ .value = " when requested." } },
+        } }) } };
+        const business = try projection.requirement(a, item, fixture.inputs, fixture.text.registry);
+        try std.testing.expectEqualStrings("business", business.kind);
+        try std.testing.expectEqualStrings(try std.fmt.allocPrint(a, "MOCK Display {s} when requested.", .{literal.value}), business.meaning);
+        try std.testing.expectEqualDeep(item.claim.id, business.claim_id);
+        try std.testing.expectEqualDeep(item.source_id, business.source_id);
+        const wire = try @import("domain/model_candidate_json.zig").encode(projection.Requirement, a, business);
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
+        try std.testing.expectEqual(@as(usize, 4), parsed.value.object.count());
+        try std.testing.expect(!parsed.value.object.contains("citations") and !parsed.value.object.contains("location"));
+
+        item.claim.content = .{ .model = .{ .technical = try text.validator.reference(a, validation_context, .{ .nodes = &.{
+            .{ .literal = .{ .value = "MOCK Context in " } },
+            .{ .source = .{ .source_id = item.source_id } },
+        } }) } };
+        const technical = try projection.requirement(a, item, fixture.inputs, fixture.text.registry);
+        try std.testing.expectEqualStrings("technical", technical.kind);
+        try std.testing.expectEqualStrings(try std.fmt.allocPrint(a, "MOCK Context in {s}", .{fixture.inputs.corpus.sources[0].path.bytes}), technical.meaning);
+
+        for (items) |entry| if (entry.claim.content == .preserved_token) {
+            const exact = try projection.requirement(a, entry, fixture.inputs, fixture.text.registry);
+            try std.testing.expectEqualStrings("preserved_token", exact.kind);
+            try std.testing.expectEqualStrings(entry.claim.content.preserved_token.value.raw_value.bytes, exact.meaning);
+            try std.testing.expectEqualDeep(entry.claim.id, exact.claim_id);
+        };
+        item = original;
+        item.claim.content = .{ .model = .{ .business = .{ .value = .{ .segments = &.{.{ .exact_copy = .{ .claim_id = item.claim.id } }} } } } };
+        try std.testing.expectError(error.InvalidReferenceReconciliation, projection.requirement(a, item, fixture.inputs, fixture.text.registry));
+        item.claim.content = .{ .model = .{ .technical = .{ .value = .{ .nodes = &.{.{ .source = .{ .source_id = .{ .ordinal = 999 } } }} } } } };
+        try std.testing.expectError(error.InvalidReferenceReconciliation, projection.requirement(a, item, fixture.inputs, fixture.text.registry));
+        item.claim.content = .{ .model = .{ .business = .{ .value = .{ .segments = &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = 999 } } }} } } } };
+        try std.testing.expectError(error.InvalidPassiveLiteral, projection.requirement(a, item, fixture.inputs, fixture.text.registry));
+    }
+}
+
 test "reference model packets preserve exact chunk bytes and engine bound scope" {
     try exercisePackets(std.testing.allocator);
 }

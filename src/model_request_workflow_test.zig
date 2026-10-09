@@ -7679,3 +7679,47 @@ test "detailed and consolidated requests bind native exclusions to the same cano
         try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
     }
 }
+
+test "protocol correction retains native singleton authority and rejects echoed determined handles" {
+    const packets = @import("domain/model_input_packet.zig");
+    const schema_source =
+        \\{"type":"object","properties":{"value":{"type":"array","minItems":1,"maxItems":4,"items":{"oneOf":[{"type":"string","maxLength":80},{"type":"object","properties":{"kind":{"const":"exact_copy"},"claim_id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","claim_id"],"additionalProperties":false}]}}},"required":["value"],"additionalProperties":false}
+    ;
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const a = fixture.arena.allocator();
+    const source = try std.mem.replaceOwned(u8, a, try protocolRetryYaml(&fixture), ", input: input.txt", "");
+    const definition = try std.mem.replaceOwned(u8, a, source, ", input: input }", " }");
+    const graph = try fixture.compileWithAssets(definition, schema_source, false);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    const base = try packets.create(std.testing.allocator, "{\"reference\":\"MOCK literal\"}", .workflow_step, .initial_generation, null);
+    defer packets.release(base);
+    const packet = try @import("domain/reference_model_input.zig").withTextChoices(std.testing.allocator, base, &.{}, &.{73});
+    runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fake.invocation_plan.complete.content = "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":73}]}";
+    try prepareProtocolAttempt(&runner, false);
+    const initial = try currentRequest(&runner);
+    const original_id = initial.id();
+    const original_schema = initial.prepared().?.response_schema;
+    try std.testing.expect(std.mem.indexOf(u8, original_schema.modelBytes(), "claim_id") == null);
+    for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode" }) |step|
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+    try std.testing.expectEqual(.invalid, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+    const correction = try currentRequest(&runner);
+    try std.testing.expect(correction.id() == original_id);
+    try std.testing.expect(correction.packet() == packet);
+    try std.testing.expect(correction.prepared().?.response_schema == original_schema);
+    try prepareProtocolAttempt(&runner, true);
+    fake.invocation_plan.complete.content = "{\"value\":[\"MOCK meaning \",{\"kind\":\"exact_copy\"}]}";
+    for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode", "validate-payload", "close-request" }) |step|
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+    const accepted = try @import("application/model_candidate_handoff.zig").read(&.{ .slots = runner.envelope.slots });
+    const reconstructed = try @import("domain/model_candidate_json.zig").constructBound(a, accepted.body, packet.integerChoices());
+    try std.testing.expectEqualStrings("{\"value\":[\"MOCK meaning \",{\"kind\":\"exact_copy\",\"claim_id\":73}]}", reconstructed);
+    try std.testing.expectEqual(@as(usize, 2), fake.effect_count);
+}

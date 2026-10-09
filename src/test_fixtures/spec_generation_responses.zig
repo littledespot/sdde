@@ -75,7 +75,42 @@ pub const Options = struct {
 };
 
 pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![]const u8 {
-    return partResponse(allocator, try requests.readCurrent(&view, requests.prepared_schema), try completeResponse(allocator, view, options), options.reconciliation_fault);
+    const request = try requests.readCurrent(&view, requests.prepared_schema);
+    const body = try partResponse(allocator, request, try completeResponse(allocator, view, options), options.reconciliation_fault);
+    return modelWire(allocator, body, request.packet() orelse return body);
+}
+
+/// Project canonical fixture data to the currently bound response wire shape.
+/// This test helper does not admit or normalize actual provider responses.
+pub fn modelWire(allocator: std.mem.Allocator, body: []const u8, packet: *const @import("../domain/model_input_packet.zig").Packet) ![]const u8 {
+    for (packet.integerChoices()) |choice| {
+        if (choice.constructedValue() != null) break;
+    } else return body;
+    var parsed = try @import("../domain/strict_json.zig").parse(allocator, body, .{ .maximum_depth = 64 }, false, null);
+    try omitScriptedNativeFields(&parsed.value, packet.integerChoices());
+    return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
+}
+
+// Scripted canonical values are fixture data; model-wire responses omit only
+// their matching determined handles. Independent boundary tests cover admission.
+fn omitScriptedNativeFields(value: *std.json.Value, choices: []const @import("../domain/model_result_schema.zig").IntegerChoice) !void {
+    switch (value.*) {
+        .object => |*object| {
+            for (object.values()) |*child| try omitScriptedNativeFields(child, choices);
+            const kind = object.get("kind") orelse return;
+            if (kind != .string) return;
+            for (choices) |choice| if (choice.constructedValue()) |fixed| {
+                const target = choice.target.tagged;
+                if (!std.mem.eql(u8, target.kind, kind.string)) continue;
+                const selected = object.get(target.field) orelse continue;
+                if (selected != .number_string) return error.InvalidFixture;
+                const id = try @import("../domain/model_payload_schema.zig").exactInteger(selected.number_string);
+                if (id == fixed) _ = object.swapRemove(target.field);
+            };
+        },
+        .array => |*array| for (array.items) |*child| try omitScriptedNativeFields(child, choices),
+        else => {},
+    }
 }
 
 fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Options) ![]const u8 {

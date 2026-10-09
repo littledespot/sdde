@@ -224,7 +224,9 @@ test "draft generation and selected repair retain original source meaning withou
                 try std.testing.expectEqualStrings(source.bytes, projected.object.get("text").?.string);
             }
             try std.testing.expect(!input.object.contains("signals"));
-            try std.testing.expect(input.object.get("claims").?.array.items.len != 0);
+            try std.testing.expect(input.object.get("source_assignment").? == .object);
+            try std.testing.expect(!input.object.contains("claims"));
+            try std.testing.expect(!input.object.contains("citations"));
             const assignment = input.object.get("source_assignment").?.object;
             if (packet == original) {
                 try std.testing.expectEqualStrings("A description of intended user-visible behavior.", assignment.get("description").?.object.get("purpose").?.string);
@@ -233,7 +235,7 @@ test "draft generation and selected repair retain original source meaning withou
                 try std.testing.expect(!assignment.get("description").?.object.contains("purpose"));
                 try std.testing.expectEqualStrings(try @import("domain/required_authority_description.zig").task(a, .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .display_name }), try selectedNativeRepairTask(input));
             }
-            try std.testing.expectEqualDeep(good.provenance.claim_ids, (try @import("domain/model_candidate_json.zig").decode(@import("domain/specification_source_binding.zig").Guidance, a, try std.json.Stringify.valueAlloc(a, input.object.get("source_assignment").?, .{}))).brief.description.claim_ids);
+            try expectAssignedRequirements(good.provenance.claim_ids, (try @import("domain/model_candidate_json.zig").decode(@import("domain/specification_source_binding.zig").Guidance, a, try std.json.Stringify.valueAlloc(a, input.object.get("source_assignment").?, .{}))).brief.description.requirements);
         }
         // Added source context does not widen valid provenance or authorize lost content.
         try std.testing.expectError(error.InvalidReferenceReconciliation, provenance.select(a, fixture.context, .{ .claim_ids = &.{.{ .ordinal = 999 }}, .clarification_response_ids = &.{} }));
@@ -288,12 +290,21 @@ test "authoring assignments retain field purpose bound meaning and exact choices
             const assigned = try codec.decode(binding.Guidance, a, try std.json.Stringify.valueAlloc(a, body.get("source_assignment").?, .{}));
             try std.testing.expectEqualStrings(before, try codec.encode(binding.Bound, a, bound));
             try std.testing.expectEqualStrings(example.source, body.get("sources").?.array.items[0].object.get("text").?.string);
-            try std.testing.expectEqualStrings(example.claim, body.get("claims").?.array.items[0].object.get("content").?.object.get("model").?.object.get("segments").?.array.items[0].string);
+            try std.testing.expectEqualStrings("write", body.get("operation").?.string);
+            try std.testing.expect(!body.contains("claims"));
+            try std.testing.expect(!body.contains("citations"));
+            try std.testing.expect(!body.contains("unit"));
+            const selected_requirements = switch (assigned) {
+                .brief => |value| value.title.requirements,
+                inline else => |value| value.requirements,
+            };
+            try std.testing.expectEqualStrings(example.claim, selected_requirements[0].meaning);
+            for (body.get("context_requirements").?.array.items) |requirement| try std.testing.expect(!binding.assigns(assigned, .{ .ordinal = @intCast(requirement.object.get("claim_id").?.integer) }));
             switch (assigned) {
                 .brief => |brief| {
-                    try std.testing.expectEqualDeep(bound.brief.title.claim_ids, brief.title.claim_ids);
-                    try std.testing.expectEqualDeep(bound.brief.description.claim_ids, brief.description.claim_ids);
-                    try std.testing.expectEqualDeep(bound.brief.primary_goal.claim_ids, brief.primary_goal.claim_ids);
+                    try expectAssignedRequirements(bound.brief.title.claim_ids, brief.title.requirements);
+                    try expectAssignedRequirements(bound.brief.description.claim_ids, brief.description.requirements);
+                    try expectAssignedRequirements(bound.brief.primary_goal.claim_ids, brief.primary_goal.requirements);
                     try std.testing.expectEqualStrings(try references.r.GenerationRole.title.purpose(a), brief.title.purpose.?);
                     try std.testing.expectEqualStrings(try references.r.GenerationRole.description.purpose(a), brief.description.purpose.?);
                     try std.testing.expectEqualStrings(try references.r.GenerationRole.primary_goal.purpose(a), brief.primary_goal.purpose.?);
@@ -301,31 +312,59 @@ test "authoring assignments retain field purpose bound meaning and exact choices
                     defer selected.release();
                     if (body.get("preserved_tokens").?.array.items.len != 0) {
                         const id = body.get("preserved_tokens").?.array.items[0].object.get("claim_id").?.integer;
-                        const wire = try std.fmt.allocPrint(a, "{{\"kind\":\"brief\",\"title\":{{\"value\":[{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}]}},\"description\":{{\"value\":[{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}]}},\"primary_goal\":{{\"value\":[{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}]}}}}", .{ id, id, id });
+                        const segment = if (body.get("preserved_tokens").?.array.items.len == 1) "{\"kind\":\"exact_copy\"}" else try std.fmt.allocPrint(a, "{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}", .{id});
+                        const wire = try std.fmt.allocPrint(a, "{{\"kind\":\"brief\",\"title\":{{\"value\":[{s}]}},\"description\":{{\"value\":[{s}]}},\"primary_goal\":{{\"value\":[{s}]}}}}", .{ segment, segment, segment });
                         // The failed live content is structurally legal, as is a
                         // source-required exact title. Purpose is semantic, not a ban.
                         try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = wire });
-                        const candidate = try g.parse(a, wire, bound);
+                        const candidate = try g.parse(a, try codec.constructBound(a, wire, packet.integerChoices()), bound);
                         try std.testing.expect((try g.validate(a, text.validator, fixture.context, .brief, candidate)) == .valid);
                     }
                     const export_value = .{ .input = std.json.Value{ .object = body }, .prior_assignment = (try std.json.parseFromSlice(std.json.Value, a, before, .{})).value, .schema = selected.selected().modelBytes() };
                     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = try std.fmt.allocPrint(a, ".zig-cache/authoring-comparison/{s}.json", .{example.name}), .data = try std.json.Stringify.valueAlloc(a, export_value, .{}) });
                 },
                 .primary_user_story => |story| {
-                    try std.testing.expectEqualDeep(bound.primary_user_story.claim_ids, story.claim_ids);
+                    try expectAssignedRequirements(bound.primary_user_story.claim_ids, story.requirements);
                     try std.testing.expectEqualStrings(try references.r.GenerationRole.primary_user_story.purpose(a), story.purpose.?);
                 },
                 .entities => |entities| {
-                    try std.testing.expectEqualDeep(bound.entities.claim_ids, entities.claim_ids);
+                    try expectAssignedRequirements(bound.entities.claim_ids, entities.requirements);
                     try std.testing.expectEqualStrings(try references.r.GenerationRole.entity_basis.purpose(a), entities.purpose.?);
                 },
                 .records => |records| {
-                    try std.testing.expectEqualDeep(bound.records.selection.claim_ids, records.claim_ids);
+                    try expectAssignedRequirements(bound.records.selection.claim_ids, records.requirements);
                     try std.testing.expectEqualDeep(bound.records.signal, records.signal);
                     try std.testing.expectEqualStrings(try references.r.GenerationRole.records.purpose(a), records.purpose.?);
                 },
             }
         }
+    }
+}
+
+fn expectAssignedRequirements(expected: []const references.r.ClaimId, actual: []const @import("domain/model_evidence.zig").Requirement) !void {
+    try std.testing.expectEqual(expected.len, actual.len);
+    for (expected, actual) |id, requirement| {
+        try std.testing.expectEqualDeep(id, requirement.claim_id);
+        try std.testing.expect(requirement.meaning.len != 0);
+        try std.testing.expect(requirement.kind.len != 0);
+        try std.testing.expect(requirement.source_id.ordinal != 0);
+    }
+}
+
+fn checkAuthoringPacket(a: std.mem.Allocator, bytes: []const u8) !void {
+    const parsed = (try std.json.parseFromSlice(std.json.Value, a, bytes, .{})).value.object;
+    const body = if (parsed.get("input")) |input| input.object else parsed;
+    try std.testing.expect(!body.contains("claims"));
+    try std.testing.expect(!body.contains("citations"));
+    for (body.get("preserved_tokens").?.array.items) |token| {
+        try std.testing.expectEqual(@as(usize, 3), token.object.count());
+        try std.testing.expect(token.object.get("claim_id").?.integer > 0);
+        try std.testing.expect(token.object.get("value").?.string.len != 0);
+        try std.testing.expect(token.object.get("source_id").?.integer > 0);
+    }
+    if (body.get("source_assignment").? == .object) {
+        const assigned = try @import("domain/model_candidate_json.zig").decode(@import("domain/specification_source_binding.zig").Guidance, a, try std.json.Stringify.valueAlloc(a, body.get("source_assignment").?, .{}));
+        for (body.get("context_requirements").?.array.items) |requirement| try std.testing.expect(!@import("domain/specification_source_binding.zig").assigns(assigned, .{ .ordinal = @intCast(requirement.object.get("claim_id").?.integer) }));
     }
 }
 
@@ -366,10 +405,10 @@ test "story generation and repair omit sibling drafts while retaining source evi
             try std.testing.expect(!body.contains("brief"));
             try std.testing.expect(!body.contains("entities"));
             try std.testing.expectEqualStrings(source, body.get("sources").?.array.items[0].object.get("text").?.string);
-            for ([_][]const u8{ "claims", "citations", "sources" }) |field|
+            for ([_][]const u8{ "context_requirements", "preserved_tokens", "sources" }) |field|
                 try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, original.get(field).?, .{}), try std.json.Stringify.valueAlloc(a, body.get(field).?, .{}));
         }
-        try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, original.get("source_assignment").?.object.get("claim_ids").?, .{}), try std.json.Stringify.valueAlloc(a, corrected.get("source_assignment").?.object.get("claim_ids").?, .{}));
+        try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, original.get("source_assignment").?.object.get("requirements").?, .{}), try std.json.Stringify.valueAlloc(a, corrected.get("source_assignment").?.object.get("requirements").?, .{}));
         try std.testing.expectEqualStrings(try @import("domain/required_authority_description.zig").task(a, .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .primary_user_story }), try selectedNativeRepairTask(.{ .object = corrected }));
         const merged = try repair.merge(a, current, fixture.context, candidate, auth, .{ .value = good.value }, null);
         try std.testing.expect((try validate_unit.execute(a, current, fixture.context, merged)) == .valid);
@@ -426,13 +465,10 @@ test "specification choices acceptance and coverage share retained claim eligibi
                 for ([_]*const packets.Packet{ packet, repair_packet }) |request| {
                     const body = try std.json.parseFromSlice(std.json.Value, a, request.body(), .{});
                     const input = if (request.purpose() == .atomic_repair) body.value.object.get("input").? else body.value;
-                    var offered = false;
-                    for (input.object.get("claims").?.array.items) |claim| {
-                        const ordinal = claim.object.get("id").?.integer;
-                        if (ordinal == id.ordinal) offered = true;
-                        try std.testing.expect(ordinal != 999);
-                    }
-                    try std.testing.expect(offered);
+                    const assigned = try @import("domain/model_candidate_json.zig").decode(@import("domain/specification_source_binding.zig").Guidance, a, try std.json.Stringify.valueAlloc(a, input.object.get("source_assignment").?, .{}));
+                    try std.testing.expect(@import("domain/specification_source_binding.zig").assigns(assigned, id));
+                    try std.testing.expect(!@import("domain/specification_source_binding.zig").assigns(assigned, .{ .ordinal = 999 }));
+                    for (input.object.get("context_requirements").?.array.items) |claim| try std.testing.expect(claim.object.get("claim_id").?.integer != 999);
                 }
             } else try std.testing.expectError(error.InvalidSpecificationBinding, sessions.packet(std.testing.allocator, current, context));
             if (eligible) {
@@ -748,7 +784,7 @@ test "complete specification sessions preserve unit order provenance and conditi
             const unit = try sessions.unit(current.completed);
             const packet = try sessions.packet(std.testing.allocator, current, fixture.context);
             defer @import("domain/model_input_packet.zig").release(packet);
-            try @import("reference_model_input_test.zig").checkProjectedPacket(a, packet.body());
+            try checkAuthoringPacket(a, packet.body());
             try std.testing.expect(std.mem.indexOf(u8, packet.body(), "principles") == null);
             const response: g.Response = .{ .content = switch (unit) {
                 .brief => .{ .brief = .{ .title = value, .description = value, .primary_goal = value } },
@@ -1043,11 +1079,12 @@ test "entity membership repair preserves fixed decisions evidence siblings origi
             }
             const replacement: spec.Model.RecordProposal = if (required) entity else .{ .content = .{ .business_rule = .{ .text = exact } }, .provenance = token_evidence };
             const corrected: @TypeOf(origin) = .{ .request = .{ .value = 12 }, .attempt = .{ .value = 1 } };
-            const selected = schemas.select(packet.resultDefinition().?).?;
-            const wire = try @import("domain/model_candidate_json.zig").encode(spec.Wire.RecordProposal, a, .{ .content = replacement.content });
-            try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = wire });
+            const selected = try @import("domain/model_result_schema.zig").restrict(a, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+            defer selected.release();
+            const wire = try @import("test_fixtures/spec_generation_responses.zig").modelWire(a, try @import("domain/model_candidate_json.zig").encode(spec.Wire.RecordProposal, a, .{ .content = replacement.content }), packet);
+            try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = wire });
             const forbidden = try @import("domain/model_candidate_json.zig").encode(spec.Wire.RecordProposal, a, .{ .content = (if (required) ordinary else entity).content });
-            try @import("model_payload_schema_test.zig").checkDocument(selected.modelBytes(), .{ .bytes = forbidden, .rejection = if (required) .unknown_property else .unknown_variant, .path = if (required) "/content/text" else "/content/kind" });
+            try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = forbidden, .rejection = if (required) .unknown_property else .unknown_variant, .path = if (required) "/content/text" else "/content/kind" });
             const decoded = try repair.parse(a, auth, packet, wire);
             const consistent = try repair.merge(a, current, fixture.context, candidate, auth, decoded, corrected);
             try std.testing.expectEqual(.resolved, (try repair.retryValidation(a, text.validator, current, fixture.context, consistent)).?.validated.result);
@@ -1114,7 +1151,7 @@ test "record generation choices follow the accepted entity decision through narr
         const selected = try schema.restrict(a, canonical.select(initial.resultDefinition().?).?, initial.excludedVariants(), initial.integerChoices());
         defer selected.release();
         try check(selected.selected().modelBytes(), .{ .bytes = ordinary_wire });
-        try check(selected.selected().modelBytes(), .{ .bytes = entity_wire, .rejection = if (required) null else .unknown_variant, .path = if (required) null else "/records/0/content/kind" });
+        try check(selected.selected().modelBytes(), .{ .bytes = try @import("test_fixtures/spec_generation_responses.zig").modelWire(a, entity_wire, initial), .rejection = if (required) null else .unknown_variant, .path = if (required) null else "/records/0/content/kind" });
         if (required) {
             const checked = (try g.validate(a, text.validator, fixture.context, .records, .{ .content = .{ .records = &.{ordinary} } })).valid;
             try std.testing.expectEqual(.entity_membership, (try sessions.checkConsistency(a, current, checked)).?.rule);
@@ -1124,7 +1161,7 @@ test "record generation choices follow the accepted entity decision through narr
         const narrowed_schema = try schema.restrict(a, canonical.select(narrowed.resultDefinition().?).?, narrowed.excludedVariants(), narrowed.integerChoices());
         defer narrowed_schema.release();
         try check(narrowed_schema.selected().modelBytes(), .{ .bytes = ordinary_wire });
-        try check(narrowed_schema.selected().modelBytes(), .{ .bytes = entity_wire, .rejection = if (required) null else .unknown_variant, .path = if (required) null else "/records/0/content/kind" });
+        try check(narrowed_schema.selected().modelBytes(), .{ .bytes = try @import("test_fixtures/spec_generation_responses.zig").modelWire(a, entity_wire, narrowed), .rejection = if (required) null else .unknown_variant, .path = if (required) null else "/records/0/content/kind" });
     }
     current.units[2] = null;
     try std.testing.expectError(error.InvalidSpecificationUnit, sessions.packet(a, current, fixture.context));
@@ -1399,7 +1436,11 @@ test "mixed prose and exact references survive repair coverage rendering and per
         const packet = try repair.packet(a, current, fixture.context, authorized);
         defer @import("domain/model_input_packet.zig").release(packet);
         const replacement: repair.Replacement = .{ .value = model.value };
-        const merged = try repair.merge(a, current, fixture.context, candidate, authorized, try repair.parse(a, authorized, packet, try json.encodeSelected(repair.Replacement, a, replacement)), null);
+        const wire = try std.fmt.allocPrint(a, "{{\"value\":[{s},{{\"kind\":\"exact_copy\"}},{s}]}}", .{ try std.json.Stringify.valueAlloc(a, case.prefix, .{}), try std.json.Stringify.valueAlloc(a, case.suffix, .{}) });
+        const decoded = try repair.parse(a, authorized, packet, wire);
+        try std.testing.expectEqualDeep(replacement, decoded);
+        try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorized, packet, try json.encodeSelected(repair.Replacement, a, replacement)));
+        const merged = try repair.merge(a, current, fixture.context, candidate, authorized, decoded, null);
         try std.testing.expect((try validate_unit.execute(a, current, fixture.context, merged)) == .valid);
         try std.testing.expectEqualDeep(candidate.response.content.brief.title, merged.response.content.brief.title);
         try std.testing.expectEqualDeep(candidate.response.content.brief.primary_goal, merged.response.content.brief.primary_goal);
@@ -1568,7 +1609,7 @@ test "atomic specification repair preserves siblings and rejects stale or foreig
         try std.testing.expect(authorization.target.value.subject == .description);
         const packet = try repair.packet(std.testing.allocator, current, fixture.context, authorization);
         defer packets.release(packet);
-        try @import("reference_model_input_test.zig").checkProjectedPacket(a, packet.body());
+        try checkAuthoringPacket(a, packet.body());
         const replacement: repair.Replacement = .{ .value = good.value };
         const wire = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, replacement);
         const parsed = try repair.parse(a, authorization, packet, wire);
@@ -1645,18 +1686,18 @@ test "active scalar repairs present one selected task and retain their bound sou
             const assigned = try json.decode(binding.Guidance, a, try std.json.Stringify.valueAlloc(a, input.object.get("source_assignment").?, .{}));
             switch (assigned) {
                 .brief => |value| {
-                    try std.testing.expectEqualDeep(bound.brief.title.claim_ids, value.title.claim_ids);
-                    try std.testing.expectEqualDeep(bound.brief.description.claim_ids, value.description.claim_ids);
-                    try std.testing.expectEqualDeep(bound.brief.primary_goal.claim_ids, value.primary_goal.claim_ids);
+                    try expectAssignedRequirements(bound.brief.title.claim_ids, value.title.requirements);
+                    try expectAssignedRequirements(bound.brief.description.claim_ids, value.description.requirements);
+                    try expectAssignedRequirements(bound.brief.primary_goal.claim_ids, value.primary_goal.requirements);
                 },
-                .primary_user_story => |value| try std.testing.expectEqualDeep(bound.primary_user_story.claim_ids, value.claim_ids),
-                .entities => |value| try std.testing.expectEqualDeep(bound.entities.claim_ids, value.claim_ids),
+                .primary_user_story => |value| try expectAssignedRequirements(bound.primary_user_story.claim_ids, value.requirements),
+                .entities => |value| try expectAssignedRequirements(bound.entities.claim_ids, value.requirements),
                 .records => return error.UnexpectedRecordAssignment,
             }
             const initial = try sessions.packet(std.testing.allocator, current, fixture.context);
             defer packets.release(initial);
             const initial_body = (try std.json.parseFromSlice(std.json.Value, a, initial.body(), .{})).value.object;
-            inline for (.{ "claims", "citations", "sources" }) |key| try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, initial_body.get(key).?, .{}), try std.json.Stringify.valueAlloc(a, input.object.get(key).?, .{}));
+            inline for (.{ "context_requirements", "preserved_tokens", "sources" }) |key| try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, initial_body.get(key).?, .{}), try std.json.Stringify.valueAlloc(a, input.object.get(key).?, .{}));
             const selected = try candidates.attributedValue(.model, original, case.subject, .value);
             const replacement: repair.Replacement = .{ .value = selected.value };
             const decoded = try repair.parse(a, authorization, packet, try json.encodeSelected(repair.Replacement, a, replacement));
@@ -4262,7 +4303,13 @@ test "reviewed copied-token narrative loss repairs the bound field without upstr
         try std.testing.expectEqual(@as(usize, 1), authorization.target.unit);
         try std.testing.expectEqual(.story, std.meta.activeTag(authorization.target.part.value.subject));
         const replacement: spec.BusinessValue = .{ .segments = &.{ .{ .literal = .{ .value = "MOCK The actor performs the source-backed action, sees " } }, .{ .exact_copy = .{ .claim_id = token } }, .{ .literal = .{ .value = " and reads the required result." } } } };
-        const repaired = try repair.mergeOmission(a, text.validator, current, fixture.context, content, decision, authorization, .{ .value = replacement }, null);
+        const packet = try repair.omissionPacket(a, current, fixture.context, content, decision, authorization);
+        defer @import("domain/model_input_packet.zig").release(packet);
+        const wire = "{\"value\":[\"MOCK The actor performs the source-backed action, sees \",{\"kind\":\"exact_copy\"},\" and reads the required result.\"]}";
+        const decoded = try repair.parseOmission(a, authorization, packet, wire);
+        try std.testing.expectEqualDeep(replacement, decoded.value);
+        try std.testing.expectError(error.InvalidJsonDocument, repair.parseOmission(a, authorization, packet, try json.encode(spec.BusinessValue, a, replacement)));
+        const repaired = try repair.mergeOmission(a, text.validator, current, fixture.context, content, decision, authorization, decoded, null);
         const rebuilt = try sessions.assemble(a, text.validator, fixture.context, repaired);
         try std.testing.expectEqualDeep(replacement, rebuilt.content.primary_user_story.value);
         try std.testing.expectEqualDeep(current.units[0], repaired.units[0]);
@@ -6556,7 +6603,8 @@ test "fixed Spec choices narrow the visible token catalogue with the selected sc
         defer packets.release(narrowed);
         const after = (try std.json.parseFromSlice(std.json.Value, a, narrowed.body(), .{})).value;
         try std.testing.expectEqual(@as(usize, 0), after.object.get("preserved_tokens").?.array.items.len);
-        try std.testing.expectEqual(before.object.get("claims").?.array.items.len, after.object.get("claims").?.array.items.len);
+        try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, before.object.get("source_assignment").?, .{}), try std.json.Stringify.valueAlloc(a, after.object.get("source_assignment").?, .{}));
+        try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, before.object.get("context_requirements").?, .{}), try std.json.Stringify.valueAlloc(a, after.object.get("context_requirements").?, .{}));
         for (narrowed.integerChoices()) |choice| try std.testing.expect(!std.mem.eql(u8, choice.target.tagged.kind, "exact_copy"));
     }
 }

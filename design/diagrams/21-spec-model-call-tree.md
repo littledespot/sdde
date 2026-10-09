@@ -111,7 +111,7 @@ flowchart LR
     GENERATE --> STORY["generate-unit: primary_user_story<br/>story-prompt<br/>1 call"]
     GENERATE --> ENTITIES["generate-unit: entities<br/>entities-prompt<br/>1 call"]
     GENERATE --> RECORDS["generate-unit: records<br/>records-prompt<br/>1 call per active record group"]
-    GENERATE -. "Unit validation authorizes repair" .-> UNIT_REPAIR["generate-unit: repair<br/>Same prompt as the affected unit<br/>Authorized replacement"]
+    GENERATE -. "Unit validation authorizes repair" .-> UNIT_REPAIR["generate-unit: repair<br/>repair-prompt<br/>Authorized replacement"]
 
     ROOT --> REVIEW["review-specification"]
     REVIEW --> CANDIDATE["review-candidate"]
@@ -150,7 +150,11 @@ ordered text fragments and literal insertion; the selected schema still defines
 the response shape. Story purpose comes from the shared native requirement descriptions.
 Brief and story packets contain source evidence without sibling drafts; entities
 receive the brief, and record requests receive the brief and entity decision.
-Corrections retain their selected context, purpose prompt and dynamic input.
+Authoring purposes include resolved bound requirements; other eligible meanings
+remain context and full source text stays available. Exact-reference bookkeeping
+is native, including construction of a sole eligible occurrence's handle.
+Native repairs use the repair prompt and their authorized purpose/task. Corrections
+retain the active context, prompt and dynamic input.
 
 Source review resolves the selected feature/record field or native signal while
 retaining original-source evidence. Producer localization carries the fixed

@@ -125,7 +125,10 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
         }
 
         pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
-            return json.decodeSelected(Replacement, a, try checkRequest(authorization, input), bytes);
+            const kind = try checkRequest(authorization, input);
+            const canonical = try json.constructBound(a, bytes, input.integerChoices());
+            defer a.free(canonical);
+            return json.decodeSelected(Replacement, a, kind, canonical);
         }
 
         /// Retained authorization binds both default and domain-selected decoders.

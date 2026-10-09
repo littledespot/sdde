@@ -157,6 +157,7 @@ fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8
             },
             .definition = if (entry.definition) |id| .{ .bytes = try a.dupe(u8, id.bytes) } else null,
             .allowed = try a.dupe(i64, entry.allowed),
+            .singleton = entry.singleton,
         };
     }
     storage(result).integer_choices = selected;

@@ -592,3 +592,51 @@ fn restrictChoices(allocator: std.mem.Allocator) !void {
     const copy = try narrowed.selected().clone(a);
     try std.testing.expectEqualStrings(narrowed.selected().modelBytes(), copy.modelBytes());
 }
+
+test "explicit native singleton construction omits only determined tagged fields" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const canonical = try compile(a,
+        \\{"type":"object","properties":{"value":{"type":"array","minItems":1,"maxItems":4,"items":{"oneOf":[{"type":"string","maxLength":80},{"type":"object","properties":{"kind":{"const":"exact_copy"},"claim_id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","claim_id"],"additionalProperties":false}]}},"count":{"type":"integer","minimum":1,"maximum":100}},"required":["value","count"],"additionalProperties":false}
+    );
+    const single: schema.IntegerChoice = .{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = &.{7}, .singleton = .construct };
+    const fixed = try schema.restrict(std.testing.allocator, canonical, &.{}, &.{single});
+    defer fixed.release();
+    try expectSelection(a, fixed.selected(), "{\"value\":[\"MOCK narrative \",{\"kind\":\"exact_copy\"}],\"count\":8}", true);
+    for ([_][]const u8{
+        "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":7}],\"count\":8}",
+        "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":8}],\"count\":8}",
+        "{\"value\":[{\"kind\":\"exact_copy\",\"unexpected\":7}],\"count\":8}",
+    }) |bad| try expectSelection(a, fixed.selected(), bad, false);
+    // Canonical and ordinary restricted contracts continue to require IDs.
+    try expectSelection(a, canonical, "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", false);
+    var selected = single;
+    selected.singleton = .select;
+    const unchanged = try schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected});
+    defer unchanged.release();
+    try expectSelection(a, unchanged.selected(), "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":7}],\"count\":8}", true);
+    selected = single;
+    selected.allowed = &.{ 7, 9 };
+    const multiple = try schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected});
+    defer multiple.release();
+    try expectSelection(a, multiple.selected(), "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":9}],\"count\":8}", true);
+    try expectSelection(a, multiple.selected(), "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", false);
+    try expectSelection(a, multiple.selected(), "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":8}],\"count\":8}", false);
+    const absent = try schema.restrict(std.testing.allocator, canonical, &.{.{ .kind = "exact_copy" }}, &.{});
+    defer absent.release();
+    try expectSelection(a, absent.selected(), "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", false);
+    // Native construction is explicit tagged scalar policy, never a blanket
+    // omission of all singleton values or optional field/array inference.
+    selected = single;
+    selected.target = .{ .path = &.{.{ .property = "count" }} };
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected}));
+    selected = single;
+    selected.allowed = &.{101};
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected}));
+    selected.allowed = &.{ 7, 7 };
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected}));
+    var adapter: parser.Adapter = .{};
+    const captured = try adapter.compiler().compileSelected(a, fixed.selected().modelBytes());
+    try expectSelection(a, captured, "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", true);
+}

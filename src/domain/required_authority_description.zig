@@ -103,7 +103,7 @@ pub fn task(allocator: std.mem.Allocator, id: a.Id) a.Error![]const u8 {
             .display_name => "A concise name derived from the feature's source-backed purpose. The source need not supply a title.",
             .description => "A description of intended user-visible behavior.",
             .primary_goal => "The intended user benefit derived from the source-backed behavior and outcome.",
-            .primary_user_story => "One narrative identifying a source-backed actor, action and intended result. The source need not use story format; preserve its conditions and obligations.",
+            .primary_user_story => "One narrative describing the actor or system identified by the source, its action and intended result. Preserve conditions and obligations; do not invent a persona or benefit or require a prewritten story.",
             .acceptance_criteria => recordFamily(.acceptance_criterion),
             .functional_requirements => recordFamily(.functional_requirement),
             .scenario_coverage => "Source-required triggers, outcomes and exact copy.",

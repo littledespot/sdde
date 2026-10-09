@@ -194,10 +194,10 @@ assesses each purpose using explicit or necessarily implied meaning; it cannot
 invent an actor, benefit or entity merely to fill coverage.
 No context-only literal is promoted to behavior merely to fill a role.
 Record authoring runs per bound group and may
-return several requirements. Each generation and repair packet presents the
-bound fields' purposes from the shared requirement descriptions beside their
-claim IDs. Claim meaning and citations appear once in the evidence catalogue;
-original sources remain available to identify extraction or assignment loss.
+return several requirements. Generation presents each bound field's shared
+purpose beside its resolved claim meanings and identities. Repair presents only
+the authorized replacement purpose. Remaining eligible meanings and original
+sources retain context; citation bookkeeping remains native.
 This presentation does not reselect support or establish semantic adequacy.
 The engine constructs canonical `S` and derives
 exact dependencies and citations. Generation, source-review and repair
@@ -215,8 +215,9 @@ For each feature-brief or specification unit, the declared model operation retur
   the shipped workflow requests the brief, primary story, entity applicability and
   complete record collection in four sequential assignments through one shared
   generation subgraph. Narrative, applicability and record drafting receive their
-  purpose-specific configured prompts. The same purpose prompt accompanies native
-  repairs and their protocol corrections.
+  purpose-specific configured authoring prompts. Native repairs receive the
+  configured repair prompt and the selected field/record purpose from the existing
+  repair task. Protocol correction retains that active assignment and its schema.
   The primary story has its own concise prompt and uses the canonical story purpose.
   Generation, native unit repair and reviewed omission repair share static text
   guidance from `spec/generation.context.json`: ordered fragments form one field
@@ -226,6 +227,15 @@ For each feature-brief or specification unit, the declared model operation retur
   the brief, records receive the brief and entity decision. Brief and story requests
   receive neither sibling draft. Source evidence and native repair dependencies
   remain complete; packet presentation does not change semantic review or retry policy.
+  Authoring packets resolve bound requirement meanings beside each field purpose.
+  Remaining eligible meanings stay in a separate context projection without
+  repeating assigned claims. Original sources remain available; citation
+  coordinates, extractor metadata and redundant token IDs remain native.
+  Exact choices expose their eligible claim occurrence, literal and source through
+  one reference-owned projection. ADR 0020 constructs a sole eligible exact-copy
+  handle natively; multiple eligible occurrences still require selection.
+  The canonical story purpose identifies an actor or system supported by the
+  source, rather than requiring an invented user persona or prewritten story.
   Functional requirements express behavior and obligation; acceptance criteria
   express precondition, triggering action and observable outcome. A rejected
   candidate may omit intent: repair preserves source meaning and correct surrounding

@@ -592,3 +592,48 @@ fn compactRoundTrip(allocator: std.mem.Allocator) !void {
         "{\"value\":false}",                                "{\"value\":[],\"extra\":0}",
     }) |bad| try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Value, a, bad));
 }
+
+test "native singleton fields reconstruct by bound occurrence without changing raw responses" {
+    try nativeSingletonFields(std.testing.allocator);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, nativeSingletonFields, .{});
+}
+fn nativeSingletonFields(allocator: std.mem.Allocator) !void {
+    const choices = [_]@import("domain/model_result_schema.zig").IntegerChoice{.{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = &.{41}, .singleton = .construct }};
+    const raw = "{\"value\":[\"MOCK surrounding narrative \",{\"kind\":\"exact_copy\"},\" and \",{\"kind\":\"exact_copy\"}]}";
+    const complete = try codec.constructBound(allocator, raw, &choices);
+    defer allocator.free(complete);
+    try std.testing.expectEqualStrings("{\"value\":[\"MOCK surrounding narrative \",{\"kind\":\"exact_copy\",\"claim_id\":41},\" and \",{\"kind\":\"exact_copy\",\"claim_id\":41}]}", complete);
+    try std.testing.expect(std.mem.indexOf(u8, raw, "claim_id") == null);
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const parsed = try codec.decode(@import("domain/specification.zig").BusinessValue, arena.allocator(), complete);
+    try std.testing.expectEqual(@as(u32, 41), parsed.segments[1].exact_copy.claim_id.ordinal);
+    try std.testing.expectEqual(@as(u32, 41), parsed.segments[3].exact_copy.claim_id.ordinal);
+    for ([_][]const u8{
+        "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":41}]}",
+        "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":42}]}",
+    }) |echo| {
+        if (codec.constructBound(allocator, echo, &choices)) |unexpected| {
+            allocator.free(unexpected);
+            return error.TestUnexpectedSuccess;
+        } else |err| {
+            if (err == error.OutOfMemory) return err;
+            try std.testing.expectEqual(error.InvalidJsonDocument, err);
+        }
+    }
+    var different = choices;
+    different[0].allowed = &.{42};
+    const alternate = try codec.constructBound(allocator, raw, &different);
+    defer allocator.free(alternate);
+    try std.testing.expect(std.mem.indexOf(u8, alternate, "\"claim_id\":42") != null);
+    different[0].allowed = &.{ 41, 42 };
+    const undecided = try codec.constructBound(allocator, raw, &different);
+    defer allocator.free(undecided);
+    try std.testing.expectEqualStrings(raw, undecided);
+    if (codec.decode(@import("domain/specification.zig").BusinessValue, arena.allocator(), undecided)) |_| {
+        return error.TestUnexpectedSuccess;
+    } else |err| {
+        if (err == error.OutOfMemory) return err;
+        try std.testing.expectEqual(error.InvalidJsonDocument, err);
+    }
+}

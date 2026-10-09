@@ -62,6 +62,12 @@ pub const IntegerChoice = struct {
     target: ChoiceTarget,
     definition: ?DefinitionId = null,
     allowed: []const i64,
+    /// Explicit native authority: only a determined tagged field is omitted.
+    singleton: enum { select, construct } = .select,
+
+    pub fn constructedValue(self: IntegerChoice) ?i64 {
+        return if (self.singleton == .construct and self.allowed.len == 1) self.allowed[0] else null;
+    }
 };
 
 fn sameDefinition(left: ?DefinitionId, right: ?DefinitionId) bool {
@@ -122,6 +128,7 @@ pub fn restrict(allocator: std.mem.Allocator, canonical: *const Schema, excluded
     errdefer arena.deinit();
     for (integer_choices, 0..) |entry, index| {
         if (entry.allowed.len > max_choices) return invalid();
+        if (entry.singleton == .construct and (entry.target != .tagged or entry.definition != null)) return invalid();
         if (entry.definition) |id| _ = DefinitionId.parse(id.bytes) orelse return invalid();
         switch (entry.target) {
             .tagged => |tag| if (tag.kind.len == 0 or tag.field.len == 0) return invalid(),
@@ -152,11 +159,46 @@ pub fn restrict(allocator: std.mem.Allocator, canonical: *const Schema, excluded
             const parent = storage(canonical).projection_of orelse return invalid();
             if (!(try narrowChoice(arena.allocator(), parent.root(), entry.target, entry.allowed)).matched) return invalid();
         }
-        root = narrowed.node;
+        root = if (entry.constructedValue() != null)
+            try omitConstructedField(arena.allocator(), narrowed.node, entry.target.tagged)
+        else
+            narrowed.node;
     }
     const selected = try createSchema(arena.allocator(), root, canonical.bytes(), &.{}, .{ .restriction_of = canonical, .definition_id = storage(canonical).definition_id, .projection_of = storage(canonical).projection_of, .choice_definitions = storage(canonical).choice_definitions });
     owned.* = .{ .allocator = allocator, .arena = arena, .canonical = canonical, .selected = selected, .handle = .{ .owner = owned } };
     return @ptrCast(&owned.handle);
+}
+
+/// The caller first narrows and checks the native value against the canonical
+/// field. Removing it from the closed selected object rejects model echoes.
+fn omitConstructedField(a: std.mem.Allocator, node: *const Node, target: @FieldType(ChoiceTarget, "tagged")) Error!*const Node {
+    const result = try a.create(Node);
+    result.* = node.*;
+    switch (node.*) {
+        .object => |properties| {
+            const kind = findProperty(properties, "kind");
+            const selected = kind != null and kind.?.schema.* == .constant and kind.?.schema.constant == .string and std.mem.eql(u8, kind.?.schema.constant.string, target.kind);
+            var copy: std.ArrayList(Property) = .empty;
+            for (properties) |property| {
+                if (selected and std.mem.eql(u8, property.name, target.field)) {
+                    if (!property.required or property.schema.* != .integer_enumeration or property.schema.integer_enumeration.len != 1) return invalid();
+                    continue;
+                }
+                var retained = property;
+                retained.schema = try omitConstructedField(a, property.schema, target);
+                try copy.append(a, retained);
+            }
+            result.* = .{ .object = try copy.toOwnedSlice(a) };
+        },
+        .array => |items| result.array.items = try omitConstructedField(a, items.items, target),
+        .one_of => |variants| {
+            const copy = try a.alloc(*const Node, variants.len);
+            for (variants, copy) |variant, *destination| destination.* = try omitConstructedField(a, variant, target);
+            result.* = .{ .one_of = copy };
+        },
+        else => {},
+    }
+    return result;
 }
 
 fn restrictNode(a: std.mem.Allocator, node: *const Node, excluded: []const ExcludedVariant) Error!*const Node {

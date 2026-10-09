@@ -192,7 +192,7 @@ pub fn withTextChoices(a: std.mem.Allocator, packet: *const packets.Packet, pass
         try choices.append(a, .{ .target = .{ .tagged = .{ .kind = "passive", .field = "passive_literal_id" } }, .allowed = passive });
     }
     if (exact_copy.len != 0) {
-        try choices.append(a, .{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = exact_copy });
+        try choices.append(a, .{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = exact_copy, .singleton = .construct });
     }
     return packets.withRestrictions(a, packet, excluded.items, choices.items);
 }

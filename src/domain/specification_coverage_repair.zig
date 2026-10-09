@@ -251,11 +251,13 @@ pub fn parseOmission(a: std.mem.Allocator, authorization: Authorization, input: 
     if (authorization.rule != .omission) return error.InvalidSpecificationCoverageRepair;
     const kind = try atomic.checkRequest(authorization, input);
     const codec = @import("model_candidate_json.zig");
+    const canonical = try codec.constructBound(a, bytes, input.integerChoices());
+    defer a.free(canonical);
     return switch (kind) {
-        .value => .{ .value = try codec.decode(g.spec.BusinessValue, a, bytes) },
+        .value => .{ .value = try codec.decode(g.spec.BusinessValue, a, canonical) },
         .record => blk: {
             const selected = authorization.rule.omission.review orelse return error.InvalidSpecificationCoverageRepair;
-            const wire = try codec.decode(g.spec.Wire.RecordProposal, a, bytes);
+            const wire = try codec.decode(g.spec.Wire.RecordProposal, a, canonical);
             break :blk .{ .record = .{ .content = wire.content, .provenance = .{ .claim_ids = selected.provenance.claim_ids, .clarification_response_ids = selected.provenance.clarification_response_ids } } };
         },
     };

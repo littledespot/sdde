@@ -662,11 +662,8 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
     }
     const prompt_path = if (request.model_request_id.immutable_unit_owner_id == .semantic_review)
         (if (std.mem.startsWith(u8, request.model_request_id.immutable_unit_owner_id.semantic_review.review_slot_id.bytes, "principle-consistency-")) "design/workflows/spec/principle.prompt.md" else "design/workflows/spec/support.prompt.md")
-    else if (request.model_request_id.immutable_unit_owner_id == .specification_unit and repair.get("rule").?.object.contains("requirement")) purpose: {
-        const unit_json = input.value.object.get("input").?.object.get("unit").?;
-        const unit = try @import("../domain/model_candidate_json.zig").decode(@import("../domain/specification_generation.zig").Unit, a, try std.json.Stringify.valueAlloc(a, unit_json, .{}));
-        break :purpose generationPrompt(unit);
-    } else "design/workflows/spec/repair.prompt.md";
+    else
+        "design/workflows/spec/repair.prompt.md";
     const configured = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, prompt_path, a, .unlimited);
     var schema_found = false;
     var instruction_found = false;

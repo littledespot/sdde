@@ -50,11 +50,11 @@ pub const Binding = struct {
     }
 };
 pub const Entry = struct {
-    source: union(enum) { model: struct { proof: *const payload.Evidence, origin: Origin }, native: struct { value: std.json.Value, snapshot: Snapshot } },
+    source: union(enum) { model: struct { proof: *const payload.Evidence, origin: Origin, value: std.json.Value }, native: struct { value: std.json.Value, snapshot: Snapshot } },
     binding: Binding,
     pub fn value(self: Entry) std.json.Value {
         return switch (self.source) {
-            .model => |model| model.proof.candidate().json().*,
+            .model => |model| model.value,
             .native => |value_| value_.value,
         };
     }
@@ -143,10 +143,20 @@ pub const State = struct {
             if (!sameOptionalOrigin(existing.origin(), origin) or !std.mem.eql(u8, current_bytes, existing_bytes)) return error.ConflictingCompositionPart;
             return self;
         }
+        const canonical_value = canonical: {
+            for (self.base.integerChoices()) |choice| {
+                if (choice.constructedValue() != null) break;
+            } else break :canonical candidate.json().*;
+            const body = @import("model_candidate_json.zig").constructBound(allocator, candidate.content(), self.base.integerChoices()) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAssembledCandidate;
+            defer allocator.free(body);
+            const parsed = @import("strict_json.zig").parse(allocator, body, .{ .maximum_depth = schema.max_json_depth }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAssembledCandidate;
+            if (payload.validateValue(envelope.value(&parsed.value), binding.schema.root()) != null) return error.InvalidAssembledCandidate;
+            break :canonical parsed.value;
+        };
         const entries = try allocator.alloc(?Entry, self.plan.parts().len);
         @memset(entries, null);
         @memcpy(entries[0..self.entries.len], self.entries);
-        entries[binding.part] = .{ .source = .{ .model = .{ .proof = proof, .origin = origin } }, .binding = try binding.copy(allocator) };
+        entries[binding.part] = .{ .source = .{ .model = .{ .proof = proof, .origin = origin, .value = canonical_value } }, .binding = try binding.copy(allocator) };
         return .{ .plan = self.plan, .base = self.base, .epoch = self.epoch, .entries = entries, .origin = self.origin orelse origin };
     }
     /// Schema-check a native projection without fabricating provider evidence.

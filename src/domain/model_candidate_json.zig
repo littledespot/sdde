@@ -8,6 +8,43 @@ const std = @import("std");
 const json = @import("strict_json.zig");
 const limits: json.Limits = .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth };
 
+/// Restore only engine-determined fields from the same native choices that
+/// selected the response schema. Raw provider bytes remain untouched evidence.
+/// This does not infer support, choose among alternatives or accept echoed IDs.
+pub fn constructBound(allocator: std.mem.Allocator, bytes: []const u8, choices: []const @import("model_result_schema.zig").IntegerChoice) json.Error![]const u8 {
+    var needed = false;
+    for (choices) |choice| if (choice.constructedValue() != null) {
+        if (choice.target != .tagged or choice.definition != null) return error.InvalidJsonDocument;
+        needed = true;
+    };
+    if (!needed) return allocator.dupe(u8, bytes);
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parsed = try json.parse(a, bytes, limits, false, null);
+    try constructFields(a, &parsed.value, choices);
+    return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
+}
+
+fn constructFields(a: std.mem.Allocator, value: *std.json.Value, choices: []const @import("model_result_schema.zig").IntegerChoice) json.Error!void {
+    switch (value.*) {
+        .object => |*object| {
+            for (object.values()) |*child| try constructFields(a, child, choices);
+            const tag = object.get("kind") orelse return;
+            if (tag != .string) return;
+            for (choices) |choice| {
+                const native = choice.constructedValue() orelse continue;
+                const target = choice.target.tagged;
+                if (!std.mem.eql(u8, target.kind, tag.string)) continue;
+                if (object.contains(target.field)) return error.InvalidJsonDocument;
+                try object.put(a, target.field, .{ .integer = native });
+            }
+        },
+        .array => |*array| for (array.items) |*child| try constructFields(a, child, choices),
+        else => {},
+    }
+}
+
 pub fn decode(comptime T: type, allocator: std.mem.Allocator, bytes: []const u8) json.Error!T {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();

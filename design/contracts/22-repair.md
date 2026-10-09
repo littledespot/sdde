@@ -224,10 +224,10 @@ Keep the rejected value once when
 its containing field adds no other content; retain record siblings when needed for meaning.
 This does not grant new repair targets, semantic reassessment or additional retries.
 
-Specification generation and native unit repair reuse the unit's configured purpose
-prompt (§17.3); repair must not substitute a generic instruction that drops the
-field's semantic purpose. The selected replacement schema and authorization still
-limit writable content. Recover original source meaning within that scope while
+Specification generation uses the unit's configured authoring prompt (§17.3).
+Native unit repair uses the configured repair prompt and the field's semantic
+purpose from its authorized task. The selected replacement schema and authorization
+still limit writable content. Recover original source meaning within that scope while
 preserving correct surrounding content. Mechanical repair acceptance does not prove
 semantic recovery; full coverage and the existing semantic review remain mandatory.
 

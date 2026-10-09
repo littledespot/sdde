@@ -26,36 +26,56 @@ pub const Bound = union(enum) {
     records: struct { signal: r.SignalId, selection: spec.Selection },
 };
 
-/// Presentation of the already bound source selection. Claims and their meaning
-/// remain in the packet's single evidence catalogue; this view grants no authority.
+/// Presentation of the already bound source selection. Resolve its meaning next
+/// to the purpose; this borrowed projection never changes native support.
 pub const GuidanceMode = enum { authoring, repair };
-pub const FieldGuidance = struct { purpose: ?[]const u8 = null, claim_ids: []const r.ClaimId };
+const Requirement = @import("model_evidence.zig").Requirement;
+pub const FieldGuidance = struct { purpose: ?[]const u8 = null, requirements: []const Requirement };
 pub const Guidance = union(enum) {
     brief: struct { title: FieldGuidance, description: FieldGuidance, primary_goal: FieldGuidance },
     primary_user_story: FieldGuidance,
     entities: FieldGuidance,
-    records: struct { purpose: ?[]const u8 = null, signal: r.SignalId, claim_ids: []const r.ClaimId },
+    records: struct { purpose: ?[]const u8 = null, signal: r.SignalId, requirements: []const Requirement },
 };
 
-pub fn guidance(a: std.mem.Allocator, bound: Bound, mode: GuidanceMode) Error!Guidance {
+pub fn guidance(a: std.mem.Allocator, bound: Bound, mode: GuidanceMode, requirements: []const Requirement) Error!Guidance {
     return switch (bound) {
         .brief => |value| .{ .brief = .{
-            .title = try fieldGuidance(a, .title, value.title, mode),
-            .description = try fieldGuidance(a, .description, value.description, mode),
-            .primary_goal = try fieldGuidance(a, .primary_goal, value.primary_goal, mode),
+            .title = try fieldGuidance(a, .title, value.title, mode, requirements),
+            .description = try fieldGuidance(a, .description, value.description, mode, requirements),
+            .primary_goal = try fieldGuidance(a, .primary_goal, value.primary_goal, mode, requirements),
         } },
-        .primary_user_story => |value| .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, value, mode) },
-        .entities => |value| .{ .entities = try fieldGuidance(a, .entity_basis, value, mode) },
+        .primary_user_story => |value| .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, value, mode, requirements) },
+        .entities => |value| .{ .entities = try fieldGuidance(a, .entity_basis, value, mode, requirements) },
         .records => |value| .{ .records = .{
             .purpose = try presentedPurpose(a, .records, mode),
             .signal = value.signal,
-            .claim_ids = value.selection.claim_ids,
+            .requirements = try assignedRequirements(a, value.selection, requirements),
         } },
     };
 }
 
-fn fieldGuidance(a: std.mem.Allocator, role: r.GenerationRole, selected: spec.Selection, mode: GuidanceMode) Error!FieldGuidance {
-    return .{ .purpose = try presentedPurpose(a, role, mode), .claim_ids = selected.claim_ids };
+fn fieldGuidance(a: std.mem.Allocator, role: r.GenerationRole, selected: spec.Selection, mode: GuidanceMode, requirements: []const Requirement) Error!FieldGuidance {
+    return .{ .purpose = try presentedPurpose(a, role, mode), .requirements = try assignedRequirements(a, selected, requirements) };
+}
+fn assignedRequirements(a: std.mem.Allocator, selected: spec.Selection, requirements: []const Requirement) Error![]const Requirement {
+    const result = try a.alloc(Requirement, selected.claim_ids.len);
+    errdefer a.free(result);
+    for (selected.claim_ids, result) |id, *copy| {
+        copy.* = for (requirements) |requirement| {
+            if (id.ordinal == requirement.claim_id.ordinal) break requirement;
+        } else return error.InvalidSpecificationBinding;
+    }
+    return result;
+}
+pub fn assigns(value: Guidance, id: r.ClaimId) bool {
+    switch (value) {
+        .brief => |fields| inline for (std.meta.fields(@TypeOf(fields))) |field| {
+            for (@field(fields, field.name).requirements) |requirement| if (id.ordinal == requirement.claim_id.ordinal) return true;
+        },
+        inline else => |field| for (field.requirements) |requirement| if (id.ordinal == requirement.claim_id.ordinal) return true,
+    }
+    return false;
 }
 fn presentedPurpose(a: std.mem.Allocator, role: r.GenerationRole, mode: GuidanceMode) Error!?[]const u8 {
     return switch (mode) {
