@@ -2,6 +2,9 @@ const std = @import("std");
 const c = @import("contracts.zig");
 const judgment = @import("judgment.zig");
 const packet = @import("packet.zig");
+test {
+    _ = @import("roles/tests.zig");
+}
 
 const case_bytes =
     \\{"schema":"evaluation-case/v1","id":"unrelated-example","sources":[{"id":"requirements","path":"reference/input.md"}],"rubric":"rubric.json"}

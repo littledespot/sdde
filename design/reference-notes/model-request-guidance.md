@@ -263,6 +263,16 @@ and [schema-constrained InvokeModel output](https://docs.aws.amazon.com/bedrock/
 or prove improvement for the configured provider/model/schema combination. A
 comparison must record the actual mode and full engine-validation results.
 
+For authoring-role semantics, the development-only
+[calibration command and cohort](../../test/calibration/authoring-roles/README.md)
+reuse production role packets/schema restrictions, native role admission and the
+existing single-request replay adapter. Labels stay outside model content. The
+candidate guidance is an experiment. The completed
+[focused pilot](../../fixes/FIX01.md#r7--high-focused-role-calibration-complete-broader-calibration-remains-open)
+found fewer unsupported assignments but unchanged total omissions and a regression
+on the captured production input; it retains production guidance. Neither that
+small comparison nor offline tests establish whole-workflow reliability.
+
 The [latest captured native-mode run](../../fixes/archive/FIX_001.md#latest-native-json-run--malformed-output-despite-native-schema)
 returned malformed JSON on all three attempts despite the native schema and explicit
 correction errors. Raw provider text and decoded text match; the engine correctly

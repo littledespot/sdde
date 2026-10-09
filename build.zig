@@ -113,6 +113,17 @@ pub fn build(b: *std.Build) void {
     b.step("evaluate-spec", "Grade a supplied specification through OpenAI or Bedrock (explicit --live required)").dependOn(&run_evaluator.step);
     b.step("build-rubric-evaluator", "Build the development-only evaluator without an API call").dependOn(&evaluator_exe.step);
     b.step("test-rubric-evaluator", "Test development-only rubric evaluation").dependOn(&run_evaluator_tests.step);
+    const role_calibration = b.addExecutable(.{ .name = "sdde-calibrate-roles", .root_module = b.createModule(.{
+        .root_source_file = b.path("role_calibration.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const run_roles = b.addRunArtifact(role_calibration);
+    run_roles.has_side_effects = true;
+    if (b.args) |args| run_roles.addArgs(args);
+    b.step("calibrate-roles", "Prepare or run explicitly selected diagnostic role trials (not E2E)").dependOn(&run_roles.step);
+    b.step("build-role-calibration", "Build role calibration without an API call").dependOn(&role_calibration.step);
     const e2e_module = b.createModule(.{
         .root_source_file = b.path("e2e.zig"),
         .target = target,
@@ -224,6 +235,27 @@ pub fn build(b: *std.Build) void {
     evaluator_smoke.dependOn(&evaluator_exe.step);
     evaluator_smoke.dependOn(&evaluator_help.step);
     evaluator_smoke.dependOn(&evaluator_denied.step);
+    const role_offline = offlineExecutable(b, role_calibration);
+    const role_binary = evaluator_directory.addCopyFile(role_offline.getEmittedBin(), role_offline.out_filename);
+    const role_help = std.Build.Step.Run.create(b, "run standalone role calibration help without API calls");
+    role_help.addFileArg(role_binary);
+    role_help.addArg("--help");
+    role_help.setCwd(evaluator_directory.getDirectory());
+    role_help.clearEnvironment();
+    role_help.expectExitCode(0);
+    role_help.expectStdErrEqual("");
+    const role_denied = std.Build.Step.Run.create(b, "reject role calibration without an explicit cohort and binding");
+    role_denied.addFileArg(role_binary);
+    role_denied.setCwd(evaluator_directory.getDirectory());
+    role_denied.clearEnvironment();
+    role_denied.expectExitCode(1);
+    role_denied.expectStdOutEqual("");
+    role_denied.expectStdErrEqual("Invalid arguments; use --help. No API call made.\n");
+    const role_smoke = b.step("smoke-role-calibration", "Test standalone diagnostic startup without live connections");
+    role_smoke.dependOn(&role_calibration.step);
+    role_smoke.dependOn(&role_help.step);
+    role_smoke.dependOn(&role_denied.step);
+    test_step.dependOn(role_smoke);
     _ = evaluator_directory.add("judge.json", "{\"schema\":\"evaluation-config/v1\",\"reasoning_effort\":null,\"temperature\":null,\"timeout_ms\":1000,\"retry_limit\":0,\"retry_delay_ms\":0,\"total_token_budget\":100}");
     for ([_]struct { name: []const u8, provider: []const u8 = "openai", region: ?[]const u8 = null, model: ?[]const u8, key: ?[]const u8, key_name: []const u8 = "TEST_OPENAI_API_KEY", expected: []const u8 }{
         .{ .name = "reject missing test evaluation model", .model = null, .key = null, .expected = "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.\n" },
@@ -611,6 +643,7 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("build.zig"));
     lint_command.addFileArg(b.path("build.zig.zon"));
     lint_command.addFileArg(b.path("harness.zig"));
+    lint_command.addFileArg(b.path("role_calibration.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));
     lint_command.addFileArg(b.path("tests.zig"));
     lint_command.addFileArg(b.path("integration.zig"));
@@ -637,7 +670,7 @@ pub fn build(b: *std.Build) void {
             std.mem.eql(u8, name, "smoke") or std.mem.startsWith(u8, name, "test-") or
             std.mem.startsWith(u8, name, "smoke-"))
         {
-            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step }) catch |err|
+            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step, &run_roles.step }) catch |err|
                 std.debug.panic("automated step {s} violates manual-only model execution: {s}", .{ name, @errorName(err) });
         }
     }

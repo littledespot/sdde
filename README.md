@@ -203,6 +203,12 @@ The launcher requires an explicit case and loads the checkout's optional
 specification; it cannot establish engine-generation success. Neither harness
 ships with the production executable.
 
+The separate [authoring-role calibration](test/calibration/authoring-roles/README.md)
+uses `zig build calibrate-roles` to prepare explicit controlled/captured assignment
+comparisons without API calls. Human-reviewed labels and bounded approval precede
+`--live` diagnostic trials. It reuses production packets, role admission and request
+replay; it is neither an E2E case nor workflow authority.
+
 ## Documentation
 
 | Document | Purpose |

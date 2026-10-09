@@ -511,21 +511,14 @@ pub fn checkRoles(allocator: std.mem.Allocator, prior: r.CheckedSignals) r.Error
     const source = prior.prior.source;
     const input_value = prior.prior.input;
     const assignments = prior.prior.proposal.role_assignments;
-    const signals = try allocator.dupe(r.ValidatedSignal, prior.signals);
     if (prior.prior.phase == .dispositions or prior.prior.phase == .signals or prior.prior.phase == .signals_with_conflicts) return error.InvalidReferenceReconciliation;
-    for (assignments, 0..) |assignment, assignment_index| {
-        const invalid: d.Issue = .{ .rule = .role_assignment, .observed = .{ .count = assignment.signal_id.ordinal }, .expected = .{ .constraint = .supported_role_assignment } };
-        const id = assignment.signal_id.ordinal;
-        const selected = for (0..signals.len) |index| {
-            if ((source.signals.at(index, signals.len) catch return error.InvalidReferenceReconciliation).ordinal == id) break index;
-        } else null;
-        if (assignment.generation_roles.len == 0 or selected == null) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
-        if (!try @import("reference_support.zig").eligibleSelection(prior.prior.dispositions, signals[selected.?].claim_ids)) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
-        for (assignments[0..assignment_index]) |earlier| if (earlier.signal_id.ordinal == id) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
-        for (assignment.generation_roles, 0..) |role, index| for (assignment.generation_roles[0..index]) |earlier| {
-            if (role == earlier) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
-        };
-        signals[selected.?].generation_roles = assignment.generation_roles;
-    }
+    const roles = @import("reference_role_assignment.zig");
+    const offered = try roles.groups(allocator, source, prior.signals);
+    defer allocator.free(offered);
+    if (try roles.check(prior.prior.dispositions, offered, assignments)) |issue| return d.reject(r.CheckedSignals, input_value, source, .signals, issue);
+    const signals = try allocator.dupe(r.ValidatedSignal, prior.signals);
+    for (assignments) |assignment| for (offered, signals) |group, *signal| {
+        if (group.signal_id.ordinal == assignment.signal_id.ordinal) signal.generation_roles = assignment.generation_roles;
+    };
     return .{ .valid = .{ .prior = prior.prior, .signals = signals } };
 }

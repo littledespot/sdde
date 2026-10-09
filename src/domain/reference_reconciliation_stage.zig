@@ -27,14 +27,14 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
         .roles, .conflicts => |v| v.signals,
         else => &.{},
     };
-    var groups: std.ArrayList(struct { signal_id: r.SignalSelectionId, value: r.ValidatedSignal }) = .empty;
-    for (signal_values, 0..) |signal, i| {
-        if (prior == .roles and !try @import("reference_support.zig").eligibleSelection(prior.roles.prior.dispositions, signal.claim_ids)) continue;
-        const occurrence = (switch (prior) {
-            .roles, .conflicts => |v| v.prior.source.signals.at(i, signal_values.len),
-            else => unreachable,
-        }) catch return error.InvalidReferenceReconciliation;
-        try groups.append(scratch, .{ .signal_id = .{ .ordinal = occurrence.ordinal }, .value = signal });
+    var groups: std.ArrayList(@import("reference_role_assignment.zig").Group) = .empty;
+    const group_source: r.diagnostic.Source = switch (prior) {
+        .roles, .conflicts => |v| v.prior.source,
+        else => .{},
+    };
+    for (try @import("reference_role_assignment.zig").groups(scratch, group_source, signal_values)) |group| {
+        if (prior == .roles and !try @import("reference_support.zig").eligibleSelection(prior.roles.prior.dispositions, group.value.claim_ids)) continue;
+        try groups.append(scratch, group);
     }
     const conflict_groups: []const @import("reference_conflict_groups.zig").Group = switch (prior) {
         .roles, .conflicts => |v| v.prior.proposal.conflict_groups,
@@ -44,7 +44,7 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     const accepted = switch (prior) {
         .dispositions => try json.encode(r.PartitionId, scratch, current.partition.id),
         .signals => |value| try json.encode(@TypeOf(.{ .dispositions = value.dispositions, .signals = value.proposal.signals }), scratch, .{ .dispositions = value.dispositions, .signals = value.proposal.signals }),
-        .roles, .conflicts => |value| try json.encode(@TypeOf(.{ .dispositions = value.prior.dispositions, .signals = groups.items, .conflict_groups = conflict_catalogue }), scratch, .{ .dispositions = value.prior.dispositions, .signals = groups.items, .conflict_groups = conflict_catalogue }),
+        .roles, .conflicts => |value| try json.encode(@import("reference_role_assignment.zig").Facts, scratch, .{ .dispositions = value.prior.dispositions, .signals = groups.items, .conflict_groups = conflict_catalogue }),
     };
     const values = std.json.parseFromSlice(std.json.Value, scratch, accepted, .{}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
     const with_facts = try packets.withJsonContext(a, selected, "accepted", values.value);

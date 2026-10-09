@@ -748,7 +748,125 @@ increase false repairs and cost; its benefit requires comparative evidence.
 medium and approval-dependent for a new disputed-premise mechanism. No evidence
 yet establishes that an extra reviewer would improve the intended model's results.
 
-### R7 — High: semantic calibration is essential but not yet specified or prepared
+### R7 — High: focused role calibration complete; broader calibration remains open
+
+**Complete — 9 October 2026: the requested focused semantic calibration of
+authoring-role selection.** Tooling, human-reviewed labels, controlled and captured
+premises, unchanged repeats, the fixed guidance comparison and held-out execution
+are complete. This closes the bounded pilot, not broader generation/review/repair
+calibration or production reliability. See the
+[calibration instructions](../test/calibration/authoring-roles/README.md).
+
+- `zig build calibrate-roles` takes an explicit cohort, captured binding, split,
+  repetition count and optional guidance comparison. `--live` is separate and
+  requires human-reviewed labels. No default live case or E2E scenario was added.
+- Controlled premises use native input builders and production role packets/schema
+  restrictions; captured premises use the existing request-log loader. Labels and
+  rationales stay outside model content. Family splits and optional/alternative
+  support labels avoid exact-output targets.
+- Native role membership/eligibility is factored into the shared
+  `reference_role_assignment` owner, reused by production and calibration. Protocol
+  admission and immutable request/response capture reuse diagnostic replay. No
+  parallel validator, relaxed coverage rule or new provider client was introduced.
+- Reports separate unusable answers, missing supported roles and unsupported pairs,
+  with explicit denominators, paired rows, unchanged repeats, byte contributions,
+  observed usage, provider latency and measured replay time. No retry/repair,
+  workflow-state import, quality threshold or automatic prompt promotion was added.
+- Reviewed cases cover required/not-applicable entity decisions, insufficient and
+  ambiguous premises across unrelated families. A separate cohort labels the
+  retained production call-7 failure. Production guidance is unchanged;
+  `candidate.prompt.md` is an experiment only.
+
+**Execution and approvals:** the user reviewed both cohorts and approved the initial
+16 calls, then explicitly approved 12 replacement development calls and 16 held-out
+calls. All 44 calls executed: 32 valid comparison trials and 12 invalid harness
+trials retained as cost only. The captured binding stayed Bedrock
+`openai.gpt-oss-20b-1:0`, low reasoning, temperature 0, native schema,
+`ap-southeast-2`. Each trial used one physical send without correction or repair.
+Development results were inspected before held-out execution; guidance and labels
+were fixed throughout. No numerical acceptance threshold was invented.
+
+**Valid comparison results:**
+
+| Input set / evidence | Guidance | Trials | Missing / required roles | Unsupported / assigned pairs | Exact cases | Actual tokens |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| [Controlled development](../zig-out/role-calibration/2026-10-09T02-09-25Z-5992ebdd35fea5e6da8ba54ed15d0987/report.md) | Baseline | 6 | 10/24 | 9/23 | 2 | 6,706 |
+| Same | Candidate | 6 | 4/24 | 0/20 | 4 | 6,704 |
+| [Captured production input](../zig-out/role-calibration/2026-10-09T01-53-53Z-669e7ce2ce235512656ad7e42dc39433/report.md) | Baseline | 2 | 0/12 | 0/12 | 2 | 3,204 |
+| Same | Candidate | 2 | 6/12 | 0/6 | 0 | 2,986 |
+| [Held-out families](../zig-out/role-calibration/2026-10-09T02-10-04Z-a7c67ef5ce08bc67e73fef8b8aaa93e1/report.md) | Baseline | 8 | 0/34 | 2/38 | 6 | 8,514 |
+| Same | Candidate | 8 | 0/34 | 2/36 | 6 | 8,623 |
+
+All 32 valid trials passed protocol and native admission on their first attempt,
+with complete usage and no operational failures. Inspection of actual provider
+requests confirmed each controlled case's cited bytes match its own source, no
+label/rationale leakage, byte-identical requests for unchanged repeats and guidance
+as the sole paired difference. Reports retain exact requests, responses and timings.
+
+**Assessment and selection:** retain production guidance; do not promote this
+candidate. Across the 16 trials per variant, both missed 10/70 required roles and
+had 10 exact cases. The candidate reduced unsupported pairs from 11/73 to 2/62,
+but regressed on the retained production input. Development improvement did not
+extend to the held-out comparison, where both falsely assigned `title` to the
+isolated copied word. The ambiguity case's optional `entity_basis` assignment was
+accepted with either choice; it was not counted as an omission or invention.
+
+The UTC development baseline varied between two supported role pairs plus one
+unsupported pair and no assignments on identical request bytes. The candidate
+consistently omitted `title` and `entity_basis` there. On the captured input it
+omitted `title`, `primary_user_story` and `entity_basis` in both repeats, while
+baseline selected all six. This exposes remaining semantic errors and variability;
+it does not justify changing model settings, weakening coverage or adding retries.
+
+Valid trials used 36,737 tokens and 29.576 seconds of measured replay time;
+provider latency was unavailable. Baseline used 18,424 tokens, candidate 18,313.
+The slight aggregate token difference is not a quality improvement. These are
+eight labelled assignments with correlated repeats, not independent population
+samples. No successful whole-workflow publication or rubric result is established.
+
+**Approved live execution and evidence defect:** the first
+[12-call controlled run](../zig-out/role-calibration/2026-10-09T01-51-14Z-dbdd140afbe762defdb1683c8a8a252d/report.json)
+is invalid calibration evidence. The new harness borrowed a temporary message
+array during case preparation; later iterations overwrote earlier descriptions,
+so every case sent the final runtime-context text. The earlier offline inspection
+checked pair/repeat equality and label isolation, but failed to check source-to-case
+fidelity. This was a harness ownership defect, not an LLM outcome. Immutable captures
+are retained; exclude their semantic totals from comparisons. Their 12,276 actual
+tokens and 10.105 seconds of measured replay time remain experiment cost.
+`controlledDescription` now owns the message array, body and restricted schema.
+A regression keeps multiple distinct cases alive after packet release and checks
+their original meanings. The corrected preparation was independently inspected
+against source bytes before the approved replacement run. Including invalid trials,
+the experiment used 49,013 tokens; their cost was not discarded from accounting.
+
+The subsequent [E2E run](../zig-out/e2e-spec/2026-10-09T02-01-41Z-2abaff5b6f3e0d8e0604e340f9cfdcaa/report.md)
+selected all six roles in call 7. Its serialized role request is identical to the
+previous run that omitted `entity_basis`; production guidance was unchanged.
+This is observed variation, not evidence of improvement caused by R7. The later
+story-generation call 10 returned only the preserved greeting, and execution
+failed at omission-repair merging after call 31. No specification was published
+or graded. That downstream failure is separate from this completed isolated
+role-calibration pilot and does not expand its scope into story repair.
+
+**Offline verification — 9 October:**
+`zig build test-reference-reconciliation test-rubric-evaluator lint --summary all`
+passed 226/226 tests before live execution; after the ownership correction,
+`zig build test-rubric-evaluator lint build-role-calibration --summary all` passed
+114/114 tests. Final `zig build verify --summary all` passed 135/135 steps and
+1331/1331 tests, including architecture/schema checks and native startup smoke
+tests. Regression coverage includes unrelated role-selection premises, optional
+and alternative labels, native/protocol/operational rejection, closed cohorts,
+family separation, multi-chunk source preservation and allocation-failure cleanup.
+`git diff --check` passed. These checks verify the comparison machinery, not model
+accuracy or production outcome improvement.
+
+**Focused definition of done:** reviewed labels, unrelated positive/negative and
+ambiguous premises, family separation, production packet/admission reuse, first-pass
+protocol/semantic/cost reporting, unchanged repeats, controlled/captured/held-out
+execution and a documented selection decision are complete. No trial in this plan
+remains unexecuted and no live allowance remains. Broader R7 calibration and agreed
+production quality thresholds remain open; automatic correction is separate.
+Diagnostic and E2E evidence remain distinct. Production guidance is unchanged.
 
 [§28.8](../design/contracts/28-testing.md#288-model-conformance-comparisons) already
 requires controlled model-conformance comparisons through existing request capture,
@@ -1163,8 +1281,9 @@ completion, and was never an automatic-correction implementation. Its guard
 already blocked the same incomplete coverage before R10. No R10 regression or
 reason to weaken/revert the guard is supported by this run. The 25-token decrease
 is generation variation during the same early stop, not an efficiency gain.
-The remaining work is semantic calibration of role selection (R7), including
-negative applicability versus missing support. Any automatic return to
+The focused role-selection pilot under R7 is now complete and measures negative
+applicability versus missing support; it did not identify a uniformly better
+guidance candidate. Broader calibration remains open. Any automatic return to
 reconciliation still needs the separate bounded correction policy above.
 
 ## 4. Feasibility and decision matrix
@@ -1177,7 +1296,7 @@ in every package. No numerical effort estimate is defensible from this review.
 
 | Handoff package | Practical assessment | Decision or dependency before implementation |
 | --- | --- | --- |
-| 1 — Define/calibrate assignments | A bounded pilot is practical; full calibration is real remaining work. Existing whole-spec examples are insufficient and outdated. | Labels, task-specific metrics and a comparison plan for the pilot; approved thresholds/live allowance before live acceptance claims. Expand to all nine existing families before full-scope claims, without requiring each family in every spec. |
+| 1 — Define/calibrate assignments | The focused authoring-role pilot is complete. Broader generation/review/repair calibration remains; existing whole-spec examples are insufficient and outdated. | Agree production quality thresholds before acceptance claims. Expand evaluation to all nine existing record families before full-scope claims, without requiring each family in every spec. |
 | 2 — Native traceability | Existing group provenance can be audited immediately. Narrower association and complete answer authority are separate coordinated changes. | Define precision and identity lifetime; amend ADR 0020 only if changing binding. Complete the separate authentication/answer/currentness contract before claiming answer-supported generation. |
 | 3 — Resolved projections/workload | R3's resolved policy inputs are implemented and observed live; R4 supplies shared family meanings. Complete workload feasibility remains unmet; grouping is a distinct, conditional experiment. | Preserve resolved scalar/record/collection/entity facts and separate instructions. A production cardinality or policy-selection change needs an explicit amendment and negative tests. |
 | 4 — Evidenced repair | Projection/evidence improvements can preserve current policy. New premise reassessment is not active authority. | Define trigger, closed outcomes, currentness, one active finding and conserved allowance; obtain the required amendment before adding reconsideration. |
@@ -1214,6 +1333,10 @@ All are feasible in principle; none should be hidden inside a prompt cleanup.
    sources. Measure its live behavior separately from R4. Any automatic upstream
    correction still needs an explicit authorization and allowance contract; it is
    not part of the selected blocking behavior.
+   The focused R7 calibration is complete, with reviewed labels, approved live
+   development/captured/held-out comparisons and a decision to retain baseline
+   guidance. Its mixed results do not establish production reliability or authorize
+   an automatic correction route.
 4. **Decide traceability precision using the observed gap.** Keep current lineage
    machinery. If group-level attribution is insufficient, amend the binding/selection
    contract and update its complete consumer surface together; do not add metadata

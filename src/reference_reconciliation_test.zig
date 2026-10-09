@@ -81,6 +81,7 @@ test "authoring roles are assigned after grouping and reject duplicate or foreig
     const groups = (try f.validate_signals.execute(a, dispositions, fixture.context())).valid;
     for (groups.signals) |signal| try std.testing.expectEqual(@as(usize, 0), signal.generation_roles.len);
     const assigned = (try f.validate_roles.execute(a, groups)).valid;
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, checkRoleAllocations, .{groups});
     var found_records = false;
     for (assigned.signals) |signal| {
         if (signal.content == .preserved_token) try std.testing.expectEqual(@as(usize, 0), signal.generation_roles.len);
@@ -102,6 +103,11 @@ test "authoring roles are assigned after grouping and reject duplicate or foreig
     try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, changed)).invalid.issue.rule);
     bad[bad.len - 1].signal_id = .{ .ordinal = 999 };
     try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, changed)).invalid.issue.rule);
+}
+fn checkRoleAllocations(allocator: std.mem.Allocator, groups: r.CheckedSignals) !void {
+    const result = try f.validate_roles.execute(allocator, groups);
+    try std.testing.expect(result == .valid);
+    allocator.free(result.valid.signals);
 }
 test "role assignment permits shared roles and rejects unknown native group selections" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -545,18 +551,7 @@ fn textRejection(a: std.mem.Allocator, parsed: r.Parsed, ctx: f.Context) !?r.dia
     };
 }
 pub fn prepare(allocator: std.mem.Allocator, sources: []const []const u8) !Fixture {
-    const ingestion = @import("domain/reference_ingestion.zig");
-    var inputs = try @import("reference_ingestion_test.zig").read(allocator, "base.md", "");
-    const documents = try allocator.alloc(ingestion.Document, sources.len);
-    for (sources, documents, 0..) |bytes, *document, index| {
-        const read = try @import("reference_ingestion_test.zig").read(allocator, try std.fmt.allocPrint(allocator, "source-{d}.md", .{index}), bytes);
-        document.* = read.documents[0];
-        document.source.ordinal = @intCast(index + 1);
-        const blocks = try allocator.dupe(ingestion.Block, document.blocks);
-        for (blocks) |*block| block.id.source = document.source;
-        document.blocks = blocks;
-    }
-    inputs.documents = documents;
+    const inputs = try @import("reference_ingestion_test.zig").readSources(std.testing.io, allocator, sources);
     var ids: @import("reference_evidence_test.zig").IdSource = .{};
     const citable = try @import("reference_evidence_test.zig").prepare(allocator, &ids, inputs);
     const candidates = try tokens.candidates(allocator, citable);

@@ -110,7 +110,7 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
                 error.InvalidRequiredAuthority => error.InvalidReferenceReconciliation,
             },
         };
-        const role_context = .{ .constraints = constraints, .role_definitions = definitions };
+        const role_context: RoleContext = .{ .constraints = constraints, .role_definitions = definitions };
         break :roles try @import("model_candidate_json.zig").encode(@TypeOf(role_context), scratch, role_context);
     } else if (assignment == .conflicts) conflicts: {
         const conflict_context = .{ .constraints = constraints };
@@ -135,7 +135,17 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     const definition_id: @import("model_result_schema.zig").DefinitionId = .{ .bytes = if (assignment == .summary) "summary" else "signals_assignment" };
     return packets.withIntegerChoices(allocator, contextual, &.{.{ .target = .{ .path = &.{ .{ .property = field }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = definition_id, .allowed = ids }});
 }
-const RoleDefinition = struct { role: reconciliation.GenerationRole, purpose: []const u8 };
+/// Closed readback of the production role packet, for diagnostic evaluation only.
+pub const RoleContext = struct { constraints: []const Guidance, role_definitions: []const RoleDefinition };
+pub const RoleInput = struct {
+    claims: []const projection.Claim,
+    citations: []const extraction.Citation,
+    preserved_tokens: []const projection.Token,
+    passive_literals: []const literals.Record,
+    assignment: RoleContext,
+    accepted: @import("reference_role_assignment.zig").Facts,
+};
+pub const RoleDefinition = struct { role: reconciliation.GenerationRole, purpose: []const u8 };
 
 /// Availability projects existing evidence, not semantics or a second registry.
 /// Reference text has no exact-copy variant; its owner leaves that choice alone.
@@ -226,7 +236,7 @@ pub fn passiveChoices(allocator: std.mem.Allocator, registry: literals.Registry,
 }
 
 const Constraint = reconciliation.diagnostic.Constraint;
-const Guidance = struct { constraint: Constraint, requirement: []const u8 };
+pub const Guidance = struct { constraint: Constraint, requirement: []const u8 };
 /// Project native rule identities alongside current claim facts. Corrections
 /// retain this packet, with no separate prompt rules table.
 fn reconciliationGuidance(allocator: std.mem.Allocator, purpose: @FieldType(reconciliation.Input, "purpose"), scope: Constraint.Scope) std.mem.Allocator.Error![]const Guidance {
