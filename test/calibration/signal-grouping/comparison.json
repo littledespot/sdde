@@ -1,0 +1,211 @@
+{
+  "schema": "signal-grouping-comparison/v1",
+  "label_status": "proposed",
+  "baseline_revision": "35ded131928ecc0a7b55c92fe5d714f5db99405f",
+  "capture": {
+    "feature": "zig-out/e2e-spec/2026-10-09T08-25-10Z-0aa73527d76068ef6d1484ca7b764d1d/project/specs/hello-world",
+    "run": "RUN-3251fbd160daa995c72e004201e60b7a",
+    "call": "request-6-inference-1",
+    "context_sha256": "29dc3449f91a05a470a88f58753e7f68c92e6524b78fe28635fc8d9aa3c28fa8"
+  },
+  "model": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0,
+    "response_mode": "native_schema"
+  },
+  "repeats": 2,
+  "maximum_physical_calls": 12,
+  "cases": [
+    {
+      "id": "captured-startup",
+      "origin": "captured",
+      "obligations": [
+        {
+          "id": "startup",
+          "claim_id": 1,
+          "meaning": "The application must start successfully."
+        },
+        {
+          "id": "greeting",
+          "claim_id": 2,
+          "meaning": "When started, the application must display `Hello, World!`."
+        },
+        {
+          "id": "utc",
+          "claim_id": 3,
+          "meaning": "The application must also output the current date and time in UTC."
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "value": "Hello, World!"
+        }
+      ],
+      "accepted_member_sets": [],
+      "baseline_edit": "captured-startup.baseline.edit.json",
+      "baseline_edit_sha256": "91fe7f312d4fad7f40802bac82e974b27b4ad5b190cecff3421d769188749481",
+      "baseline_schema_sha256": "8c92a652bbfc43ba1697962892c181b00d3e5e499a8e12d8604907a273cf3594",
+      "candidate_edit": "captured-startup.candidate.edit.json",
+      "candidate_edit_sha256": "281af5788d42d050771c9e4d1e8d3159764fbbc1b9430db68eaa57dba54d5d53",
+      "candidate_schema_sha256": "5808fb4966569cbbf1877132ec519940a8d607ffa7ad00786829e3d2c419d634"
+    },
+    {
+      "id": "prescription-renewal",
+      "origin": "controlled",
+      "obligations": [
+        {
+          "id": "approved-status",
+          "claim_id": 1,
+          "meaning": "When a prescription renewal is approved, the application must display `Ready for collection`."
+        },
+        {
+          "id": "secure-transport",
+          "claim_id": 2,
+          "meaning": "Renewal requests must use authenticated HTTPS connections."
+        },
+        {
+          "id": "rejection-status",
+          "claim_id": 3,
+          "meaning": "When a renewal is rejected, the application must display the rejection reason and must not report it ready for collection."
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "value": "Ready for collection"
+        }
+      ],
+      "accepted_member_sets": [],
+      "baseline_edit": "prescription-renewal.baseline.edit.json",
+      "baseline_edit_sha256": "3a132a75be260d1008c10c57f6c77d96635d16147d01a48523354b179415fee2",
+      "baseline_schema_sha256": "8c92a652bbfc43ba1697962892c181b00d3e5e499a8e12d8604907a273cf3594",
+      "candidate_edit": "prescription-renewal.candidate.edit.json",
+      "candidate_edit_sha256": "219418adefe3667de1a96a39bd7938b9201e0cae254379f474fa58dff1853fb1",
+      "candidate_schema_sha256": "3a5115a99cf4bade0d38bead8cd23ab039479c681b4f37215bd7ef771374d138"
+    },
+    {
+      "id": "irrigation-coverage",
+      "origin": "controlled",
+      "obligations": [
+        {
+          "id": "start",
+          "claim_id": 1,
+          "meaning": "When soil moisture drops below the configured threshold, irrigation must begin."
+        },
+        {
+          "id": "threshold-stop",
+          "claim_id": 2,
+          "meaning": "Irrigation must stop when soil moisture reaches the configured threshold."
+        },
+        {
+          "id": "sensor-failure",
+          "claim_id": 3,
+          "meaning": "If a sensor reading is unavailable, irrigation must stop and the operator must receive an alert."
+        }
+      ],
+      "literal_expectations": [],
+      "accepted_member_sets": [
+        [
+          1,
+          2
+        ]
+      ],
+      "baseline_edit": "irrigation-coverage.baseline.edit.json",
+      "baseline_edit_sha256": "0f71f2d6d5351d859b8141f2c712cddd0cbb15768e669ea4adb792e17a723d6a",
+      "baseline_schema_sha256": "8c92a652bbfc43ba1697962892c181b00d3e5e499a8e12d8604907a273cf3594",
+      "candidate_edit": "irrigation-coverage.candidate.edit.json",
+      "candidate_edit_sha256": "d517e0ed30352253da1c14fed96d72835da66359ca72272898d3a6119deb4062",
+      "candidate_schema_sha256": "5808fb4966569cbbf1877132ec519940a8d607ffa7ad00786829e3d2c419d634"
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-startup-baseline-1",
+      "case": "captured-startup",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "captured-startup.baseline.edit.json"
+    },
+    {
+      "id": "captured-startup-candidate-1",
+      "case": "captured-startup",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "captured-startup.candidate.edit.json"
+    },
+    {
+      "id": "prescription-renewal-baseline-1",
+      "case": "prescription-renewal",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "prescription-renewal.baseline.edit.json"
+    },
+    {
+      "id": "prescription-renewal-candidate-1",
+      "case": "prescription-renewal",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "prescription-renewal.candidate.edit.json"
+    },
+    {
+      "id": "irrigation-coverage-baseline-1",
+      "case": "irrigation-coverage",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "irrigation-coverage.baseline.edit.json"
+    },
+    {
+      "id": "irrigation-coverage-candidate-1",
+      "case": "irrigation-coverage",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "irrigation-coverage.candidate.edit.json"
+    },
+    {
+      "id": "captured-startup-candidate-2",
+      "case": "captured-startup",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "captured-startup.candidate.edit.json"
+    },
+    {
+      "id": "captured-startup-baseline-2",
+      "case": "captured-startup",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "captured-startup.baseline.edit.json"
+    },
+    {
+      "id": "prescription-renewal-candidate-2",
+      "case": "prescription-renewal",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "prescription-renewal.candidate.edit.json"
+    },
+    {
+      "id": "prescription-renewal-baseline-2",
+      "case": "prescription-renewal",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "prescription-renewal.baseline.edit.json"
+    },
+    {
+      "id": "irrigation-coverage-candidate-2",
+      "case": "irrigation-coverage",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "irrigation-coverage.candidate.edit.json"
+    },
+    {
+      "id": "irrigation-coverage-baseline-2",
+      "case": "irrigation-coverage",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "irrigation-coverage.baseline.edit.json"
+    }
+  ]
+}

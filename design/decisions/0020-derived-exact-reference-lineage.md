@@ -6,6 +6,7 @@
 - **27 September 2026 amendment authority:** Explicit user approval of provenance-free, source-bound per-unit assignments in this session.
 - **28 September 2026 amendment authority:** Explicit user instruction to clarify generation-role assignment and require nonempty role lists when supplied.
 - **9 October 2026 amendment authority:** Explicit user instruction to implement the complete role-decision contract in [FIX01 §9.8](../../fixes/FIX01.md#98-complete-role-decisions-critical-review--9-october-2026), including shared admission, lifecycle and calibration paths.
+- **9 October 2026 loss-evidence amendment authority:** Explicit user instruction to implement R7 authoring-input projection and R6 retained producer-loss evidence; no change to exact-reference lineage or retry policy.
 - **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1. The overall design remains Proposed.
 
 ## Boundary and representation
@@ -184,6 +185,12 @@ content. Changed reference or contract authority invalidates dependent state
 through the existing runner and stage gates. No new retry mechanism, schema
 registry, evidence store, provider mode or model prompt for reassembly is
 authorized.
+
+The R6 loss-evidence amendment advances the shared state to
+`specification-state/v8`. Source-review findings retain the selected source lines
+and producer-loss comparison required by §22.1; completed readback validates that
+evidence through the same owner as live collection. Earlier state versions reject.
+This changes neither `S`, `E`, `L` nor the exact-reference representation.
 
 This decision records the runtime contract, not a claim that live quality
 evaluation has passed. The baseline and test checkpoints remain

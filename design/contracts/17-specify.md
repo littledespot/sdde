@@ -140,7 +140,14 @@ Typed content covers these concerns; each concern does not require a separate ca
   Initial findings and authorized review corrections reuse this projection.
   A candidate-omission finding triggers a separate
   loss-location call with the finding fixed; that call cannot revise the verdict.
-  The engine validates the location and complete review before repair or publication.
+  A selected upstream location also supplies a source selection and a comparison
+  explaining what that producer failed to preserve. Native admission resolves the
+  selection through the existing source-line validator and verifies its association
+  with the selected producer. The comparison is retained with review evidence;
+  valid coordinates and nonempty explanation do not prove semantic loss.
+  `unlocalized` has no upstream comparison and preserves the existing candidate-local
+  repair or failure decision. The engine validates the location, comparison and
+  complete review before repair or publication.
   For a positive finding with a fixed claim set, the engine
   supplies that set from the current requirement rule; the response omits
   `provenance` and is rejected if it echoes it. The engine constructs invariant
@@ -225,7 +232,11 @@ For each feature-brief or specification unit, the declared model operation retur
   literals. Schemas remain the sole response-shape authority. Initial and native
   repair packets include earlier drafts only for dependent units: entities receive
   the brief, records receive the brief and entity decision. Brief and story requests
-  receive neither sibling draft. Source evidence and native repair dependencies
+  receive neither sibling draft. Dependent drafts are resolved business text and
+  applicability; their canonical provenance, fragment wrappers and display-span
+  bookkeeping remain native. Record-family purposes and response alternatives use
+  the same eligibility decision, including the accepted entity applicability.
+  Source evidence and native repair dependencies
   remain complete; packet presentation does not change semantic review or retry policy.
   Authoring packets resolve bound requirement meanings beside each field purpose.
   Remaining eligible meanings stay in a separate context projection without

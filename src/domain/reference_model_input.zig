@@ -121,11 +121,35 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     const contextual = try packets.withAssignmentContexts(allocator, selected, &.{.{ .id = packets.AssignmentContextId.parse(@tagName(assignment)).?, .body = context_body }});
     if (assignment != .summary and assignment != .signals) return contextual;
     defer packets.release(contextual);
-    const ids = try scratch.alloc(i64, presentation.composed.claim_ids.len);
-    for (ids, presentation.composed.claim_ids) |*id, claim| id.* = claim.ordinal;
+    return withSemanticChoices(allocator, contextual, input.progress.plan.layout.items, presentation.composed.claim_ids, if (assignment == .summary) .summary else .signals);
+}
+
+/// Project the canonical selection/content rules without inventing categories
+/// or semantic decisions. The generic schema owner applies these restrictions.
+pub fn withSemanticChoices(a: std.mem.Allocator, packet: *const packets.Packet, items: reconciliation.Items, members: []const reconciliation.ClaimId, assignment: enum { summary, signals }) ReconciliationError!*packets.Packet {
+    const schema = @import("model_result_schema.zig");
+    try reconciliation.unique(reconciliation.ClaimId, members);
+    var excluded: std.ArrayList(schema.ExcludedVariant) = .empty;
+    defer excluded.deinit(a);
+    try excluded.appendSlice(a, packet.excludedVariants());
+    var available = std.EnumSet(extraction.Kind).initEmpty();
+    for (members) |id| {
+        const kind = (try @import("reference_reconciliation_validation.zig").selectedKind(items, &.{id})) orelse return error.InvalidReferenceReconciliation;
+        if (kind != .model) return error.InvalidReferenceReconciliation;
+        available.insert(kind.model);
+    }
+    // Empty selection restricts the enclosing collection to []; retaining its
+    // item shape avoids creating an invalid empty alternative before narrowing.
+    if (members.len != 0) for (std.enums.values(extraction.Kind)) |kind| {
+        if (!available.contains(kind)) try excluded.append(a, .{ .kind = @tagName(kind) });
+    };
+    const narrowed = try packets.withExcludedVariants(a, packet, excluded.items);
+    defer packets.release(narrowed);
+    const ids = try claimOrdinals(a, members);
+    defer a.free(ids);
     const field = if (assignment == .summary) "statements" else "signals";
-    const definition_id: @import("model_result_schema.zig").DefinitionId = .{ .bytes = if (assignment == .summary) "summary" else "signals_assignment" };
-    return packets.withIntegerChoices(allocator, contextual, &.{.{ .target = .{ .path = &.{ .{ .property = field }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = definition_id, .allowed = ids }});
+    const definition_id: schema.DefinitionId = .{ .bytes = if (assignment == .summary) "summary" else "signals_assignment" };
+    return packets.withIntegerChoices(a, narrowed, &.{.{ .target = .{ .path = &.{ .{ .property = field }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = definition_id, .allowed = ids, .collection = .unique_subset }});
 }
 /// Closed readback of the production role packet, for diagnostic evaluation only.
 pub const RoleContext = struct { constraints: []const Guidance, role_definitions: []const RoleDefinition };
@@ -260,7 +284,7 @@ fn reconciliationGuidance(allocator: std.mem.Allocator, purpose: @FieldType(reco
     var result: std.ArrayList(Guidance) = .empty;
     errdefer result.deinit(allocator);
     for (std.enums.values(Constraint)) |constraint| if (constraint.appliesTo(purpose, scope)) {
-        try result.append(allocator, .{ .constraint = constraint, .requirement = constraint.description() });
+        try result.append(allocator, .{ .constraint = constraint, .requirement = constraint.descriptionFor(scope) });
     };
     return result.toOwnedSlice(allocator);
 }

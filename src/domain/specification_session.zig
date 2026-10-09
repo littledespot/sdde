@@ -91,6 +91,20 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const a = arena.allocator();
+    const selected = try unit(index);
+    const entity_decision: ?g.spec.ApplicabilityProposal = if (selected == .records) decision: {
+        const checked = current.units[2] orelse return error.InvalidSpecificationUnit;
+        if (checked.unit != .entities or checked.response != .content or checked.response.content != .entities) return error.InvalidSpecificationUnit;
+        break :decision checked.response.content.entities;
+    } else null;
+    const excluded: []const @import("model_result_schema.zig").ExcludedVariant = if (entity_decision != null and entity_decision.?.disposition == .not_applicable) &.{.{ .kind = "entity" }} else &.{};
+    // The schema restriction is also the presentation filter. Descriptions do
+    // not establish another applicability rule or offer an excluded family.
+    var record_kinds: std.ArrayList(g.spec.Kind) = .empty;
+    families: for (std.meta.tags(g.spec.Kind)) |kind| {
+        for (excluded) |entry| if (std.mem.eql(u8, entry.kind, @tagName(kind))) continue :families;
+        try record_kinds.append(a, kind);
+    }
     const projection = @import("model_evidence.zig");
     var requirements: std.ArrayList(projection.Requirement) = .empty;
     var exact_choices: std.ArrayList(projection.ExactLiteral) = .empty;
@@ -109,7 +123,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     }
     // Completed units are repaired under an atomic target and its evidence.
     // Their authoring cursor no longer selects a current source assignment.
-    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(index), current.record_cursor), if (options.task != null) .repair else .authoring, requirements.items);
+    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, selected, current.record_cursor), if (options.task != null) .repair else .authoring, requirements.items, record_kinds.items);
     var contextual_requirements: std.ArrayList(projection.Requirement) = .empty;
     for (requirements.items) |requirement| {
         if (assigned) |selection| if (binding.assigns(selection, requirement.claim_id)) continue;
@@ -125,7 +139,6 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         }).scopes
     else
         scopes.items;
-    const selected = try unit(index);
     const payload = .{
         .source_assignment = assigned,
         .context_requirements = contextual_requirements.items,
@@ -155,7 +168,8 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     switch (selected) {
         .brief, .primary_user_story => {},
         .entities, .records => if (current.units[0]) |checked| {
-            const contextual = try packets.withContext(@TypeOf(checked.response.content.brief), allocator, result, "brief", checked.response.content.brief);
+            const business = @import("specification_projection.zig");
+            const contextual = try packets.withContext(business.Brief, allocator, result, "brief", try business.brief(a, context, checked.response.content.brief));
             packets.release(result);
             result = contextual;
         },
@@ -170,18 +184,14 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
             packets.release(result);
             result = contextual;
         }
-        const entities = current.units[2] orelse return error.InvalidSpecificationUnit;
-        if (entities.unit != .entities or entities.response != .content or entities.response.content != .entities) return error.InvalidSpecificationUnit;
-        const contextual = try packets.withContext(@TypeOf(entities.response.content.entities), allocator, result, "entities", entities.response.content.entities);
+        const business = @import("specification_projection.zig");
+        const contextual = try packets.withContext(business.EntityDecision, allocator, result, "entities", try business.entities(a, context, entity_decision.?));
         packets.release(result);
         result = contextual;
-        if (entities.response.content.entities.disposition == .not_applicable) {
-            const fixed = try packets.withExcludedVariants(allocator, result, &.{.{ .kind = "entity" }});
-            defer packets.release(fixed);
-            return input.withTextChoices(allocator, fixed, passive_ids, exact_ids);
-        }
     }
-    return input.withTextChoices(allocator, result, passive_ids, exact_ids);
+    const fixed = try packets.withExcludedVariants(allocator, result, excluded);
+    defer packets.release(fixed);
+    return input.withTextChoices(allocator, fixed, passive_ids, exact_ids);
 }
 
 /// A value-only repair cannot borrow choices from unchanged sibling evidence.

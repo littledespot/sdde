@@ -57,7 +57,7 @@ pub const Constraint = enum {
 
     /// Presentation scope only; every merged candidate still runs all validators.
     pub const Assignment = enum { summary, dispositions, signals, roles, conflicts };
-    pub const Scope = union(enum) { all, selection, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail, assignment: Assignment };
+    pub const Scope = union(enum) { all, selection: enum { statement, signal, conflict }, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail, assignment: Assignment };
     pub fn appliesTo(self: Constraint, purpose: @FieldType(r.Input, "purpose"), scope: Scope) bool {
         const in_purpose = switch (self) {
             .unique_nonzero, .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token => true,
@@ -70,16 +70,17 @@ pub const Constraint = enum {
                 .no_self_relation, .same_content_kind, .same_token_value, .nonconflicting_target, .reciprocal_conflict, .acyclic, .nonempty => true,
                 else => false,
             },
-            .selection => switch (self) {
-                .unique_nonzero, .no_self_relation, .same_content_kind, .same_token_value, .nonconflicting_target, .reciprocal_conflict, .acyclic, .nonempty => false,
-                else => true,
+            .selection => |unit| switch (unit) {
+                .statement => self == .nonempty_unique_allowed_claims,
+                .signal => self == .nonempty_unique_allowed_claims or self == .nonconflicting_claims or self == .unique_members,
+                .conflict => false,
             },
             .summary, .conflict_detail => false,
             .assignment => |assignment| switch (assignment) {
-                .summary => self.appliesTo(.summary, .all),
+                .summary => self != .exact_selected_token and self.appliesTo(.summary, .all),
                 .dispositions => self.appliesTo(purpose, .{ .disposition = .rules }),
                 .signals => switch (self) {
-                    .nonempty_unique_allowed_claims, .matching_claim_content, .exact_selected_token, .nonconflicting_claims, .unique_members, .retained_claim_covered, .token_projected => true,
+                    .nonempty_unique_allowed_claims, .matching_claim_content, .nonconflicting_claims, .unique_members, .retained_claim_covered, .token_projected => true,
                     else => false,
                 },
                 .roles => self == .supported_role_assignment,
@@ -89,6 +90,28 @@ pub const Constraint = enum {
                 },
             },
         };
+    }
+    /// Present the same native rule for the actual assignment, not the complete
+    /// assembled result. Repair scopes retain their own authorized selections.
+    pub fn descriptionFor(self: Constraint, scope: Scope) []const u8 {
+        if (scope == .selection) return switch (self) {
+            .nonempty_unique_allowed_claims => "Select a nonempty, unique subset of repair.rule.selection. Other claims are supporting evidence and cannot be selected.",
+            .unique_members => "Do not duplicate another candidate signal's complete member set. Different sets may overlap.",
+            else => self.description(),
+        };
+        if (scope == .assignment) switch (scope.assignment) {
+            .summary, .signals => {
+                if (self == .nonempty_unique_allowed_claims) return "Select a nonempty, unique subset of assignment.claim_ids. Other claims are supporting evidence and cannot be selected.";
+                if (scope.assignment == .signals) return switch (self) {
+                    .retained_claim_covered => "Cover every retained claim in assignment.claim_ids that is not already covered by accepted.signals.",
+                    .unique_members => "Do not repeat a complete member set from accepted.signals or another returned signal. Different sets may overlap.",
+                    .token_projected => "Preserved-token claims are evidence only; native code supplies their signals.",
+                    else => self.description(),
+                };
+            },
+            else => {},
+        };
+        return self.description();
     }
     pub fn description(self: Constraint) []const u8 {
         return switch (self) {

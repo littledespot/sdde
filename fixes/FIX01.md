@@ -10,13 +10,19 @@ status statements are historical. This document owns the outstanding work below.
 forward: business subjects and family meanings are clearer, incomplete role coverage
 has a truthful typed outcome, and failure evidence is substantially better. They
 have **not demonstrated improved completion or specification quality**. The latest
-retained run, **9 October at 17:31:50 AEDT**, passed role selection, generated a
-candidate, merged an upstream repair and regenerated, then exceeded the token
-budget during its second source review. Its first clear content defect was call
-10's user story containing only three greeting references; call 17 then attributed
-that loss to an intact upstream signal. No specification was published or graded.
-[§9.10](#910-first-authoring-error-and-its-consequences--9-october-2026)
-records the evidence. Greater execution progress, offline correctness and completed
+retained run, **9 October at 19:25:10 AEDT**, stopped at call 6 after the provider
+repeated signal member IDs until its output limit. Its call-6 request was byte-identical
+to the preceding successful call-6 request. It did not exercise call 12 or the §9.12
+changes. [§9.13](#913-call-6-semantic-assignment-scope-and-response-projection--9-october-2026)
+records the scoped follow-up and its evidence limits.
+The preceding **18:32:23 AEDT** run produced a meaningful call-10 story,
+but call 12 filled acceptance-criterion and functional-requirement fields with
+greeting references alone. Loss localization selected extraction despite the
+requirements already being extracted. The unnecessary upstream repair and rebuild
+ended blocked on duplicate signals after 40 exchanges and 77,122 accounted tokens.
+No specification was published or graded. [§9.12](#912-call-12-authoring-projection-and-loss-evidence-follow-up--9-october-2026)
+records the follow-up; §9.10 retains the preceding run's analysis.
+Greater execution progress, offline correctness and completed
 calibration are different outcomes from a reliable completed workflow.
 
 The bounded R3 policy projection, R4 family meanings and R10 blocking handoff remain
@@ -31,7 +37,10 @@ entity source review reuses the resolved business subject. Their implementation
 and offline verification do not establish improved live model outcomes.
 The authoring-input follow-up is also implemented and offline-verified (§9.11):
 resolved requirements, concise active instructions and native singleton exact
-references reduce work requested from the model. Live benefit remains unmeasured.
+references reduce work requested from the model. The 18:32 run demonstrates
+story improvement in that invocation, while record authoring still fails.
+The authorized follow-up in §9.12 completes dependent-draft projection and
+strengthens retained localization evidence; semantic benefit requires comparison.
 
 The remaining brittleness is principally semantic selection and review reliability,
 repeated whole-context review cost, and incomplete answer recovery. The inspected
@@ -2762,3 +2771,150 @@ publication gates remain required. The new inputs reduce lookup and formatting
 work, but improved first-pass meaning, repair routing, publication and rubric
 quality require the separately approved comparisons described in §9.10. No live
 model calls or E2E runs were made for this implementation.
+
+### 9.12 Call-12 authoring projection and loss-evidence follow-up — 9 October 2026
+
+**Authority and scope:** the user explicitly authorized the remaining R7
+authoring projection, a bounded semantic comparison and the R6 loss-evidence
+follow-up. Record generation stays one assignment per accepted group. No new
+reviewer, semantic verdict reconsideration, retry allowance or automatic model
+escalation is introduced. Live comparisons and E2E still require their separate
+bounded approvals under §28.
+
+**Observed failure:** the [18:32 run](../zig-out/e2e-spec/2026-10-09T07-32-23Z-4dea51d8871d149cc721f69b011070b6/report.md)
+supplied all three business requirements, original sources and field purposes to
+[call 12](../zig-out/e2e-spec/2026-10-09T07-32-23Z-4dea51d8871d149cc721f69b011070b6/evidence/generation/call-000012/context.json).
+Its raw provider answer already contained only exact-copy references in `given`,
+`when`, `then` and functional-requirement text. The provider stopped normally;
+native code did not remove prose. Both prose and references were permitted.
+An earlier call 35 exhibited the same failure with explicit claim IDs, so native
+singleton construction did not introduce this failure class. The exact model
+cause remains unestablished. Family shapes, nonempty fields and claim lineage
+were valid, but did not establish meaningful behavior.
+
+Collection review detected omitted UTC behavior. Subsequent localization selected
+extraction even though that meaning was present in the extracted claims. A later
+field review also accepted greeting-only functional text through literal matching.
+These are separate semantic authoring/review defects; improving projection does
+not establish that either is resolved.
+
+**Implementation:**
+
+| Boundary | Change and retained limits |
+| --- | --- |
+| Shared authoring packet | Dependent brief and entity decision use the canonical text resolver and expose business strings/applicability. Provenance, fragments and display spans remain native. Bound requirements, full original sources and the exact-literal catalogue remain available. Initial and selected repair packets reuse this projection; protocol correction retains its prepared packet. |
+| Record-family purposes | Purpose descriptions are filtered from the same native exclusions used by the selected schema. Accepted entity applicability is not reinterpreted by another policy. Existing shared descriptions and repair eligibility remain the owners. |
+| Loss localization | The closed response retains the existing location and adds a source-line selection with a producer-loss comparison. Numbered source evidence reuses the existing source-selection projection. An upstream location requires comparison evidence; `unlocalized` carries none. The fixed omission verdict cannot change. |
+| Admission and repair | Existing source-line validation checks the selected span; the loss owner checks its association with the named producer. Empty comparison, missing/out-of-range evidence, foreign producer source and misplaced comparison reject. This establishes evidence integrity, not semantic truth. Existing candidate-local repair remains available when upstream meaning survives; unresolved ownership retains existing failure rules. |
+| Persistence | Source-review evidence retains the comparison through collection, selected correction, repair dependencies and readback. Principle evidence rejects it. `specification-state/v8` rejects earlier state contracts; no migration or compatibility reader is added. Exact-reference lineage is unchanged. |
+
+**Semantic comparison:** the [frozen diagnostic plan](../test/calibration/record-authoring/comparison.json)
+and [replay procedure](../test/calibration/record-authoring/README.md) use the captured record assignment
+and unrelated prose-only and multiple-literal premises, with paired original and
+simplified packets and unchanged repeats. Schema/provider/settings remain fixed
+within each pair. Field purpose, aggregate obligation preservation and exact-literal
+correctness are separate assessments. Controlled premises and proposed labels are
+diagnostic data, never E2E scenarios or production authority. The bounded plan is
+three premises × two arms × two unchanged repeats: **12 physical calls**, with
+no correction, repair or model-judge calls. Labels remain proposed for independent
+review; the [scorecard](../test/calibration/record-authoring/scorecard.template.json)
+is unassessed. Replay decoding/schema admission is separate from native record
+admission, which is not assessed without the full captured generation state.
+Existing debugger
+replay owns dispatch and capture; there is no parallel provider runner.
+
+**Validation status: implementation and offline verification complete; live
+comparison pending explicit approval.** Checks passed:
+
+- `zig build test-specification-generation --summary all`: **253/253**.
+- `zig build test-model-candidate-json --summary all`: **64/64**.
+- `zig build test-architecture --summary all`: **123/123**.
+- `zig build test-rubric-evaluator --global-cache-dir /private/tmp/sdde-records-zig-cache --summary all`: **148/148**, including frozen diagnostic schema/packet checks.
+- `zig build verify --summary all`: **135/135 steps, 1,366/1,366 tests**, including
+  unit tests, the separate offline integration suite and packaged clean-environment
+  smoke checks. An initial sandbox attempt could not access the installed compiler
+  and global cache; the authorized offline rerun completed successfully.
+- `git diff --check`: passed.
+
+Independent code review checked source/producer association, nested schema
+restrictions, correction, retained readback, principle evidence separation and
+the diagnostic pairs. No new live call, semantic improvement, E2E publication or
+rubric result is claimed. Record-authoring reliability and true loss attribution
+remain R7/R6 acceptance questions, even though the native checks pass.
+
+**Separate retained limitation:** `Source.collectLoss` preserves the initial
+finding's origin, so a native rejection of localization evidence can be attributed
+to that earlier review request. Raw localization captures still identify the actual
+call. This pre-existing R9 observability gap is not a new repair-routing rule and
+is not changed by the present evidence contract.
+
+### 9.13 Call-6 semantic assignment scope and response projection — 9 October 2026
+
+**Authority and scope:** the user authorized clearer shared selection/coverage
+guidance, meaningful signal content instructions, native-derived response
+restrictions, offline lifecycle tests and preparation of a bounded comparison.
+Signal grouping remains one call. No role selection, provider setting, retry,
+publication rule or persisted format changes. The generic engine receives typed
+restriction facts; reference-domain owners supply eligibility and content kinds.
+
+**Evidence:** the [19:25 run](../zig-out/e2e-spec/2026-10-09T08-25-10Z-0aa73527d76068ef6d1484ca7b764d1d/report.md)
+failed at signal grouping, before authoring. The raw response repeated IDs
+`1,2,3` until `finish_reason: length` at 8,192 completion tokens. The preceding
+run completed that assignment in 94 completion tokens. Their serialized call-6
+requests are byte-identical (SHA256
+`4914a9ecb2b06b841b9a6669226a7d9d06ea64fc29ab4bf60ac5e0f2d1604bf4`).
+The latest authoring/loss-localization changes are not shown to cause this failure.
+
+The request supplied selectable semantic claims 1–3 and retained token claim 4 as
+evidence, but presented the final-result invariant “Every retained claim must
+appear in a signal” without limiting the model's responsibility. The response's
+diagnostic described intending to select token claim 4. Native code supplies that
+token's signal, so the assembled contract was satisfiable; the model-facing scope
+was ambiguous. This is observed scope confusion, not proof of the decoder-loop
+cause. Uniqueness was already explicitly instructed and the repetition violated it.
+
+**Implementation:**
+
+| Boundary | Change and retained limit |
+| --- | --- |
+| Shared constraint presentation | Semantic assignment selection names `assignment.claim_ids`; all other claims are evidence. Signal coverage names retained assigned claims not already covered by `accepted.signals`. Native token projection is stated once. Generic full-result validation descriptions remain available to their actual scopes. |
+| Signal prompt | Defines coherent same-category grouping and preservation of meaning, conditions, triggers and obligation strength. No prescribed group count, duplicate mechanical rules or fixture-specific business content. |
+| Response projection | Summary and signal categories derive from canonical `selectedKind`; unique-subset membership uses the eligible IDs to cap the existing array maximum. Empty eligible catalogues admit only an empty authored collection. Mixed-category selections still require native rejection; category availability does not prove per-group correlation. |
+| Generic schema boundary | Opt-in `IntegerChoice.collection = unique_subset` narrows integer-array bounds through the existing schema owner. Scalar/default sequence selectors retain their contract. `uniqueItems` is unsupported and is not added; native duplicate checks remain required. Bedrock receives the complete bound as guidance, while its existing structural profile omits `maxItems`; no decoding-loop prevention is claimed. |
+| Repair and correction | Atomic selection repair names its authorized `repair.rule.selection` and target-specific rules, without requesting whole-result coverage. Its bound uses compatible repair choices, not all visible evidence. The original candidate rejection is labeled `failed_requirement`, separate from replacement instructions. Scalar conflict-group selection and selected content-repair shapes remain unchanged. Protocol correction retains the prepared packet and schema. |
+| Native enforcement | Complete coverage, token projection, duplicate rejection, allowed overlaps and exact target/dependency checks remain authoritative. No semantic acceptance is inferred from valid JSON or attached claim IDs. |
+
+**Verification:** offline checks cover the captured failure class and unrelated
+requirements: scoped guidance, token evidence, category narrowing, empty catalogues,
+overlong/foreign/repeated memberships, valid overlaps, repair authorization and
+protocol-correction retention. Checks passed:
+
+- `zig build test-reference-model-input test-model-result-schema --summary all`:
+  **225/225 tests** (168 input/linked tests and 57 schema tests).
+- `zig build test-reference-reconciliation --summary all`: **150/150**.
+- `zig build test-model-request-workflow --summary all`: **357/357**.
+- `zig build test-architecture test-model-payload-schema test-model-candidate-json --summary all`:
+  **227/227**.
+- `zig build test-rubric-evaluator --summary all`: **150/150**, including frozen
+  diagnostic contract checks; no external model dispatch.
+- `zig build verify --summary all`: **passed, exit 0**, including the complete
+  offline suite, separate integration entry point and packaged clean-environment
+  smoke checks.
+- `git diff --check`: passed.
+
+For the captured premise, selected schema bytes fall from **3,177 to 698**;
+guidance is 202 → 236 bytes and dynamic evidence/context is 3,487 → 3,488 bytes.
+These are component byte counts, not provider token usage or quality evidence.
+Independent review also identified and closed the second repair-guidance surface
+by labeling the original candidate rejection separately from replacement instructions.
+
+**Live evidence remains pending.** The [comparison plan](../test/calibration/signal-grouping/comparison.json)
+and [procedure](../test/calibration/signal-grouping/README.md) prepare three premises
+× two arms × two unchanged repeats: **12 physical diagnostic calls**, with no
+correction, repair or judge calls. The original captured request is retained as
+baseline; unrelated mixed-category/token and accepted-overlap premises test the
+same boundaries. Assess completed/schema-valid responses, truncation, duplicate
+or foreign selections, missing meaning, changed obligations, invented behavior
+and literal fidelity separately. Labels are proposed, the scorecard is unassessed,
+and no live call is authorized by this document. §28.8 requires explicit bounded
+approval. These diagnostics are not E2E publication or rubric evidence.

@@ -14,6 +14,15 @@ This summarizes the existing contracts in
   model content's semantic category (`content.model.kind`). The shared
   [native constraint descriptions](../../src/domain/reference_reconciliation_diagnostic.zig)
   supply the matching rules for initial assignments and repairs.
+- Semantic summary/signal selections come only from `assignment.claim_ids`; token
+  claims remain supporting evidence and native projections. Signal coverage guidance
+  concerns retained assigned claims not already covered by accepted signals. Signal
+  content preserves the selected claims' conditions, triggers and obligation strength.
+  Compatible content categories and subset cardinality derive from the native
+  selection owner. Atomic selection repairs instead name `repair.rule.selection`;
+  they do not request whole-result coverage. Different signal groups may overlap.
+  Reference repair `failed_requirement` describes the rejected candidate; the
+  repair target and scoped constraints describe the permitted replacement.
 - Content references preserved-token IDs; `preserved_tokens` retains exact values
   and citations across reconciliation, generation, review and repair.
 - Extraction selects source lines as `{first: {ordinal}, last: {ordinal}}`, with
@@ -25,6 +34,14 @@ This summarizes the existing contracts in
   Diagnostics preserve originating request/attempt even after request release;
   repairing one citation preserves sibling attribution.
 - Source selection proves location, not semantic support.
+- Authoring dependencies use resolved brief text and entity applicability/basis;
+  canonical provenance and fragment bookkeeping stay native. Record purposes and
+  selected schema alternatives derive from the same native eligibility decision.
+- Loss localization keeps its omission verdict fixed. An upstream location requires
+  captured source lines and a producer-loss comparison; the existing source and
+  loss validators check association and retain the evidence for repair/readback.
+  This does not prove semantic loss. `unlocalized` retains the existing
+  candidate-local repair or failure route, without a new reviewer or retry.
 
 Native operation causes and expected domain rejections survive into CLI, telemetry
 and harness evidence through the closed operation contract. The harness records

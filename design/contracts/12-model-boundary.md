@@ -137,13 +137,19 @@ Each generation request contains only what the current unit needs:
 - Empty eligible sets admit only an empty collection where the canonical shape
   permits it (including an optional enclosing record collection). Scalar or
   required collection choices reject. Nonempty restrictions preserve canonical
-  cardinality; sets above ADR 0006's 1,024-choice bound reject before invocation.
+  cardinality unless the native owner declares a unique-subset selector: its maximum
+  is the smaller of the canonical maximum and eligible-ID count. This fact applies
+  only to integer collections, never scalar choices, and introduces no token limit.
+  Sets above ADR 0006's 1,024-choice bound reject before invocation.
   Source review and its selection repairs use actual source IDs; reference
   authoring and repairs use their current native claim, signal or group scope.
   Visible display catalogues use the same scope. Refreshing text choices preserves
   other owners' restrictions. Membership enums do not prove correlation,
   provenance, uniqueness, source support or semantic correctness; native admission
   and canonical readback remain mandatory.
+  The closed schema profile does not support `uniqueItems`; subset cardinality does
+  not enforce uniqueness. The complete guidance and local schema retain the bound;
+  provider structural projections retain their existing supported-keyword profile.
 - Packet context/repair projections retain these facts out of band. Request preparation binds
   the derived schema once; provider serialization, payload validation and protocol corrections
   use that same view. Composition accepts only its exact part schema or a restriction derived
@@ -808,16 +814,18 @@ packet guidance, selected schemas, collection and readback project those same ru
 Source-only evidence is valid only for loss locations that permit it. A selected
 signal/conflict requires its exact producer claims; disposition loss may use its
 claim or source-only evidence. An unlocalized finding retains ordinary eligibility.
-Native source-review evidence retains `loss`, so readback repeats those same joins;
-principle evidence has no loss location. `specification-state/v7` rejects earlier
+Native source-review evidence retains `loss` and its source-line/producer-loss
+comparison, so readback repeats the same source and producer joins. A localized
+answer without comparison evidence rejects; unlocalized and non-omission findings
+carry no comparison. Principle evidence has neither. `specification-state/v8` rejects earlier
 snapshot contracts rather than silently supplying a missing binding. ADR 0020
 governs the derived exact-reference lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
 **Source-review response contract (28 September 2026):** the model chooses a
 semantic finding, detail, and any genuinely selectable source. When the finding
-is candidate omission, a separate call selects only a loss location against that
-fixed finding;
+is candidate omission, a separate call selects a loss location and supplies the
+required source-line/producer comparison against that fixed finding;
 every selected generation, source-review and repair schema rejects `provenance`.
 The engine constructs the canonical claim selection from the current bound
 source group, candidate evidence or selected diagnostic producer. A selected

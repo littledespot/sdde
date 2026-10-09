@@ -358,11 +358,14 @@ test "loss attribution wire variants stay closed across initial review insertion
     };
     try std.testing.expectEqual(@typeInfo(@import("domain/source_omission.zig").Location).@"union".fields.len, locations.len);
     inline for (locations) |location| {
-        try checkCandidate("support", "loss", location);
+        const comparison = if (comptime std.mem.eql(u8, location, "{\"kind\":\"unlocalized\"}")) "null" else "{\"kind\":\"source_producer_comparison\",\"source\":{\"chunk_id\":{\"bytes\":\"chunk-7\"},\"lines\":{\"first\":1,\"last\":1}},\"producer_loss\":\"MOCK The producer omitted this source obligation.\"}";
+        try checkCandidate("support", "loss", "{\"location\":" ++ location ++ ",\"comparison\":" ++ comparison ++ "}");
         const value = "{\"kind\":\"candidate_omission\",\"loss\":" ++ location ++ ",\"source_ids\":[" ++ response_wire.id ++ "],\"detail\":\"Preserve the deadline.\"}";
         inline for (.{ "finding", "applicability_finding" }) |selection| try candidateCase("support", selection, value, .unknown_property, "/loss");
     }
-    try candidateCase("support", "loss", "{\"kind\":\"unlocalized\",\"value\":null}", .unknown_property, "/value");
+    try candidateCase("support", "loss", "{\"location\":{\"kind\":\"unlocalized\",\"value\":null},\"comparison\":null}", .unknown_property, "/location/value");
+    try candidateCase("support", "loss", "{\"kind\":\"unlocalized\"}", .unknown_property, "/kind");
+    try candidateCase("support", "loss", "{\"location\":{\"kind\":\"unlocalized\"}}", .missing_required_property, "/comparison");
     try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"Preserve the deadline.\"}");
 }
 
@@ -436,7 +439,7 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         return nativeWire(@import("domain/specification_generation.zig").ModelResponse, a, bytes);
     } else if (comptime selection != null) {
         const selected = selection.?;
-        if (comptime std.mem.eql(u8, selected, "loss")) return nativeWire(@import("domain/source_omission.zig").Location, a, bytes);
+        if (comptime std.mem.eql(u8, selected, "loss")) return nativeWire(@import("domain/source_omission.zig").Assessment, a, bytes);
         const model = @import("domain/specification_support_model.zig");
         if (comptime std.mem.eql(u8, selected, "finding") or std.mem.eql(u8, selected, "applicability_finding")) return nativeWire(model.Value, a, bytes);
         if (comptime std.mem.eql(u8, selected, "selection")) return nativeWire(model.Selection, a, bytes);

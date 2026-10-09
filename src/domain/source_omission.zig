@@ -11,6 +11,25 @@ pub const Location = union(enum) {
     reconciliation_disposition: r.ClaimId,
     reconciliation_conflict: r.ConflictId,
 };
+/// The selected captured source span and the alleged defect in one producer.
+/// Native validation proves the source/producer joins, not semantic loss.
+pub const Comparison = struct {
+    kind: enum { source_producer_comparison } = .source_producer_comparison,
+    source: struct { chunk_id: r.extraction.identity.ChunkId, lines: @import("source_selections.zig").Selection },
+    producer_loss: []const u8,
+};
+pub const Assessment = struct { location: Location, comparison: ?Comparison };
+pub const SourceLines = struct { chunk_id: r.extraction.identity.ChunkId, source_id: r.extraction.identity.SourceId, lines: []const @import("source_selections.zig").Choice };
+
+/// Allocations belong to the caller's request arena.
+pub fn sourceLines(a: std.mem.Allocator, sources: r.evidence.Inputs) r.Error![]const SourceLines {
+    var result: std.ArrayList(SourceLines) = .empty;
+    for (sources.chunks.entries) |chunk| {
+        try result.append(a, .{ .chunk_id = chunk.id, .source_id = chunk.source_id, .lines = try @import("source_selections.zig").project(a, sources, .{ .state_id = sources.corpus.state_id, .chunk_id = chunk.id }) });
+    }
+    return result.toOwnedSlice(a);
+}
+
 pub const Support = struct { review: @import("specification_support.zig").Source.Candidate, inputs: authority.Inputs, observations: authority.Observations, result: authority.Result };
 pub const Evidence = struct { finding: authority.Evidence, location: Location };
 pub const Rejection = enum {
@@ -164,7 +183,44 @@ pub fn diagnosticClaims(records: @import("reference_support.zig").Records, locat
 
 /// Verify all mechanical joins. Meaning and loss attribution remain explicitly
 /// model-assisted; absence of a unique location cannot authorize a repair.
-pub fn validate(inputs: authority.Inputs, sources: r.evidence.Inputs, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) (authority.Error || r.Error)!void {
+pub fn validate(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evidence.Inputs, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) (authority.Error || r.Error)!void {
+    try validateLocation(inputs, sources, finding, review, location);
+    if (location == .unlocalized) {
+        if (review.loss_comparison != null) return error.InvalidRequiredAuthority;
+        return;
+    }
+    const comparison = review.loss_comparison orelse return error.InvalidRequiredAuthority;
+    if (!@import("clarification_inputs.zig").validText(comparison.producer_loss, @import("clarification_inputs.zig").max_text_bytes)) return error.InvalidRequiredAuthority;
+    const scope: r.evidence.Scope = .{ .state_id = sources.corpus.state_id, .chunk_id = comparison.source.chunk_id };
+    const source = try r.evidence.resolve(sources, scope);
+    if (!r.contains(r.extraction.identity.SourceId, review.source_ids, source.source.id)) return error.InvalidRequiredAuthority;
+    const cited = try @import("source_selections.zig").validate(a, sources, scope, &.{comparison.source.lines});
+    defer if (cited == .valid) a.free(cited.valid.entries);
+    if (cited != .valid) return error.InvalidRequiredAuthority;
+    const records = inputs.references orelse return error.InvalidRequiredAuthority;
+    switch (location) {
+        .unlocalized => unreachable,
+        .extraction_claim => |id| if (!id.eql(source.chunk.id)) return error.InvalidRequiredAuthority,
+        .token_classification => |id| {
+            if (!std.meta.eql(id.source_id, source.source.id)) return error.InvalidRequiredAuthority;
+            const matching_chunk = found: {
+                for (records.items.extraction) |chunk| for (chunk.token_classifications) |classification| {
+                    if (std.meta.eql(classification.id(), id)) break :found chunk.scope.chunk_id;
+                };
+                return error.InvalidRequiredAuthority;
+            };
+            if (!matching_chunk.eql(source.chunk.id)) return error.InvalidRequiredAuthority;
+        },
+        .reconciliation_signal, .reconciliation_disposition, .reconciliation_conflict => {
+            const claims = diagnosticClaims(records, location) orelse return error.InvalidRequiredAuthority;
+            for (claims) |claim| {
+                if ((try r.item(records.items, claim)).claim.chunk_id.eql(source.chunk.id)) break;
+            } else return error.InvalidRequiredAuthority;
+        },
+    }
+}
+
+fn validateLocation(inputs: authority.Inputs, sources: r.evidence.Inputs, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) (authority.Error || r.Error)!void {
     if (location == .unlocalized) return;
     if (finding != .candidate_omission or review.source_ids.len == 0) return error.InvalidRequiredAuthority;
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
@@ -236,7 +292,7 @@ pub fn available(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evid
     for (candidates.items) |location| {
         var diagnostic = review;
         if (location != .unlocalized) diagnostic.provenance.claim_ids = diagnosticClaims(records, location) orelse return error.InvalidRequiredAuthority;
-        validate(inputs, sources, .candidate_omission, diagnostic, location) catch |err| switch (err) {
+        validateLocation(inputs, sources, .candidate_omission, diagnostic, location) catch |err| switch (err) {
             error.InvalidRequiredAuthority => continue,
             else => return err,
         };

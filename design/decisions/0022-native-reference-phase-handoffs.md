@@ -48,6 +48,22 @@ repairs retain their existing exact target and dependency contracts. Native
 candidate validation still rejects unsupported selections; presentation never
 normalizes a rejected token selection into acceptance.
 
+Semantic assignment guidance names `assignment.claim_ids` as the sole selection
+scope. Signal coverage concerns retained assigned claims not already covered by
+accepted signals; native token coverage is stated once and remains engine-owned.
+Signal content preserves supported meaning, conditions, triggers and obligation
+strength. Complete duplicate member sets reject; different sets may overlap.
+Summary and signal schema views derive available model-content categories from
+the canonical selected-kind validator and membership cardinality from eligible
+IDs through §12's generic unique-subset restriction. Empty eligible catalogues
+admit only an empty authored collection. Atomic selection repairs use their
+authorized compatible IDs and target-specific guidance, not initial-assignment
+or whole-result coverage instructions. Content repairs retain their existing
+selected-kind schema. Reference repair guidance labels the original candidate's
+rejection as `failed_requirement`, distinct from the authorized replacement's
+constraints. Full coverage and native uniqueness remain unchanged;
+schema admission does not establish meaning preservation or model reliability.
+
 Authoring-role choices use the same positive-support eligibility as their Spec
 consumers: every claim in a selected group must be retained. The shared reference
 support owner supplies this rule to phase packets, role validation, generation,

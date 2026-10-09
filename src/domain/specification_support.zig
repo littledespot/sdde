@@ -185,7 +185,10 @@ pub fn Contract(comptime purpose: Purpose) type {
             defer packets.release(contextual);
             const loss = @import("source_omission.zig");
             const locations = try loss.available(scratch, inputs, context.inputs, .{ .detail = finding.value.detail, .source_ids = finding.value.source_ids, .provenance = .{ .claim_ids = finding.value.provenance.claim_ids, .citation_ids = &.{}, .clarification_response_ids = finding.value.provenance.clarification_response_ids } });
-            const available = try packets.withContext([]const loss.Location, allocator, contextual, "available_loss_locations", locations);
+            const available_locations = try packets.withContext([]const loss.Location, allocator, contextual, "available_loss_locations", locations);
+            defer packets.release(available_locations);
+            const source_lines = try loss.sourceLines(scratch, context.inputs);
+            const available = try packets.withContext([]const loss.SourceLines, allocator, available_locations, "loss_sources", source_lines);
             defer packets.release(available);
             const schema = @import("model_result_schema.zig");
             var excluded: std.ArrayList(schema.ExcludedVariant) = .empty;
@@ -221,7 +224,11 @@ pub fn Contract(comptime purpose: Purpose) type {
             const slot = try std.fmt.allocPrint(scratch, "{s}-loss", .{base.unit().semantic_review.review_slot_id.bytes});
             var unit = base.unit();
             unit.semantic_review.review_slot_id.bytes = slot;
-            const result = try packets.create(allocator, available.body(), unit, .{ .semantic_review = .{ .bytes = slot } }, .{ .bytes = "loss" });
+            var loss_body = try @import("strict_json.zig").decode(std.json.Value, scratch, available.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
+            // Numbered captured source lines replace the raw duplicate source view.
+            _ = loss_body.object.orderedRemove("sources");
+            const body = try std.json.Stringify.valueAlloc(scratch, loss_body, .{});
+            const result = try packets.create(allocator, body, unit, .{ .semantic_review = .{ .bytes = slot } }, .{ .bytes = "loss" });
             defer packets.release(result);
             return packets.withRestrictions(allocator, result, excluded.items, choices.items);
         }
@@ -236,7 +243,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             const expected = try packetForLoss(allocator, inputs, context, candidate);
             defer packets.release(expected);
             try checkPacket(expected, packet);
-            const location = try @import("model_candidate_json.zig").decode(@import("source_omission.zig").Location, allocator, bytes);
+            const location = try @import("model_candidate_json.zig").decode(@import("source_omission.zig").Assessment, allocator, bytes);
             const ordinal = candidate.pending_localization orelse return error.InvalidRequiredAuthority;
             const ledger = try a.build(allocator, inputs);
             const required = try admission.requirements(allocator, inputs, context.inputs, ledger.requirements[ordinal - 1].seed.id);
@@ -353,7 +360,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     const before = diagnostics.items.len;
                     if (purpose == .source) if (decisionOf(finding.value) == .not_applicable and required != .review) try diagnostics.append(allocator, diagnostic(proposed, .invalid_decision, requirement.seed.id, ordinal, position));
                     const semantic = decisionOf(finding.value).finding();
-                    var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail, finding.value.loss);
+                    var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail, finding.value.loss, finding.value.loss_comparison);
                     const rejection: ?Diagnostic = if (reviewed == .rejected) rejected: {
                         var invalid = diagnostic(proposed, .invalid_evidence, requirement.seed.id, ordinal, position);
                         if (purpose == .source) if (reviewed.rejected.issue == .invalid_finding) {
@@ -424,7 +431,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (evidence.finding != .supported) return error.InvalidRequiredAuthority;
                     break :blk Decision.not_applicable;
                 } else try Decision.fromFinding(evidence.finding);
-                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .kind = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .question = review.question, .loss = review.loss orelse return error.InvalidRequiredAuthority } };
+                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .kind = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .question = review.question, .loss = review.loss orelse return error.InvalidRequiredAuthority, .loss_comparison = review.loss_comparison } };
             }
             var empty = inputs;
             empty.evidence = &.{};

@@ -32,6 +32,7 @@ pub const Decision = enum {
 };
 pub const Canonical = struct {
     loss: loss = .{ .unlocalized = .{} },
+    loss_comparison: ?@import("source_omission.zig").Comparison = null,
     kind: Decision,
     provenance: @import("specification.zig").Selection,
     source_ids: []const SourceId,
@@ -87,11 +88,12 @@ pub fn decode(a_alloc: std.mem.Allocator, bytes: []const u8, required: evidence.
     };
 }
 
-pub fn bindLoss(required: evidence.Requirements, value: Canonical, location: loss) json.Error!Canonical {
+pub fn bindLoss(required: evidence.Requirements, value: Canonical, assessment: @import("source_omission.zig").Assessment) json.Error!Canonical {
     if (value.kind != .candidate_omission) return error.InvalidJsonDocument;
     var bound = value;
-    bound.loss = location;
-    bound.provenance.claim_ids = try claimsFor(required, .candidate_omission, location);
+    bound.loss = assessment.location;
+    bound.loss_comparison = assessment.comparison;
+    bound.provenance.claim_ids = try claimsFor(required, .candidate_omission, assessment.location);
     return bound;
 }
 

@@ -527,7 +527,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     try fixtureLoss(&view, inputs, context, mode)
                 else
                     .{ .unlocalized = .{} };
-                return @import("../domain/model_candidate_json.zig").encode(@import("../domain/source_omission.zig").Location, allocator, location);
+                return @import("source_omission_evidence.zig").encode(allocator, inputs, location);
             };
             const selected_index = if (request.id().purpose == .atomic_repair) 0 else try reviewIndex(allocator, inputs, try @import("../domain/specification_support.zig").Source.nextSubject(allocator, inputs, try workflow.prior(.source, progress)));
             const all = try @import("../domain/specification_provenance.zig").items(context);

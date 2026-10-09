@@ -62,6 +62,10 @@ pub const IntegerChoice = struct {
     target: ChoiceTarget,
     definition: ?DefinitionId = null,
     allowed: []const i64,
+    /// A native unique-selection invariant also bounds collection cardinality.
+    /// Duplicate admission remains with the native owner; the schema profile
+    /// has no uniqueness keyword. Sequence selectors keep canonical bounds.
+    collection: enum { sequence, unique_subset } = .sequence,
     /// Explicit native authority: only a determined tagged field is omitted.
     singleton: enum { select, construct } = .select,
 
@@ -150,14 +154,14 @@ pub fn restrict(allocator: std.mem.Allocator, canonical: *const Schema, excluded
                 const other = for (storage(canonical).choice_definitions) |definition| {
                     if (std.mem.eql(u8, id.bytes, definition.id.bytes)) break definition.root;
                 } else return invalid();
-                if (!(try narrowChoice(arena.allocator(), other, entry.target, entry.allowed)).matched) return invalid();
+                if (!(try narrowChoice(arena.allocator(), other, entry.target, entry.allowed, entry.collection)).matched) return invalid();
                 continue;
             }
         }
-        const narrowed = try narrowChoice(arena.allocator(), root, entry.target, entry.allowed);
+        const narrowed = try narrowChoice(arena.allocator(), root, entry.target, entry.allowed, entry.collection);
         if (!narrowed.matched and entry.target == .path) {
             const parent = storage(canonical).projection_of orelse return invalid();
-            if (!(try narrowChoice(arena.allocator(), parent.root(), entry.target, entry.allowed)).matched) return invalid();
+            if (!(try narrowChoice(arena.allocator(), parent.root(), entry.target, entry.allowed, entry.collection)).matched) return invalid();
         }
         root = if (entry.constructedValue() != null)
             try omitConstructedField(arena.allocator(), narrowed.node, entry.target.tagged)
@@ -227,9 +231,10 @@ fn restrictNode(a: std.mem.Allocator, node: *const Node, excluded: []const Exclu
 }
 
 const Narrowed = struct { node: *const Node, matched: bool };
-fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, allowed: ?[]const i64) Error!Narrowed {
+fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, allowed: ?[]const i64, collection: @FieldType(IntegerChoice, "collection")) Error!Narrowed {
     if (target == .path and target.path.len == 0) {
         if (node.* != .integer and node.* != .integer_enumeration and (node.* != .array or (node.array.items.* != .integer and node.array.items.* != .integer_enumeration))) return invalid();
+        if (collection == .unique_subset and node.* != .array) return invalid();
         const values = allowed orelse return .{ .node = node, .matched = true };
         const result = try a.create(Node);
         result.* = node.*;
@@ -237,7 +242,13 @@ fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, a
             if (values.len == 0) {
                 if (node.array.minimum != 0) return invalid();
                 result.array.maximum = 0;
-            } else result.array.items = try narrowInteger(a, node.array.items, values);
+            } else {
+                result.array.items = try narrowInteger(a, node.array.items, values);
+                if (collection == .unique_subset) {
+                    result.array.maximum = @min(result.array.maximum, @as(u32, @intCast(values.len)));
+                    if (result.array.minimum > result.array.maximum) return invalid();
+                }
+            }
         } else result.* = (try narrowInteger(a, node, values)).*;
         return .{ .node = result, .matched = true };
     }
@@ -246,7 +257,7 @@ fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, a
             const copy = try a.dupe(*const Node, variants);
             var matched = false;
             for (copy) |*variant| {
-                const selected = try narrowChoice(a, variant.*, target, allowed);
+                const selected = try narrowChoice(a, variant.*, target, allowed, collection);
                 variant.* = selected.node;
                 matched = selected.matched or matched;
             }
@@ -259,7 +270,7 @@ fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, a
                 const tag = findProperty(properties, "kind");
                 if (tag != null and tag.?.schema.* == .constant and tag.?.schema.constant == .string and std.mem.eql(u8, tag.?.schema.constant.string, target.tagged.kind)) {
                     if (findProperty(properties, target.tagged.field) == null) return invalid();
-                    return narrowChoice(a, node, .{ .path = &.{.{ .property = target.tagged.field }} }, allowed);
+                    return narrowChoice(a, node, .{ .path = &.{.{ .property = target.tagged.field }} }, allowed, collection);
                 }
             }
             const copy = try a.dupe(Property, properties);
@@ -269,7 +280,7 @@ fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, a
                     if (target.path[0] != .property or !std.mem.eql(u8, target.path[0].property, property.name)) continue;
                     break :blk .{ .path = target.path[1..] };
                 };
-                const selected = try narrowChoice(a, property.schema, next, allowed);
+                const selected = try narrowChoice(a, property.schema, next, allowed, collection);
                 property.schema = selected.node;
                 matched = selected.matched or matched;
             }
@@ -283,7 +294,7 @@ fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, a
                 break :blk .{ .path = target.path[1..] };
             };
             if (target == .path and allowed != null and allowed.?.len == 0 and items.minimum == 0) {
-                const checked = try narrowChoice(a, items.items, next, null);
+                const checked = try narrowChoice(a, items.items, next, null, collection);
                 if (checked.matched) {
                     const empty = try a.create(Node);
                     empty.* = node.*;
@@ -291,7 +302,7 @@ fn narrowChoice(a: std.mem.Allocator, node: *const Node, target: ChoiceTarget, a
                     return .{ .node = empty, .matched = true };
                 }
             }
-            const selected = try narrowChoice(a, items.items, next, allowed);
+            const selected = try narrowChoice(a, items.items, next, allowed, collection);
             const result = try a.create(Node);
             result.* = node.*;
             result.array.items = selected.node;

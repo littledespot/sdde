@@ -74,6 +74,78 @@ test "integer collection choices preserve required minima and empty optional par
     try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, required, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "handles" }} }, .allowed = &.{} }}));
 }
 
+test "native unique subsets derive collection cardinality without restricting overlapping groups" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const resource = try compile(a, selectionChoices);
+    const nested = resource.select(.{ .bytes = "nested" }).?;
+    const path: []const schema.ChoiceStep = &.{ .{ .property = "records" }, .{ .items = {} }, .{ .property = "handles" } };
+    const one: schema.IntegerChoice = .{ .target = .{ .path = path }, .allowed = &.{7}, .collection = .unique_subset };
+    const selected = try schema.restrict(std.testing.allocator, nested, &.{}, &.{one});
+    defer selected.release();
+    try expectSelection(a, selected.selected(), "{\"records\":[{\"handles\":[7]},{\"handles\":[7]}]}", true);
+    try expectSelection(a, selected.selected(), "{\"records\":[{\"handles\":[7,7]}]}", false);
+    try expectSelection(a, selected.selected(), "{\"records\":[{\"handles\":[]}]}", false);
+    try expectSelection(a, selected.selected(), "{\"records\":[{\"handles\":[2]}]}", false);
+    const handles = schema.findProperty(schema.findProperty(selected.selected().root().object, "records").?.schema.array.items.object, "handles").?.schema;
+    try std.testing.expectEqual(@as(u32, 1), handles.array.maximum);
+    // Uniqueness is an existing native-owner obligation. The closed schema
+    // profile does not claim to enforce duplicates within the derived bound.
+    const two = try schema.restrict(std.testing.allocator, nested, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 2, 7 }, .collection = .unique_subset }});
+    defer two.release();
+    try expectSelection(a, two.selected(), "{\"records\":[{\"handles\":[2,7]},{\"handles\":[7]}]}", true);
+    try expectSelection(a, two.selected(), "{\"records\":[{\"handles\":[2,2]}]}", true);
+    try std.testing.expect(std.mem.indexOf(u8, two.selected().modelBytes(), "uniqueItems") == null);
+    const larger = try schema.restrict(std.testing.allocator, nested, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 2, 7, 9 }, .collection = .unique_subset }});
+    defer larger.release();
+    try expectSelection(a, larger.selected(), "{\"records\":[{\"handles\":[2,7,9]}]}", false);
+    // Opt-in subset facts never alter another owner's sequence semantics.
+    var sequence = one;
+    sequence.collection = .sequence;
+    const repeated = try schema.restrict(std.testing.allocator, nested, &.{}, &.{sequence});
+    defer repeated.release();
+    try expectSelection(a, repeated.selected(), "{\"records\":[{\"handles\":[7,7]}]}", true);
+    var none = one;
+    none.allowed = &.{};
+    const empty = try schema.restrict(std.testing.allocator, nested, &.{}, &.{none});
+    defer empty.release();
+    try expectSelection(a, empty.selected(), "{\"records\":[]}", true);
+    try expectSelection(a, empty.selected(), "{\"records\":[{\"handles\":[7]}]}", false);
+    const optional = resource.select(.{ .bytes = "selection" }).?;
+    const optional_empty = try schema.restrict(std.testing.allocator, optional, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .allowed = &.{}, .collection = .unique_subset }});
+    defer optional_empty.release();
+    try expectSelection(a, optional_empty.selected(), "{\"source_ids\":[]}", true);
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "claim_id" }} }, .allowed = &.{7}, .collection = .unique_subset }}));
+    const required = try compile(a, try fieldSchema(a, "{\"type\":\"array\",\"minItems\":2,\"maxItems\":4,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}}"));
+    for ([_][]const i64{ &.{}, &.{7} }) |ids| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, required, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = ids, .collection = .unique_subset }}));
+}
+
+test "unique collection metadata survives packet projections and tagged selection" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, uniqueCollectionPacket, .{});
+}
+
+fn uniqueCollectionPacket(allocator: std.mem.Allocator) !void {
+    const packets = @import("domain/model_input_packet.zig");
+    const base = try packets.create(allocator, "{}", .workflow_step, .initial_generation, null);
+    defer packets.release(base);
+    const selected = try packets.withIntegerChoices(allocator, base, &.{.{ .target = .{ .tagged = .{ .kind = "selection", .field = "handles" } }, .allowed = &.{ 3, 8 }, .collection = .unique_subset }});
+    defer packets.release(selected);
+    const contextual = try packets.withContext(struct { description: []const u8 }, allocator, selected, "assignment", .{ .description = "MOCK native selection" });
+    defer packets.release(contextual);
+    try std.testing.expectEqualDeep(selected.integerChoices(), contextual.integerChoices());
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const resource = try compile(a,
+        \\{"type":"object","properties":{"value":{"type":"object","properties":{"kind":{"const":"selection"},"handles":{"type":"array","minItems":1,"maxItems":8,"items":{"type":"integer","minimum":1,"maximum":10}}},"required":["kind","handles"],"additionalProperties":false}},"required":["value"],"additionalProperties":false}
+    );
+    const narrowed = try schema.restrict(allocator, resource, contextual.excludedVariants(), contextual.integerChoices());
+    defer narrowed.release();
+    try expectSelection(a, narrowed.selected(), "{\"value\":{\"kind\":\"selection\",\"handles\":[3,8]}}", true);
+    try expectSelection(a, narrowed.selected(), "{\"value\":{\"kind\":\"selection\",\"handles\":[3,8,3]}}", false);
+}
+
 test "ID restrictions validate definition and selected part association before omitting sibling locations" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, selectedIdChoices, .{});
 }

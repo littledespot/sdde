@@ -93,6 +93,83 @@
       "maxLength": 2000
     },
     "loss": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "$ref": "#/$defs/loss_location"
+        },
+        "comparison": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "source_producer_comparison"
+                },
+                "source": {
+                  "type": "object",
+                  "properties": {
+                    "chunk_id": {
+                      "type": "object",
+                      "properties": {
+                        "bytes": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        }
+                      },
+                      "required": [
+                        "bytes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "lines": {
+                      "type": "object",
+                      "properties": {
+                        "first": {
+                          "$ref": "#/$defs/ordinal"
+                        },
+                        "last": {
+                          "$ref": "#/$defs/ordinal"
+                        }
+                      },
+                      "required": [
+                        "first",
+                        "last"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "chunk_id",
+                    "lines"
+                  ],
+                  "additionalProperties": false
+                },
+                "producer_loss": {
+                  "$ref": "#/$defs/required_detail_value"
+                }
+              },
+              "required": [
+                "kind",
+                "source",
+                "producer_loss"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "location",
+        "comparison"
+      ],
+      "additionalProperties": false
+    },
+    "loss_location": {
       "oneOf": [
         {
           "type": "object",

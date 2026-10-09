@@ -295,11 +295,10 @@ fn repairTask(a: std.mem.Allocator, authorization: Authorization) (Error || auth
 }
 
 fn membershipTask(a: std.mem.Allocator, disposition: g.spec.Applicability) authority.Error![]const u8 {
-    if (disposition == .required) return descriptions.record(a, .entity);
     var permitted: std.ArrayList(g.spec.Kind) = .empty;
     defer permitted.deinit(a);
     for (std.meta.tags(g.spec.Kind)) |kind| {
-        if (kind == .entity) continue;
+        if (!g.spec.entityMembershipSatisfied(disposition, @intFromBool(kind == .entity))) continue;
         try permitted.append(a, kind);
     }
     return descriptions.recordsFor(a, permitted.items);

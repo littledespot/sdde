@@ -1,7 +1,6 @@
-Keep fixed_review unchanged. Select from available_loss_locations. Check the
-alleged loss against original sources and captured extraction, dispositions and
-signals. Select the first defective producer
-supported by captured outputs. Poorly authored fields do not establish extraction
-loss. Use unlocalized when meaning survives these producers or no unique defect
-is established. For extraction_claim, bytes selects a chunk ID; never insert
-already extracted meaning. Do not draft a replacement.
+Keep fixed_review unchanged. Compare its missing meaning with the original source
+and each captured producer output. Select a location only when that producer lost
+or distorted the meaning: cite its source lines from loss_sources and explain
+what its output lacks in comparison.producer_loss. Eligibility is not evidence of
+loss. If meaning survives upstream, or no unique producer defect is established,
+return unlocalized with comparison null; candidate-local repair stays downstream.

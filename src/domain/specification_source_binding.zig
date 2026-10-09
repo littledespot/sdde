@@ -38,7 +38,7 @@ pub const Guidance = union(enum) {
     records: struct { purpose: ?[]const u8 = null, signal: r.SignalId, requirements: []const Requirement },
 };
 
-pub fn guidance(a: std.mem.Allocator, bound: Bound, mode: GuidanceMode, requirements: []const Requirement) Error!Guidance {
+pub fn guidance(a: std.mem.Allocator, bound: Bound, mode: GuidanceMode, requirements: []const Requirement, record_kinds: []const spec.Kind) Error!Guidance {
     return switch (bound) {
         .brief => |value| .{ .brief = .{
             .title = try fieldGuidance(a, .title, value.title, mode, requirements),
@@ -48,7 +48,10 @@ pub fn guidance(a: std.mem.Allocator, bound: Bound, mode: GuidanceMode, requirem
         .primary_user_story => |value| .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, value, mode, requirements) },
         .entities => |value| .{ .entities = try fieldGuidance(a, .entity_basis, value, mode, requirements) },
         .records => |value| .{ .records = .{
-            .purpose = try presentedPurpose(a, .records, mode),
+            .purpose = if (mode == .authoring) @import("required_authority_description.zig").recordsFor(a, record_kinds) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.InvalidRequiredAuthority => return error.InvalidSpecificationBinding,
+            } else null,
             .signal = value.signal,
             .requirements = try assignedRequirements(a, value.selection, requirements),
         } },

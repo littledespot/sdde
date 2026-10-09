@@ -74,8 +74,16 @@ authority. Localization has its own producer-comparison assignment, without a
 support-assessment instruction. It cannot reopen the fixed finding and may report
 `unlocalized` when the alleged meaning survives. A localized producer supplies its
 exact diagnostic claims, including the one discarded claim of a disposition,
-independently of positive field provenance. Collection and persisted review
-readback enforce the same rule.
+independently of positive field provenance. A localized answer must also supply
+captured source lines and an explanation of the selected producer's loss. The
+existing source-selection validator resolves those lines; loss admission verifies
+the source/producer association and retains the comparison with the finding.
+Initial collection, correction, repair authorization and persisted review readback
+enforce the same evidence contract. A location alone cannot authorize upstream
+repair. Valid source coordinates do not prove the explanation's semantic truth.
+An `unlocalized` answer carries no upstream comparison and uses the existing
+candidate-local repair or failure path. This adds no reviewer, verdict reassessment,
+retry allowance or continuation rule.
 
 ### 22.2 Repair classification
 

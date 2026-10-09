@@ -1,0 +1,495 @@
+{
+  "schema": "record-authoring-scorecard/v1",
+  "status": "not_run",
+  "reviewer": null,
+  "trials": [
+    {
+      "id": "captured-startup-baseline-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_record_admission": "not_assessed",
+      "field_purposes": [],
+      "required_family_coverage": {
+        "acceptance_criterion": "unassessed",
+        "functional_requirement": "unassessed"
+      },
+      "obligations": [
+        {
+          "id": "startup",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "greeting",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "utc",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "invented_conditions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "captured-startup-candidate-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_record_admission": "not_assessed",
+      "field_purposes": [],
+      "required_family_coverage": {
+        "acceptance_criterion": "unassessed",
+        "functional_requirement": "unassessed"
+      },
+      "obligations": [
+        {
+          "id": "startup",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "greeting",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "utc",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "invented_conditions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "room-alert-baseline-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_record_admission": "not_assessed",
+      "field_purposes": [],
+      "required_family_coverage": {
+        "acceptance_criterion": "unassessed",
+        "functional_requirement": "unassessed"
+      },
+      "obligations": [
+        {
+          "id": "above-threshold",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "measurement",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "boundary",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [],
+      "invented_conditions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "room-alert-candidate-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_record_admission": "not_assessed",
+      "field_purposes": [],
+      "required_family_coverage": {
+        "acceptance_criterion": "unassessed",
+        "functional_requirement": "unassessed"
+      },
+      "obligations": [
+        {
+          "id": "above-threshold",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "measurement",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "boundary",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [],
+      "invented_conditions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "connectivity-result-baseline-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_record_admission": "not_assessed",
+      "field_purposes": [],
+      "required_family_coverage": {
+        "acceptance_criterion": "unassessed",
+        "functional_requirement": "unassessed"
+      },
+      "obligations": [
+        {
+          "id": "success",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "failure",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "truthfulness",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "claim_id": 5,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "invented_conditions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "connectivity-result-candidate-1",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_record_admission": "not_assessed",
+      "field_purposes": [],
+      "required_family_coverage": {
+        "acceptance_criterion": "unassessed",
+        "functional_requirement": "unassessed"
+      },
+      "obligations": [
+        {
+          "id": "success",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "failure",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "truthfulness",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "claim_id": 5,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "invented_conditions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "captured-startup-candidate-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_record_admission": "not_assessed",
+      "field_purposes": [],
+      "required_family_coverage": {
+        "acceptance_criterion": "unassessed",
+        "functional_requirement": "unassessed"
+      },
+      "obligations": [
+        {
+          "id": "startup",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "greeting",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "utc",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "invented_conditions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "captured-startup-baseline-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_record_admission": "not_assessed",
+      "field_purposes": [],
+      "required_family_coverage": {
+        "acceptance_criterion": "unassessed",
+        "functional_requirement": "unassessed"
+      },
+      "obligations": [
+        {
+          "id": "startup",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "greeting",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "utc",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "invented_conditions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "room-alert-candidate-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_record_admission": "not_assessed",
+      "field_purposes": [],
+      "required_family_coverage": {
+        "acceptance_criterion": "unassessed",
+        "functional_requirement": "unassessed"
+      },
+      "obligations": [
+        {
+          "id": "above-threshold",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "measurement",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "boundary",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [],
+      "invented_conditions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "room-alert-baseline-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_record_admission": "not_assessed",
+      "field_purposes": [],
+      "required_family_coverage": {
+        "acceptance_criterion": "unassessed",
+        "functional_requirement": "unassessed"
+      },
+      "obligations": [
+        {
+          "id": "above-threshold",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "measurement",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "boundary",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [],
+      "invented_conditions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "connectivity-result-candidate-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_record_admission": "not_assessed",
+      "field_purposes": [],
+      "required_family_coverage": {
+        "acceptance_criterion": "unassessed",
+        "functional_requirement": "unassessed"
+      },
+      "obligations": [
+        {
+          "id": "success",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "failure",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "truthfulness",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "claim_id": 5,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "invented_conditions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "connectivity-result-baseline-2",
+      "call_id": null,
+      "transport": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_record_admission": "not_assessed",
+      "field_purposes": [],
+      "required_family_coverage": {
+        "acceptance_criterion": "unassessed",
+        "functional_requirement": "unassessed"
+      },
+      "obligations": [
+        {
+          "id": "success",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "failure",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "truthfulness",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "claim_id": 5,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "invented_conditions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    }
+  ]
+}
