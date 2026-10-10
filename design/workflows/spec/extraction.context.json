@@ -1,7 +1,7 @@
 {
-  "purpose": "Reference extraction field meanings. Apply only to fields in the selected result schema; the schema defines the response shape.",
-  "kind": "Use claims when prose or exact-token obligations exist. Use no_feature_claim only when neither exists.",
-  "claims": "One independently meaningful source fact per entry. Include meaningful identity and purpose headings. Keep each fact's conditions, qualifiers and obligation strength; separate independent behavior, implementation and verification facts into different entries.",
+  "purpose": "Reference extraction field meanings. Apply only to selected fields. The selected schema defines allowed shapes and fragment forms; use only supplied reference IDs.",
+  "kind": "Use claims when source facts or exact-token obligations exist. Meaningful prose requires claims; claims may be empty only when there are exact-token obligations but no prose facts to extract. Use no_feature_claim with a reason only when neither exists.",
+  "claims": "One independently meaningful source fact per entry. Include meaningful identity and purpose headings. Keep each fact's conditions, qualifiers, obligation strength and required literal text; separate independent behavior, implementation and verification facts. Do not invent facts.",
   "content": "The meaning of this one claim. Classify by what the source requires or states, not keywords or obligation strength.",
   "content.kind": {
     "business": "Feature identity, purpose, goals or observable product behavior, including outputs, conditions and behavioral constraints. Preserve technical qualifiers with the behavior.",
@@ -12,7 +12,7 @@
     "open_question": "A question left unresolved by the source.",
     "scope_guard": "An explicit inclusion, exclusion or scope boundary."
   },
-  "segments": "Ordered fragments concatenated into one claim, usually one complete string. They are not separate claims. Use strings for meaning and supplied passive or exact-copy references only when eligible.",
-  "nodes": "Ordered fragments concatenated into one reference text. Use strings for meaning; supplied passive or source references display paths, not semantic descriptions.",
+  "segments": "Ordered fragments concatenated into one claim, not separate claims. Prefer one complete string unless a permitted reference is needed. References insert supplied display values; strings express meaning.",
+  "nodes": "Ordered fragments concatenated into one reference text. Prefer one complete string unless a permitted reference is needed. References insert supplied display values; strings express meaning.",
   "citations": "Source evidence for the complete claim, including its conditions. Each first/last pair selects an inclusive range of source_lines IDs from the current input."
 }

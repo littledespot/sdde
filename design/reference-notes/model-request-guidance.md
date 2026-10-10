@@ -37,6 +37,13 @@ This summarizes the existing contracts in
 - Extraction selects source lines as `{first: {ordinal}, last: {ordinal}}`, with
   inclusive endpoints and original line endings. Separate selections represent
   discontiguous support; exact tokens retain extractor-owned finer spans.
+- Extraction content assigns source facts, semantic categories and citations;
+  token classification is separate. The shared extraction context distinguishes
+  meaningful prose, exact-token-only content and `no_feature_claim`. It prefers
+  complete strings while preserving source conditions, obligation strength and
+  literal text. Fragment forms and reference IDs come from the existing selected
+  schema and supplied evidence, without a second variant list in the context.
+  Corrections retain that context; scoped repairs apply it only to selected fields.
 - Models supply neither quote bytes nor coordinates. The engine assigns citations
   after validation and rechecks them against captured sources on load.
 - Invalid selections retain typed diagnostics and existing replacement authority.

@@ -3288,3 +3288,36 @@ issues. Verification passed:
 
 No live comparison or E2E run was performed. Improved semantic fidelity, avoidance
 of repetition, downstream publication and rubric quality remain unproven.
+
+### 9.18 Extraction assignment guidance — 10 October 2026
+
+Call 1's content prompt now explicitly assigns source facts, semantic categories
+and citations, with token classification kept separate. The shared extraction
+context qualifies empty claims: meaningful prose requires claims; exact-token-only
+content may use an empty collection; `no_feature_claim` requires neither prose
+facts nor exact-token obligations. Existing token-only admission remains intact.
+
+Text guidance prefers complete strings and preserves conditions, qualifiers,
+obligation strength and required literal text. It no longer lists fragment forms
+that the selected schema may exclude. Existing schema projection owns available
+forms and reference IDs across generation, protocol correction and scoped repair;
+no parallel projection mechanism, fixed claim count or semantic validator was added.
+This implements the existing extraction contract in ADR 0016 §5, without changing
+the generic engine, model settings or repair authority.
+
+These changes address instruction clarity. Their effect on completion reliability
+and semantic fidelity still requires live evidence.
+
+**Validation:** existing regressions cover token-only and no-feature outcomes,
+eligible fragment projection, protocol correction and extraction repair. All
+checks passed:
+
+- `zig build test-reference-model-input test-reference-extraction test-model-result-schema test-model-request-workflow test-specification-generation --global-cache-dir .zig-cache/global --summary all`:
+  **897/897 tests**.
+- `zig build lint --global-cache-dir .zig-cache/global --summary all`: passed.
+- `zig build verify --global-cache-dir .zig-cache/global --summary all`:
+  **142/142 steps, 1,409/1,409 tests**, including offline integration and packaged
+  clean-environment smoke checks.
+- `git diff --check`: passed.
+
+No live model calls or E2E runs were performed.

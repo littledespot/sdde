@@ -7,7 +7,12 @@
     "slots": {
       "audit_analysis": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
       "drift_analysis": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
-      "spec_generation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0", "reasoningEffort": "high", "maxOutputTokens": 16384 },
+      "spec_generation": {
+        "provider": "aws-bedrock",
+        "model": "openai.gpt-oss-20b-1:0",
+        "reasoningEffort": "low",
+        "maxOutputTokens": 16384
+      },
       "repair": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0", "reasoningEffort": "low" },
       "design_section_generation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
       "implementation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" }
