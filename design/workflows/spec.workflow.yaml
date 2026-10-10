@@ -463,7 +463,13 @@ subgraphs:
         on: {ok: initialize-summary, failed: end.failed}
       select-composition:
         use: check-reference-reconciliation-purpose
-        on: {ok: initialize-global, more: reconciliation-packet, failed: end.failed}
+        on: {ok: initialize-global, more: check-summary-reuse, failed: end.failed}
+      check-summary-reuse:
+        use: check-reference-summary-reuse
+        on: {ok: reuse-summary, more: reconciliation-packet, failed: end.failed}
+      reuse-summary:
+        use: reuse-reference-reconciliation-summary
+        on: {ok: validate-summary, failed: end.failed}
       initialize-summary:
         use: initialize-json-composition
         with: {composition: reconciliation-summary}
@@ -744,7 +750,7 @@ subgraphs:
     steps:
       initialize-specification:
         use: initialize-specification-generation
-        on: {ok: brief, failed: end.failed}
+        on: {ok: brief, blocked: end.blocked, failed: end.failed}
       brief:
         call: generate-unit
         with: {prompt: generation-prompt}
@@ -805,7 +811,7 @@ subgraphs:
         with:
           slot: repair
           context: generation-context
-          prompt: {param: prompt}
+          prompt: repair-prompt
           schema: generation-schema
           retry-limit: 1
         on: {ok: parse-repair, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}

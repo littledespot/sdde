@@ -12,8 +12,9 @@ consistency review and shared actionable-question preparation to this design.
 Native assessment and question-preparation owners exist; complete semantic readiness
 is outstanding. The corrective [§12.8.1 clarification gate](../contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
 has offline-verified admission and repair-precedence coverage.
-[FIX_002](../../fixes/FIX_002.md) tracks the remaining semantic acceptance work and
-the approved D1 source-response schema change under §12.7. Historical delivery
+[FIX01](../../fixes/FIX01.md) tracks remaining semantic acceptance work;
+[FIX_002](../../fixes/archive/FIX_002.md) retains the approved D1 delivery record
+under §12.7. Historical delivery
 notes below do not establish live question necessity or completed readiness.
 
 [ADR 0016](../decisions/0016-configured-json-response-composition.md) defines the
@@ -22,8 +23,8 @@ dependent token classifications, and global claim dispositions/signals/conflicts
 then deterministic assembly and complete validation. Global parts select the existing
 `global` definition in the reconciliation schema; summaries select `summary` as one
 part. The supplied workflow shares request, retention and assembly subgraphs. Native repairs retain per-value provenance and their existing
-rebuilding path. The finite graph limit is 1,024. [Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition)
-owns implementation and verification, including unrelated JSON shapes.
+rebuilding path. The finite graph limit is 1,024. [Chunk 18](../../fixes/archive/IMP_001.md#r34-follow-up--configured-response-decomposition)
+records historical implementation and verification, including unrelated JSON shapes.
 
 **Transport:** `spec.workflow.yaml` uses F0005's generic YAML 1.2
 workflow-definition boundary; F0100 adds no reader or Specify-specific media
@@ -552,24 +553,52 @@ All operations are pure and individually registered in the generic YAML registry
 | Responsibility | Operations |
 | --- | --- |
 | Inputs and grouping | `build-reference-reconciliation-items`, `partition-reference-reconciliation-items` (`with: { group-size: 16 }`), `assign-reference-reconciliation-partitions`, `validate-reference-reconciliation-partitions` |
-| Each partition | `build-reference-reconciliation-input`; summary collection and parsing |
+| Each partition | `build-reference-reconciliation-input`; select summary reuse or semantic processing |
+| Summary reuse | `check-reference-summary-reuse`, `reuse-reference-reconciliation-summary`; otherwise summary collection and parsing |
 | Non-final summaries | `validate-reference-reconciliation-summary`, `assign-reference-summary-identities`, `build-reference-reconciliation-summary` |
 | Global phases | Build and collect dispositions, signals, roles and conflicts assignments; `check-reference-reconciliation-phase`; the disposition, signal, role and conflict validators |
 | Identified result | `assign-reference-reconciliation-identities`, `build-reference-reconciliation-records`, `validate-reference-reconciliation-completeness` |
 
 - The engine selects the current partition's summary or named phase schema.
+- Before building a summary model packet, YAML checks whether a non-final, nonempty
+  partition has one current validated child with identical claim membership. The
+  native check resolves canonical history and verifies projection, evidence and
+  text dependencies; stale or altered authority fails. An eligible child supplies
+  a native candidate to the same validation/identity/build actions. Leaf, empty and
+  multiple-child partitions retain their model path; global phases are unchanged.
+- Native summary iteration uses the shared registered finite-iteration contract.
+  Partition validation initializes the non-final partition count; summary
+  construction advances the current cursor exactly once and supplies current
+  immutable plan/progress evidence. The runner rejects stale, repeated, skipped
+  or exhausted progress and commits advancement with the delta. Initialization
+  cannot cycle without an independent retry guard; upstream repair may establish
+  a new validated plan. Each committed advancement adds one graph traversal to
+  the runner's retry-derived allowance. Reuse has no retry parameter; model/repair
+  retry limits and the workflow token budget remain unchanged.
 - A summary proposal contains only semantic `statements`, with selected `claim_ids`
   and typed model `content`. Native code appends each exact-token statement.
-- Constructed statements represent every partition member claim exactly once.
+- Constructed statement membership covers every partition claim by union; each
+  statement selects nonempty unique authorized IDs. Combined, split and overlapping
+  expressions are allowed under the approved §16.4 summary-coverage amendment.
+- After all raw statements validate, native projection retains the first occurrence
+  of identical validated content with the same claim membership. It preserves the
+  raw candidate, producer origins and original-to-surviving occurrence mapping;
+  invalid entries, distinct source occurrences and paraphrases cannot be hidden.
 - The engine constructs canonical `member_claim_ids` from that partition and
   `member_summary_ids` from its validated child summaries; neither membership field is
   accepted in a model response.
 - Summary IDs are allocated only after validation; partition planning contains local
   group links, not future canonical summary IDs.
-- Statement IDs follow semantic response order, then native token claim order.
+- Statement IDs follow surviving semantic response order, then native token claim
+  order. Stable repair occurrences and retry accounting stay bound to the raw
+  candidate independently of this normalized projection.
 - Accepted summaries retain their lineage in immutable execution-local history;
   advancing clears the consumed candidate keys rather than retaining stale parallel
   candidates.
+- Carried summaries retain ordered content, membership, exact tokens and child
+  lineage with newly allocated parent identities. The child's provider/repair
+  provenance stays in history; the native parent has no provider origin or copied
+  repair receipt. Current text dependencies and typed content are revalidated.
 
 Under [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md), global
 dispositions, signals, roles and conflicts are collected and natively validated
@@ -791,6 +820,8 @@ validators:
   `check-reference-reconciliation-purpose`,
   `collect-reference-reconciliation-result` for summaries, and the four native
   phase assignment builders and collectors for global reconciliation.
+  `check-reference-summary-reuse` and `reuse-reference-reconciliation-summary`
+  provide the explicit native summary path described in §3.9.
 
 - Each extraction packet contains the complete captured chunk as lossless `source_lines`
   with request-local IDs, scoped passive choices and token candidates.
@@ -1526,18 +1557,15 @@ YAML definition.
 **Phase 3 repair**
 
 C1/C2 selection feasibility and disposition equivalence, including conflict-pair
-membership, are [implemented and verified offline](../../fixes/IMP_001.md#c1-and-c2-delivery--15-september-2026).
+membership, are [implemented and verified offline](../../fixes/archive/IMP_001.md#c1-and-c2-delivery--15-september-2026).
 Shared retained-claim eligibility (C3) remains consolidated in the provenance owner.
 
 **Known implementation gaps**
 
-ADR 0015's canonical principle selection and Spec assessment, persisted downstream
-obligations and shared actionable-question preparation remain pending. Existing
-native gates/lifecycle do not establish those new acceptance criteria. See the
-[implementation plan](../../fixes/IMP_001.md#spec-principle-review--approved-design-and-native-delivery).
-
 Authenticated answer acceptance and remaining publication/readback assurance remain
-open. The [rollout](../../fixes/IMP_001.md) owns their status; offline verification
+open. [FIX01](../../fixes/FIX01.md) tracks current gaps; the
+[historical delivery record](../../fixes/archive/IMP_001.md#spec-principle-review--approved-design-and-native-delivery)
+retains the earlier assessment/question-preparation implementation. Offline verification
 does not establish complete Specify or live E2E acceptance.
 
 **E2E evaluation**

@@ -9,6 +9,7 @@ const p = @import("specification_provenance.zig");
 const r = @import("reference_reconciliation.zig");
 const shared = @import("atomic_repair.zig");
 const authority = @import("required_authority.zig");
+const descriptions = @import("required_authority_description.zig");
 const retry = @import("workflow_retry.zig");
 const RepairSubject = union(enum) { token: coverage.TokenSubject, requirement: authority.Id };
 pub const Support = struct { inputs: authority.Inputs, observations: authority.Observations, result: authority.Result };
@@ -119,6 +120,28 @@ fn reviewedFacts(a: std.mem.Allocator, current: sessions.Session, context: p.Con
     facts.support = support;
     return facts;
 }
+/// Native authorization rejection; retained evidence names the reviewed work that
+/// could not be authorized. It grants neither a target nor permission to repair.
+pub const AuthorizationRejection = struct {
+    reason: @import("operation_error.zig").Code(Error),
+    revision: u64,
+    outstanding_requirements: []const authority.Entry,
+    review_origin: ?@import("model_candidate_origin.zig").Origin,
+};
+
+pub fn authorizationRejection(a: std.mem.Allocator, support: Support, cause: Error) std.mem.Allocator.Error!AuthorizationRejection {
+    var outstanding: std.ArrayList(authority.Entry) = .empty;
+    for (support.result.entries) |entry| if (entry.candidate_defect != null) {
+        try outstanding.append(a, entry);
+    };
+    return .{
+        .reason = @import("operation_error.zig").code(Error, cause),
+        .revision = support.inputs.revision,
+        .outstanding_requirements = try outstanding.toOwnedSlice(a),
+        .review_origin = support.inputs.review_origin,
+    };
+}
+
 /// Only a current, shared-classified omission may select a native content slot.
 /// No coverage row, source record or review verdict is a repair target.
 pub fn authorizeOmission(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, support: Support) Error!Authorization {
@@ -129,6 +152,7 @@ pub fn authorizeOmission(a: std.mem.Allocator, validator: @import("typed_text.zi
     for (support.result.entries) |entry| {
         const evidence = (try authority.supportedOmission(a, support.inputs, support.observations, support.result, entry.requirement)) orelse continue;
         try @import("specification_support_evidence.zig").validate(a, support.inputs, context.inputs, evidence);
+        if (@import("source_omission.zig").isUpstream(evidence.review.?.loss orelse return error.InvalidSpecificationCoverageRepair)) continue;
         if (evidence.review.?.provenance.claim_ids.len == 0) continue;
         const target = omissionTarget(candidate, entry.requirement, current) catch |err| switch (err) {
             error.UnsafeSpecificationOmissionRepair => continue,
@@ -203,7 +227,11 @@ pub fn omissionPacket(a: std.mem.Allocator, current: sessions.Session, context: 
         const selected = authorization.target.part.value;
         break :allowed try effectiveTarget(a, current.units[authorization.target.unit].?, selected.subject, selected.field);
     } else null;
-    const base = try sessions.packetForChoices(a, current, context, authorization.target.unit, allowed);
+    const task = if (authorization.target.part == .record)
+        try descriptions.record(arena.allocator(), try omissionRecordKind(authorization.rule.omission.requirement))
+    else
+        try descriptions.task(arena.allocator(), authorization.rule.omission.requirement);
+    const base = try sessions.packetForOptions(a, current, context, authorization.target.unit, .{ .exact_claims = allowed, .task = task });
     defer packets.release(base);
     const contextual = try packets.withContext(g.spec.IdentifiedContent, a, base, "candidate", candidate);
     defer packets.release(contextual);
@@ -224,11 +252,13 @@ pub fn parseOmission(a: std.mem.Allocator, authorization: Authorization, input: 
     if (authorization.rule != .omission) return error.InvalidSpecificationCoverageRepair;
     const kind = try atomic.checkRequest(authorization, input);
     const codec = @import("model_candidate_json.zig");
+    const canonical = try codec.constructBound(a, bytes, input.integerChoices());
+    defer a.free(canonical);
     return switch (kind) {
-        .value => .{ .value = try codec.decode(g.spec.BusinessValue, a, bytes) },
+        .value => .{ .value = try codec.decode(g.spec.BusinessValue, a, canonical) },
         .record => blk: {
             const selected = authorization.rule.omission.review orelse return error.InvalidSpecificationCoverageRepair;
-            const wire = try codec.decode(g.spec.Wire.RecordProposal, a, bytes);
+            const wire = try codec.decode(g.spec.Wire.RecordProposal, a, canonical);
             break :blk .{ .record = .{ .content = wire.content, .provenance = .{ .claim_ids = selected.provenance.claim_ids, .clarification_response_ids = selected.provenance.clarification_response_ids } } };
         },
     };

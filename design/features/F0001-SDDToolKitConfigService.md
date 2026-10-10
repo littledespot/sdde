@@ -70,7 +70,8 @@ ModelsConfig {
   slots: map<ModelSlotName, {
     provider: string,
     model: string,
-    reasoningEffort?: string
+    reasoningEffort?: string,
+    maxOutputTokens?: positive integer
   }>
 }
 
@@ -99,6 +100,10 @@ PathsConfig {
   collisions, scopes and category coverage before any consuming operation. An absent
   section supplies no default policy. [§9.4](../contracts/09-configuration.md#94-project-principle-resolution) owns the rules.
 - Model slot names are data, but every slot value has the same closed shape.
+- Optional `maxOutputTokens` decodes as a positive native-representable integer;
+  malformed values reject as `ENGINE_CONFIG_PARSE_ERROR`. Its provider-request
+  semantics and omission behavior are owned by
+  [ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance).
 - Under [ADR 0018](../decisions/0018-debug-model-exchange-logging.md), the shared
   effective F0002 policy selects complete capture at `debug`/`trace` and metadata
   only at higher thresholds. The removed `promptCapture` field is rejected, with

@@ -1,0 +1,451 @@
+{
+  "schema": "signal-grouping-scorecard/v1",
+  "comparison_sha256": "27ebb5ddbd57da94f59b097f791109ce0f09dd24d1da047d7014f070624ee77c",
+  "label_status": "proposed",
+  "trials": [
+    {
+      "id": "captured-startup-baseline-1",
+      "call_id": null,
+      "transport": "not_run",
+      "completion": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_signal_admission": "not_assessed",
+      "membership_issues": [],
+      "category_issues": [],
+      "obligations": [
+        {
+          "id": "startup",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "greeting",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "utc",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "unsupported_additions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "captured-startup-candidate-1",
+      "call_id": null,
+      "transport": "not_run",
+      "completion": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_signal_admission": "not_assessed",
+      "membership_issues": [],
+      "category_issues": [],
+      "obligations": [
+        {
+          "id": "startup",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "greeting",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "utc",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "unsupported_additions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "prescription-renewal-baseline-1",
+      "call_id": null,
+      "transport": "not_run",
+      "completion": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_signal_admission": "not_assessed",
+      "membership_issues": [],
+      "category_issues": [],
+      "obligations": [
+        {
+          "id": "approved-status",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "secure-transport",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "rejection-status",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "unsupported_additions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "prescription-renewal-candidate-1",
+      "call_id": null,
+      "transport": "not_run",
+      "completion": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_signal_admission": "not_assessed",
+      "membership_issues": [],
+      "category_issues": [],
+      "obligations": [
+        {
+          "id": "approved-status",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "secure-transport",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "rejection-status",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "unsupported_additions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "irrigation-coverage-baseline-1",
+      "call_id": null,
+      "transport": "not_run",
+      "completion": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_signal_admission": "not_assessed",
+      "membership_issues": [],
+      "category_issues": [],
+      "obligations": [
+        {
+          "id": "start",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "threshold-stop",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "sensor-failure",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [],
+      "unsupported_additions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "irrigation-coverage-candidate-1",
+      "call_id": null,
+      "transport": "not_run",
+      "completion": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_signal_admission": "not_assessed",
+      "membership_issues": [],
+      "category_issues": [],
+      "obligations": [
+        {
+          "id": "start",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "threshold-stop",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "sensor-failure",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [],
+      "unsupported_additions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "captured-startup-candidate-2",
+      "call_id": null,
+      "transport": "not_run",
+      "completion": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_signal_admission": "not_assessed",
+      "membership_issues": [],
+      "category_issues": [],
+      "obligations": [
+        {
+          "id": "startup",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "greeting",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "utc",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "unsupported_additions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "captured-startup-baseline-2",
+      "call_id": null,
+      "transport": "not_run",
+      "completion": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_signal_admission": "not_assessed",
+      "membership_issues": [],
+      "category_issues": [],
+      "obligations": [
+        {
+          "id": "startup",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "greeting",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "utc",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "unsupported_additions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "prescription-renewal-candidate-2",
+      "call_id": null,
+      "transport": "not_run",
+      "completion": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_signal_admission": "not_assessed",
+      "membership_issues": [],
+      "category_issues": [],
+      "obligations": [
+        {
+          "id": "approved-status",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "secure-transport",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "rejection-status",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "unsupported_additions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "prescription-renewal-baseline-2",
+      "call_id": null,
+      "transport": "not_run",
+      "completion": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_signal_admission": "not_assessed",
+      "membership_issues": [],
+      "category_issues": [],
+      "obligations": [
+        {
+          "id": "approved-status",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "secure-transport",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "rejection-status",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "unsupported_additions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "irrigation-coverage-candidate-2",
+      "call_id": null,
+      "transport": "not_run",
+      "completion": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_signal_admission": "not_assessed",
+      "membership_issues": [],
+      "category_issues": [],
+      "obligations": [
+        {
+          "id": "start",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "threshold-stop",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "sensor-failure",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [],
+      "unsupported_additions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    },
+    {
+      "id": "irrigation-coverage-baseline-2",
+      "call_id": null,
+      "transport": "not_run",
+      "completion": "not_run",
+      "json_admission": "not_run",
+      "schema_admission": "not_run",
+      "native_signal_admission": "not_assessed",
+      "membership_issues": [],
+      "category_issues": [],
+      "obligations": [
+        {
+          "id": "start",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "threshold-stop",
+          "assessment": "unassessed",
+          "evidence": null
+        },
+        {
+          "id": "sensor-failure",
+          "assessment": "unassessed",
+          "evidence": null
+        }
+      ],
+      "literal_expectations": [],
+      "unsupported_additions": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null
+    }
+  ]
+}

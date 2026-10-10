@@ -26,18 +26,20 @@ pub const ProviderModelBindingId = struct {
     slot_id: identity.ModelSlotId,
     registry_entry_id: provider_registry.RegistryEntryId,
     reasoning_effort: ?[]const u8,
+    controls: @import("model_controls.zig").InferenceControls,
 
     pub fn eql(left: ProviderModelBindingId, right: ProviderModelBindingId) bool {
         return left.operation_id.eql(right.operation_id) and
             left.slot_id.eql(right.slot_id) and
             left.registry_entry_id.eql(right.registry_entry_id) and
-            optionalStringEql(left.reasoning_effort, right.reasoning_effort);
+            optionalStringEql(left.reasoning_effort, right.reasoning_effort) and
+            std.meta.eql(left.controls, right.controls);
     }
 
     pub fn isValid(self: ProviderModelBindingId) bool {
         return self.operation_id.isValid() and
             identity.ModelSlotId.parse(self.slot_id.bytes) != null and
-            self.registry_entry_id.ordinal != 0 and
+            self.registry_entry_id.ordinal != 0 and self.controls.isValid() and
             (self.reasoning_effort == null or
                 (self.reasoning_effort.?.len > 0 and
                     std.unicode.utf8ValidateSlice(self.reasoning_effort.?)));
@@ -57,6 +59,7 @@ pub const ValidatedProviderModelBinding = struct {
             .slot_id = self.slot_id,
             .registry_entry_id = self.registry_entry.id,
             .reasoning_effort = self.reasoning_effort,
+            .controls = self.controls,
         };
     }
 };

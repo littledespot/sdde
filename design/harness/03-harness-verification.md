@@ -138,7 +138,7 @@ are separate evidence classes; both are needed, and neither replaces the other.
 ### Scope and implementation
 
 - Successful generation followed by live grading remains an open acceptance criterion.
-- The [active rollout](../../fixes/IMP_001.md) tracks corrective work and its evidence.
+- [FIX01](../../fixes/FIX01.md) tracks current corrective work and required evidence.
 - **Dependencies:** H-015/H-016; reuse H-011/H-012 negative-path tests.
 
 ### Required work

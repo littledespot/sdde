@@ -40,9 +40,12 @@ unattributed evidence remains explicitly uncorrelated.
 The prompt column schema becomes `prompt-columns/v3`, with 37 columns; no legacy
 reader is added. A separate `request_description` body records the provider/model,
 region/config, selected slot, workflow/request entry, typed content, fixed protocol
-prompt, exact validation schema and inference settings. `model-request-debug/v2`
+prompt, exact validation schema and inference settings. `model-request-debug/v3`
 captures the selected schema's complete expanded projection, including named
-selections, composition parts and narrowed repair shapes. The shared schema
+selections, composition parts and narrowed repair shapes, plus the optional output
+allowance under the 2026-10-10 amendment to ADR 0011. Older descriptions remain
+unchanged and reject readback; replay requires a new capture, with no compatibility
+reader. The shared schema
 compiler reconstructs selected object/tagged-union roots for diagnostic use;
 constant-tagged selected roots are permitted without relaxing the external
 workflow-resource profile. Shared node/depth bounds apply; the source-file byte
@@ -93,6 +96,10 @@ serializer validate and assemble the new request. Provider, model and settings
 remain those of the selected call and must still be permitted by the current
 provider registry and repository model allowlist. Credentials are obtained afresh
 from the existing authorization source, never from logs or the browser.
+Settings include the optional output allowance under
+[ADR 0011](0011-provider-owned-request-limits.md#optional-provider-request-output-allowance):
+replay preserves captured omission or value rather than replacing it from current
+configuration.
 
 Every replay creates new immutable diagnostic request/result records beneath the
 selected feature's `logs/debugger`, linked to the source run/call. The request is

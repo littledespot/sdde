@@ -1,6 +1,6 @@
 const std = @import("std");
 const toolchain = @import("../domain/toolchain.zig");
-pub const Error = error{InvalidToolchainDocument};
+pub const Error = @import("../domain/operation_error.zig").ToolchainDocumentParser;
 pub const Parser = struct {
     context: *anyopaque,
     parse_fn: *const fn (*anyopaque, std.mem.Allocator, []const toolchain.Capture) Error![]const toolchain.RawDocument,

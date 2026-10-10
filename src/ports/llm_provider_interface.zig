@@ -2,7 +2,7 @@ const std = @import("std");
 const binding = @import("../domain/llm_provider_binding.zig");
 const operation = @import("../domain/llm_provider_operation.zig");
 
-pub const Error = std.mem.Allocator.Error || error{ Cancelled, ModelLoggingBlocked };
+pub const Error = @import("../domain/operation_error.zig").LlmProviderInterface;
 
 pub const Context = opaque {};
 

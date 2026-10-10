@@ -12,6 +12,234 @@ const engine = @import("application/workflow_engine_orchestrator.zig");
 const engine_bindings = @import("application/workflow_engine_child_bindings.zig");
 const run_outcome = @import("domain/run_outcome.zig");
 const finalization = @import("ports/feature_log_activation.zig");
+const iteration = @import("domain/workflow_iteration.zig");
+const iteration_values = @import("application/pipeline_values.zig");
+
+test "native finite iteration executes the actual population without consuming retries or model tokens" {
+    for ([_]usize{ 0, 1, 37 }) |population| {
+        var batch: NativeBatch = .{ .population = population };
+        var entries: [4]operations.Entry = undefined;
+        var registry = batch.registry(&entries);
+        var graph = try nativeBatchGraph();
+        var barrier: FakeBarrier = .{};
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        defer runner.deinit();
+        var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+        try std.testing.expectEqual(.ok, engine.run(children.bindings()).executionStatus().?);
+        try std.testing.expectEqual(population, batch.advances);
+        try std.testing.expectEqual(population, (try iteration_values.read(&.{ .slots = runner.envelope.slots }, NativeBatch.progress_schema, usize)).*);
+        for (runner.retry_execution_counts) |count| try std.testing.expectEqual(@as(u64, 0), count);
+        try std.testing.expectEqual(@as(u128, 0), runner.tokenLedger().committed());
+        // Three compiled steps can process any validated finite population.
+        try std.testing.expectEqual(@as(usize, 3), graph.authority.maximum_step_executions);
+    }
+}
+
+test "native advancement rejects absent repeated skipped enlarged and malformed progress" {
+    for (std.enums.values(NativeBatch.Fault)) |fault| {
+        if (fault == .none) continue;
+        var batch: NativeBatch = .{ .population = 2, .fault = fault };
+        var entries: [4]operations.Entry = undefined;
+        var registry = batch.registry(&entries);
+        var graph = try nativeBatchGraph();
+        var barrier: FakeBarrier = .{};
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        defer runner.deinit();
+        try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(NativeBatch.steps[0].id).outcome);
+        const before = runner.native_iteration;
+        const original = runner.envelope.slots[@intFromEnum(NativeBatch.progress_schema.key)];
+        const generation = runner.envelope.generation;
+        const allowance = runner.remaining_step_executions;
+        try std.testing.expectEqual(.authority, runner.bindings().invokeStep(NativeBatch.steps[2].id).rejected);
+        try std.testing.expectEqualDeep(before, runner.native_iteration);
+        try std.testing.expectEqual(original, runner.envelope.slots[@intFromEnum(NativeBatch.progress_schema.key)]);
+        try std.testing.expectEqual(generation, runner.envelope.generation);
+        try std.testing.expectEqual(allowance - 1, runner.remaining_step_executions);
+        // Rejected deltas grant no credit and do not consume a population item.
+        batch.fault = .none;
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(NativeBatch.steps[2].id).outcome);
+        try std.testing.expectEqual(@as(usize, 1), (try iteration_values.read(&.{ .slots = runner.envelope.slots }, NativeBatch.progress_schema, usize)).*);
+    }
+}
+
+test "native progress rejects replaced authority and cannot restart the same scope" {
+    for ([_]bool{ false, true }) |replace_scope| {
+        var batch: NativeBatch = .{ .population = 2 };
+        var entries: [4]operations.Entry = undefined;
+        var registry = batch.registry(&entries);
+        var graph = try nativeBatchGraph();
+        var barrier: FakeBarrier = .{};
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        defer runner.deinit();
+        try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(NativeBatch.steps[0].id).outcome);
+        const before = runner.native_iteration;
+        const schema = if (replace_scope) NativeBatch.scope_schema else NativeBatch.progress_schema;
+        var replacement: pipeline.NodeDelta = .{};
+        defer runner.envelope.discard(&replacement);
+        replacement.data_replacements[@intFromEnum(schema.key)] = try iteration_values.create(std.testing.allocator, schema, usize, if (replace_scope) 2 else 0);
+        try runner.envelope.apply(.{ .id = "test.replace", .kind = .action, .requires = &.{}, .produces = &.{}, .replaces = &.{schema.key}, .side_effect = .none }, &replacement, .ok);
+        try std.testing.expectEqual(.authority, runner.bindings().invokeStep(NativeBatch.steps[2].id).rejected);
+        try std.testing.expectEqualDeep(before, runner.native_iteration);
+    }
+    var batch: NativeBatch = .{ .population = 1 };
+    var entries: [4]operations.Entry = undefined;
+    var registry = batch.registry(&entries);
+    var graph = try nativeBatchGraph();
+    var barrier: FakeBarrier = .{};
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    defer runner.deinit();
+    try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(NativeBatch.steps[0].id).outcome);
+    const before = runner.native_iteration;
+    var invalidation: pipeline.NodeDelta = .{};
+    invalidation.data_invalidations.insert(NativeBatch.progress_schema.key);
+    try runner.envelope.apply(.{ .id = "test.invalidate", .kind = .action, .requires = &.{}, .produces = &.{}, .invalidates = &.{NativeBatch.progress_schema.key}, .side_effect = .none }, &invalidation, .ok);
+    try std.testing.expectEqual(.authority, runner.bindings().invokeStep(NativeBatch.steps[0].id).rejected);
+    try std.testing.expectEqualDeep(before, runner.native_iteration);
+    try std.testing.expect(runner.envelope.slots[@intFromEnum(NativeBatch.progress_schema.key)] == null);
+}
+
+test "runner rejects undeclared native progress and bounds nonadvancing execution" {
+    var batch: NativeBatch = .{ .population = 1 };
+    var entries: [4]operations.Entry = undefined;
+    var registry = batch.registry(&entries);
+    var graph = try nativeBatchGraph();
+    var barrier: FakeBarrier = .{};
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    defer runner.deinit();
+    try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(NativeBatch.steps[0].id).outcome);
+    batch.undeclared = true;
+    try std.testing.expectEqual(.authority, runner.bindings().invokeStep(NativeBatch.steps[1].id).rejected);
+    batch.undeclared = false;
+    try std.testing.expectEqual(.more, runner.bindings().invokeStep(NativeBatch.steps[1].id).outcome);
+    try std.testing.expectEqual(.authority, runner.bindings().invokeStep(NativeBatch.steps[1].id).rejected);
+    try std.testing.expectEqual(@as(usize, 0), batch.advances);
+}
+
+test "native iteration rejects unchanged scope whose source authority became stale" {
+    const source_schema = iteration_values.schema(.raw_engine_config, usize, 1, 32);
+    var batch: NativeBatch = .{ .population = 1 };
+    var entries: [4]operations.Entry = undefined;
+    var registry = batch.registry(&entries);
+    var graph = try nativeBatchGraph();
+    graph.authority.data_schemas = &.{ NativeBatch.scope_schema, NativeBatch.progress_schema, source_schema };
+    registry.data_schemas = graph.authority.data_schemas;
+    var barrier: FakeBarrier = .{};
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    defer runner.deinit();
+    try std.testing.expectEqual(.ok, runner.bindings().invokeInvocation().outcome);
+    var delta: pipeline.NodeDelta = .{};
+    defer runner.envelope.discard(&delta);
+    delta.data_writes[@intFromEnum(source_schema.key)] = try iteration_values.create(std.testing.allocator, source_schema, usize, 1);
+    try runner.envelope.apply(.{ .id = "test.source", .kind = .action, .requires = &.{}, .produces = &.{source_schema.key}, .side_effect = .none }, &delta, .ok);
+    delta.data_replacements[@intFromEnum(NativeBatch.scope_schema.key)] = try iteration_values.create(std.testing.allocator, NativeBatch.scope_schema, usize, 1);
+    try runner.envelope.apply(.{ .id = "test.plan", .kind = .action, .requires = &.{source_schema.key}, .produces = &.{}, .replaces = &.{NativeBatch.scope_schema.key}, .side_effect = .none }, &delta, .ok);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(NativeBatch.steps[0].id).outcome);
+    const before = runner.native_iteration;
+    delta.data_replacements[@intFromEnum(source_schema.key)] = try iteration_values.create(std.testing.allocator, source_schema, usize, 2);
+    try runner.envelope.apply(.{ .id = "test.source-change", .kind = .action, .requires = &.{}, .produces = &.{}, .replaces = &.{source_schema.key}, .side_effect = .none }, &delta, .ok);
+    try std.testing.expectEqual(.authority, runner.bindings().invokeStep(NativeBatch.steps[2].id).rejected);
+    try std.testing.expectEqualDeep(before, runner.native_iteration);
+}
+
+// An unrelated finite native batch exercises the shared execution contract.
+// The values are counts, not model payloads or reference-reconciliation data.
+const NativeBatch = struct {
+    population: usize,
+    advances: usize = 0,
+    fault: Fault = .none,
+    undeclared: bool = false,
+    const Fault = enum { none, missing, repeated, skipped, enlarged, wrong_schema, missing_replacement, wrong_outcome };
+    const scope_schema = iteration_values.schema(.workflow_invocation, usize, 1, 32);
+    const progress_schema = iteration_values.schema(.canonical_log_level, usize, 1, 32);
+    const initialize: iteration.Descriptor = .{ .kind = .initialize, .scope = scope_schema.key, .progress = progress_schema.key };
+    const advance: iteration.Descriptor = .{ .kind = .advance, .scope = scope_schema.key, .progress = progress_schema.key };
+    const steps = blk: {
+        var result = [_]compilation.CompiledStep{test_steps[0]} ** 3;
+        for (&result, [_][]const u8{ "initialize", "check", "advance" }, [_][]const u8{ "test.batch-begin", "test.batch-check", "test.batch-advance" }) |*step, id, operation_id| {
+            step.id = .{ .bytes = id };
+            step.operation_id = .{ .bytes = operation_id };
+            step.outcomes = &.{ .ok, .more, .failed };
+            step.requires = &.{ scope_schema.key, progress_schema.key };
+        }
+        result[0].requires = &.{scope_schema.key};
+        result[0].produces = &.{progress_schema.key};
+        result[0].iteration = initialize;
+        result[2].replaces = &.{progress_schema.key};
+        result[2].iteration = advance;
+        break :blk result;
+    };
+    fn registry(self: *NativeBatch, entries: *[4]operations.Entry) operations.Registry {
+        entries[0] = .{
+            .contract = .{ .id = "test.batch-input", .kind = .invocation, .produces = &.{scope_schema.key}, .outcomes = &.{.ok}, .side_effect = .none },
+            .binding = operation_bindings.bind(NativeBatch, self, invoke),
+        };
+        for (steps, 1..) |step, index| entries[index] = .{
+            .contract = .{ .id = step.operation_id.bytes, .kind = .step, .requires = step.requires, .produces = step.produces, .replaces = step.replaces, .outcomes = step.outcomes, .side_effect = .none, .iteration = step.iteration },
+            .binding = operation_bindings.bind(NativeBatch, self, invoke),
+        };
+        return .{
+            .operations = entries,
+            .data_schemas = &.{ scope_schema, progress_schema },
+            .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = test_outcomes, .total_model_token_budget = .{ .value = 1000 } }},
+            .gates = &.{},
+        };
+    }
+    fn invoke(context: ?*NativeBatch, input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        var result: execution.Candidate = .{ .outcome = .ok, .delta = .{} };
+        if (input == .invocation) {
+            result.delta.data_writes[@intFromEnum(scope_schema.key)] = try iteration_values.create(std.testing.allocator, scope_schema, usize, self.population);
+            return result;
+        }
+        const total = (try iteration_values.read(&input.step.data, scope_schema, usize)).*;
+        if (input.step.step.iteration) |descriptor| {
+            if (descriptor.kind == .initialize) {
+                result.delta.data_writes[@intFromEnum(progress_schema.key)] = try iteration_values.create(std.testing.allocator, progress_schema, usize, 0);
+                result.iteration = .{ .limit = total, .before = 0, .after = 0 };
+            } else {
+                const before = (try iteration_values.read(&input.step.data, progress_schema, usize)).*;
+                const after = switch (self.fault) {
+                    .repeated => before,
+                    .skipped => before + 2,
+                    else => before + 1,
+                };
+                var schema = progress_schema;
+                if (self.fault == .wrong_schema) schema.version += 1;
+                if (self.fault != .missing_replacement) result.delta.data_replacements[@intFromEnum(progress_schema.key)] = try iteration_values.create(std.testing.allocator, schema, usize, after);
+                if (self.fault != .missing) result.iteration = .{ .limit = total + @as(usize, if (self.fault == .enlarged) 1 else 0), .before = before, .after = after };
+                if (self.fault == .wrong_outcome) result.outcome = .failed;
+                self.advances += 1;
+            }
+        } else {
+            const position = (try iteration_values.read(&input.step.data, progress_schema, usize)).*;
+            result.outcome = if (position < total) .more else .ok;
+            if (self.undeclared) result.iteration = .{ .limit = total, .before = position, .after = position + 1 };
+        }
+        return result;
+    }
+};
+
+fn nativeBatchGraph() !compilation.CompiledWorkflow {
+    var graph = try testGraph();
+    graph.authority.invocation_operation_id = .{ .bytes = "test.batch-input" };
+    graph.authority.invocation_outputs = &.{NativeBatch.scope_schema.key};
+    graph.authority.data_schemas = &.{ NativeBatch.scope_schema, NativeBatch.progress_schema };
+    graph.authority.start_step_id = NativeBatch.steps[0].id;
+    graph.authority.steps = &NativeBatch.steps;
+    graph.authority.transitions = &.{
+        .{ .from = NativeBatch.steps[0].id, .outcome = .ok, .target = .{ .step = NativeBatch.steps[1].id } },
+        .{ .from = NativeBatch.steps[1].id, .outcome = .more, .target = .{ .step = NativeBatch.steps[2].id } },
+        .{ .from = NativeBatch.steps[1].id, .outcome = .ok, .target = .{ .terminal = .ok } },
+        .{ .from = NativeBatch.steps[2].id, .outcome = .ok, .target = .{ .step = NativeBatch.steps[1].id } },
+        .{ .from = NativeBatch.steps[2].id, .outcome = .failed, .target = .{ .terminal = .failed } },
+    };
+    graph.authority.maximum_step_executions = compilation.calculateExecutionLimit(graph.authority.steps).?;
+    return graph;
+}
 
 test "generic engine preserves every YAML-compiled terminal outcome" {
     inline for (test_outcomes) |expected| {
@@ -468,6 +696,7 @@ test "runner contract rejections cannot enter invalid or failed recovery leading
         try std.testing.expectEqual(@as(usize, 0), barrier.calls);
         try std.testing.expect(runner.envelope.slots[@intFromEnum(test_value_schema.key)] == null);
         try std.testing.expect(!runner.envelope.latestInformation(test_value_schema.key).contains(test_value_schema.key));
+        try std.testing.expect(runner.last_effects == null and runner.last_operation_rejection == null);
         try std.testing.expectEqual(@as(u128, 0), runner.token_accounting.current().committed());
     }
 }
@@ -696,6 +925,8 @@ const OperationState = struct {
     expected_resource_id: ?[]const u8 = null,
     calls: usize = 0,
     fail_call: ?usize = null,
+    failure: enum { generic, reconciliation, omission, allocation } = .generic,
+    diagnostic: enum { none, unsafe, allocation } = .none,
     delta_fault: ?DeltaFault = null,
 };
 const DeltaFault = enum { missing_write, wrong_schema, undeclared_invalidation, undeclared_outcome };
@@ -766,7 +997,12 @@ fn invokeOperation(context: ?*OperationState, input: operations.Input) operation
             else
                 control.outcome;
             control.calls += 1;
-            if (control.fail_call == control.calls) return error.OperationExecutionFailed;
+            if (control.fail_call == control.calls) return switch (control.failure) {
+                .generic => error.OperationExecutionFailed,
+                .reconciliation => error.InvalidReferenceReconciliation,
+                .omission => error.InvalidSpecificationCoverageRepair,
+                .allocation => error.OutOfMemory,
+            };
             var delta: pipeline.NodeDelta = .{};
             if (control.delta_fault) |fault| {
                 const values = @import("application/pipeline_values.zig");
@@ -779,7 +1015,11 @@ fn invokeOperation(context: ?*OperationState, input: operations.Input) operation
                 if (fault == .undeclared_outcome and control.calls == 1) break :step .{ .outcome = .more, .delta = delta };
             }
             step_input.log.log(&delta, .{ .event_type = .action_completed }) catch return error.OperationExecutionFailed;
-            break :step .{ .outcome = outcome, .delta = delta };
+            break :step .{ .outcome = outcome, .delta = delta, .diagnostic = switch (control.diagnostic) {
+                .none => null,
+                .unsafe => error.UnsafeSpecificationRepair,
+                .allocation => error.OutOfMemory,
+            } };
         },
     };
 }
@@ -836,3 +1076,73 @@ const test_transitions = [_]workflow.Transition{
     .{ .from = .{ .bytes = "run" }, .outcome = .failed, .target = .{ .terminal = .failed } },
     .{ .from = .{ .bytes = "run" }, .outcome = .cancelled, .target = .{ .terminal = .cancelled } },
 };
+
+test "operation failures retain unrelated native causes without applying a failed delta" {
+    for ([_]operations.Error{ error.InvalidReferenceReconciliation, error.InvalidSpecificationCoverageRepair, error.OutOfMemory }, [_]@FieldType(OperationState, "failure"){ .reconciliation, .omission, .allocation }) |cause, failure| {
+        var control: OperationControl = .{ .state = .{ .outcome = .ok, .fail_call = 1, .failure = failure } };
+        var barrier: FakeBarrier = .{};
+        var graph = try testGraph();
+        var registry = testRegistry(&control);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        defer runner.deinit();
+        var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+        const result = engine.run(children.bindings());
+        try std.testing.expectEqual(cause, result.execution_rejected.operation_failed);
+        try std.testing.expectEqualStrings(@errorName(cause), result.execution_rejected.diagnostic());
+        try std.testing.expect(runner.last_effects == null);
+        try std.testing.expect(runner.last_operation_rejection == null);
+        try std.testing.expectEqual(@as(usize, 0), barrier.calls);
+        for (runner.envelope.slots) |slot| try std.testing.expect(slot == null);
+    }
+}
+
+test "expected operation rejection evidence preserves outcomes and cannot accompany success" {
+    for ([_]workflow.OutcomeTag{ .invalid, .blocked, .failed, .ok }) |outcome| {
+        var control: OperationControl = .{ .state = .{ .outcome = outcome, .diagnostic = .unsafe } };
+        var barrier: FakeBarrier = .{};
+        var graph = try testGraph();
+        var registry = testRegistry(&control);
+        var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+        defer runner.deinit();
+        var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+        const result = engine.run(children.bindings());
+        if (outcome == .ok) {
+            try std.testing.expectEqual(.authority, result.execution_rejected);
+            try std.testing.expect(runner.last_effects == null and runner.last_operation_rejection == null);
+        } else {
+            try std.testing.expectEqual(outcome, result.executionStatus().?);
+            try std.testing.expectEqual(.UnsafeSpecificationRepair, runner.last_operation_rejection.?.cause);
+            try std.testing.expectEqual(outcome, runner.last_operation_rejection.?.outcome);
+        }
+    }
+}
+
+test "runner allocation failure crosses its boundary without allocating diagnostic storage" {
+    var failing = std.testing.FailingAllocator.init(std.testing.allocator, .{ .fail_index = 0 });
+    var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+    var barrier: FakeBarrier = .{};
+    var graph = try testGraph();
+    var registry = testRegistry(&control);
+    var runner = runner_module.Runner.init(failing.allocator(), selected(&graph), &registry, barrier.port(), .{}, null);
+    defer runner.deinit();
+    var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+    const result = engine.run(children.bindings());
+    try std.testing.expectEqual(error.OutOfMemory, result.execution_rejected.operation_failed);
+    try std.testing.expectEqualStrings("OutOfMemory", result.execution_rejected.diagnostic());
+    try std.testing.expectEqual(@as(usize, 0), control.state.calls);
+    try std.testing.expectEqual(@as(usize, 0), failing.allocated_bytes);
+}
+
+test "allocation failure cannot be disguised as an expected candidate rejection" {
+    var control: OperationControl = .{ .state = .{ .outcome = .invalid, .diagnostic = .allocation } };
+    var barrier: FakeBarrier = .{};
+    var graph = try testGraph();
+    var registry = testRegistry(&control);
+    var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
+    defer runner.deinit();
+    var children: TestEngineBindings = .{ .graph = &graph, .runner = &runner };
+    const result = engine.run(children.bindings());
+    try std.testing.expectEqual(error.OutOfMemory, result.execution_rejected.operation_failed);
+    try std.testing.expect(runner.last_effects == null and runner.last_operation_rejection == null);
+    for (runner.envelope.slots) |slot| try std.testing.expect(slot == null);
+}

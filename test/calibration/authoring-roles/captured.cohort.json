@@ -1,0 +1,76 @@
+{
+  "schema": "role-calibration/v1",
+  "label_status": "reviewed",
+  "reviewer": "Project user, approved 2026-10-09",
+  "cases": [
+    {
+      "id": "captured-greeting-roles",
+      "family": "greeting-clock",
+      "split": "development",
+      "input": {
+        "captured": {
+          "feature": "zig-out/e2e-spec/2026-10-09T00-53-40Z-ab59e9144c1aff2ce96a9816c782f782/project/specs/hello-world",
+          "run": "RUN-cbac788ebaac52369795c48e68656ea0",
+          "call": "request-7-inference-1"
+        }
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Retained production call 7: signal 1 contains startup, greeting and UTC display behavior and supports all six authoring tasks, including an entity applicability decision. Signal 2 is a copied greeting, not an independent basis. The current-date wording was added upstream; local role selection and upstream fidelity must be evaluated separately."
+    }
+  ]
+}

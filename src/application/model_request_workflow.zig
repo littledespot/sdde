@@ -40,10 +40,10 @@ pub const Initialize = struct {
 
     pub fn invoke(context: ?*@This(), _: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const owner = self.action.execute(self.allocator, .{ .initial_generation = true, .semantic_review = true, .atomic_repair = true }) catch return error.OperationExecutionFailed;
+        const owner = self.action.execute(self.allocator, .{ .initial_generation = true, .semantic_review = true, .atomic_repair = true }) catch |operation_error| return operation_error;
         errdefer identity.deinitOwner(owner);
         var delta: pipeline.NodeDelta = .{};
-        delta.data_writes[@intFromEnum(ledger_schema.key)] = adoptLedger(self.allocator, owner) catch return error.OperationExecutionFailed;
+        delta.data_writes[@intFromEnum(ledger_schema.key)] = adoptLedger(self.allocator, owner) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
     }
 };
@@ -62,15 +62,15 @@ pub const Assign = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const step = input.step;
-        const current = values.read(&step.data, ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+        const current = values.read(&step.data, ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         var arena = std.heap.ArenaAllocator.init(self.allocator);
         defer arena.deinit();
         const selection = try selections(self.allocator, arena.allocator(), step);
         defer selection.deinit();
         const selected = selection.value;
-        const assignment = self.action.execute(current, current.revision(), selected.unit(), selected.binding.operation_id, selected.purpose()) catch return error.OperationExecutionFailed;
+        const assignment = self.action.execute(current, current.revision(), selected.unit(), selected.binding.operation_id, selected.purpose()) catch |operation_error| return operation_error;
         defer identity.deinitOwner(assignment.owner);
-        const request = selected.bind(self.allocator, assignment) catch return error.OperationExecutionFailed;
+        const request = selected.bind(self.allocator, assignment) catch |operation_error| return operation_error;
         return publishAssignment(self.allocator, assignment.owner, &.{request});
     }
 };
@@ -88,12 +88,12 @@ pub const Prepare = struct {
 
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const current = values.read(&input.step.data, ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+        const current = values.read(&input.step.data, ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         var arena = std.heap.ArenaAllocator.init(self.allocator);
         defer arena.deinit();
         const selection = try selections(self.allocator, arena.allocator(), input.step);
         defer selection.deinit();
-        const prepared = self.action.execute(self.allocator, current, current.revision(), selection.value) catch return error.OperationExecutionFailed;
+        const prepared = self.action.execute(self.allocator, current, current.revision(), selection.value) catch |operation_error| return operation_error;
         defer identity.deinitOwner(prepared.owner);
         return publishAssignment(self.allocator, prepared.owner, &.{ prepared.assigned, prepared.validated, prepared.request });
     }
@@ -108,10 +108,10 @@ pub const Validate = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const request = try readCurrent(&input.step.data, assigned_schema);
-        const current = values.read(&input.step.data, ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+        const current = values.read(&input.step.data, ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         const id = request.id();
-        const evidence = self.action.execute(current, current.revision(), id, id.immutable_unit_owner_id, request.binding().operation_id, id.purpose) catch return error.OperationExecutionFailed;
-        const next = handoff.validated(request, evidence) catch return error.OperationExecutionFailed;
+        const evidence = self.action.execute(current, current.revision(), id, id.immutable_unit_owner_id, request.binding().operation_id, id.purpose) catch |operation_error| return operation_error;
+        const next = handoff.validated(request, evidence) catch |operation_error| return operation_error;
         return publish(self.allocator, validated_schema, next);
     }
 };
@@ -128,11 +128,11 @@ pub const Build = struct {
         // These resources were selected once by the originating compiled step.
         var parts: handoff.ContentBuffer = undefined;
         var input_id: [32]u8 = undefined;
-        const source = request.buildSource(&input_id) catch return error.OperationExecutionFailed;
-        var owned = self.action.execute(self.allocator, source, request.content(&parts)) catch return error.OperationExecutionFailed;
-        const next = handoff.prepared(request, owned, null) catch {
+        const source = request.buildSource(&input_id) catch |operation_error| return operation_error;
+        var owned = self.action.execute(self.allocator, source, request.content(&parts)) catch |operation_error| return operation_error;
+        const next = handoff.prepared(request, owned, null) catch |native_failure| {
             owned.deinit();
-            return error.OperationExecutionFailed;
+            return native_failure;
         };
         return publish(self.allocator, prepared_schema, next);
     }
@@ -149,7 +149,7 @@ const Selection = struct {
 fn selections(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: operations.StepInput) operations.Error!Selection {
     if (!@import("../domain/workflow_model.zig").validResultSelection(step.step.parameters)) return error.OperationExecutionFailed;
     const selected = step.model_binding orelse return error.OperationExecutionFailed;
-    const packet = if (step.data.contains(.model_input_packet)) values.read(&step.data, packet_schema, packets.Packet) catch return error.OperationExecutionFailed else null;
+    const packet = if (step.data.contains(.model_input_packet)) values.read(&step.data, packet_schema, packets.Packet) catch |operation_error| return operation_error else null;
     const static_input = resource(step, "input");
     if (packet != null and static_input != null) return error.OperationExecutionFailed;
     var selection: handoff.ResultSelection = .resource;
@@ -171,10 +171,10 @@ fn selections(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: op
         const state = try compositions.readState(&step.data);
         if (state.base != packet) return error.OperationExecutionFailed;
         const part = state.plan.part(@import("../domain/workflow.zig").WorkflowResourceId.parse(id) orelse return error.OperationExecutionFailed) orelse return error.OperationExecutionFailed;
-        const binding = state.select(scratch, part) catch return error.OperationExecutionFailed;
+        const binding = state.select(scratch, part) catch |operation_error| return operation_error;
         result.composition = binding;
         result.result = .{ .id = state.plan.resultAlias(), .content = .{ .result_schema = state.plan.resultSchema() } };
-        const derived = state.packet(allocator, binding) catch return error.OperationExecutionFailed;
+        const derived = state.packet(allocator, binding) catch |operation_error| return operation_error;
         result.input = .{ .packet = derived };
         return .{ .value = result, .owned_packet = derived };
     } else {
@@ -200,21 +200,21 @@ fn publishAssignment(allocator: std.mem.Allocator, owner: *identity.Owner, reque
         for (delta.data_writes) |value| if (value) |owned| values.destroy(owned);
         if (delta.data_replacements[@intFromEnum(ledger_schema.key)]) |owned| values.destroy(owned);
     }
-    identity.retainOwner(owner) catch return error.OperationExecutionFailed;
-    delta.data_replacements[@intFromEnum(ledger_schema.key)] = adoptLedger(allocator, owner) catch {
+    identity.retainOwner(owner) catch |operation_error| return operation_error;
+    delta.data_replacements[@intFromEnum(ledger_schema.key)] = adoptLedger(allocator, owner) catch |native_failure| {
         identity.deinitOwner(owner);
-        return error.OperationExecutionFailed;
+        return native_failure;
     };
     for (requests, request_schemas[0..requests.len]) |request, schema| {
-        delta.data_writes[@intFromEnum(schema.key)] = adoptRequest(allocator, schema, request) catch return error.OperationExecutionFailed;
+        delta.data_writes[@intFromEnum(schema.key)] = adoptRequest(allocator, schema, request) catch |operation_error| return operation_error;
         transferred += 1;
     }
     return .{ .outcome = .ok, .delta = delta };
 }
 
 pub fn readCurrent(view: *const data.View, schema: data.Schema) operations.Error!*const handoff.Request {
-    const current = values.read(view, ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
-    const request = values.read(view, schema, handoff.Request) catch return error.OperationExecutionFailed;
+    const current = values.read(view, ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
+    const request = values.read(view, schema, handoff.Request) catch |operation_error| return operation_error;
     if (!current.containsRequest(request.id()) or !current.stageRunEpochId().eql(request.ledger().stageRunEpochId())) return error.OperationExecutionFailed;
     return request;
 }
@@ -242,7 +242,7 @@ pub fn adoptPacket(allocator: std.mem.Allocator, packet: *packets.Packet) values
 pub fn publishPacket(allocator: std.mem.Allocator, packet: *packets.Packet) operations.Error!execution.Candidate {
     errdefer packets.release(packet);
     var delta: pipeline.NodeDelta = .{};
-    delta.data_writes[@intFromEnum(packet_schema.key)] = adoptPacket(allocator, packet) catch return error.OperationExecutionFailed;
+    delta.data_writes[@intFromEnum(packet_schema.key)] = adoptPacket(allocator, packet) catch |operation_error| return operation_error;
     return .{ .outcome = .ok, .delta = delta };
 }
 
@@ -253,6 +253,6 @@ pub fn adoptRequest(allocator: std.mem.Allocator, schema: data.Schema, request: 
 fn publish(allocator: std.mem.Allocator, schema: data.Schema, request: *handoff.Request) operations.Error!execution.Candidate {
     errdefer handoff.destroy(request);
     var delta: pipeline.NodeDelta = .{};
-    delta.data_writes[@intFromEnum(schema.key)] = adoptRequest(allocator, schema, request) catch return error.OperationExecutionFailed;
+    delta.data_writes[@intFromEnum(schema.key)] = adoptRequest(allocator, schema, request) catch |operation_error| return operation_error;
     return .{ .outcome = .ok, .delta = delta };
 }

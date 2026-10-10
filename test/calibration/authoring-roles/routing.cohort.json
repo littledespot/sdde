@@ -1,0 +1,185 @@
+{
+  "schema": "role-calibration/v1",
+  "label_status": "reviewed",
+  "reviewer": "Project user: approved the prepared R7 live comparison on 9 October 2026",
+  "cases": [
+    {
+      "id": "parcel-later",
+      "family": "parcel-routing",
+      "split": "development",
+      "input": { "controlled": [
+        {"text":"The retired parcel-dashboard prototype used Java and a relational database. Its interface and storage were implementation research.\n","kind":"technical"},
+        {"text":"A recipient opens the parcel tracker to see a parcel's delivery status. Keep each parcel linked to its delivery events so the recipient can follow progress.\n","kind":"business"}
+      ] },
+      "labels": [
+        {"role":"title","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"description","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"primary_goal","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"primary_user_story","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"entity_basis","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"records","required":true,"allowed_signal_ids":[{"ordinal":2}]}
+      ],
+      "rationale": "Group 1 is retired implementation background; group 2 supplies the current actor, action, observable result and parcel/event relationship. Group 2 supports all six authoring tasks, including required business entities. No role may be assigned to group 1 merely because it mentions the same domain."
+    },
+    {
+      "id": "parcel-permuted",
+      "family": "parcel-routing",
+      "split": "development",
+      "input": { "controlled": [
+        {"text":"A recipient opens the parcel tracker to see a parcel's delivery status. Keep each parcel linked to its delivery events so the recipient can follow progress.\n","kind":"business"},
+        {"text":"The retired parcel-dashboard prototype used Java and a relational database. Its interface and storage were implementation research.\n","kind":"technical"}
+      ] },
+      "labels": [
+        {"role":"title","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"description","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"primary_goal","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"primary_user_story","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"entity_basis","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"records","required":true,"allowed_signal_ids":[{"ordinal":1}]}
+      ],
+      "rationale": "The same two premises as parcel-later are reversed. Group 1 now supplies the current behavior and required parcel/event relationship; group 2 is retired implementation background. The supported-role set is unchanged and its native handle moves from 2 to 1."
+    },
+    {
+      "id": "lamp-later",
+      "family": "lamp-routing",
+      "split": "development",
+      "input": { "controlled": [
+        {"text":"The retired alarm-history feature recorded every alarm event for supervisors. These archived notes describe that former product.\n","kind":"business"},
+        {"text":"For the current lamp-test feature, a technician presses the test button and sees a warning lamp flash, confirming that the lamp works. The feature does not retain or relate business records.\n","kind":"business"}
+      ] },
+      "labels": [
+        {"role":"title","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"description","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"primary_goal","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"primary_user_story","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"entity_basis","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"records","required":true,"allowed_signal_ids":[{"ordinal":2}]}
+      ],
+      "rationale": "Group 1 describes real business behavior of a retired alarm-history product; it declares no current-feature requirement or exclusion. Group 2 supplies the current technician, test action and visible confirmation, and an explicit no-business-records scope. Both groups have business kind, so kind alone cannot select support. All six current-feature authoring roles belong to group 2; entity_basis supports not_applicable rather than entity creation. Historical behavior must not become a current non-goal without an explicit current exclusion."
+    },
+    {
+      "id": "lamp-permuted",
+      "family": "lamp-routing",
+      "split": "development",
+      "input": { "controlled": [
+        {"text":"For the current lamp-test feature, a technician presses the test button and sees a warning lamp flash, confirming that the lamp works. The feature does not retain or relate business records.\n","kind":"business"},
+        {"text":"The retired alarm-history feature recorded every alarm event for supervisors. These archived notes describe that former product.\n","kind":"business"}
+      ] },
+      "labels": [
+        {"role":"title","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"description","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"primary_goal","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"primary_user_story","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"entity_basis","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"records","required":true,"allowed_signal_ids":[{"ordinal":1}]}
+      ],
+      "rationale": "The lamp-later business sources are reversed within the same development family. Group 1 supplies the current lamp-test behavior and not_applicable entity basis; group 2 supplies archived behavior of the retired alarm-history product, without a current requirement or exclusion. Kind cannot distinguish these groups. Select by current source meaning rather than the first or last group."
+    },
+    {
+      "id": "inventory-rule-only",
+      "family": "inventory-policy",
+      "split": "development",
+      "input": { "controlled": [
+        {"text":"An inventory balance must never be negative.\n","kind":"business"}
+      ] },
+      "labels": [
+        {"role":"title","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"description","required":false,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"primary_goal","required":false,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"primary_user_story","required":false,"allowed_signal_ids":[]},
+        {"role":"entity_basis","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"records","required":true,"allowed_signal_ids":[{"ordinal":1}]}
+      ],
+      "rationale": "Group 1 supplies a business balance concept and a mandatory prohibition, supporting an inventory-rule title, entity applicability and business-rule/prohibited-behavior records. No actor, triggering action or intended result is supplied for a primary story. Description and derived user benefit are debatable from this single constraint, so their assignments are optional rather than forced or forbidden."
+    },
+    {
+      "id": "wayfinding-split-premises",
+      "family": "wayfinding-scope",
+      "split": "development",
+      "input": { "controlled": [
+        {"text":"The intended benefit of this feature is to reduce how long visitors spend finding public restrooms.\n","kind":"business"},
+        {"text":"This feature excludes business records and relationships; no visitor, place or journey data is kept.\n","kind":"scope_guard"}
+      ] },
+      "labels": [
+        {"role":"title","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"description","required":false,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"primary_goal","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"primary_user_story","required":false,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"entity_basis","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"records","required":true,"allowed_signal_ids":[{"ordinal":1},{"ordinal":2}]}
+      ],
+      "rationale": "Group 1 supplies the stated user benefit and feature purpose; group 2 supplies the explicit excluded-data scope and not_applicable entity basis. Supported title/goal and entity-basis assignments therefore span distinct groups. A concrete visible interaction is unspecified, so description/story routing from group 1 is optional. Records may express group 1's intended outcome or group 2's supported exclusion; the labels do not require both groups or a particular generated record."
+    },
+    {
+      "id": "coupon-undecided-outcome",
+      "family": "coupon-choice",
+      "split": "held_out",
+      "input": { "controlled": [
+        {"text":"A shopper can apply a coupon. The acceptance rules and resulting price are not decided.\n","kind":"business"}
+      ] },
+      "labels": [
+        {"role":"title","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"description","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"primary_goal","required":false,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"primary_user_story","required":false,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"entity_basis","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"records","required":true,"allowed_signal_ids":[{"ordinal":1}]}
+      ],
+      "rationale": "Group 1 supports coupon feature identity, the supplied shopper action, a coupon business concept and a record of that action/undecided rules. It does not establish a discount, eligibility condition or successful price outcome. Goal/story assignments are optional because the intended result is underdetermined; their inclusion must not invent that result. This evaluates local role routing, not downstream clarification or completion."
+    },
+    {
+      "id": "incident-retention-conflict",
+      "family": "incident-conflict",
+      "split": "held_out",
+      "input": { "controlled": [
+        {"text":"For operator incident review, each incident must remain linked to its device until review closes.\n","kind":"business"},
+        {"text":"For operator incident review, no incident may remain linked to its device after capture.\n","kind":"business"}
+      ] },
+      "labels": [
+        {"role":"title","required":true,"allowed_signal_ids":[{"ordinal":1},{"ordinal":2}]},
+        {"role":"description","required":false,"allowed_signal_ids":[{"ordinal":1},{"ordinal":2}]},
+        {"role":"primary_goal","required":false,"allowed_signal_ids":[{"ordinal":1},{"ordinal":2}]},
+        {"role":"primary_user_story","required":false,"allowed_signal_ids":[{"ordinal":1},{"ordinal":2}]},
+        {"role":"entity_basis","required":true,"allowed_signal_ids":[{"ordinal":1},{"ordinal":2}]},
+        {"role":"records","required":true,"allowed_signal_ids":[{"ordinal":1},{"ordinal":2}]}
+      ],
+      "rationale": "Group 1 requires an incident/device link through review; group 2 forbids retaining that same link after capture. Both explicitly supply the operator incident-review purpose, supporting a title without choosing a retention rule. Both groups are retained by the controlled builder and individually supply entity/relationship and obligation-record evidence; role assignment does not resolve their contradiction or choose precedence. Visible behavior, benefit and narrative support is debatable from these policy-only premises, so those roles allow either group but are optional. This is unresolved-prose routing, not native conflicting-disposition or conflict-catalog coverage. The existing label contract cannot require selecting both contradictory groups."
+    },
+    {
+      "id": "spoken-timer-later",
+      "family": "spoken-timer-routing",
+      "split": "held_out",
+      "input": { "controlled": [
+        {"text":"The implementation experiment used a browser speech API and a TypeScript timer library. Those technology choices do not define the current product interaction.\n","kind":"technical"},
+        {"text":"A reader selects the countdown button and hears the remaining time spoken aloud, so the reader can check the timer without seeing the screen. No business records or relationships are retained.\n","kind":"business"}
+      ] },
+      "labels": [
+        {"role":"title","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"description","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"primary_goal","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"primary_user_story","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"entity_basis","required":true,"allowed_signal_ids":[{"ordinal":2}]},
+        {"role":"records","required":true,"allowed_signal_ids":[{"ordinal":2}]}
+      ],
+      "rationale": "Group 1 supplies implementation research only. Group 2 supplies the reader, selection action, spoken result, explicit user benefit and no-business-records scope. All six authoring roles belong to group 2, with entity_basis supporting not_applicable. This held-out family changes both domain and output modality from the development lamp cases."
+    },
+    {
+      "id": "spoken-timer-permuted",
+      "family": "spoken-timer-routing",
+      "split": "held_out",
+      "input": { "controlled": [
+        {"text":"A reader selects the countdown button and hears the remaining time spoken aloud, so the reader can check the timer without seeing the screen. No business records or relationships are retained.\n","kind":"business"},
+        {"text":"The implementation experiment used a browser speech API and a TypeScript timer library. Those technology choices do not define the current product interaction.\n","kind":"technical"}
+      ] },
+      "labels": [
+        {"role":"title","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"description","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"primary_goal","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"primary_user_story","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"entity_basis","required":true,"allowed_signal_ids":[{"ordinal":1}]},
+        {"role":"records","required":true,"allowed_signal_ids":[{"ordinal":1}]}
+      ],
+      "rationale": "The spoken-timer-later sources are reversed within the same held-out family. Group 1 now supplies behavior, benefit and the not_applicable entity basis; group 2 is implementation background. Supported role meaning stays fixed while the selected native group handle changes."
+    }
+  ]
+}

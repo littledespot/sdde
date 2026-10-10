@@ -11,7 +11,7 @@ pub const schema = values.schema(.accounted_model_attempt, accounting.AccountedA
 pub const operation_schema = values.schema(.assigned_provider_operation, lifecycle.AssignedOperation, 1, null).captured();
 pub const invoked_schema = values.schema(.invoked_provider_operation, lifecycle.InvokedOperation, 1, null).captured();
 pub const terminal_schema = values.schema(.terminal_provider_operation, lifecycle.TerminalOperation, 1, null).captured();
-pub const Error = accounting.Error || accounting.RequestError || identity.Error || lifecycle.Error || values.Error || error{InvalidAccountingTransition};
+pub const Error = accounting.Error || accounting.RequestError || identity.Error || lifecycle.Error || values.Error;
 
 /// Expected terminal facts retain their exact applied source, not a second record.
 pub const Completion = struct {

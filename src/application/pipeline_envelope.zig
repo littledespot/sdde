@@ -6,16 +6,7 @@ const gate = @import("../domain/workflow_gate.zig");
 const workflow = @import("../domain/workflow.zig");
 const reference = @import("../domain/execution_reference.zig");
 
-pub const Error = pipeline.DeltaError || std.mem.Allocator.Error || error{
-    DataSchemaMismatch,
-    UnregisteredDataSchema,
-    AliasedDataValue,
-    DataGenerationExhausted,
-    DataReferenceOverflow,
-    InvalidInformationOccurrence,
-    InformationConflict,
-    InvalidRepairRenewal,
-};
+pub const Error = data.EnvelopeError;
 
 /// Native placement identity, never a model key or an execution receipt.
 pub const Occurrence = struct { scope: reference.Ref, ordinal: u64, producer: []const u8 };
@@ -240,6 +231,11 @@ pub const PipelineEnvelope = struct {
         var checked = std.enums.EnumSet(pipeline.DataKey).initEmpty();
         for (contract.authority) |key| if (self.checkAuthorityLineage(key, &checked)) |rejection| return rejection;
         return null;
+    }
+
+    pub fn checkCurrentAuthority(self: *const PipelineEnvelope, key: pipeline.DataKey) ?gate.Rejection {
+        var checked = std.enums.EnumSet(pipeline.DataKey).initEmpty();
+        return self.checkAuthorityLineage(key, &checked);
     }
 
     // A projection cannot keep a gate current after one of its sources changes.

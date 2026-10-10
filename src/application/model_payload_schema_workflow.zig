@@ -51,7 +51,7 @@ pub const Validate = struct {
         errdefer values.destroy(value);
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(schema.key)] = value;
-        const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch return error.OperationExecutionFailed;
+        const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch |operation_error| return operation_error;
         return .{ .outcome = status(result), .delta = delta };
     }
 };
@@ -88,7 +88,7 @@ pub const Admit = struct {
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(envelope.schema.key)] = envelope_value;
         delta.data_writes[@intFromEnum(schema.key)] = payload_value;
-        const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch return error.OperationExecutionFailed;
+        const result = values.read(&.{ .slots = delta.data_writes }, schema, Result) catch |operation_error| return operation_error;
         return .{ .outcome = status(result), .delta = delta };
     }
 };
@@ -98,9 +98,9 @@ fn capture(allocator: std.mem.Allocator, view: *const data.View, checked: ?valid
     const source = try envelope.readCurrent(view);
     if ((source.outcome() == .decoded) != (checked != null)) return error.OperationExecutionFailed;
     if (checked) |result| if (result == .valid and result.valid.candidate() != source.outcome().decoded) return error.OperationExecutionFailed;
-    const owner = allocator.create(Owner) catch return error.OperationExecutionFailed;
+    const owner = allocator.create(Owner) catch |operation_error| return operation_error;
     errdefer allocator.destroy(owner);
-    const retained = values.retain(view.slots[@intFromEnum(envelope.schema.key)].?) catch return error.OperationExecutionFailed;
+    const retained = values.retain(view.slots[@intFromEnum(envelope.schema.key)].?) catch |operation_error| return operation_error;
     errdefer values.destroy(retained);
     owner.* = .{
         .allocator = allocator,
@@ -111,11 +111,11 @@ fn capture(allocator: std.mem.Allocator, view: *const data.View, checked: ?valid
             .invalid => |reason| .{ .schema_rejected = reason },
         } else .{ .not_validated = source },
     };
-    return values.adopt(allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch error.OperationExecutionFailed;
+    return values.adopt(allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch |operation_error| operation_error;
 }
 
 pub fn readCurrent(view: *const data.View) operations.Error!*const Result {
-    const result = values.read(view, schema, Result) catch return error.OperationExecutionFailed;
+    const result = values.read(view, schema, Result) catch |operation_error| return operation_error;
     try observation.requireCurrent(view, result.source().source());
     return result;
 }

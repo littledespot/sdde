@@ -30,7 +30,7 @@ fn Completion(comptime kind: @import("../domain/llm_provider_operation.zig").Pro
             if (facts.source.id().kind != kind) return error.OperationExecutionFailed;
             const authority = input.step.provider_operation orelse return error.OperationExecutionFailed;
             const record = authority.ledger.record(facts.source.id()) orelse return error.OperationExecutionFailed;
-            var delta = self.action.execute(authority.ledger, authority.authority, authority.ledger.revision(), record.id, record.revision, .{ .terminate = facts.terminal }) catch return error.OperationExecutionFailed;
+            var delta = self.action.execute(authority.ledger, authority.authority, authority.ledger.revision(), record.id, record.revision, .{ .terminate = facts.terminal }) catch |operation_error| return operation_error;
             delta.data_invalidations.insert(.invoked_provider_operation);
             return .{ .outcome = facts.outcome, .delta = delta };
         }
@@ -42,7 +42,7 @@ pub fn readCurrent(view: *const data.View) operations.Error!accounting.Completio
     if (view.contains(.provider_token_count_validation_result)) {
         const counts = @import("model_token_count_observation_workflow.zig");
         const source = try counts.readCurrent(view);
-        const invoked = (values.read(view, accounting.invoked_schema, lifecycle.InvokedOperation) catch return error.OperationExecutionFailed).operation();
+        const invoked = (values.read(view, accounting.invoked_schema, lifecycle.InvokedOperation) catch |operation_error| return operation_error).operation();
         if (!source.operationId().eql(invoked.id) or invoked.id.kind != .input_token_count) return error.OperationExecutionFailed;
         const terminal: lifecycle.Terminal = switch (source.outcome()) {
             .validated => |evidence| switch (evidence) {
@@ -55,7 +55,7 @@ pub fn readCurrent(view: *const data.View) operations.Error!accounting.Completio
         return .{ .source = .{ .invoked = invoked }, .terminal = terminal, .outcome = counts.status(source) };
     }
     const source = try observation.readCurrent(view);
-    const invoked = (values.read(view, accounting.invoked_schema, lifecycle.InvokedOperation) catch return error.OperationExecutionFailed).operation();
+    const invoked = (values.read(view, accounting.invoked_schema, lifecycle.InvokedOperation) catch |operation_error| return operation_error).operation();
     if (!source.operationId().eql(invoked.id) or invoked.id.kind != .inference) return error.OperationExecutionFailed;
     const terminal: lifecycle.Terminal = switch (source.outcome()) {
         .validated => |evidence| switch (evidence.result()) {

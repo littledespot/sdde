@@ -651,25 +651,51 @@ current registry. No separate resolver action or historical-schema registry is n
 - **Responsibility:** Prove every input member appears exactly once at that level and IDs/order
   are unique; perform no model-request size estimation.
 
+## `CheckReferenceSummaryReuseAction`
+
+- **Input:** current reconciliation assignment, canonical summary history and current
+  source/text-validation dependencies
+- **Output:** reusable or semantic outcome; no state change
+- **Responsibility:** Prove that a non-final, nonempty partition contains exactly one
+  current validated child with unchanged membership and dependencies under §16.4.
+  Stale or altered authority fails rather than requesting another model response.
+
+## `ReuseReferenceReconciliationSummaryAction`
+
+- **Input:** the same current assignment and validation dependencies
+- **Output:** native summary candidate linked to its validated child
+- **Responsibility:** Recheck reuse eligibility and carry the child's ordered content
+  into the existing summary validation path. Preserve lineage; create no provider
+  origin, copied repair receipt or canonical identity.
+- **Execution bound:** The shared finite-iteration contract under §6.3 binds each
+  pass to its validated partition population. Accepted summary construction
+  advances the current cursor once; reuse declares no retry parameter and grants
+  no model retries or repair authority.
+
 ## `ValidateReferenceReconciliationSummaryProposalAction`
 
 - **Input:** one summary proposal, exact partition, and claim/summary allowlists
-- **Output:** summary-proposal evidence
-- **Responsibility:** Require exact member-ID echo, total represented-claim coverage, closed
-  content variants, and no canonical IDs.
+- **Output:** validated summary projection with raw-to-surviving occurrence mapping
+- **Responsibility:** Validate every raw statement's authorized unique selection and
+  typed content, require complete represented-claim coverage by union, and normalize
+  proven duplicates under §16.4 while preserving raw candidates and repair identities.
+  Partition membership is native; model canonical IDs and member-ID echoes reject.
+  Native carried candidates also revalidate child eligibility and content; retain
+  a proof bound to the accepted projection and current source/text dependencies.
 
 ## `AssignReferenceReconciliationSummaryIdsAction`
 
-- **Input:** one validated summary proposal and current reference ID ledger
+- **Input:** one validated normalized summary projection and current reference ID ledger
 - **Output:** summary/statement ID map plus successor ledger
-- **Responsibility:** Allocate summary and statement IDs in canonical local-key order and
-  advance only their two reconciliation ordinals.
+- **Responsibility:** Allocate summary and statement IDs in surviving response order,
+  followed by native token order, and advance only their two reconciliation ordinals.
 
 ## `BuildReferenceReconciliationSummaryAction`
 
-- **Input:** validated proposal and ID map
+- **Input:** validated normalized projection and ID map
 - **Output:** canonical summary
-- **Responsibility:** Replace local keys with IDs while preserving represented claims/content.
+- **Responsibility:** Attach native IDs while preserving normalized statements, complete
+  partition membership, validated child-summary lineage and validation proof.
 
 ## `BuildCrossSourceReconciliationInputAction`
 
@@ -696,8 +722,8 @@ current registry. No separate resolver action or historical-schema registry is n
 
 - **Input:** hierarchical state and complete identified-claim registry
 - **Output:** reconciliation-completeness evidence
-- **Responsibility:** Prove level lineage, one-to-one membership at every level, total final
-  claim coverage, and no dropped/duplicated claim.
+- **Responsibility:** Prove level lineage, exact partition membership at every level,
+  complete summary coverage by union, and exactly one final disposition per claim.
 
 ## `ValidateClaimDispositionProposalAction`
 

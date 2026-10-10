@@ -1,0 +1,329 @@
+{
+  "schema": "authoring-guidance-comparison/v1",
+  "label_status": "proposed",
+  "baseline_revision": "2bcd1788d02cee2a533d2897baae0e03352f5033",
+  "capture_build_identity": {
+    "revision": "031b5f44f3f9056aa2ddd0662312800b0049fbfd",
+    "source_sha256": "c3750047fc97bedaeb55485731075c49a8396c4de70e2ddadaf0ce83c79d51c6",
+    "modified": true
+  },
+  "capture": {
+    "feature": "zig-out/e2e-spec/2026-10-09T20-25-01Z-114a71784dee27afd412beda5af561dd/project/specs/hello-world",
+    "run": "RUN-30bf52923e1410d76f70edf8b9c1e06d",
+    "story": {
+      "call": "request-10-inference-1",
+      "context_sha256": "ed7e5aa9f7bb62724d81b0cf96e321ec0a677ea71108e8b39030ddf2df701d6f"
+    },
+    "records": {
+      "call": "request-12-inference-1",
+      "context_sha256": "a3eac734d4d55f0b49d3dc1ba2a9333ee7a9a6b18d41873a1afffd25289ef9fd"
+    }
+  },
+  "model": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0,
+    "response_mode": "native_schema"
+  },
+  "repeats": 2,
+  "maximum_physical_calls": 16,
+  "cases": [
+    {
+      "id": "captured-startup",
+      "contrast": "composition_example",
+      "parent": "story",
+      "origin": "captured",
+      "exact_claim_ids": [
+        4
+      ],
+      "sources": [
+        {
+          "id": 1,
+          "sha256": "49cfe66ae6b41493badef2d9001f54cf2b841cf67c780562620122eefba54487"
+        }
+      ],
+      "obligations": [
+        {
+          "id": "obligation-1",
+          "meaning": "The application starts successfully."
+        },
+        {
+          "id": "obligation-2",
+          "meaning": "On startup, the application displays the exact greeting."
+        },
+        {
+          "id": "obligation-3",
+          "meaning": "The application outputs the current date and time in UTC."
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "source_id": 1,
+          "value": "Hello, World!",
+          "meaning": "The greeting displayed on startup; every generated use must belong to its surrounding narrative."
+        }
+      ],
+      "assessment_notes": "Captured call 10 evidence/schema and story purpose with the current shared fragment wording as baseline. Assess whether the typed reference replaces the literal in its narrative position instead of being appended after raw quoted prose. Do not copy the format example into the narrative as an invented requirement.",
+      "schema_sha256": "75de173895b7e163ac12aadf58ed1a0b1803da68307a1645345b482c4244e361",
+      "baseline_edit": "captured-startup.baseline.edit.json",
+      "baseline_edit_sha256": "a265b7ce9c06b17d5211eedb216ff0e73e32f4e8934541be88396d32deb68e8a",
+      "candidate_edit": "captured-startup.candidate.edit.json",
+      "candidate_edit_sha256": "fb1b98e490f0ab0889e4b3003ebb1d55a6e796a50a60885a3be739a829280af5"
+    },
+    {
+      "id": "airflow-pause",
+      "contrast": "composition_example",
+      "parent": "story",
+      "origin": "controlled",
+      "exact_claim_ids": [
+        11
+      ],
+      "sources": [
+        {
+          "id": 7,
+          "sha256": "0924c4604a6efa9a0855e91f6b89a277c91490b594b80d5c93354819921ae506"
+        }
+      ],
+      "obligations": [
+        {
+          "id": "obligation-1",
+          "meaning": "The ventilator controller must let the operator pause airflow."
+        },
+        {
+          "id": "obligation-2",
+          "meaning": "When airflow is paused, stop the fan and display exactly `Paused`. Keep displaying that status until the operator resumes airflow."
+        },
+        {
+          "id": "obligation-3",
+          "meaning": "Resuming airflow restarts the fan."
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 11,
+          "source_id": 7,
+          "value": "Paused",
+          "meaning": "The status while airflow is paused, retained until resumption."
+        }
+      ],
+      "assessment_notes": "Unrelated singleton occurrence. Preserve stop/status-duration/restart obligations; use the offered exact reference wherever the literal appears, while keeping the narrative source-backed and excluding unsupported example wording.",
+      "schema_sha256": "75de173895b7e163ac12aadf58ed1a0b1803da68307a1645345b482c4244e361",
+      "baseline_edit": "airflow-pause.baseline.edit.json",
+      "baseline_edit_sha256": "54abff13c244b23d851a4787f5653f0f587e38cd00eed5db20c764563c6ac0be",
+      "candidate_edit": "airflow-pause.candidate.edit.json",
+      "candidate_edit_sha256": "c89c9de41365c47244b2698ccd4b9f7e6b0418b84e4699ae782db91251bf8222"
+    },
+    {
+      "id": "room-notification",
+      "contrast": "composition_example",
+      "parent": "story",
+      "origin": "controlled",
+      "exact_claim_ids": [],
+      "sources": [
+        {
+          "id": 1,
+          "sha256": "422e96cca4d182315bce5dbc56a86ef782312a5a5afd875e6712bd014899e650"
+        }
+      ],
+      "obligations": [
+        {
+          "id": "obligation-1",
+          "meaning": "When measured room temperature exceeds the configured threshold, notify the operator and include the measured temperature."
+        },
+        {
+          "id": "obligation-2",
+          "meaning": "Do not notify the operator when temperature is at or below the threshold."
+        }
+      ],
+      "literal_expectations": [],
+      "assessment_notes": "Zero eligible literals: candidate and baseline are byte-identical, with no composition example. This is a no-change control for narrative/obligation quality and natural variability, not a typed-reference success denominator.",
+      "schema_sha256": "3454e1ed6a0b7041175b4238a40c9551cecb2036bc42cc648cc3d0bf4fa568ce",
+      "baseline_edit": "room-notification.baseline.edit.json",
+      "baseline_edit_sha256": "01ec7540e6f677218904bf5d2d716ef2e50722862f158aace5f5fc29ce3986fe",
+      "candidate_edit": "room-notification.candidate.edit.json",
+      "candidate_edit_sha256": "01ec7540e6f677218904bf5d2d716ef2e50722862f158aace5f5fc29ce3986fe"
+    },
+    {
+      "id": "valve-status",
+      "contrast": "composition_example",
+      "parent": "story",
+      "origin": "controlled",
+      "exact_claim_ids": [
+        201,
+        202,
+        203
+      ],
+      "sources": [
+        {
+          "id": 11,
+          "sha256": "a8c3958b2502b190fd3f265c57248d4a12ac1db89d9c18dcd688bb77566c9fd6"
+        },
+        {
+          "id": 12,
+          "sha256": "a94d0cd714f5cf7f8d96c2e4c62965e70fdad7479a0edddecc96173bd5f11e16"
+        },
+        {
+          "id": 13,
+          "sha256": "586ebf58613e102157e9fb65621ca42ef2a0df025dd33ef00542d17be57c5ca4"
+        }
+      ],
+      "obligations": [
+        {
+          "id": "obligation-1",
+          "meaning": "When an operator tests the north valve and confirms its closed position, set the latest-test banner to exactly `Closed`; use that same label in the north-valve status display until its next test."
+        },
+        {
+          "id": "obligation-2",
+          "meaning": "When an operator tests the south valve and confirms its closed position, set the latest-test banner to exactly `Closed`; use that same label in the south-valve status display until its next test."
+        },
+        {
+          "id": "obligation-3",
+          "meaning": "If either valve test cannot confirm the valve position, show exactly `Unknown` and retain the prior confirmed result separately for comparison."
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 201,
+          "source_id": 11,
+          "value": "Closed",
+          "meaning": "North-valve confirmation, used in both its latest-test banner and status display."
+        },
+        {
+          "claim_id": 202,
+          "source_id": 12,
+          "value": "Closed",
+          "meaning": "South-valve confirmation, a distinct source occurrence with the same bytes, used in its banner and status display."
+        },
+        {
+          "claim_id": 203,
+          "source_id": 13,
+          "value": "Unknown",
+          "meaning": "The status when either valve position cannot be confirmed."
+        }
+      ],
+      "assessment_notes": "The first offered occurrence illustrates formatting only; it does not recommend north-valve behavior or resolve any other occurrence. Preserve both valves, both display contexts and the inconclusive-test/previous-result behavior. Allow repeated use of the same claim reference. If generated context does not identify which Closed occurrence is meant, record identity as unassessable rather than guessing; no fixed textual repetition count is required.",
+      "schema_sha256": "58b72a8fc04a91ab8f16020b6fb91bded85ce49c91923b0fa91bb69747fb1985",
+      "baseline_edit": "valve-status.baseline.edit.json",
+      "baseline_edit_sha256": "f6b8f7cf20b3a347e08d0ee4293ab2d18e0652ace9ee934974a38c1c2c2c04eb",
+      "candidate_edit": "valve-status.candidate.edit.json",
+      "candidate_edit_sha256": "0dc55c9e208819d54c670ce55455a176f8efe00af16dad26f78d4fccb2693d19"
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-startup-baseline-1",
+      "case": "captured-startup",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "captured-startup.baseline.edit.json"
+    },
+    {
+      "id": "captured-startup-candidate-1",
+      "case": "captured-startup",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "captured-startup.candidate.edit.json"
+    },
+    {
+      "id": "airflow-pause-baseline-1",
+      "case": "airflow-pause",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "airflow-pause.baseline.edit.json"
+    },
+    {
+      "id": "airflow-pause-candidate-1",
+      "case": "airflow-pause",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "airflow-pause.candidate.edit.json"
+    },
+    {
+      "id": "room-notification-baseline-1",
+      "case": "room-notification",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "room-notification.baseline.edit.json"
+    },
+    {
+      "id": "room-notification-candidate-1",
+      "case": "room-notification",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "room-notification.candidate.edit.json"
+    },
+    {
+      "id": "valve-status-baseline-1",
+      "case": "valve-status",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "valve-status.baseline.edit.json"
+    },
+    {
+      "id": "valve-status-candidate-1",
+      "case": "valve-status",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "valve-status.candidate.edit.json"
+    },
+    {
+      "id": "captured-startup-candidate-2",
+      "case": "captured-startup",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "captured-startup.candidate.edit.json"
+    },
+    {
+      "id": "captured-startup-baseline-2",
+      "case": "captured-startup",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "captured-startup.baseline.edit.json"
+    },
+    {
+      "id": "airflow-pause-candidate-2",
+      "case": "airflow-pause",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "airflow-pause.candidate.edit.json"
+    },
+    {
+      "id": "airflow-pause-baseline-2",
+      "case": "airflow-pause",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "airflow-pause.baseline.edit.json"
+    },
+    {
+      "id": "room-notification-candidate-2",
+      "case": "room-notification",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "room-notification.candidate.edit.json"
+    },
+    {
+      "id": "room-notification-baseline-2",
+      "case": "room-notification",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "room-notification.baseline.edit.json"
+    },
+    {
+      "id": "valve-status-candidate-2",
+      "case": "valve-status",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "valve-status.candidate.edit.json"
+    },
+    {
+      "id": "valve-status-baseline-2",
+      "case": "valve-status",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "valve-status.baseline.edit.json"
+    }
+  ]
+}

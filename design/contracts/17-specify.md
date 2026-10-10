@@ -134,13 +134,23 @@ Typed content covers these concerns; each concern does not require a separate ca
   Exact and passive references resolve through the canonical text projector.
   These read-only assignments do not certify support or alter evidence eligibility.
   Coverage assessments retain surrounding candidate context. Separate loss
-  localization retains the target, candidate and upstream reconstruction context
-  without a support-assessment instruction; it compares a fixed alleged loss with
-  captured producers and may report `unlocalized` when meaning survives.
+  localization supplies the resolved target, surrounding business values and each
+  producer beside its actual output, without a support-assessment instruction.
+  Ineligible producers remain supporting evidence with no selectable location.
+  It compares the fixed alleged loss with captured producers and
+  reports `candidate` when meaning survives upstream and
+  is missing from the generated subject, or `unlocalized` when ownership is uncertain.
   Initial findings and authorized review corrections reuse this projection.
   A candidate-omission finding triggers a separate
   loss-location call with the finding fixed; that call cannot revise the verdict.
-  The engine validates the location and complete review before repair or publication.
+  A selected upstream location also supplies a source selection and a comparison
+  explaining what that producer failed to preserve. Native admission resolves the
+  selection through the existing source-line validator and verifies its association
+  with the selected producer. The comparison is retained with review evidence;
+  valid coordinates and nonempty explanation do not prove semantic loss.
+  `candidate` and `unlocalized` have no upstream comparison and preserve the
+  existing candidate-local repair or failure decision. The engine validates the location, comparison and
+  complete review before repair or publication.
   For a positive finding with a fixed claim set, the engine
   supplies that set from the current requirement rule; the response omits
   `provenance` and is rejected if it echoes it. The engine constructs invariant
@@ -158,27 +168,46 @@ Typed content covers these concerns; each concern does not require a separate ca
 
 The approved ADR 0020 successor binds source-obligation groups from validated
 reconciliation signals before model authoring. Signal grouping and authoring-role
-assignment are separate model calls. Feature-level fields have explicit
-group-role assignments. Reconciliation assignments use ADR 0016's native
-assignment contexts over one complete evidence catalogue. Role assignment receives
-only its exact-group rule and role purposes projected from the shared requirement
-descriptions; summary, disposition, signal and conflict rules remain with their
-own assignments. A group may support several roles and a role several groups;
-unsupported roles remain unassigned and mandatory coverage still blocks authoring.
+assignment are separate model calls. One initial role request returns a closed
+`role_decisions` object with one required property per registered `GenerationRole`:
+`supported` with nonempty unique `signal_ids`, or `unsupported` without selections.
+The schema and typed map are checked against that shared catalogue; omitted,
+unknown or duplicate roles, malformed branches and duplicate/ineligible selections
+reject. Native admission derives the existing positive group-role assignments in
+offered-group and registered-role order. A group may support several roles and a
+role several groups; this conversion preserves group boundaries and does not infer
+semantic support. An empty eligible catalogue admits only unsupported decisions.
+Reconciliation assignments use ADR 0016's native assignment contexts over one
+complete evidence catalogue. Role assignment receives only its exact-group rule
+and role purposes projected from the shared requirement descriptions; summary,
+disposition, signal and conflict rules remain with their own assignments.
+An admitted unsupported verdict is a model candidate, not proof of a user
+information gap, clarification authority or an entity `not_applicable` result.
+Unsupported roles remain unassigned in canonical signals and mandatory coverage
+still blocks authoring through the shared source-binding gate. Protocol correction
+retains the same complete decision contract, evidence and existing allowance;
+an unsupported verdict grants no semantic retry.
 Role packets and admission use the same retained-claim support rule as source
 binding and canonical readback. A historical or mixed inactive group cannot
 acquire authoring roles; native choice projection retains original group handles
 and complete source evidence under [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md).
+Upstream changes retire the complete role assessment, its producer origin and all
+derived assignments together. Pending decisions cannot default to unsupported;
+unchanged canonical persistence retains positive roles, while captured response
+evidence retains the reported negative verdicts. Structural completeness does not
+establish semantic accuracy or improved live outcomes; compare omissions, false
+unsupported verdicts and wrong selections before promotion, then verify actual
+publication and rubric quality under §28.
 Shared field purposes describe derivation from source-backed behavior, not a
 requirement for a ready-made title, goal or story in the source. Role assignment
 assesses each purpose using explicit or necessarily implied meaning; it cannot
 invent an actor, benefit or entity merely to fill coverage.
 No context-only literal is promoted to behavior merely to fill a role.
 Record authoring runs per bound group and may
-return several requirements. Each generation and repair packet presents the
-bound fields' purposes from the shared requirement descriptions beside their
-claim IDs. Claim meaning and citations appear once in the evidence catalogue;
-original sources remain available to identify extraction or assignment loss.
+return several requirements. Generation presents each bound field's shared
+purpose beside its resolved claim meanings and identities. Repair presents only
+the authorized replacement purpose. Remaining eligible meanings and original
+sources retain context; citation bookkeeping remains native.
 This presentation does not reselect support or establish semantic adequacy.
 The engine constructs canonical `S` and derives
 exact dependencies and citations. Generation, source-review and repair
@@ -196,8 +225,9 @@ For each feature-brief or specification unit, the declared model operation retur
   the shipped workflow requests the brief, primary story, entity applicability and
   complete record collection in four sequential assignments through one shared
   generation subgraph. Narrative, applicability and record drafting receive their
-  purpose-specific configured prompts. The same purpose prompt accompanies native
-  repairs and their protocol corrections.
+  purpose-specific configured authoring prompts. Native repairs receive the
+  configured repair prompt and the selected field/record purpose from the existing
+  repair task. Protocol correction retains that active assignment and its schema.
   The primary story has its own concise prompt and uses the canonical story purpose.
   Generation, native unit repair and reviewed omission repair share static text
   guidance from `spec/generation.context.json`: ordered fragments form one field
@@ -205,8 +235,21 @@ For each feature-brief or specification unit, the declared model operation retur
   literals. Schemas remain the sole response-shape authority. Initial and native
   repair packets include earlier drafts only for dependent units: entities receive
   the brief, records receive the brief and entity decision. Brief and story requests
-  receive neither sibling draft. Source evidence and native repair dependencies
+  receive neither sibling draft. Dependent drafts are resolved business text and
+  applicability; their canonical provenance, fragment wrappers and display-span
+  bookkeeping remain native. Record-family purposes and response alternatives use
+  the same eligibility decision, including the accepted entity applicability.
+  Source evidence and native repair dependencies
   remain complete; packet presentation does not change semantic review or retry policy.
+  Authoring packets resolve bound requirement meanings beside each field purpose.
+  Remaining eligible meanings stay in a separate context projection without
+  repeating assigned claims. Original sources remain available; citation
+  coordinates, extractor metadata and redundant token IDs remain native.
+  Exact choices expose their eligible claim occurrence, literal and source through
+  one reference-owned projection. ADR 0020 constructs a sole eligible exact-copy
+  handle natively; multiple eligible occurrences still require selection.
+  The canonical story purpose identifies an actor or system supported by the
+  source, rather than requiring an invented user persona or prewritten story.
   Functional requirements express behavior and obligation; acceptance criteria
   express precondition, triggering action and observable outcome. A rejected
   candidate may omit intent: repair preserves source meaning and correct surrounding
@@ -293,9 +336,9 @@ specific to their existing typed purposes; the same shared review orchestration
 and each purpose's guidance serve initial review, insertion and selected repair.
 A policy finding explains the relation between business behavior and a cited policy
 passage. A source-comparison concern alone does not establish a policy conflict,
-and a citation's existence does not prove semantic support. Implementation and
-remaining live semantic validation are tracked in
-[FIX_002 §25](../../fixes/FIX_002.md#25-principle-citation-conformance--architecture-review).
+and a citation's existence does not prove semantic support. Historical implementation
+is recorded in [FIX_002 §25](../../fixes/archive/FIX_002.md#25-principle-citation-conformance--architecture-review);
+[FIX01](../../fixes/FIX01.md) tracks remaining semantic validation.
 
 - Source-preservation review remains independent: it distinguishes missing source
   authority from extraction/reconciliation loss. Principles are policy evidence,

@@ -241,6 +241,42 @@ test "Specify projects registered native fields and complete reference obligatio
     try std.testing.expectError(error.InvalidRequiredAuthority, build.execute(allocator, invented));
 }
 
+test "record purposes distinguish families without adding required authority or review instructions" {
+    const spec = @import("domain/specification.zig");
+    const descriptions = @import("domain/required_authority_description.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const catalogue = try descriptions.records(allocator);
+    inline for (comptime std.meta.tags(spec.Kind)) |kind| {
+        const family = descriptions.recordFamily(kind);
+        try std.testing.expect(family.len != 0);
+        try std.testing.expect(std.mem.indexOf(u8, catalogue, family) != null);
+        const record = try descriptions.record(allocator, kind);
+        inline for (std.meta.fields(@FieldType(spec.Content(spec.BusinessValue), @tagName(kind)))) |field| {
+            const slot: a.Slot = @field(a.Slot, if (std.mem.eql(u8, field.name, "relationships")) "relationship" else field.name);
+            const purpose = try descriptions.recordField(kind, slot);
+            const selected: a.Id = .{ .kind = .feature_intent, .unit = .{ .record = .{ .kind = kind, .ordinal = 3 } }, .slot = slot, .member = if (slot == .relationship) 2 else 0 };
+            const task = try descriptions.task(allocator, selected);
+            try std.testing.expectEqualStrings(try descriptions.recordTask(allocator, kind, slot), task);
+            try std.testing.expect(std.mem.indexOf(u8, task, family) != null);
+            try std.testing.expect(std.mem.indexOf(u8, task, purpose) != null);
+            try std.testing.expect(std.mem.indexOf(u8, record, purpose) != null);
+            try std.testing.expect(std.mem.indexOf(u8, task, "Source support") == null);
+            try std.testing.expect(std.mem.indexOf(u8, task, "compatible") == null);
+            try std.testing.expectEqual(.spec, a.policy(selected).?.owner);
+        }
+        try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(kind, .display_name));
+    }
+    const text_kinds = [_]spec.Kind{ .user_visible_outcome, .functional_requirement, .business_rule, .assumption, .non_goal, .prohibited_behavior };
+    for (text_kinds, 0..) |kind, index| {
+        for (text_kinds[0..index]) |prior| try std.testing.expect(!std.mem.eql(u8, try descriptions.recordField(kind, .text), try descriptions.recordField(prior, .text)));
+    }
+    try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(.functional_requirement, .given));
+    try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.recordField(.entity, .text));
+    try std.testing.expectError(error.InvalidRequiredAuthority, descriptions.task(allocator, .{ .kind = .feature_intent, .unit = .{ .record = .{ .kind = .assumption, .ordinal = 1 } }, .slot = .when }));
+}
+
 test "reference support must name current accounted signals with no foreign or duplicate members" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

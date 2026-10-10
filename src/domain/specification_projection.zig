@@ -1,9 +1,32 @@
-//! Typed business values to editable-view scalars. Provenance remains in the
+//! Typed business values to view and model-facing text. Provenance remains in the
 //! canonical content, never in the business Markdown or a second text authority.
 const std = @import("std");
 const spec = @import("specification.zig");
 const provenance = @import("specification_provenance.zig");
 pub const Error = provenance.Error;
+pub const Brief = struct { title: []const u8, description: []const u8, primary_goal: []const u8 };
+pub const EntityDecision = struct { disposition: spec.Applicability, basis: []const u8 };
+
+/// Read-only business context allocated in the caller's scratch arena;
+/// canonical fragments and lineage stay native.
+pub fn brief(allocator: std.mem.Allocator, context: provenance.Context, value: spec.Brief) Error!Brief {
+    return .{
+        .title = try businessText(allocator, context, value.title),
+        .description = try businessText(allocator, context, value.description),
+        .primary_goal = try businessText(allocator, context, value.primary_goal),
+    };
+}
+
+/// Caller supplies the same scratch-arena ownership as brief/project.
+pub fn entities(allocator: std.mem.Allocator, context: provenance.Context, value: spec.ApplicabilityProposal) Error!EntityDecision {
+    return .{ .disposition = value.disposition, .basis = try businessText(allocator, context, value.basis) };
+}
+
+fn businessText(allocator: std.mem.Allocator, context: provenance.Context, value: spec.AttributedValue) Error![]const u8 {
+    const projected = try scalar(allocator, context, value);
+    allocator.free(projected.code_spans);
+    return projected.bytes;
+}
 pub const RequirementTrace = struct {
     id: spec.Id,
     occurrences: []const @import("reference_support.zig").Occurrence,

@@ -11,7 +11,7 @@ const execution = @import("../domain/workflow_execution.zig");
 pub const schema = values.schema(.specification_support_repair, owned.Value, 1, null).captured();
 pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{schema};
 fn read(comptime selected: Purpose, view: *const @import("../domain/pipeline_data.zig").View) operations.Error!repair.Contract(selected).State {
-    return owned.read(view, schema, if (selected == .source) .support_repair else .principle_support_repair) catch error.OperationExecutionFailed;
+    return owned.read(view, schema, if (selected == .source) .support_repair else .principle_support_repair) catch |operation_error| operation_error;
 }
 fn retain(comptime selected: Purpose, owner: *owned.Owner, state: repair.Contract(selected).State) void {
     owner.payload = if (selected == .source) .{ .support_repair = state } else .{ .principle_support_repair = state };
@@ -30,15 +30,16 @@ pub const Authorize = struct {
             const current = try support.collection(selected, progress);
             if (current != .rejected) return error.OperationExecutionFailed;
             const context_value = try spec.readContext(&input.step.data);
-            const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+            const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
             errdefer owned.destroy(owner);
             const authorization = self.action.execute(selected, owner.arena.allocator(), source, context_value, current.rejected) catch |err| {
-                if (err == error.OutOfMemory) return error.OperationExecutionFailed;
-                return owned.publish(self.allocator, schema, owner, .blocked) catch error.OperationExecutionFailed;
+                if (err == error.OutOfMemory) return error.OutOfMemory;
+                owner.rejection = err;
+                return owned.publish(self.allocator, schema, owner, .blocked) catch |operation_error| operation_error;
             };
             const permit = authorization.retry orelse return error.OperationExecutionFailed;
             retain(selected, owner, .{ .authorization = authorization });
-            var candidate = owned.publish(self.allocator, schema, owner, if (authorization.operation == .delete) .more else .ok) catch return error.OperationExecutionFailed;
+            var candidate = owned.publish(self.allocator, schema, owner, if (authorization.operation == .delete) .more else .ok) catch |operation_error| return operation_error;
             candidate.delta.repair_transition = .{ .authorized = permit };
             return candidate;
         };
@@ -57,7 +58,7 @@ pub const BuildInput = struct {
             const state = try read(selected, &input.step.data);
             const current = try support.collection(selected, progress);
             if (current != .rejected or current.rejected.candidate == null) return error.OperationExecutionFailed;
-            return @import("model_request_workflow.zig").publishPacket(self.allocator, self.action.execute(selected, self.allocator, source, try spec.readContext(&input.step.data), current.rejected.candidate.?, state.authorization) catch return error.OperationExecutionFailed);
+            return @import("model_request_workflow.zig").publishPacket(self.allocator, self.action.execute(selected, self.allocator, source, try spec.readContext(&input.step.data), current.rejected.candidate.?, state.authorization) catch |operation_error| return operation_error);
         };
         unreachable;
     }
@@ -68,16 +69,16 @@ pub const Parse = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const payload = owned.payload(values.read(&input.step.data, schema, owned.Value) catch return error.OperationExecutionFailed);
+        const payload = owned.payload(values.read(&input.step.data, schema, owned.Value) catch |operation_error| return operation_error);
         inline for (.{ Purpose.source, .principles }) |selected| if (payload.* == (if (selected == .source) .support_repair else .principle_support_repair)) {
             const state = try read(selected, &input.step.data);
-            const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch return error.OperationExecutionFailed;
+            const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
             const handoff = try @import("model_candidate_handoff.zig").read(&input.step.data);
-            const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+            const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
             errdefer owned.destroy(owner);
-            retain(selected, owner, .{ .authorization = state.authorization, .response = .{ .value = self.action.execute(selected, owner.arena.allocator(), state.authorization, packet, handoff.body) catch return error.OperationExecutionFailed, .origin = handoff.origin } });
+            retain(selected, owner, .{ .authorization = state.authorization, .response = .{ .value = self.action.execute(selected, owner.arena.allocator(), state.authorization, packet, handoff.body) catch |operation_error| return operation_error, .origin = handoff.origin } });
             var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
-            delta.data_replacements[@intFromEnum(schema.key)] = values.adopt(self.allocator, schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
+            delta.data_replacements[@intFromEnum(schema.key)] = values.adopt(self.allocator, schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
             return .{ .outcome = .ok, .delta = delta };
         };
         return error.OperationExecutionFailed;
@@ -101,10 +102,10 @@ pub const Merge = struct {
             const state = try read(selected, &input.step.data);
             const context_value = try spec.readContext(&input.step.data);
             const permit = state.authorization.retry orelse return error.OperationExecutionFailed;
-            const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
-            const result = self.action.execute(selected, owner.arena.allocator(), source, context_value, current.rejected.candidate.?, state) catch {
+            const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
+            const result = self.action.execute(selected, owner.arena.allocator(), source, context_value, current.rejected.candidate.?, state) catch |native_failure| {
                 owned.destroy(owner);
-                return error.OperationExecutionFailed;
+                return native_failure;
             };
             var candidate = try support.publish(selected, self.allocator, owner, progress, result);
             candidate.delta.repair_transition = .{ .merged_validated = .{ .permit = permit, .revision_after = switch (result) {

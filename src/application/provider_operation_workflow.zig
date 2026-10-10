@@ -28,7 +28,7 @@ pub const Assign = struct {
         const self = context.?;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         const prepared = request.prepared() orelse return error.OperationExecutionFailed;
-        const attempt = values.read(&input.step.data, accounting.schema, attempts.AccountedAttempt) catch return error.OperationExecutionFailed;
+        const attempt = values.read(&input.step.data, accounting.schema, attempts.AccountedAttempt) catch |operation_error| return operation_error;
         const kind = selection.resolve(input.step.step.parameters) orelse return error.OperationExecutionFailed;
         const facts = input.step.provider_operation orelse return error.OperationExecutionFailed;
         const assignment: lifecycle.Assignment = .{ .binding_id = prepared.binding_id, .model_visible_input_id = prepared.model_visible_input_id };
@@ -39,7 +39,7 @@ pub const Assign = struct {
         }, null, switch (kind) {
             .inference => .{ .assign_inference = assignment },
             .input_token_count => .{ .assign_count = assignment },
-        }) catch return error.OperationExecutionFailed;
+        }) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
     }
 };

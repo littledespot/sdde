@@ -40,7 +40,7 @@ pub const Validate = struct {
         const call = input.step.provider_token_count orelse return error.OperationExecutionFailed;
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         if (request.prepared() != call.request or request.binding() != call.provider_binding) return error.OperationExecutionFailed;
-        const response = values.read(&input.step.data, invocation.count_schema, raw_result.Result) catch return error.OperationExecutionFailed;
+        const response = values.read(&input.step.data, invocation.count_schema, raw_result.Result) catch |operation_error| return operation_error;
         const raw = response.outcome() orelse return error.OperationExecutionFailed;
         const outcome: Outcome = if (!response.operationId().eql(call.operation_id))
             .{ .rejected = error.ModelTokenCountAssociationInvalid }
@@ -50,14 +50,15 @@ pub const Validate = struct {
                 break :observed .{ .validated = evidence };
             },
             .cancelled => .cancelled,
-            .allocation_failed, .logging_blocked_before_send => return error.OperationExecutionFailed,
+            .allocation_failed => return error.OutOfMemory,
+            .logging_blocked_before_send => return error.OperationExecutionFailed,
         };
-        const owner = self.allocator.create(Owner) catch return error.OperationExecutionFailed;
+        const owner = self.allocator.create(Owner) catch |operation_error| return operation_error;
         errdefer self.allocator.destroy(owner);
-        const retained = values.retain(input.step.data.slots[@intFromEnum(requests.prepared_schema.key)].?) catch return error.OperationExecutionFailed;
+        const retained = values.retain(input.step.data.slots[@intFromEnum(requests.prepared_schema.key)].?) catch |operation_error| return operation_error;
         errdefer values.destroy(retained);
         owner.* = .{ .allocator = self.allocator, .request = retained, .operation_id = call.operation_id, .outcome = outcome };
-        const value = values.adopt(self.allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch return error.OperationExecutionFailed;
+        const value = values.adopt(self.allocator, schema, Result, Owner, owner, Owner.view, Owner.destroy, null) catch |operation_error| return operation_error;
         var delta: pipeline.NodeDelta = .{};
         delta.data_writes[@intFromEnum(schema.key)] = value;
         return .{ .outcome = status(owner.view()), .delta = delta };
@@ -65,9 +66,9 @@ pub const Validate = struct {
 };
 
 pub fn readCurrent(view: *const data.View) operations.Error!*const Result {
-    const result = values.read(view, schema, Result) catch return error.OperationExecutionFailed;
+    const result = values.read(view, schema, Result) catch |operation_error| return operation_error;
     const request = try requests.readCurrent(view, requests.prepared_schema);
-    const retained = values.read(&singleRequest(storage(result).request), requests.prepared_schema, @import("../domain/model_request_handoff.zig").Request) catch return error.OperationExecutionFailed;
+    const retained = values.read(&singleRequest(storage(result).request), requests.prepared_schema, @import("../domain/model_request_handoff.zig").Request) catch |operation_error| return operation_error;
     if (request != retained or result.operationId().model_request_id != request.id() or result.operationId().kind != .input_token_count) return error.OperationExecutionFailed;
     return result;
 }

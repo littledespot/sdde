@@ -31,11 +31,13 @@ flowchart LR
     VALIDATE_EX -. "Invalid selections or claims" .-> EX_REPAIR["model-request-with-context<br/>repair-prompt<br/>Authorized extraction repair"]
 
     ROOT --> RC["reconcile-references"]
-    RC --> SUMMARY["summary<br/>reconciliation-prompt<br/>1 call per summary partition"]
+    RC --> SUMMARY_ROUTE["Check summary reuse<br/>Non-final partitions"]
+    SUMMARY_ROUTE -. "Current single child;<br/>unchanged dependencies" .-> SUMMARY_REUSE["Native carry-forward<br/>Validate, identify and build summary"]
+    SUMMARY_ROUTE -. "Semantic summarization required" .-> SUMMARY["summary<br/>reconciliation-prompt<br/>1 call per remaining summary partition"]
     RC --> GLOBAL["Native global phase handoffs<br/>4 validated semantic assignments"]
     GLOBAL --> DISPOSITIONS["dispositions<br/>dispositions-prompt"]
     GLOBAL --> SIGNALS["signals<br/>signals-prompt"]
-    GLOBAL --> ROLES["roles<br/>roles-prompt"]
+    GLOBAL --> ROLES["roles<br/>roles-prompt<br/>1 complete role-decision request"]
     GLOBAL --> CONFLICTS["conflicts<br/>conflicts-prompt"]
     RC -. "Invalid summary" .-> RC_REPAIR["repair-reconciliation-candidate<br/>repair-prompt<br/>Authorized reconciliation repair"]
 
@@ -57,10 +59,16 @@ flowchart LR
 Global calls execute in this order: **dispositions → validate → signals → validate
 → roles → validate → conflicts → validate**. The next call receives native accepted
 facts, rather than unchecked response JSON. Repairs retire affected descendants
-and request pending assignments again. Roles select stable signal occurrence
-handles whose complete claim selections are retained; historical groups remain
-evidence without authoring roles. Admission and readback use that same eligibility
-rule. Conflicts select accepted group handles. Native code constructs token
+and request pending assignments again. Roles return one complete required decision
+map: each registered role selects supporting stable signal occurrence handles or
+reports unsupported. Native admission rejects missing/duplicate decisions and
+duplicate/ineligible selections, then derives positive group-role assignments in
+offered-group and role order. Selected groups' complete claim selections must be
+retained; historical groups remain evidence without authoring roles. An empty
+eligible catalogue permits only unsupported decisions. Admission and readback use
+that same eligibility rule. Upstream changes retire the complete assessment,
+producer origin and derived assignments together; pending is not unsupported.
+Conflicts select accepted group handles. Native code constructs token
 projections and reciprocal relationships. Summary partitions finish before the
 global phase handoffs. The YAML sets
 reconciliation `group-size: 8`; the resulting partition count depends on the
@@ -68,8 +76,16 @@ extracted claims and hierarchy.
 
 Empty token collections and classifications forced by `no_feature_claim` are
 constructed natively; positive token-only extraction still needs semantic
-classification. Summary order follows semantic response order, then native token
-claim order. See [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md).
+classification. Summary coverage uses the union of statement selections, permitting
+overlap. Exact duplicates normalize only after all statements validate; retained
+semantic response order precedes native token claim order. Raw repair occurrences
+remain unchanged. A non-final, nonempty partition with one current validated child
+and unchanged membership, evidence and text dependencies carries that child forward
+without a model call. Explicit workflow actions recheck eligibility and use the
+same summary validation, identity allocation and construction path. Stale or altered
+children fail; original provider and repair provenance remain on the child in
+history. Final global semantic phases are unchanged. See
+[ADR 0022](../decisions/0022-native-reference-phase-handoffs.md).
 Summary and signal `assignment.claim_ids` contain only eligible semantic claims;
 the full token/citation evidence remains visible. Conflict explanations receive
 native group handles without a separate claim-selection assignment.
@@ -80,6 +96,17 @@ preservation review when source readiness passes. A source-readiness block still
 routes through source review and the authority gate.
 
 ## Specification generation and review
+
+Native generation initialization checks all authoring roles before the first
+authoring request. Incomplete coverage ends `blocked`, retaining the missing roles,
+reference state/revision, role-selection request origin and eligible groups in the
+shared candidate diagnostic. Explicit unsupported decisions supply no positive
+coverage and grant no clarification or entity `not_applicable` authority. Protocol
+correction retains the complete map and immutable packet under existing bounds;
+unsupported adds no semantic retry. The gate adds no model call, automatic role
+assignment or correction allowance. Source readiness remains a separate structural
+check. Complete decisions prove representation only; semantic improvement still
+requires baseline comparison and actual publication/rubric evidence.
 
 Generation runs **brief → primary user story → entities → record groups**.
 After assembly and deterministic coverage validation, source review runs before
@@ -94,7 +121,7 @@ flowchart LR
     GENERATE --> STORY["generate-unit: primary_user_story<br/>story-prompt<br/>1 call"]
     GENERATE --> ENTITIES["generate-unit: entities<br/>entities-prompt<br/>1 call"]
     GENERATE --> RECORDS["generate-unit: records<br/>records-prompt<br/>1 call per active record group"]
-    GENERATE -. "Unit validation authorizes repair" .-> UNIT_REPAIR["generate-unit: repair<br/>Same prompt as the affected unit<br/>Authorized replacement"]
+    GENERATE -. "Unit validation authorizes repair" .-> UNIT_REPAIR["generate-unit: repair<br/>repair-prompt<br/>Authorized replacement"]
 
     ROOT --> REVIEW["review-specification"]
     REVIEW --> CANDIDATE["review-candidate"]
@@ -133,7 +160,11 @@ ordered text fragments and literal insertion; the selected schema still defines
 the response shape. Story purpose comes from the shared native requirement descriptions.
 Brief and story packets contain source evidence without sibling drafts; entities
 receive the brief, and record requests receive the brief and entity decision.
-Corrections retain their selected context, purpose prompt and dynamic input.
+Authoring purposes include resolved bound requirements; other eligible meanings
+remain context and full source text stays available. Exact-reference bookkeeping
+is native, including construction of a sole eligible occurrence's handle.
+Native repairs use the repair prompt and their authorized purpose/task. Corrections
+retain the active context, prompt and dynamic input.
 
 Source review resolves the selected feature/record field or native signal while
 retaining original-source evidence. Producer localization carries the fixed

@@ -3,6 +3,7 @@
 Companion to the [request-flow diagram](../diagrams/17-model-prompt-response-flow.md).
 This summarizes the existing contracts in
 [ADR 0006](../decisions/0006-minimal-model-response.md),
+[ADR 0011](../decisions/0011-provider-owned-request-limits.md),
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md) and
 [ADR 0014](../decisions/0014-universal-response-format-guidance.md).
 
@@ -14,17 +15,74 @@ This summarizes the existing contracts in
   model content's semantic category (`content.model.kind`). The shared
   [native constraint descriptions](../../src/domain/reference_reconciliation_diagnostic.zig)
   supply the matching rules for initial assignments and repairs.
+- Semantic summary/signal selections come only from `assignment.claim_ids`; token
+  claims remain supporting evidence and native projections. Signal coverage guidance
+  concerns retained assigned claims not already covered by accepted signals. Signal
+  content preserves the selected claims' conditions, triggers and obligation strength.
+  Compatible content categories and subset cardinality derive from the native
+  selection owner. Atomic selection repairs instead name `repair.rule.selection`;
+  they do not request whole-result coverage. Different signal groups may overlap.
+  Reference repair `failed_requirement` describes the rejected candidate; the
+  repair target and scoped constraints describe the permitted replacement.
+- Summary packets carry one shared `summary_purpose` for generation and scoped
+  repair: preserve selected meaning, conditions, triggers and obligation strength;
+  original claims and cited sources govern earlier summaries, and incompatible
+  meanings remain distinct. Complete-summary assignments require every assigned
+  semantic claim ID in the union of statements, with nonempty unique selections
+  inside each statement. Combined, split and overlapping expressions are permitted;
+  native code adds token statements. This coverage instruction is absent from partial
+  repairs and signal assignments. Protocol correction retains the original packet.
+  After every statement validates, the native summary projection keeps the first of
+  any exact duplicates with the same claim membership and equivalent typed content;
+  the raw candidate and repair occurrences remain intact. Different source occurrences
+  and paraphrases are not deduplicated by similar display text. Coverage and
+  normalization do not prove meaning preservation or enlarge repair authority.
+- A non-final, nonempty summary partition with one current validated child and
+  unchanged membership/evidence/text dependencies carries its content forward
+  natively. Explicit workflow actions check eligibility before any model packet and
+  feed the existing summary validation/identity/build path. Stale or altered history
+  fails; other summary partitions retain their existing request path. The native
+  parent links to the child's retained provenance without claiming a new model call.
 - Content references preserved-token IDs; `preserved_tokens` retains exact values
   and citations across reconciliation, generation, review and repair.
 - Extraction selects source lines as `{first: {ordinal}, last: {ordinal}}`, with
   inclusive endpoints and original line endings. Separate selections represent
   discontiguous support; exact tokens retain extractor-owned finer spans.
+- Extraction content assigns source facts, semantic categories and citations;
+  token classification is separate. The shared extraction context distinguishes
+  meaningful prose, exact-token-only content and `no_feature_claim`. It prefers
+  complete strings while preserving source conditions, obligation strength and
+  literal text. Fragment forms and reference IDs come from the existing selected
+  schema and supplied evidence, without a second variant list in the context.
+  Corrections retain that context; scoped repairs apply it only to selected fields.
 - Models supply neither quote bytes nor coordinates. The engine assigns citations
   after validation and rechecks them against captured sources on load.
 - Invalid selections retain typed diagnostics and existing replacement authority.
   Diagnostics preserve originating request/attempt even after request release;
   repairing one citation preserves sibling attribution.
 - Source selection proves location, not semantic support.
+- Authoring dependencies use resolved brief text and entity applicability/basis;
+  canonical provenance and fragment bookkeeping stay native. Record purposes and
+  selected schema alternatives derive from the same native eligibility decision.
+- Loss localization keeps its omission verdict fixed. The dedicated packet pairs
+  each producer with its actual output, alongside resolved candidate
+  business values and numbered source lines. Only eligible producers carry selectable
+  locations; other outputs remain supporting evidence. It omits support-assessment guidance.
+  `candidate` means the defect is downstream and meaning survived upstream;
+  `unlocalized` means ownership remains uncertain. Neither carries a comparison.
+  `localized` requires an eligible upstream `location` and source/producer `comparison`.
+  Shared admission checks current evidence association; it does not prove semantic
+  loss. Schema choices follow the same eligibility in initial and correction calls.
+  Candidate and unlocalized answers retain the existing safe candidate-local repair
+  or failure route; they grant no upstream target or broader repair authority.
+
+Native operation causes and expected domain rejections survive into CLI, telemetry
+and harness evidence through the closed operation contract. The harness records
+the first observed diagnostic and explicit repair/revision/invalidation links;
+event order does not prove the initiating semantic cause. Provider-content rejection
+survives transport retirement independently of protocol rejection. See the
+[retained evidence contract](../harness/e2e.md#retained-results). These observations
+grant no retry, repair, continuation or publication authority.
 
 ## Guidance by call type
 
@@ -37,6 +95,9 @@ for every workflow and both response modes:
 - The schema defines allowed properties, required fields, types, bounds and variants.
 - Universal framing adds no schema, business rules or workflow authority. Templates
   and the evaluator do not supply independent copies.
+- Selected reasoning effort and optional output allowance are retained request
+  controls, not model-visible task guidance. Corrections and diagnostic replay
+  preserve their originating binding under ADR 0011.
 
 **Protocol correction** receives:
 
@@ -56,7 +117,7 @@ replacement, not the whole candidate. Schema and domain validation still apply;
 syntax correction cannot recover omitted requirements. No candidate examples or
 accumulated correction prompts are added.
 
-In [R45](../../fixes/FIX_001.md#47-brief-schema-exhaustion-despite-child-object-guidance),
+In [R45](../../fixes/archive/FIX_001.md#47-brief-schema-exhaustion-despite-child-object-guidance),
 both corrections already included `unknown_property` at `/provenance`, required
 child `value`/`provenance` fields and the rejected response. The first correction
 therefore differed from initial generation; the second correction repeated the
@@ -110,6 +171,107 @@ evidence owner supplies claim minimums, eligible/exact sets and current candidat
 provenance to both admission and guidance. Corrections retain the precise failing
 rule once, preserving the decision; insertion retains the available choices.
 Absent presentation fields are omitted without removing source/extraction evidence.
+Collection assignments identify the assessed slot and its resolved records,
+including an empty collection. Source review retains the complete business and
+source reconstruction context; related prose cannot replace the selected records.
+Collection membership comes from the same native lens as evidence aggregation.
+Completed entity-applicability review receives the disposition, resolved basis and
+business context through the same projection as policy review. Partial source
+review and producer localization retain their existing subjects and evidence.
+
+**Entity applicability** uses the shared requirement description for role
+selection, generation, source/policy review and authorized basis repair. It defines
+both the entity-only disposition and the explanation connecting that decision to
+the requirements. A negative entity decision retains the other behavioral
+obligations. Review assesses the decision and its basis together; an irrelevant
+basis is not evidence that those obligations disappeared. This guidance grants
+no additional semantic omission-repair authority.
+
+**Principle review** receives one resolved business `subject`, its semantic `task`
+and the complete selected `principles`. Feature fields contain their displayed
+text; record fields also contain their fully resolved siblings and business record
+ID. Collection subjects identify the assessed slot and selected resolved records;
+entity applicability includes its disposition and resolved basis. Every subject
+retains the resolved brief, candidate and entity basis as supporting context:
+free-text principles may relate different requirements. Exact/passive values use
+the same projector as rendering. Native requirement tuples, assignment ordinals and
+source-review instructions are not business content. Initial review, correction,
+insertion and detail/citation repair reuse this projection; native identity,
+currentness, evidence admission and retained verdicts keep their existing owners.
+
+**Specification record meanings** come from the shared
+[requirement descriptions](../../src/domain/required_authority_description.zig).
+Generation receives eligible family meanings and their fields through its source
+assignment; focused source and policy reviews receive the selected family/field
+purpose. Records authoring also receives `record_requirements`, projecting the
+canonical mandatory families with `assembled_specification` scope. Requiredness
+applies across bound source-group batches; optional families need no filler.
+The authoring prompt asks the collection to preserve all assigned obligations.
+The shared acceptance-criterion field descriptions distinguish the situation
+before the trigger, the trigger itself and its observable consequences. They
+also reach focused review and repair; those paths have no separate definitions.
+Atomic repair omits that aggregate authoring guidance and retains its selected
+target. Specification content repair presents its authorized `task` once; active source
+assignments retain their claim/signal selections and omit authoring purposes.
+Native value and membership repairs describe only the selected field or permitted
+families. Completed-unit omission repair retains `source_assignment: null` without
+recreating a consumed authoring assignment. Authoring resolves requirement meaning
+beside the bound purpose; remaining eligible requirements are context, not another
+assignment. These are projections of existing claims, not a new evidence ledger.
+Original source bytes remain available. Citation coordinates and extractor/token
+bookkeeping stay native; exact choices expose only the eligible occurrence, value
+and source. Initial requests use their authoring prompt; native replacements use
+the existing repair prompt and authorized task. Prompts own the generation, review
+or repair instructions, rather than another copy of the definitions.
+These descriptions add no optional-family requirement, semantic rejection or
+cross-kind deduplication rule.
+
+The shared generation context describes fragments by their assigned field purpose:
+a title names, a basis explains, and behavioral fields express requirements.
+Exact-copy/reference fragments insert display values; any required explanation or
+behavioral meaning comes from the surrounding text. The shared context directs
+authors to insert an exact-copy object instead of retyping a supplied preserved
+literal inside prose, with any surrounding prose in separate string fragments.
+Its selector fields still come from the selected schema. Literal-only values remain
+structurally valid where the selected schema permits them. Schema admission and
+valid provenance do not establish that a field fulfils its semantic purpose.
+The [authoring-guidance comparison](../../test/calibration/authoring-guidance/README.md)
+separates this representation change from record-purpose/collection guidance;
+offline conformance is not evidence of semantic improvement.
+
+**Determined exact references** follow ADR 0020. A single eligible occurrence is
+constructed by native code: the model returns `{"kind":"exact_copy"}` and must
+not echo its determined `claim_id`. Multiple eligible occurrences retain the
+explicit selection. The selected schema and response construction use the same
+immutable native choice facts; protocol correction keeps that schema. Canonical
+segments and persisted lineage retain the occurrence ID. Matching literal text
+never reconstructs source identity, and this rule adds no semantic support.
+
+**Authoring-role assessment** remains one initial model call. Its `role_decisions`
+map requires one decision for every registered role: `supported` with nonempty
+unique eligible signal IDs, or `unsupported` without IDs. Role names and purposes
+come from the shared catalogue, not another prompt registry. Native admission
+rejects missing/duplicate roles and duplicate/ineligible selections, then derives
+positive group-role bindings in native offered-group and role order through the
+existing validator. No eligible groups yields an unsupported-only selected schema;
+pending decisions are not default negatives. Upstream repairs retire the complete
+assessment and derived bindings together. Protocol correction retains the same
+immutable packet and complete contract, with the existing allowance. An admitted
+unsupported judgment does not trigger semantic reconsideration, establish a user
+gap or grant entity `not_applicable` authority. See
+[ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#complete-role-decision-amendment-approved-9-october-2026).
+
+**Authoring-role handoff** uses the shared
+[source-binding coverage check](../../src/domain/specification_source_binding.zig)
+before generation. Complete eligible coverage starts authoring. An incomplete
+assignment returns `blocked` with every missing role, the current reference state,
+partition and revision, role-selection request origin, and eligible signal/claim
+IDs. The existing candidate diagnostic carries this evidence into CLI and harness
+reports. Source readiness still establishes structural accounting, not role
+completeness. Unsupported decisions contribute no canonical positive roles;
+the actual captured response retains the verdict. This result authorizes neither
+default assignments, a user clarification nor an automatic correction call.
+Canonical readback requires complete coverage through the same check.
 
 **After every response**, the engine independently requires one complete JSON object.
 The approved [§22.6 prefix normalization](../contracts/22-repair.md#226-unparseable-output)
@@ -134,7 +296,7 @@ do not establish a measured reliability improvement or a completed, scored basel
 
 ## Proposed conformance improvements — 20 September 2026
 
-The [21 September Bedrock comparisons](../../fixes/JSON_ISSUE.md#11-plain-string-versus-constant--completed-follow-up)
+The [21 September Bedrock comparisons](../../fixes/archive/JSON_ISSUE.md#11-plain-string-versus-constant--completed-follow-up)
 reproduced malformed native-schema output with a minimal constant-constrained field;
 the plain-string counterpart passed. This narrows the measured boundary without
 isolating native constraints from schema guidance or proving a remedy. Preserve
@@ -142,8 +304,9 @@ canonical discriminator constraints, admission and bounded correction. These
 diagnostics justify neither more decomposition nor workflow completion authority.
 
 The table distinguishes implemented guidance from remaining assessments; linked
-contracts own each boundary. [Chunk 18's current follow-up](../../fixes/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance)
-owns sequencing and approval decisions. R38 repeated incorrect nested wrappers
+contracts own each boundary. [Chunk 18's historical follow-up](../../fixes/archive/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance)
+retains its sequencing and approval record; [FIX01](../../fixes/FIX01.md) tracks
+current work. R38 repeated incorrect nested wrappers
 despite the correct schema; R39 corrected its JSON and then reached a separate
 semantic-review problem. Measure structural compliance and semantic quality separately.
 
@@ -151,7 +314,7 @@ semantic-review problem. Measure structural compliance and semantic quality sepa
 | --- | --- |
 | Assignment-specific instructions | Request/assignment guidance supplies only relevant generation rules, shared JSON framing and necessary evidence. Remove sibling-unit instructions consistently from initial and correction inputs; do not create parallel prompts for every failure. |
 | Precise nested correction guidance | The feasibility review selects [one nonrecursive child-object required-field annotation](../contracts/22-repair.md#2261-child-object-requirements), approved on 20 September 2026. Reuse the shared projection and protocol builder with the same selected schema; no branch selection, evidence relocation or candidate synthesis. |
-| Explicit error explanations | [§22.6.2](../contracts/22-repair.md#2262-explicit-error-guidance) is implemented through typed diagnostics and schema projection, with repetition wording only from confirmed prior-correction evidence. [R45 delivery](../../fixes/IMP_001.md#r45-delivery--explicit-correction-errors) records offline verification; live effectiveness remains unproven. |
+| Explicit error explanations | [§22.6.2](../contracts/22-repair.md#2262-explicit-error-guidance) is implemented through typed diagnostics and schema projection, with repetition wording only from confirmed prior-correction evidence. [R45 delivery](../../fixes/archive/IMP_001.md#r45-delivery--explicit-correction-errors) records offline verification; live effectiveness remains unproven. |
 | Model and response-mode comparison | Reuse existing provider binding, schema projection and request capture. Explicitly compare the configured baseline with native mode or another registered, authorized model; change one factor at a time. No automatic fallback, hidden model escalation or new retry owner. |
 | Further response decomposition | Reuse ADR 0016 for measured object-shape difficulties. Array-item decomposition remains deferred until finite assignments, stable identities, unique ownership, coverage/order and dependency renewal have accepted authority. Do not add arbitrary splitting, flattening or another assembler. |
 | Native derivation of mechanical fields | Reuse existing native construction where accepted inputs determine the value uniquely. Required evidence selections, relationships and business meaning remain explicit candidate data. Changing a wire shape requires consistent schema, decoding, repair, provenance and persisted-validation changes; a formatter cannot infer missing support. |
@@ -167,7 +330,7 @@ including when clarification forms are open.
 ## Nested-correction feasibility
 
 **Feasible within existing owners; model benefit remains unproven.** The latest
-[R40 evidence](../../fixes/FIX_001.md#42-brief-wrapper-recurrence-and-correction-feasibility)
+[R40 evidence](../../fixes/archive/FIX_001.md#42-brief-wrapper-recurrence-and-correction-feasibility)
 repeats R38's misplaced root provenance. The validator reports that first unknown
 property before visiting children. Its expected node already identifies the brief
 branch; the outline reduces each child object to its type. The complete schema is
@@ -195,7 +358,7 @@ or authorize copying the rejected root provenance into every child. Deeper defec
 remain governed by the full schema and subsequent diagnostics; this amendment does
 not recursively expand objects or array items. Repeated failure still exhausts.
 
-The [implementation and offline verification record](../../fixes/IMP_001.md#focused-226-decision--child-object-requirements)
+The [implementation and offline verification record](../../fixes/archive/IMP_001.md#focused-226-decision--child-object-requirements)
 cover unrelated shapes, optional fields, exact selected-schema ownership, cleanup,
 recovery and exhaustion. Request-size evidence measures overhead, not reliability;
 approved controlled calls are still needed to measure model outcomes under §28.8.
@@ -216,11 +379,39 @@ approved controlled calls are still needed to measure model outcomes under §28.
 AWS documents [structured-output support for gpt-oss-20b](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-oss-20b.html)
 and [schema-constrained InvokeModel output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
 (checked 25 September 2026). Availability does not overturn the
-[retained native-mode failures](../../fixes/FIX_001.md#47-native-mode-and-retry-counts-are-not-demonstrated-solutions)
+[retained native-mode failures](../../fixes/archive/FIX_001.md#47-native-mode-and-retry-counts-are-not-demonstrated-solutions)
 or prove improvement for the configured provider/model/schema combination. A
 comparison must record the actual mode and full engine-validation results.
 
-The [latest captured native-mode run](../../fixes/FIX_001.md#latest-native-json-run--malformed-output-despite-native-schema)
+For authoring-role semantics, the development-only
+[calibration command and cohort](../../test/calibration/authoring-roles/README.md)
+reuse production role packets/schema restrictions, native role admission and the
+existing single-request replay adapter. Labels stay outside model content. The
+candidate guidance is an experiment. Baseline and intervention comparisons bind
+each request schema to its matching diagnostic decoder; historical captures are
+immutable and any packet reprojection is explicit. Production has no sparse-wire
+compatibility reader. Reports separate structural missing decisions, false
+unsupported verdicts and wrong supported selections from semantic omissions;
+complete representation is not a quality score. The completed
+[focused pilot](../../fixes/Z_FIX01.md#r7--high-focused-role-calibration-complete-broader-calibration-remains-open)
+found fewer unsupported assignments but unchanged total omissions and a regression
+on the captured production input; it retains production guidance. Neither that
+small comparison nor offline tests establish whole-workflow reliability.
+
+The [R7 routing follow-up](../../fixes/Z_FIX01.md#97-r7-routing-calibration-follow-up--9-october-2026)
+adds reviewed partial-role, competing-group, source-order and split-role cases,
+plus two retained production inputs. Reports identify wrong-basis pairs as a
+subset of unsupported assignments, after ordinary protocol/native admission.
+All 48 approved live comparisons completed. The candidate reduced unsupported
+assignments but increased omissions overall and on captured production inputs;
+production semantic guidance is retained. Those results used the prior sparse
+response contract and do not establish the effect of complete role decisions.
+No genuine post-repair role capture is available, and diagnostic results establish
+no completed-spec quality improvement. The complete-decision intervention still
+requires comparison of omissions and wrong selections before promotion, followed
+by actual live publication, rubric grading and an unchanged repeat under §28.
+
+The [latest captured native-mode run](../../fixes/archive/FIX_001.md#latest-native-json-run--malformed-output-despite-native-schema)
 returned malformed JSON on all three attempts despite the native schema and explicit
 correction errors. Raw provider text and decoded text match; the engine correctly
 exhausted and withheld publication. Before another prompt/schema refactor, isolate

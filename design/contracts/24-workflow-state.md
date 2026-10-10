@@ -27,11 +27,16 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 The coordinated [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md)
-cutover uses `specification/v2` and `specification-state/v7`. Completed readback
+cutover uses `specification/v2`; the R6 explicit candidate-attribution amendment advances
+the state to `specification-state/v9`. Completed readback
 validates captured reconciliation groups and per-unit associations against the
 reference ledger, resolves stored explicit support and exact occurrence handles,
 then recomputes effective claims, citations and source links. It rejects
-inconsistent review or coverage projections. A missing or changed assignment
+inconsistent review or coverage projections. Localized review evidence must retain
+its captured source selection and producer-loss comparison and pass the same
+admission as initial collection. Candidate attribution retains its current bound
+claim evidence and no upstream comparison; unlocalized attribution remains distinct.
+A missing or changed assignment
 rejects; loading cannot infer one from prose or eligible claims. The pending
 variant retains reference and clarification data without claiming completed
 attributed content. Earlier versions reject without migration or a parallel

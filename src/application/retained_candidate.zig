@@ -11,6 +11,7 @@ pub fn Storage(comptime Payload: type, comptime initial: Payload) type {
             arena: std.heap.ArenaAllocator,
             parents: data.Slots = data.empty_slots,
             payload: Payload = initial,
+            rejection: ?@import("../domain/workflow_execution.zig").OperationError = null,
         };
         pub fn create(allocator: std.mem.Allocator, inputs: data.View) !*Owner {
             const owner = try allocator.create(Owner);
@@ -33,7 +34,7 @@ pub fn Storage(comptime Payload: type, comptime initial: Payload) type {
             const owner: *const Owner = @ptrCast(@alignCast(value));
             return &owner.payload;
         }
-        pub fn read(inputs: *const data.View, schema: data.Schema, comptime tag: std.meta.Tag(Payload)) !@FieldType(Payload, @tagName(tag)) {
+        pub fn read(inputs: *const data.View, schema: data.Schema, comptime tag: std.meta.Tag(Payload)) values.Error!@FieldType(Payload, @tagName(tag)) {
             const current = payload(try values.read(inputs, schema, Value));
             if (current.* != tag) return error.InvalidCandidatePayload;
             return @field(current, @tagName(tag));
@@ -41,7 +42,7 @@ pub fn Storage(comptime Payload: type, comptime initial: Payload) type {
         pub fn publish(allocator: std.mem.Allocator, schema: data.Schema, owner: *Owner, outcome: @import("../domain/workflow.zig").OutcomeTag) !@import("../domain/workflow_execution.zig").Candidate {
             var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
             delta.data_writes[@intFromEnum(schema.key)] = try values.adopt(allocator, schema, Value, Owner, owner, view, destroy, null);
-            return .{ .outcome = outcome, .delta = delta };
+            return .{ .outcome = outcome, .delta = delta, .diagnostic = owner.rejection };
         }
     };
 }

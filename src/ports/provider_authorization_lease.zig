@@ -2,7 +2,7 @@ const operation = @import("../domain/llm_provider_operation.zig");
 const binding = @import("../domain/llm_provider_binding.zig");
 const pipeline = @import("../domain/pipeline.zig");
 
-pub const Error = error{ AuthorizationDenied, AuthorizationExpired, ClockUnavailable, Cancelled };
+pub const Error = @import("../domain/operation_error.zig").ProviderAuthorizationLease;
 pub const Context = opaque {};
 pub const CapabilityPayload = opaque {};
 

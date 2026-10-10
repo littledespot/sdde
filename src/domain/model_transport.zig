@@ -1,5 +1,7 @@
 const pipeline = @import("pipeline.zig");
 
+pub const Error = error{InvalidTransportRetirement};
+
 pub const Retirement = enum { request, rejected_attempt, input, request_and_input };
 pub const requires = [_]pipeline.DataKey{ .model_request_identity_ledger, .prepared_model_request, .accounted_model_attempt, .terminal_provider_operation, .model_payload_schema_result };
 pub const attempt_keys = [_]pipeline.DataKey{
@@ -20,7 +22,7 @@ pub fn keys(comptime retirement: Retirement) []const pipeline.DataKey {
     };
 }
 
-pub fn retire(comptime retirement: Retirement, ledger: *const @import("model_request_identity.zig").ModelRequestIdentityLedger, request: *const @import("model_request_identity.zig").ModelRequestId, payload: @import("workflow.zig").OutcomeTag) error{InvalidTransportRetirement}!pipeline.NodeDelta {
+pub fn retire(comptime retirement: Retirement, ledger: *const @import("model_request_identity.zig").ModelRequestIdentityLedger, request: *const @import("model_request_identity.zig").ModelRequestId, payload: @import("workflow.zig").OutcomeTag) Error!pipeline.NodeDelta {
     const record = ledger.record(request) orelse return error.InvalidTransportRetirement;
     if (retirement == .rejected_attempt) {
         if (record.status != .invoked or payload != .invalid) return error.InvalidTransportRetirement;

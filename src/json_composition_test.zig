@@ -13,8 +13,8 @@ test "reference phase definitions share the captured shape owner" {
     const grouping = canonical.select(.{ .bytes = "signals_assignment" }).?;
     const roles = canonical.select(.{ .bytes = "roles_assignment" }).?;
     try std.testing.expect(schema.findProperty(grouping.root().object, "signals") != null);
-    try std.testing.expect(schema.findProperty(grouping.root().object, "role_assignments") == null);
-    try std.testing.expect(schema.findProperty(roles.root().object, "role_assignments") != null);
+    try std.testing.expect(schema.findProperty(grouping.root().object, "role_decisions") == null);
+    try std.testing.expect(schema.findProperty(roles.root().object, "role_decisions") != null);
 }
 
 fn compileSchema(allocator: std.mem.Allocator, bytes: []const u8) !*const schema.Schema {

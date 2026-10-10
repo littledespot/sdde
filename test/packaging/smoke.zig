@@ -505,7 +505,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_toolchain.clearEnvironment();
     denied_toolchain.expectExitCode(1);
     denied_toolchain.expectStdOutEqual("");
-    denied_toolchain.expectStdErrEqual("failed\n");
+    denied_toolchain.expectStdErrEqual("InvalidToolchain\n");
 
     const toolchain_directory = b.addTempFiles();
     const toolchain_executable = toolchain_directory.addCopyFile(executable.getEmittedBin(), executable.out_filename);
@@ -574,7 +574,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
     denied_reference.clearEnvironment();
     denied_reference.expectExitCode(1);
     denied_reference.expectStdOutEqual("");
-    denied_reference.expectStdErrEqual("failed\n");
+    denied_reference.expectStdErrEqual("InvalidReferenceSelector\n");
     const executable_without_config = missing_config_directory.addCopyFile(
         executable.getEmittedBin(),
         executable.out_filename,
@@ -630,11 +630,11 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         check.addArgs(&.{ "spec-generation", "--feature", "chosen", "--reference", "Hello" });
         check.setCwd(directory.getDirectory());
         check.clearEnvironment();
-        // No live call: the normal provider authorization boundary rejects
-        // absent credentials after discovery and compilation of the full graph.
+        // No live call: graph/resource compilation completes before the invalid
+        // project toolchain rejects. Provider authorization is checked separately.
         check.expectExitCode(1);
         check.expectStdOutEqual("");
-        check.expectStdErrEqual("failed\n");
+        check.expectStdErrEqual("InvalidToolchain\n");
         missing_config_command.step.dependOn(&check.step);
     }
     for ([_]bool{ false, true }) |invalid_region| {
@@ -690,7 +690,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         check.clearEnvironment();
         check.expectExitCode(if (case.rejected) 1 else 0);
         check.expectStdOutEqual("");
-        check.expectStdErrEqual(if (case.rejected) "failed\n" else "");
+        check.expectStdErrEqual(if (case.rejected) "InvalidReferenceAccounting\n" else "");
         missing_config_command.step.dependOn(&check.step);
     }
     for ([_]struct { feature: []const u8, rejected: bool }{
@@ -705,14 +705,14 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         check.clearEnvironment();
         check.expectExitCode(if (case.rejected) 1 else 0);
         check.expectStdOutEqual("");
-        check.expectStdErrEqual(if (case.rejected) "failed\n" else "");
+        check.expectStdErrEqual(if (case.rejected) "InvalidClarificationInput\n" else "");
         missing_config_command.step.dependOn(&check.step);
     }
     for ([_][]const []const u8{
         &.{ "reference-preflight", "--reference", "Café/日本語" },
         &.{ "reference-preflight", "--feature", "../escape", "--reference", "Café/日本語" },
         &.{ "reference-preflight", "--feature", "_archive/child", "--reference", "Café/日本語" },
-    }) |arguments| {
+    }, 0..) |arguments, index| {
         const rejected = std.Build.Step.Run.create(b, "reject packaged invalid feature selection");
         rejected.addFileArg(packaged_executable);
         rejected.addArgs(arguments);
@@ -720,7 +720,7 @@ pub fn add(b: *std.Build, executable: *std.Build.Step.Compile) *std.Build.Step.R
         rejected.clearEnvironment();
         rejected.expectExitCode(1);
         rejected.expectStdOutEqual("");
-        rejected.expectStdErrEqual("failed\n");
+        rejected.expectStdErrEqual(if (index == 0) "InvalidSpecifyArguments\n" else "InvalidFeatureDirectory\n");
         missing_config_command.step.dependOn(&rejected.step);
     }
     missing_config_command.addFileArg(executable_without_config);

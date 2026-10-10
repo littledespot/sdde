@@ -1,0 +1,625 @@
+{
+  "status": "not_run",
+  "trials": [
+    {
+      "trial": "captured-startup-baseline-1",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "The application must start successfully.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "On startup the application must display the exact greeting Hello, World!.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "The application must output the date and time in UTC.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "captured-startup-candidate-1",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "The application must start successfully.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "On startup the application must display the exact greeting Hello, World!.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "The application must output the date and time in UTC.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "loan-renewal-baseline-1",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "Eligibility and absence of reservation are conditions for seven-day extension after a renewal request.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "A reservation requires refusal and no due-date change.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "Notification includes the new due date and occurs only after successful renewal.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "loan-renewal-candidate-1",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "Eligibility and absence of reservation are conditions for seven-day extension after a renewal request.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "A reservation requires refusal and no due-date change.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "Notification includes the new due date and occurs only after successful renewal.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "valve-occurrences-baseline-1",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "North-valve confirmed closure triggers its own Closed status until its next test.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "South-valve confirmed closure triggers its own Closed status until its next test.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "Equal literal bytes retain two distinct source occurrences; neither requirement substitutes for the other.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "valve-occurrences-candidate-1",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "North-valve confirmed closure triggers its own Closed status until its next test.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "South-valve confirmed closure triggers its own Closed status until its next test.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "Equal literal bytes retain two distinct source occurrences; neither requirement substitutes for the other.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "reservoir-control-baseline-1",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "A level below the minimum requires pump shutdown.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "The shutdown lasts until the level recovers.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "reservoir-control-candidate-1",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "A level below the minimum requires pump shutdown.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "The shutdown lasts until the level recovers.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "captured-startup-candidate-2",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "The application must start successfully.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "On startup the application must display the exact greeting Hello, World!.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "The application must output the date and time in UTC.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "captured-startup-baseline-2",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "The application must start successfully.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "On startup the application must display the exact greeting Hello, World!.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "The application must output the date and time in UTC.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "loan-renewal-candidate-2",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "Eligibility and absence of reservation are conditions for seven-day extension after a renewal request.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "A reservation requires refusal and no due-date change.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "Notification includes the new due date and occurs only after successful renewal.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "loan-renewal-baseline-2",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "Eligibility and absence of reservation are conditions for seven-day extension after a renewal request.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "A reservation requires refusal and no due-date change.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "Notification includes the new due date and occurs only after successful renewal.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "valve-occurrences-candidate-2",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "North-valve confirmed closure triggers its own Closed status until its next test.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "South-valve confirmed closure triggers its own Closed status until its next test.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "Equal literal bytes retain two distinct source occurrences; neither requirement substitutes for the other.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "valve-occurrences-baseline-2",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "North-valve confirmed closure triggers its own Closed status until its next test.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "South-valve confirmed closure triggers its own Closed status until its next test.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "Equal literal bytes retain two distinct source occurrences; neither requirement substitutes for the other.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "reservoir-control-candidate-2",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "A level below the minimum requires pump shutdown.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "The shutdown lasts until the level recovers.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    },
+    {
+      "trial": "reservoir-control-baseline-2",
+      "status": "not_run",
+      "call_id": null,
+      "stop_reason": null,
+      "input_tokens": null,
+      "output_tokens": null,
+      "latency_ms": null,
+      "json_schema": null,
+      "native_admission": "not_assessed",
+      "structural_review": {
+        "invalid_selections": null,
+        "duplicate_ids_within_statement": null,
+        "missing_claim_ids": null,
+        "exact_duplicate_statements": null,
+        "distinct_overlapping_statements": null,
+        "repetition_or_truncation": null
+      },
+      "obligations": [
+        {
+          "requirement": "A level below the minimum requires pump shutdown.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        },
+        {
+          "requirement": "The shutdown lasts until the level recovers.",
+          "assessment": "unassessable",
+          "source_output_evidence": null
+        }
+      ],
+      "unsupported_additions": null,
+      "literal_occurrence_assessment": null,
+      "false_acceptance_risk": null,
+      "notes": null
+    }
+  ]
+}

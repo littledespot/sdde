@@ -22,9 +22,9 @@ pub const Initialize = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const inputs = try readInputs(&input.step.data);
-        const owner = owned.create(self.allocator, null) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, null) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .extraction_progress = self.action.execute(owner.arena.allocator(), inputs.*) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .extraction_progress = self.action.execute(owner.arena.allocator(), inputs.*) catch |operation_error| return operation_error };
         return extraction.publish(self.allocator, progress_schema, owner, .ok);
     }
 };
@@ -45,9 +45,9 @@ pub const BuildExtractionInput = struct {
         const self = context.?;
         const inputs = try readInputs(&input.step.data);
         const literals = try readLiterals(&input.step.data);
-        const tokens = values.read(&input.step.data, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch return error.OperationExecutionFailed;
+        const tokens = values.read(&input.step.data, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch |operation_error| return operation_error;
         const prior = try extraction.read(&input.step.data, progress_schema, .extraction_progress);
-        const packet = self.action.execute(self.allocator, inputs.*, literals.*, tokens.*, prior.payload().extraction_progress) catch return error.OperationExecutionFailed;
+        const packet = self.action.execute(self.allocator, inputs.*, literals.*, tokens.*, prior.payload().extraction_progress) catch |operation_error| return operation_error;
         return requests.publishPacket(self.allocator, packet);
     }
 };
@@ -59,15 +59,15 @@ pub const CollectExtraction = struct {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, progress_schema, .extraction_progress);
         const candidate = try @import("json_composition_workflow.zig").readValidated(&input.step.data);
-        const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const producers: @import("../domain/reference_extraction.zig").ProducerOrigins = .{
             .content = candidate.producer(&.{"claims"}) orelse candidate.producer(&.{"reason"}) orelse return error.OperationExecutionFailed,
             .classifications = candidate.producer(&.{"token_classifications"}),
         };
-        owner.payload = .{ .extraction_progress = self.action.execute(owner.arena.allocator(), prior.payload().extraction_progress, candidate.base, candidate.body, candidate.origin orelse return error.OperationExecutionFailed, producers) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .extraction_progress = self.action.execute(owner.arena.allocator(), prior.payload().extraction_progress, candidate.base, candidate.body, candidate.origin orelse return error.OperationExecutionFailed, producers) catch |operation_error| return operation_error };
         var delta: pipeline.NodeDelta = .{};
-        delta.data_replacements[@intFromEnum(progress_schema.key)] = values.adopt(self.allocator, progress_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
+        delta.data_replacements[@intFromEnum(progress_schema.key)] = values.adopt(self.allocator, progress_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
         return .{ .outcome = .ok, .delta = delta };
     }
@@ -79,9 +79,9 @@ pub const FinishExtraction = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, progress_schema, .extraction_progress);
-        const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .raw = self.action.execute(owner.arena.allocator(), prior.payload().extraction_progress) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .raw = self.action.execute(owner.arena.allocator(), prior.payload().extraction_progress) catch |operation_error| return operation_error };
         return extraction.publish(self.allocator, extraction.raw_schema, owner, .ok);
     }
 };
@@ -92,7 +92,7 @@ pub const BuildReconciliationInput = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, reconciliation.input_schema, .reconciliation_input);
-        const packet = self.action.execute(self.allocator, prior.payload().reconciliation_input, (try readInputs(&input.step.data)).*, (try readLiterals(&input.step.data)).*) catch return error.OperationExecutionFailed;
+        const packet = self.action.execute(self.allocator, prior.payload().reconciliation_input, (try readInputs(&input.step.data)).*, (try readLiterals(&input.step.data)).*) catch |operation_error| return operation_error;
         return requests.publishPacket(self.allocator, packet);
     }
 };
@@ -112,20 +112,20 @@ pub const CollectReconciliation = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, reconciliation.input_schema, .reconciliation_input);
-        const owner = owned.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const candidate = try @import("json_composition_workflow.zig").readValidated(&input.step.data);
-        owner.payload = .{ .reconciliation_raw = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_input, candidate) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .reconciliation_raw = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_input, candidate) catch |operation_error| return operation_error };
         var result = try extraction.publish(self.allocator, reconciliation.raw_schema, owner, .ok);
         for (Action.contract.invalidates) |key| result.delta.data_invalidations.insert(key);
         return result;
     }
 };
 fn readInputs(view: *const data.View) operations.Error!*const source.Inputs {
-    return values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, source.Inputs) catch error.OperationExecutionFailed;
+    return values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, source.Inputs) catch |operation_error| operation_error;
 }
 fn readLiterals(view: *const data.View) operations.Error!*const @import("../domain/passive_literals.zig").Registry {
-    return values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch error.OperationExecutionFailed;
+    return values.read(view, @import("passive_literal_workflow.zig").registry_schema, @import("../domain/passive_literals.zig").Registry) catch |operation_error| operation_error;
 }
 
 /// The domain constructor provides native data; the composition owner performs
@@ -150,10 +150,10 @@ pub const ForceClassifications = struct {
             if (std.mem.eql(u8, parameter.id.bytes, "source-part")) source_part = part;
             if (std.mem.eql(u8, parameter.id.bytes, "native-composition-part")) target_part = part;
         };
-        const candidates = values.read(&input.step.data, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch return error.OperationExecutionFailed;
+        const candidates = values.read(&input.step.data, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch |operation_error| return operation_error;
         const owner = try composition.Owner.create(self.allocator, &input.step.data, &.{.json_composition});
         errdefer owner.destroy();
-        const outcome: @import("../domain/workflow.zig").OutcomeTag = switch (self.action.execute(owner.arena.allocator(), state.*, source_part orelse return error.OperationExecutionFailed, target_part orelse return error.OperationExecutionFailed, (try readInputs(&input.step.data)).*, candidates.*) catch return error.OperationExecutionFailed) {
+        const outcome: @import("../domain/workflow.zig").OutcomeTag = switch (self.action.execute(owner.arena.allocator(), state.*, source_part orelse return error.OperationExecutionFailed, target_part orelse return error.OperationExecutionFailed, (try readInputs(&input.step.data)).*, candidates.*) catch |operation_error| return operation_error) {
             .semantic => semantic: {
                 owner.payload = .{ .state = state.* };
                 break :semantic .more;

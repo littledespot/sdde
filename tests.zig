@@ -1,4 +1,4 @@
-//! Full repository test discovery. Import shared sources in one module so their
+//! Unit test discovery. Import shared sources in one module so their
 //! tests execute once even when both the engine and harness depend on them.
 test {
     _ = @import("src/root.zig");
@@ -7,5 +7,6 @@ test {
     _ = @import("build/zig_version.zig");
     _ = @import("build/provenance.zig");
     _ = @import("src/workflow_repair_retry_test.zig");
+    _ = @import("src/test_fixtures/scenario_timing.zig");
     _ = @import("src/adapters/provider/native_model_http.zig");
 }

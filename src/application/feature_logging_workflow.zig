@@ -21,12 +21,12 @@ pub const Activate = struct {
 
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const prior = values.read(&input.step.data, @import("feature_directory_workflow.zig").directory, feature.Directory) catch return error.OperationExecutionFailed;
+        const prior = values.read(&input.step.data, @import("feature_directory_workflow.zig").directory, feature.Directory) catch |operation_error| return operation_error;
         const activator = self.activator orelse return error.OperationExecutionFailed;
         return switch (activator.activate(prior.*, input.step.log.workflow_shortcode)) {
             .ready => |current| ready: {
                 var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
-                delta.data_writes[@intFromEnum(directory.key)] = values.create(self.allocator, directory, feature.Directory, current) catch return error.OperationExecutionFailed;
+                delta.data_writes[@intFromEnum(directory.key)] = values.create(self.allocator, directory, feature.Directory, current) catch |operation_error| return operation_error;
                 break :ready .{ .outcome = .ok, .delta = delta };
             },
             .blocked => .{ .outcome = .blocked, .delta = .{} },

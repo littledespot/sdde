@@ -685,7 +685,7 @@ service is published.
   contract and its output typed run context/data keys satisfy graph entry;
 - schema evidence proves unique local step and parameter IDs; the entry resolves
   exactly once, and every step is reachable from entry and can reach a terminal;
-- every retry cycle crosses a registered monotonic attempt/iteration-budget
+- every retry cycle crosses a registered monotonic attempt-budget
   operation whose finite `retry-limit` is an explicitly supplied and validated
   scalar parameter on that retry-capable operation instance; the selected
   workflow policy cannot supply or default it. Registered repair scopes retain
@@ -693,6 +693,13 @@ service is published.
   Execution bounds multiply their allowances by the finite native key population;
   request-accounting sites also include their ordinary-request population. Arithmetic
   overflow and incompatible repair roles/scopes reject before execution;
+- native finite iteration uses registered scope/progress contracts and a cursor
+  bound to the validated population under [§6.3](../contracts/06-pipeline-nodes.md#63-reordering-and-composition-rules).
+  Every native cycle crosses a declared advancing outcome, and initialization cannot
+  cycle without an independent retry guard. The runner accepts exact forward
+  progress against current generations and grants one additional graph traversal
+  only after committing the associated delta. This allowance has no retry
+  parameter and does not change the workflow model-token budget;
 - every step's `use` reference resolves to one current registered operation contract and every
   parameter satisfies that contract's closed definition-safe descriptor;
 - every declared resource is captured exactly once, has one compatible typed

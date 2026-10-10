@@ -1,0 +1,422 @@
+{
+  "status": "prepared_not_run",
+  "purpose": "Diagnostic attribution-contract comparison using existing modified request replay; planning data only.",
+  "labels_status": "proposed_for_review_not_semantic_ground_truth",
+  "parent": {
+    "artifact_root": "zig-out/e2e-spec/2026-10-10T02-17-38Z-e9ca8a70c7f7cb4c45f002ba9ded8dee/evidence/generation/call-000014",
+    "run": "RUN-ebb17bc64a64a01ef7d1134b87e37f35",
+    "call": "request-14-inference-1",
+    "context_sha256": "94aa8a6d66eda6302bedd06db458986ca0139944491c9cb700e9499939cc1902",
+    "request_sha256": "a358ab4d2d09a49c88d96f5dd90d251be70fde8ca3e207f050b972e41bf731f5",
+    "response_sha256": "88ebb9eeeb1200f6d5393e520144c980a22669206bfa390efe03f8b04bdf3ea8",
+    "selected_schema_sha256": "35997abd4ae43ef4284a52a00f1bb0bfeb1043652199e70b2eef92b85544ca47",
+    "authored_description_origin_call": 8
+  },
+  "settings": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0,
+    "max_output_tokens": 16384,
+    "response_mode": "native_schema"
+  },
+  "comparison_factor": "Loss attribution request contract as one bounded bundle: dedicated packet, resolved business subject, inline producer evidence, attribution guidance and explicit candidate response arm. This pilot cannot isolate the contribution of individual bundle parts.",
+  "maximum_physical_calls": 16,
+  "repetitions_per_case_arm": 2,
+  "retries_corrections_repairs_judges_e2e": 0,
+  "unmeasured": [
+    "semantic reliability for genuinely unknown ownership",
+    "successful candidate-local repair",
+    "repair-induced harm",
+    "whole-workflow completion/publication/rubric quality"
+  ],
+  "production_sources": [
+    {
+      "path": "src/domain/model_evidence.zig",
+      "sha256": "930cfcf1d8360d183a45e944988a59850c48c9060f9abcb42c00a398c116be1b"
+    },
+    {
+      "path": "src/domain/source_omission.zig",
+      "sha256": "e38deb279536968b01fc515b78be84b344aa797f6545f261f402258133b68ca8"
+    },
+    {
+      "path": "src/domain/source_omission_context.zig",
+      "sha256": "46d9f8991644b4376a17e86bca16aefac46c137f625825c4baf2f9266400c96a"
+    },
+    {
+      "path": "src/domain/specification_review_subject.zig",
+      "sha256": "94354d4039a9dd20a21efc2777d3f8ee77f9ac1cea5eb5cba4ac2e1692b79bf5"
+    },
+    {
+      "path": "src/domain/specification_support.zig",
+      "sha256": "4eeebd10c455cc48a11b4cd9168cca598c9cb939ca4a6502ec87a8d53871af57"
+    },
+    {
+      "path": "design/workflows/spec/support-loss.prompt.md",
+      "sha256": "f7e964c27027e9c1dd423e85ddd1340afc313725cdbc3098a482e5447788c976"
+    },
+    {
+      "path": "design/workflows/spec/support.schema.json",
+      "sha256": "b8a2c594c3e2bebad3bc8042bfaee5977921e8e52cda509983428568a5352f2c"
+    }
+  ],
+  "cases": [
+    {
+      "id": "captured-description",
+      "kind": "captured",
+      "expected_owner": "candidate",
+      "expected_location": null,
+      "basis": "The exact greeting survives claim 2, preserved-token claim 4, reconciliation signal 1 and token signal 2. The description instead contains a literal JSON-like marker. This is the retained call 14 failure after call 8 authored the malformed description.",
+      "fixed_missing_meaning": "On startup the description must express displaying Hello, World!.",
+      "candidate_local_repair_potential": "existing brief description target, but adding unselected exact-copy claim 4 is not authorized; successful repair remains unestablished",
+      "source_evidence": [
+        {
+          "source_id": 1,
+          "chunk_id": {
+            "bytes": "chunk-1"
+          },
+          "lines": [
+            {
+              "id": 1,
+              "text": "# Hello World Application\n"
+            },
+            {
+              "id": 2,
+              "text": "\n"
+            },
+            {
+              "id": 3,
+              "text": "## Requirements\n"
+            },
+            {
+              "id": 4,
+              "text": "\n"
+            },
+            {
+              "id": 5,
+              "text": "- The application must start successfully.\n"
+            },
+            {
+              "id": 6,
+              "text": "- When started, the application must display `Hello, World!`.\n"
+            },
+            {
+              "id": 7,
+              "text": "- Must also output date and time in UTC\n"
+            }
+          ]
+        }
+      ],
+      "fixed_review": {
+        "finding": {
+          "kind": "candidate_omission",
+          "detail": "The source requires the application to display \"Hello, World!\" when started, but the candidate description states it displays { \"kind\":\"exact_copy\" }. The required display text is missing or incorrectly specified.",
+          "source_ids": [
+            1
+          ]
+        }
+      },
+      "edits": {
+        "baseline": {
+          "path": "captured-description.baseline.edit.json",
+          "sha256": "944efbc8a919e21aa80246f5fe37ebe4ffda1486da7b9f2eb3597bfd3ac4f69a",
+          "schema_sha256": "35997abd4ae43ef4284a52a00f1bb0bfeb1043652199e70b2eef92b85544ca47",
+          "prompt_bytes": 527,
+          "evidence_bytes": 6436,
+          "schema_bytes": 1309,
+          "complete_provider_request_bytes": null
+        },
+        "candidate": {
+          "path": "captured-description.candidate.edit.json",
+          "sha256": "1769dfdf42b48e1fc7edd1dbfb33ce3c5e0f361bc1ec57096331e767b2ebac4a",
+          "schema_sha256": "0c754b50b088a6a6d23e4504c03fc7515e99f042903f6f78768a79746f274c1a",
+          "prompt_bytes": 797,
+          "evidence_bytes": 8874,
+          "schema_bytes": 1420,
+          "complete_provider_request_bytes": null
+        }
+      }
+    },
+    {
+      "id": "downstream-loan",
+      "kind": "controlled",
+      "expected_owner": "candidate",
+      "expected_location": null,
+      "basis": "The extraction claim and reconciliation signal both retain eligibility and the absence of a reservation; only the candidate description drops them.",
+      "fixed_missing_meaning": "Renewal requires an eligible borrower and no reservation.",
+      "candidate_local_repair_potential": "existing brief description repair; no new selection or coupled repair permission",
+      "source_evidence": [
+        {
+          "source_id": 1,
+          "chunk_id": {
+            "bytes": "chunk-1"
+          },
+          "lines": [
+            {
+              "id": 1,
+              "text": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.\n"
+            }
+          ]
+        }
+      ],
+      "fixed_review": {
+        "finding": {
+          "kind": "candidate_omission",
+          "detail": "The candidate description omits the eligibility and no-reservation conditions on renewal.",
+          "source_ids": [
+            1
+          ]
+        }
+      },
+      "edits": {
+        "baseline": {
+          "path": "downstream-loan.baseline.edit.json",
+          "sha256": "45facb2c2440e228fb096ab87fcaa3e7798d6a98d2ba69ee762f79831b27b31e",
+          "schema_sha256": "aed20f061d464a386f37c0f58d4faca3506eec680c0f236cca36275eb3105ce2",
+          "prompt_bytes": 527,
+          "evidence_bytes": 2963,
+          "schema_bytes": 1307,
+          "complete_provider_request_bytes": null
+        },
+        "candidate": {
+          "path": "downstream-loan.candidate.edit.json",
+          "sha256": "8cf12123639304050c114c4fa4c3455a773d49094396b4145d46b7b984a9c835",
+          "schema_sha256": "33ffce3d865c7009c6359cddb38df1fce34a09bd3507b874d3a9f3ef63ea2358",
+          "prompt_bytes": 797,
+          "evidence_bytes": 3070,
+          "schema_bytes": 1418,
+          "complete_provider_request_bytes": null
+        }
+      }
+    },
+    {
+      "id": "source-only-extraction",
+      "kind": "controlled",
+      "expected_owner": "extraction_claim",
+      "expected_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "basis": "The first source line has no extracted claim. Claim 1 and the signal concern only the separate display requirement on line 2. Attaching the existing claim to a response cannot establish the missing pump behavior.",
+      "fixed_missing_meaning": "Low level requires pump shutdown until recovery.",
+      "candidate_local_repair_potential": "not justified: missing upstream meaning needs the existing extraction repair boundary",
+      "source_evidence": [
+        {
+          "source_id": 1,
+          "chunk_id": {
+            "bytes": "chunk-1"
+          },
+          "lines": [
+            {
+              "id": 1,
+              "text": "When the reservoir falls below the minimum, the pump must stop until the level recovers.\n"
+            },
+            {
+              "id": 2,
+              "text": "The controller must display the measured level.\n"
+            }
+          ]
+        }
+      ],
+      "fixed_review": {
+        "finding": {
+          "kind": "candidate_omission",
+          "detail": "The candidate description omits the required pump stop below the minimum and its duration until recovery.",
+          "source_ids": [
+            1
+          ]
+        }
+      },
+      "edits": {
+        "baseline": {
+          "path": "source-only-extraction.baseline.edit.json",
+          "sha256": "b9a0153c3954d12977942c8e2c6b007c94c19013eed0a3c627ba3f09075a1abf",
+          "schema_sha256": "aed20f061d464a386f37c0f58d4faca3506eec680c0f236cca36275eb3105ce2",
+          "prompt_bytes": 527,
+          "evidence_bytes": 2742,
+          "schema_bytes": 1307,
+          "complete_provider_request_bytes": null
+        },
+        "candidate": {
+          "path": "source-only-extraction.candidate.edit.json",
+          "sha256": "36db1579a26ebab388d6e65e00c2bf4fe0e9e8828cdf921d9eb91f0f9003ec72",
+          "schema_sha256": "33ffce3d865c7009c6359cddb38df1fce34a09bd3507b874d3a9f3ef63ea2358",
+          "prompt_bytes": 797,
+          "evidence_bytes": 2539,
+          "schema_bytes": 1418,
+          "complete_provider_request_bytes": null
+        }
+      }
+    },
+    {
+      "id": "reconciliation-condition",
+      "kind": "controlled",
+      "expected_owner": "reconciliation_signal",
+      "expected_location": {
+        "kind": "reconciliation_signal",
+        "ordinal": 1
+      },
+      "basis": "The extraction claim retains the necessary confirmation; signal 1 drops it and permits restart on door closure alone.",
+      "fixed_missing_meaning": "Operator confirmation remains necessary after the door closes.",
+      "candidate_local_repair_potential": "not justified: the identified reconciliation signal needs the existing upstream repair boundary",
+      "source_evidence": [
+        {
+          "source_id": 1,
+          "chunk_id": {
+            "bytes": "chunk-1"
+          },
+          "lines": [
+            {
+              "id": 1,
+              "text": "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness.\n"
+            }
+          ]
+        }
+      ],
+      "fixed_review": {
+        "finding": {
+          "kind": "candidate_omission",
+          "detail": "The candidate description omits operator confirmation as a necessary condition for restarting the fan.",
+          "source_ids": [
+            1
+          ]
+        }
+      },
+      "edits": {
+        "baseline": {
+          "path": "reconciliation-condition.baseline.edit.json",
+          "sha256": "0504a6c3d806a22b49d2de44bfcf9ccf6896ac0f2ec5bb3ba64d072c13589d67",
+          "schema_sha256": "aed20f061d464a386f37c0f58d4faca3506eec680c0f236cca36275eb3105ce2",
+          "prompt_bytes": 527,
+          "evidence_bytes": 2988,
+          "schema_bytes": 1307,
+          "complete_provider_request_bytes": null
+        },
+        "candidate": {
+          "path": "reconciliation-condition.candidate.edit.json",
+          "sha256": "06db3f952fb46ee5d9408daef14ec20f6904e0f373008224040213b4334f6dc9",
+          "schema_sha256": "33ffce3d865c7009c6359cddb38df1fce34a09bd3507b874d3a9f3ef63ea2358",
+          "prompt_bytes": 797,
+          "evidence_bytes": 3143,
+          "schema_bytes": 1418,
+          "complete_provider_request_bytes": null
+        }
+      }
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-description-baseline-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "captured-description.baseline.edit.json"
+    },
+    {
+      "id": "captured-description-candidate-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "captured-description.candidate.edit.json"
+    },
+    {
+      "id": "downstream-loan-baseline-1",
+      "case": "downstream-loan",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "downstream-loan.baseline.edit.json"
+    },
+    {
+      "id": "downstream-loan-candidate-1",
+      "case": "downstream-loan",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "downstream-loan.candidate.edit.json"
+    },
+    {
+      "id": "source-only-extraction-baseline-1",
+      "case": "source-only-extraction",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "source-only-extraction.baseline.edit.json"
+    },
+    {
+      "id": "source-only-extraction-candidate-1",
+      "case": "source-only-extraction",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "source-only-extraction.candidate.edit.json"
+    },
+    {
+      "id": "reconciliation-condition-baseline-1",
+      "case": "reconciliation-condition",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "reconciliation-condition.baseline.edit.json"
+    },
+    {
+      "id": "reconciliation-condition-candidate-1",
+      "case": "reconciliation-condition",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "reconciliation-condition.candidate.edit.json"
+    },
+    {
+      "id": "captured-description-candidate-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "captured-description.candidate.edit.json"
+    },
+    {
+      "id": "captured-description-baseline-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "captured-description.baseline.edit.json"
+    },
+    {
+      "id": "downstream-loan-candidate-2",
+      "case": "downstream-loan",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "downstream-loan.candidate.edit.json"
+    },
+    {
+      "id": "downstream-loan-baseline-2",
+      "case": "downstream-loan",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "downstream-loan.baseline.edit.json"
+    },
+    {
+      "id": "source-only-extraction-candidate-2",
+      "case": "source-only-extraction",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "source-only-extraction.candidate.edit.json"
+    },
+    {
+      "id": "source-only-extraction-baseline-2",
+      "case": "source-only-extraction",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "source-only-extraction.baseline.edit.json"
+    },
+    {
+      "id": "reconciliation-condition-candidate-2",
+      "case": "reconciliation-condition",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "reconciliation-condition.candidate.edit.json"
+    },
+    {
+      "id": "reconciliation-condition-baseline-2",
+      "case": "reconciliation-condition",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "reconciliation-condition.baseline.edit.json"
+    }
+  ]
+}

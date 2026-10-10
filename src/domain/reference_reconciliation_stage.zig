@@ -27,14 +27,14 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
         .roles, .conflicts => |v| v.signals,
         else => &.{},
     };
-    var groups: std.ArrayList(struct { signal_id: r.SignalSelectionId, value: r.ValidatedSignal }) = .empty;
-    for (signal_values, 0..) |signal, i| {
-        if (prior == .roles and !try @import("reference_support.zig").eligibleSelection(prior.roles.prior.dispositions, signal.claim_ids)) continue;
-        const occurrence = (switch (prior) {
-            .roles, .conflicts => |v| v.prior.source.signals.at(i, signal_values.len),
-            else => unreachable,
-        }) catch return error.InvalidReferenceReconciliation;
-        try groups.append(scratch, .{ .signal_id = .{ .ordinal = occurrence.ordinal }, .value = signal });
+    var groups: std.ArrayList(@import("reference_role_assignment.zig").Group) = .empty;
+    const group_source: r.diagnostic.Source = switch (prior) {
+        .roles, .conflicts => |v| v.prior.source,
+        else => .{},
+    };
+    for (try @import("reference_role_assignment.zig").groups(scratch, group_source, signal_values)) |group| {
+        if (prior == .roles and !try @import("reference_support.zig").eligibleSelection(prior.roles.prior.dispositions, group.value.claim_ids)) continue;
+        try groups.append(scratch, group);
     }
     const conflict_groups: []const @import("reference_conflict_groups.zig").Group = switch (prior) {
         .roles, .conflicts => |v| v.prior.proposal.conflict_groups,
@@ -44,7 +44,7 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     const accepted = switch (prior) {
         .dispositions => try json.encode(r.PartitionId, scratch, current.partition.id),
         .signals => |value| try json.encode(@TypeOf(.{ .dispositions = value.dispositions, .signals = value.proposal.signals }), scratch, .{ .dispositions = value.dispositions, .signals = value.proposal.signals }),
-        .roles, .conflicts => |value| try json.encode(@TypeOf(.{ .dispositions = value.prior.dispositions, .signals = groups.items, .conflict_groups = conflict_catalogue }), scratch, .{ .dispositions = value.prior.dispositions, .signals = groups.items, .conflict_groups = conflict_catalogue }),
+        .roles, .conflicts => |value| try json.encode(@import("reference_role_assignment.zig").Facts, scratch, .{ .dispositions = value.prior.dispositions, .signals = groups.items, .conflict_groups = conflict_catalogue }),
     };
     const values = std.json.parseFromSlice(std.json.Value, scratch, accepted, .{}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
     const with_facts = try packets.withJsonContext(a, selected, "accepted", values.value);
@@ -57,30 +57,25 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     if (prior == .signals) return inherited;
     defer packets.release(inherited);
     if (prior == .dispositions) return @import("reference_model_input.zig").withDispositionChoices(a, inherited, current.partition.group.claim_ids, null, true);
-    const schema = @import("model_result_schema.zig");
-    const ids = try scratch.alloc(i64, switch (prior) {
-        .dispositions => unreachable,
-        .roles => groups.items.len,
-        .conflicts => conflict_catalogue.len,
-        .signals => unreachable,
-    });
-    switch (prior) {
-        .dispositions => unreachable,
-        .roles => for (ids, groups.items) |*id, group| {
-            id.* = group.signal_id.ordinal;
-        },
-        .conflicts => for (ids, conflict_catalogue) |*id, group| {
-            id.* = group.group_id.ordinal;
-        },
-        .signals => unreachable,
+    if (prior == .roles) return restrictRolePacket(a, inherited, prior.roles.prior.dispositions, groups.items);
+    const ids = try scratch.alloc(i64, conflict_catalogue.len);
+    for (ids, conflict_catalogue) |*id, group| id.* = group.group_id.ordinal;
+    return packets.withIntegerChoices(a, inherited, &.{.{ .target = .{ .path = &.{ .{ .property = "conflicts" }, .{ .items = {} }, .{ .property = "group_id" } } }, .definition = result.resultDefinition(), .allowed = ids }});
+}
+/// Production and diagnostic replay share the same eligible support projection.
+pub fn restrictRolePacket(a: std.mem.Allocator, base: *const packets.Packet, dispositions: []const r.ClaimDisposition, offered: []const @import("reference_role_assignment.zig").Group) @import("reference_model_input.zig").ReconciliationError!*packets.Packet {
+    var ids: std.ArrayList(i64) = .empty;
+    defer ids.deinit(a);
+    for (offered) |group| if (try @import("reference_support.zig").eligibleSelection(dispositions, group.value.claim_ids)) try ids.append(a, group.signal_id.ordinal);
+    if (ids.items.len == 0) {
+        const schema = @import("model_result_schema.zig");
+        const excluded = try a.alloc(schema.ExcludedVariant, base.excludedVariants().len + 1);
+        defer a.free(excluded);
+        @memcpy(excluded[0..base.excludedVariants().len], base.excludedVariants());
+        excluded[excluded.len - 1] = .{ .kind = "supported" };
+        return packets.withExcludedVariants(a, base, excluded);
     }
-    const choices: []const schema.IntegerChoice = switch (prior) {
-        .dispositions => unreachable,
-        .roles => &.{.{ .target = .{ .path = &.{ .{ .property = "role_assignments" }, .{ .items = {} }, .{ .property = "signal_id" } } }, .definition = result.resultDefinition(), .allowed = ids }},
-        .conflicts => &.{.{ .target = .{ .path = &.{ .{ .property = "conflicts" }, .{ .items = {} }, .{ .property = "group_id" } } }, .definition = result.resultDefinition(), .allowed = ids }},
-        .signals => unreachable,
-    };
-    return packets.withIntegerChoices(a, inherited, choices);
+    return packets.withIntegerChoices(a, base, &.{.{ .target = .{ .tagged = .{ .kind = "supported", .field = "signal_ids" } }, .definition = base.resultDefinition(), .allowed = ids.items }});
 }
 pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet, body: []const u8, origin: @import("model_candidate_origin.zig").Origin) r.Error!r.Parsed {
     const current = input(prior);
@@ -108,7 +103,7 @@ pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet,
             result.phase = if (result.proposal.global.conflicts.len > 0) .signals_with_conflicts else .signals;
         },
         .roles => |v| {
-            result.proposal.global.role_assignments = v.role_assignments;
+            result.proposal.global.role_decisions = v.role_decisions;
             result.phase = if (result.phase == .signals_with_conflicts) .complete else .roles;
         },
         .conflicts => |v| {
@@ -136,7 +131,7 @@ pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet,
     result.source.fields = try fields.toOwnedSlice(a);
     return result;
 }
-pub const Response = union(Stage) { dispositions: @import("reference_conflict_groups.zig").Selection, signals: struct { signals: []const @import("reference_reconciliation_projection.zig").SemanticSignal }, roles: struct { role_assignments: []const r.RoleAssignment }, conflicts: struct { conflicts: []const @import("reference_conflict_groups.zig").Explanation } };
+pub const Response = union(Stage) { dispositions: @import("reference_conflict_groups.zig").Selection, signals: struct { signals: []const @import("reference_reconciliation_projection.zig").SemanticSignal }, roles: struct { role_decisions: r.RoleDecisions }, conflicts: struct { conflicts: []const @import("reference_conflict_groups.zig").Explanation } };
 
 fn definition(stage: Stage) []const u8 {
     return switch (stage) {

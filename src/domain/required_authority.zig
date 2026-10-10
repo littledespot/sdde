@@ -55,7 +55,7 @@ pub fn policy(id: Id) ?Policy {
     };
 }
 
-fn recordField(kind: @import("specification.zig").Kind, slot: Slot) bool {
+pub fn recordField(kind: @import("specification.zig").Kind, slot: Slot) bool {
     const Content = @import("specification.zig").Content(@import("specification.zig").BusinessValue);
     switch (kind) {
         inline else => |tag| inline for (@typeInfo(@FieldType(Content, @tagName(tag))).@"struct".fields) |field| {
@@ -72,6 +72,7 @@ pub const Resolution = union(enum) { existing_authority: Authority, supported_ca
 pub const Finding = enum { supported, ambiguous, conflicting, unsupported, candidate_omission, inconclusive };
 pub const ReviewEvidence = struct {
     loss: ?@import("source_omission.zig").Location = null,
+    loss_comparison: ?@import("source_omission.zig").Comparison = null,
     detail: []const u8,
     question: ?[]const u8 = null,
     provenance: @import("specification.zig").Provenance,

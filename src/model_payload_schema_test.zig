@@ -69,6 +69,104 @@ test "reconciliation repair definitions admit only the natively selected payload
     }
 }
 
+test "loss responses couple localization to producer comparison in the selected schema" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const compiled = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .limited(1_048_576)));
+    const selected = compiled.select(.{ .bytes = "loss" }).?;
+    const comparison =
+        \\{"kind":"source_producer_comparison","source":{"chunk_id":{"bytes":"MOCK-source"},"lines":{"first":2,"last":3}},"producer_loss":"MOCK producer omitted the source condition."}
+    ;
+    for ([_]Case{
+        .{ .bytes = "{\"kind\":\"unlocalized\"}" },
+        .{ .bytes = "{\"kind\":\"candidate\"}" },
+        .{ .bytes = "{}", .rejection = .missing_required_property, .path = "/kind" },
+        .{ .bytes = "{\"kind\":\"candidate\",\"comparison\":null}", .rejection = .unknown_property, .path = "/comparison" },
+        .{ .bytes = "{\"kind\":\"candidate\",\"comparison\":" ++ comparison ++ "}", .rejection = .unknown_property, .path = "/comparison" },
+        .{ .bytes = "{\"kind\":\"candidate\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"}}", .rejection = .unknown_property, .path = "/location" },
+        .{ .bytes = "{\"kind\":\"unlocalized\",\"comparison\":null}", .rejection = .unknown_property, .path = "/comparison" },
+        .{ .bytes = "{\"kind\":\"unlocalized\",\"comparison\":" ++ comparison ++ "}", .rejection = .unknown_property, .path = "/comparison" },
+        .{ .bytes = "{\"kind\":\"unlocalized\",\"location\":{\"kind\":\"unlocalized\"}}", .rejection = .unknown_property, .path = "/location" },
+        .{ .bytes = "{\"location\":{\"kind\":\"unlocalized\"},\"comparison\":null}", .rejection = .missing_required_property, .path = "/kind" },
+        .{ .bytes = "{\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"},\"comparison\":" ++ comparison ++ "}", .rejection = .missing_required_property, .path = "/kind" },
+        .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"}}", .rejection = .missing_required_property, .path = "/comparison" },
+        .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"},\"comparison\":null}", .rejection = .type_mismatch, .path = "/comparison" },
+        .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"unlocalized\"},\"comparison\":" ++ comparison ++ "}", .rejection = .unknown_variant, .path = "/location/kind" },
+        .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"candidate\"},\"comparison\":" ++ comparison ++ "}", .rejection = .unknown_variant, .path = "/location/kind" },
+        .{ .bytes = "{\"kind\":\"localized\",\"comparison\":" ++ comparison ++ "}", .rejection = .missing_required_property, .path = "/location" },
+    }) |case| try checkDocument(selected.modelBytes(), case);
+    for ([_][]const u8{
+        "{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"}",
+        "{\"kind\":\"token_classification\",\"source_id\":1,\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":2}",
+        "{\"kind\":\"reconciliation_signal\",\"ordinal\":1}",
+        "{\"kind\":\"reconciliation_disposition\",\"ordinal\":1}",
+        "{\"kind\":\"reconciliation_conflict\",\"ordinal\":1}",
+    }) |location| try checkDocument(selected.modelBytes(), .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"localized\",\"location\":{s},\"comparison\":{s}}}", .{ location, comparison }) });
+}
+
+test "loss protocol correction preserves the complete selected contract in both response modes" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const compiled = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .limited(1_048_576)));
+    const selected = compiled.select(.{ .bytes = "loss" }).?;
+    var fixture: Fixture = undefined;
+    try fixture.initWithCompiledSchema(selected);
+    defer fixture.deinit();
+    fixture.fake.invocation_plan.complete.content = "{\"kind\":\"unlocalized\",\"comparison\":null}";
+    var response = try fixture.response();
+    defer response.deinit();
+    var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
+    defer captured.deinit();
+    var decoded = try (decoder.Action{}).execute(std.testing.allocator, captured.evidence.result().complete, null);
+    defer decoded.deinit();
+    const diagnostic = validation.validate(decoded.candidate).invalid;
+    try std.testing.expectEqual(validation.Rejection.unknown_property, diagnostic.reason);
+    var retry = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, captured.evidence, .{ .schema = diagnostic }, .unconfirmed, "Correct syntax only.");
+    defer retry.deinit();
+    try std.testing.expect(retry.request.response_schema == selected);
+    for ([_]*const @import("domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest{ fixture.prepared.request, retry.request }) |source| {
+        for (std.enums.values(@import("domain/model_controls.zig").ResponseGuidanceMode)) |mode| {
+            var request = source.*;
+            request.response_guidance_mode = mode;
+            const wire = try std.json.parseFromSlice(std.json.Value, a, try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference), .{});
+            var occurrences: usize = 0;
+            for (wire.value.object.get("messages").?.array.items[0].object.get("content").?.array.items) |part|
+                occurrences += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, selected.modelBytes()));
+            try std.testing.expectEqual(@as(usize, 1), occurrences);
+            try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("response_format"));
+            if (mode == .native_schema) {
+                const shape = wire.value.object.get("response_format").?.object.get("json_schema").?.object.get("schema").?;
+                const choices = shape.object.get("anyOf").?.array.items;
+                try std.testing.expectEqual(@as(usize, 3), choices.len);
+                for (choices) |choice| {
+                    const properties = choice.object.get("properties").?.object;
+                    const tag = properties.get("kind").?.object.get("const").?.string;
+                    try std.testing.expect(!choice.object.get("additionalProperties").?.bool);
+                    if (std.mem.eql(u8, tag, "unlocalized") or std.mem.eql(u8, tag, "candidate")) {
+                        try std.testing.expectEqual(@as(usize, 1), properties.count());
+                        try std.testing.expectEqual(@as(usize, 1), choice.object.get("required").?.array.items.len);
+                    } else {
+                        try std.testing.expectEqualStrings("localized", tag);
+                        try std.testing.expectEqual(@as(usize, 3), properties.count());
+                        try std.testing.expectEqual(@as(usize, 3), choice.object.get("required").?.array.items.len);
+                        try std.testing.expectEqualStrings("object", properties.get("comparison").?.object.get("type").?.string);
+                        const locations = properties.get("location").?.object.get("anyOf").?.array.items;
+                        try std.testing.expectEqual(@as(usize, 5), locations.len);
+                        for (locations) |location| {
+                            const location_kind = location.object.get("properties").?.object.get("kind").?.object.get("const").?.string;
+                            try std.testing.expect(!std.mem.eql(u8, "unlocalized", location_kind) and !std.mem.eql(u8, "candidate", location_kind));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 test "child requirements stay inside selected definitions parts and repair schemas in both modes" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -607,6 +705,17 @@ pub fn checkDocument(contract: []const u8, case: Case) !void {
     var fixture: Fixture = undefined;
     try fixture.initWithSchema(contract);
     defer fixture.deinit();
+    try checkFixture(&fixture, case);
+}
+
+pub fn checkCompiled(contract: *const @import("domain/model_result_schema.zig").Schema, case: Case) !void {
+    var fixture: Fixture = undefined;
+    try fixture.initWithCompiledSchema(contract);
+    defer fixture.deinit();
+    try checkFixture(&fixture, case);
+}
+
+fn checkFixture(fixture: *Fixture, case: Case) !void {
     fixture.fake.invocation_plan = .{ .complete = .{ .content = case.bytes, .input_tokens = 10, .output_tokens = 2 } };
     var response = try fixture.response();
     defer response.deinit();

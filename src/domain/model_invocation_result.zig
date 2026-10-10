@@ -2,6 +2,8 @@ const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const identity = @import("model_request_identity.zig");
 
+pub const Error = std.mem.Allocator.Error || identity.Error || error{InvalidInvocationResult};
+
 pub fn For(comptime kind: provider.ProviderOperationKind) type {
     return struct {
         pub const Outcome = union(enum) {
@@ -32,7 +34,7 @@ pub fn For(comptime kind: provider.ProviderOperationKind) type {
             outcome: ?Outcome = null,
 
             /// Prepared before the call so retaining its result cannot allocate afterward.
-            pub fn init(allocator: std.mem.Allocator, requests: *const identity.ModelRequestIdentityLedger, operation_id: provider.ProviderOperationId) (std.mem.Allocator.Error || identity.Error || error{InvalidInvocationResult})!*Owner {
+            pub fn init(allocator: std.mem.Allocator, requests: *const identity.ModelRequestIdentityLedger, operation_id: provider.ProviderOperationId) Error!*Owner {
                 if (operation_id.kind != kind or operation_id.model_attempt_ordinal.value == 0 or
                     requests.canonicalRequestId(operation_id.model_request_id) != operation_id.model_request_id) return error.InvalidInvocationResult;
                 const retained = try identity.retainLedger(requests);

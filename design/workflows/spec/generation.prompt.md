@@ -1,2 +1,2 @@
-Write each source_assignment field for its purpose using its bound claims and
-original sources. Preserve obligations.
+Write the assigned fields for their supplied purposes and requirements.
+Preserve source conditions and obligations.

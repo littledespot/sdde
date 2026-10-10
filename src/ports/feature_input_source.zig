@@ -4,7 +4,7 @@ const artifacts = @import("../domain/workflow_artifact_registry.zig");
 const directory = @import("../domain/feature_directory.zig");
 const clarification = @import("../domain/clarification_inputs.zig");
 
-pub const Error = std.mem.Allocator.Error || error{FeatureInputUnavailable};
+pub const Error = @import("../domain/operation_error.zig").FeatureInputSource;
 pub const Capturer = struct {
     context: *anyopaque,
     capability: ?*const roots.FeatureInputReadCapability = null,

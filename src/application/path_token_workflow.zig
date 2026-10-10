@@ -24,10 +24,10 @@ pub const Compile = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const current = values.read(&input.step.data, toolchain_values.valid, safety.ValidToolchain) catch return error.OperationExecutionFailed;
+        const current = values.read(&input.step.data, toolchain_values.valid, safety.ValidToolchain) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), current) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), current) catch |operation_error| return operation_error;
         return publish(self.allocator, policy_schema, naming.Compiled, result);
     }
 };
@@ -37,12 +37,12 @@ pub const Build = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const current = values.read(&input.step.data, toolchain_values.valid, safety.ValidToolchain) catch return error.OperationExecutionFailed;
-        const policy = values.read(&input.step.data, policy_schema, naming.Compiled) catch return error.OperationExecutionFailed;
-        const source = values.read(&input.step.data, evidence_values.inputs_schema, evidence.Inputs) catch return error.OperationExecutionFailed;
+        const current = values.read(&input.step.data, toolchain_values.valid, safety.ValidToolchain) catch |operation_error| return operation_error;
+        const policy = values.read(&input.step.data, policy_schema, naming.Compiled) catch |operation_error| return operation_error;
+        const source = values.read(&input.step.data, evidence_values.inputs_schema, evidence.Inputs) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), policy.*, current, source.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), policy.*, current, source.*) catch |operation_error| return operation_error;
         return publish(self.allocator, grammar_schema, grammar.Grammar, result);
     }
 };
@@ -56,9 +56,9 @@ pub const Scan = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const step = input.step;
-        const current = values.read(&step.data, toolchain_values.valid, safety.ValidToolchain) catch return error.OperationExecutionFailed;
-        const compiled = values.read(&step.data, grammar_schema, grammar.Grammar) catch return error.OperationExecutionFailed;
-        const source = values.read(&step.data, evidence_values.inputs_schema, evidence.Inputs) catch return error.OperationExecutionFailed;
+        const current = values.read(&step.data, toolchain_values.valid, safety.ValidToolchain) catch |operation_error| return operation_error;
+        const compiled = values.read(&step.data, grammar_schema, grammar.Grammar) catch |operation_error| return operation_error;
+        const source = values.read(&step.data, evidence_values.inputs_schema, evidence.Inputs) catch |operation_error| return operation_error;
         var text: ?[]const u8 = null;
         for (step.step.parameters) |parameter| {
             if (!std.mem.eql(u8, parameter.id.bytes, "text") or parameter.value != .resource) continue;
@@ -66,10 +66,10 @@ pub const Scan = struct {
                 text = resource.content.data;
             };
         }
-        const result = self.action.execute(self.allocator, compiled.*, current, source.*, text orelse return error.OperationExecutionFailed) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(self.allocator, compiled.*, current, source.*, text orelse return error.OperationExecutionFailed) catch |operation_error| return operation_error;
         errdefer scan.destroy(result);
         var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
-        delta.data_writes[@intFromEnum(scan_schema.key)] = values.adopt(self.allocator, scan_schema, scan.Result, scan.Owner, result, scan.view, scan.destroy, null) catch return error.OperationExecutionFailed;
+        delta.data_writes[@intFromEnum(scan_schema.key)] = values.adopt(self.allocator, scan_schema, scan.Result, scan.Owner, result, scan.view, scan.destroy, null) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
     }
 };

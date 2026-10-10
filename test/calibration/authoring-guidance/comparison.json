@@ -1,0 +1,520 @@
+{
+  "schema": "authoring-guidance-comparison/v1",
+  "label_status": "proposed",
+  "baseline_revision": "2bcd1788d02cee2a533d2897baae0e03352f5033",
+  "capture_build_identity": {
+    "revision": "031b5f44f3f9056aa2ddd0662312800b0049fbfd",
+    "source_sha256": "c3750047fc97bedaeb55485731075c49a8396c4de70e2ddadaf0ce83c79d51c6",
+    "modified": true
+  },
+  "capture": {
+    "feature": "zig-out/e2e-spec/2026-10-09T20-25-01Z-114a71784dee27afd412beda5af561dd/project/specs/hello-world",
+    "run": "RUN-30bf52923e1410d76f70edf8b9c1e06d",
+    "story": {
+      "call": "request-10-inference-1",
+      "context_sha256": "ed7e5aa9f7bb62724d81b0cf96e321ec0a677ea71108e8b39030ddf2df701d6f"
+    },
+    "records": {
+      "call": "request-12-inference-1",
+      "context_sha256": "a3eac734d4d55f0b49d3dc1ba2a9333ee7a9a6b18d41873a1afffd25289ef9fd"
+    }
+  },
+  "model": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0,
+    "response_mode": "native_schema"
+  },
+  "repeats": 2,
+  "maximum_physical_calls": 28,
+  "cases": [
+    {
+      "id": "fragments-captured-story",
+      "contrast": "fragments",
+      "parent": "story",
+      "origin": "captured",
+      "exact_claim_ids": [
+        4
+      ],
+      "sources": [
+        {
+          "id": 1,
+          "sha256": "49cfe66ae6b41493badef2d9001f54cf2b841cf67c780562620122eefba54487"
+        }
+      ],
+      "obligations": [
+        {
+          "id": "obligation-1",
+          "meaning": "The application starts successfully."
+        },
+        {
+          "id": "obligation-2",
+          "meaning": "On startup, the application displays the exact greeting."
+        },
+        {
+          "id": "obligation-3",
+          "meaning": "The application outputs the current date and time in UTC."
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "source_id": 1,
+          "value": "Hello, World!",
+          "meaning": "The greeting displayed on startup. Reuse this same reference for every occurrence in generated fields."
+        }
+      ],
+      "assessment_notes": "Assess story purpose and obligations independently from using typed exact-copy fragments instead of raw literal text.",
+      "schema_sha256": "75de173895b7e163ac12aadf58ed1a0b1803da68307a1645345b482c4244e361",
+      "baseline_edit": "fragments-captured-story.baseline.edit.json",
+      "baseline_edit_sha256": "61d533a18e1fcea9246d02a035aa0146855c2c9836741d8948492709fd94f525",
+      "candidate_edit": "fragments-captured-story.candidate.edit.json",
+      "candidate_edit_sha256": "a265b7ce9c06b17d5211eedb216ff0e73e32f4e8934541be88396d32deb68e8a"
+    },
+    {
+      "id": "fragments-captured-records",
+      "contrast": "fragments",
+      "parent": "records",
+      "origin": "captured",
+      "exact_claim_ids": [
+        4
+      ],
+      "sources": [
+        {
+          "id": 1,
+          "sha256": "49cfe66ae6b41493badef2d9001f54cf2b841cf67c780562620122eefba54487"
+        }
+      ],
+      "obligations": [
+        {
+          "id": "obligation-1",
+          "meaning": "The application starts successfully."
+        },
+        {
+          "id": "obligation-2",
+          "meaning": "On startup, the application displays the exact greeting."
+        },
+        {
+          "id": "obligation-3",
+          "meaning": "The application outputs the current date and time in UTC."
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "source_id": 1,
+          "value": "Hello, World!",
+          "meaning": "The greeting displayed on startup. Reuse this same reference for every occurrence in generated fields."
+        }
+      ],
+      "assessment_notes": "Hold record-purpose and collection guidance at baseline. Measure whether typed references improve without judging placement or collection completeness from schema validity.",
+      "schema_sha256": "64e66637619987c1e4bdeac90e5354e4ff57b175c3f082e1ec9f5e7ac6705884",
+      "baseline_edit": "fragments-captured-records.baseline.edit.json",
+      "baseline_edit_sha256": "1a79f08872ee05108084ea5972c2b822d8f727cd1ae630ae2a3933aaf4aaffc2",
+      "candidate_edit": "fragments-captured-records.candidate.edit.json",
+      "candidate_edit_sha256": "238a9fc310e0be40b3ea2bc7987870bccad3a6a22cadc26f3ed91e830e6780f2"
+    },
+    {
+      "id": "fragments-room-notification",
+      "contrast": "fragments",
+      "parent": "story",
+      "origin": "controlled",
+      "exact_claim_ids": [],
+      "sources": [
+        {
+          "id": 1,
+          "sha256": "7ab266c78eb3eac55c976521a50b8ad5c34182686fc2f8857c37d801ff377b87"
+        }
+      ],
+      "obligations": [
+        {
+          "id": "obligation-1",
+          "meaning": "When measured room temperature exceeds the configured threshold, notify the operator and include the measured temperature."
+        },
+        {
+          "id": "obligation-2",
+          "meaning": "Do not notify the operator when the temperature is at or below the threshold."
+        }
+      ],
+      "literal_expectations": [],
+      "assessment_notes": "Zero exact literals: prose is appropriate. Do not reward fabricated exact references or unnecessary clarification.",
+      "schema_sha256": "3454e1ed6a0b7041175b4238a40c9551cecb2036bc42cc648cc3d0bf4fa568ce",
+      "baseline_edit": "fragments-room-notification.baseline.edit.json",
+      "baseline_edit_sha256": "7bbccb4131171f768a4484c51d9c1368bfa4050a3585ea976593d81894d51273",
+      "candidate_edit": "fragments-room-notification.candidate.edit.json",
+      "candidate_edit_sha256": "b6d95a1de24bf0f8adae6438b9aa2fe2467935a5e8e2924612160b520dd22c62"
+    },
+    {
+      "id": "fragments-panel-status",
+      "contrast": "fragments",
+      "parent": "records",
+      "origin": "controlled",
+      "exact_claim_ids": [
+        4,
+        5,
+        6
+      ],
+      "sources": [
+        {
+          "id": 1,
+          "sha256": "f415a761a77f153278b84b74a3998b82fb468feb776cffbba7aceff1c896f2b6"
+        },
+        {
+          "id": 2,
+          "sha256": "3bde1d7c41f6a07ece6af34065dad3701136ecffc5656b7775e2f30e1480f860"
+        },
+        {
+          "id": 3,
+          "sha256": "29861223117a6275d974239105a660c7a9a85cb44048d6cdecbe881309144d76"
+        }
+      ],
+      "obligations": [
+        {
+          "id": "obligation-1",
+          "meaning": "When the operator selects Check on the left panel, display exactly `Ready` as its successful-check status."
+        },
+        {
+          "id": "obligation-2",
+          "meaning": "When the operator selects Check on the right panel, display exactly `Ready` as its successful-check status."
+        },
+        {
+          "id": "obligation-3",
+          "meaning": "If a check cannot complete, display exactly `Busy` as that panel's status; allow the operator to repeat the check."
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "source_id": 1,
+          "value": "Ready",
+          "meaning": "Left-panel successful-check status."
+        },
+        {
+          "claim_id": 5,
+          "source_id": 2,
+          "value": "Ready",
+          "meaning": "Right-panel successful-check status; identical bytes do not merge this source occurrence with claim 4."
+        },
+        {
+          "claim_id": 6,
+          "source_id": 3,
+          "value": "Busy",
+          "meaning": "Status when either panel check cannot complete."
+        }
+      ],
+      "assessment_notes": "Typed reference identity follows the associated panel/source. Repeated references across AC and FR are legitimate. A literal-only then value can fulfil its purpose when its criterion establishes the panel check and observable status; no prose fragment is required. If occurrence identity cannot be determined from the generated context, mark it unassessable instead of guessing.",
+      "schema_sha256": "c087db392145d5eea0fd5acb9c584965b202b87ba86b70ebaf9ad26cefb9d49b",
+      "baseline_edit": "fragments-panel-status.baseline.edit.json",
+      "baseline_edit_sha256": "0f9cf73b02accd1bb8d92283f1e92ed0d1f29beb3ca2dd1d87bb6f5147c7ac13",
+      "candidate_edit": "fragments-panel-status.candidate.edit.json",
+      "candidate_edit_sha256": "b56abc7fc714487521ebd4999fff5c1b6d9d584245213f31fd669307847b5ceb"
+    },
+    {
+      "id": "purpose-captured-startup",
+      "contrast": "record_purposes",
+      "parent": "records",
+      "origin": "captured",
+      "exact_claim_ids": [
+        4
+      ],
+      "sources": [
+        {
+          "id": 1,
+          "sha256": "49cfe66ae6b41493badef2d9001f54cf2b841cf67c780562620122eefba54487"
+        }
+      ],
+      "obligations": [
+        {
+          "id": "obligation-1",
+          "meaning": "The application starts successfully."
+        },
+        {
+          "id": "obligation-2",
+          "meaning": "On startup, the application displays the exact greeting."
+        },
+        {
+          "id": "obligation-3",
+          "meaning": "The application outputs the current date and time in UTC."
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "source_id": 1,
+          "value": "Hello, World!",
+          "meaning": "The greeting displayed on startup. Reuse this same reference for every occurrence in generated fields."
+        }
+      ],
+      "assessment_notes": "Success must remain an observable startup obligation. A given-only assertion that startup succeeds must not erase that result across the record collection. Hold fragment guidance at baseline.",
+      "schema_sha256": "64e66637619987c1e4bdeac90e5354e4ff57b175c3f082e1ec9f5e7ac6705884",
+      "baseline_edit": "purpose-captured-startup.baseline.edit.json",
+      "baseline_edit_sha256": "1a79f08872ee05108084ea5972c2b822d8f727cd1ae630ae2a3933aaf4aaffc2",
+      "candidate_edit": "purpose-captured-startup.candidate.edit.json",
+      "candidate_edit_sha256": "7e64e2a2933425279a133ae12cca867c2f59c3deda3ffa5e138a33486d36bd07"
+    },
+    {
+      "id": "purpose-buzzer",
+      "contrast": "record_purposes",
+      "parent": "records",
+      "origin": "controlled",
+      "exact_claim_ids": [],
+      "sources": [
+        {
+          "id": 1,
+          "sha256": "e3ed19e939c8449988cd6dd6f2e4e0103d23d5bb416483d51f26b4fa06c53df4"
+        }
+      ],
+      "obligations": [
+        {
+          "id": "obligation-1",
+          "meaning": "While the operator presses the button, the buzzer must sound."
+        },
+        {
+          "id": "obligation-2",
+          "meaning": "Releasing the button must silence the buzzer."
+        }
+      ],
+      "literal_expectations": [],
+      "assessment_notes": "Check both observable sound and silence obligations without inventing setup requirements or assuming the tested result.",
+      "schema_sha256": "b2fcf7202c21e43231db7c8e88464932619ef4c5258eb1fd10dd5056543c3716",
+      "baseline_edit": "purpose-buzzer.baseline.edit.json",
+      "baseline_edit_sha256": "389d38c9e84454ef1ff9d40e8ce4120b1248bee671d64e6297f168abe44b2148",
+      "candidate_edit": "purpose-buzzer.candidate.edit.json",
+      "candidate_edit_sha256": "dd9093b05c1dd09c66ddf631551decb355b7306ceb0f0f14f2575b55251d7e2d"
+    },
+    {
+      "id": "purpose-chamber-cycle",
+      "contrast": "record_purposes",
+      "parent": "records",
+      "origin": "controlled",
+      "exact_claim_ids": [],
+      "sources": [
+        {
+          "id": 1,
+          "sha256": "6c023e975f269265f8903fc1863519cfb2b80ed06b51db90b6b4bd7e35618175"
+        }
+      ],
+      "obligations": [
+        {
+          "id": "obligation-1",
+          "meaning": "On a cleaning request, the controller must close the chamber door and engage its lock."
+        },
+        {
+          "id": "obligation-2",
+          "meaning": "Start the cleaning cycle only while the door is closed and locked."
+        },
+        {
+          "id": "obligation-3",
+          "meaning": "When the cleaning cycle finishes, unlock the door."
+        }
+      ],
+      "literal_expectations": [],
+      "assessment_notes": "Closed and locked is a legitimate prerequisite for starting the cycle, but producing that state is also an assigned obligation that needs an observable result elsewhere in the collection. Do not remove valid prerequisites to avoid all obligation-shaped given fields.",
+      "schema_sha256": "b2fcf7202c21e43231db7c8e88464932619ef4c5258eb1fd10dd5056543c3716",
+      "baseline_edit": "purpose-chamber-cycle.baseline.edit.json",
+      "baseline_edit_sha256": "57d37a0df2ee91541f9742e585b15b8678fb09d447a402c029b4f24e6b63ba75",
+      "candidate_edit": "purpose-chamber-cycle.candidate.edit.json",
+      "candidate_edit_sha256": "ca856403264dc6fb96a5726a00f07faf92a9642afa975ba1df4a06f680234ec9"
+    }
+  ],
+  "trials": [
+    {
+      "id": "fragments-captured-story-baseline-1",
+      "case": "fragments-captured-story",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "fragments-captured-story.baseline.edit.json"
+    },
+    {
+      "id": "fragments-captured-story-candidate-1",
+      "case": "fragments-captured-story",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "fragments-captured-story.candidate.edit.json"
+    },
+    {
+      "id": "fragments-captured-records-baseline-1",
+      "case": "fragments-captured-records",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "fragments-captured-records.baseline.edit.json"
+    },
+    {
+      "id": "fragments-captured-records-candidate-1",
+      "case": "fragments-captured-records",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "fragments-captured-records.candidate.edit.json"
+    },
+    {
+      "id": "fragments-room-notification-baseline-1",
+      "case": "fragments-room-notification",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "fragments-room-notification.baseline.edit.json"
+    },
+    {
+      "id": "fragments-room-notification-candidate-1",
+      "case": "fragments-room-notification",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "fragments-room-notification.candidate.edit.json"
+    },
+    {
+      "id": "fragments-panel-status-baseline-1",
+      "case": "fragments-panel-status",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "fragments-panel-status.baseline.edit.json"
+    },
+    {
+      "id": "fragments-panel-status-candidate-1",
+      "case": "fragments-panel-status",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "fragments-panel-status.candidate.edit.json"
+    },
+    {
+      "id": "purpose-captured-startup-baseline-1",
+      "case": "purpose-captured-startup",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "purpose-captured-startup.baseline.edit.json"
+    },
+    {
+      "id": "purpose-captured-startup-candidate-1",
+      "case": "purpose-captured-startup",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "purpose-captured-startup.candidate.edit.json"
+    },
+    {
+      "id": "purpose-buzzer-baseline-1",
+      "case": "purpose-buzzer",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "purpose-buzzer.baseline.edit.json"
+    },
+    {
+      "id": "purpose-buzzer-candidate-1",
+      "case": "purpose-buzzer",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "purpose-buzzer.candidate.edit.json"
+    },
+    {
+      "id": "purpose-chamber-cycle-baseline-1",
+      "case": "purpose-chamber-cycle",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "purpose-chamber-cycle.baseline.edit.json"
+    },
+    {
+      "id": "purpose-chamber-cycle-candidate-1",
+      "case": "purpose-chamber-cycle",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "purpose-chamber-cycle.candidate.edit.json"
+    },
+    {
+      "id": "fragments-captured-story-candidate-2",
+      "case": "fragments-captured-story",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "fragments-captured-story.candidate.edit.json"
+    },
+    {
+      "id": "fragments-captured-story-baseline-2",
+      "case": "fragments-captured-story",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "fragments-captured-story.baseline.edit.json"
+    },
+    {
+      "id": "fragments-captured-records-candidate-2",
+      "case": "fragments-captured-records",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "fragments-captured-records.candidate.edit.json"
+    },
+    {
+      "id": "fragments-captured-records-baseline-2",
+      "case": "fragments-captured-records",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "fragments-captured-records.baseline.edit.json"
+    },
+    {
+      "id": "fragments-room-notification-candidate-2",
+      "case": "fragments-room-notification",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "fragments-room-notification.candidate.edit.json"
+    },
+    {
+      "id": "fragments-room-notification-baseline-2",
+      "case": "fragments-room-notification",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "fragments-room-notification.baseline.edit.json"
+    },
+    {
+      "id": "fragments-panel-status-candidate-2",
+      "case": "fragments-panel-status",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "fragments-panel-status.candidate.edit.json"
+    },
+    {
+      "id": "fragments-panel-status-baseline-2",
+      "case": "fragments-panel-status",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "fragments-panel-status.baseline.edit.json"
+    },
+    {
+      "id": "purpose-captured-startup-candidate-2",
+      "case": "purpose-captured-startup",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "purpose-captured-startup.candidate.edit.json"
+    },
+    {
+      "id": "purpose-captured-startup-baseline-2",
+      "case": "purpose-captured-startup",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "purpose-captured-startup.baseline.edit.json"
+    },
+    {
+      "id": "purpose-buzzer-candidate-2",
+      "case": "purpose-buzzer",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "purpose-buzzer.candidate.edit.json"
+    },
+    {
+      "id": "purpose-buzzer-baseline-2",
+      "case": "purpose-buzzer",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "purpose-buzzer.baseline.edit.json"
+    },
+    {
+      "id": "purpose-chamber-cycle-candidate-2",
+      "case": "purpose-chamber-cycle",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "purpose-chamber-cycle.candidate.edit.json"
+    },
+    {
+      "id": "purpose-chamber-cycle-baseline-2",
+      "case": "purpose-chamber-cycle",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "purpose-chamber-cycle.baseline.edit.json"
+    }
+  ]
+}

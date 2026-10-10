@@ -38,6 +38,20 @@ pub fn recordField(inputs: authority.Inputs, id: authority.Id) authority.Error!?
     return error.InvalidRequiredAuthority;
 }
 
+/// Collection membership shared by review subjects and their evidence lens.
+/// This selects existing records; it establishes neither requiredness nor support.
+pub fn collectionFamily(slot: authority.Slot) ?spec.Kind {
+    return switch (slot) {
+        .acceptance_criteria => .acceptance_criterion,
+        .functional_requirements => .functional_requirement,
+        else => null,
+    };
+}
+pub fn collectionContains(slot: authority.Slot, kind: spec.Kind) authority.Error!bool {
+    if (slot == .scenario_coverage) return kind == .acceptance_criterion or kind == .edge_case or kind == .user_visible_outcome;
+    return kind == (collectionFamily(slot) orelse return error.InvalidRequiredAuthority);
+}
+
 pub fn project(allocator: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, references: reference.Accounted, content: ?spec.IdentifiedContent, brief: ?spec.Brief) authority.Error!authority.Inputs {
     return projectRecords(allocator, feature, @import("reference_support.zig").records(references), content, brief);
 }
@@ -53,16 +67,13 @@ pub fn projectRecords(allocator: std.mem.Allocator, feature: @import("feature_id
             .requiredness = .{ .schema = .specification },
             .input_authorities = sources,
         });
+        // Schema family floors are distinct from collection membership: scenario
+        // coverage selects several families but adds no record-family floor.
         // Missing mandatory families are an engine-observed gap. A model's
         // positive review cannot authorize an empty successful specification.
         if (content) |candidate| {
-            const kind: ?spec.Kind = switch (slot) {
-                .acceptance_criteria => .acceptance_criterion,
-                .functional_requirements => .functional_requirement,
-                else => null,
-            };
-            if (kind) |required| {
-                if (!spec.hasRecords(candidate, required)) try gaps.append(allocator, .{ .requirement = seeds.items[seeds.items.len - 1].id, .reason = .missing, .subject = .candidate });
+            if (collectionFamily(slot)) |required| {
+                if (spec.requiresRecords(required) and !spec.hasRecords(candidate, required)) try gaps.append(allocator, .{ .requirement = seeds.items[seeds.items.len - 1].id, .reason = .missing, .subject = .candidate });
             }
         }
     }

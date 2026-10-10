@@ -1,5 +1,48 @@
 const std = @import("std");
 
+test "unit test import trees cannot discover integration scenarios" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var pending: std.ArrayList([]const u8) = .empty;
+    var visited: std.StringHashMap(void) = .init(allocator);
+    const project_root = try std.Io.Dir.cwd().realPathFileAlloc(std.testing.io, ".", allocator);
+    for ([_][]const u8{ "tests.zig", "src/root.zig", "src/main.zig" }) |root| {
+        try pending.append(allocator, try std.fs.path.resolve(allocator, &.{ project_root, root }));
+    }
+    while (pending.pop()) |path| {
+        if ((try visited.getOrPut(path)).found_existing) continue;
+        try validateUnitImportPath(path);
+        const source = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, allocator, .limited(1024 * 1024));
+        var tokens = std.zig.Tokenizer.init(try allocator.dupeZ(u8, source));
+        while (true) {
+            const token = tokens.next();
+            if (token.tag == .eof) break;
+            if (token.tag != .builtin or !std.mem.eql(u8, source[token.loc.start..token.loc.end], "@import")) continue;
+            try std.testing.expectEqual(.l_paren, tokens.next().tag);
+            const literal = tokens.next();
+            try std.testing.expectEqual(.string_literal, literal.tag);
+            const imported = try std.zig.string_literal.parseAlloc(allocator, source[literal.loc.start..literal.loc.end]);
+            if (!std.mem.endsWith(u8, imported, ".zig")) continue;
+            try pending.append(allocator, try std.fs.path.resolve(allocator, &.{ std.fs.path.dirname(path).?, imported }));
+        }
+    }
+}
+
+fn validateUnitImportPath(path: []const u8) !void {
+    if (std.mem.indexOf(u8, path, "/test/integration/") != null or
+        std.mem.indexOf(u8, path, "/test/harness/integration/") != null or
+        std.mem.endsWith(u8, path, "/integration.zig")) return error.IntegrationTestImport;
+}
+
+test "unit import routing accepts internal tests and rejects each integration root" {
+    try validateUnitImportPath("/repo/src/workflow_execution_test.zig");
+    try validateUnitImportPath("/repo/test/harness/tests.zig");
+    try std.testing.expectError(error.IntegrationTestImport, validateUnitImportPath("/repo/test/integration/workflow_tests.zig"));
+    try std.testing.expectError(error.IntegrationTestImport, validateUnitImportPath("/repo/test/harness/integration/tests.zig"));
+    try std.testing.expectError(error.IntegrationTestImport, validateUnitImportPath("/repo/integration.zig"));
+}
+
 test "production sources exclude internal evaluation tooling and test environment configuration" {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
@@ -386,11 +429,13 @@ test "provider catalogue and repository allowlist have one immutable authority e
     try expectAbsent(registry, "anyopaque");
 
     const allowlist_fields = @typeInfo(repository_model_allowlist.Entry).@"struct".fields;
-    try std.testing.expectEqual(@as(usize, 3), allowlist_fields.len);
+    try std.testing.expectEqual(@as(usize, 4), allowlist_fields.len);
     try std.testing.expectEqualStrings("slot_id", allowlist_fields[0].name);
     try std.testing.expect(allowlist_fields[0].type == @import("domain/llm_provider_identity.zig").ModelSlotId);
     try std.testing.expectEqualStrings("registry_entry_id", allowlist_fields[1].name);
     try std.testing.expectEqualStrings("reasoning_effort", allowlist_fields[2].name);
+    try std.testing.expectEqualStrings("controls", allowlist_fields[3].name);
+    try std.testing.expect(allowlist_fields[3].type == @import("domain/model_controls.zig").InferenceControls);
     try std.testing.expect(allowlist_fields[1].type == llm_provider_registry.RegistryEntryId);
 
     const allowlist = @embedFile("domain/repository_model_allowlist.zig");

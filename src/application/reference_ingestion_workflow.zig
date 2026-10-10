@@ -18,10 +18,10 @@ pub const Inventory = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const directory = values.read(&input.step.data, @import("reference_workflow_values.zig").directory, @import("../domain/reference_selector.zig").Directory) catch return error.OperationExecutionFailed;
+        const directory = values.read(&input.step.data, @import("reference_workflow_values.zig").directory, @import("../domain/reference_selector.zig").Directory) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), directory.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), directory.*) catch |operation_error| return operation_error;
         return publish(self.allocator, raw_schema, reference.RawInventory, result);
     }
 };
@@ -31,10 +31,10 @@ pub const ValidateInventory = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const raw = values.read(&input.step.data, raw_schema, reference.RawInventory) catch return error.OperationExecutionFailed;
+        const raw = values.read(&input.step.data, raw_schema, reference.RawInventory) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), raw.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), raw.*) catch |operation_error| return operation_error;
         return publish(self.allocator, inventory_schema, reference.Inventory, result);
     }
 };
@@ -44,10 +44,10 @@ pub const Capture = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const inventory = values.read(&input.step.data, inventory_schema, reference.Inventory) catch return error.OperationExecutionFailed;
+        const inventory = values.read(&input.step.data, inventory_schema, reference.Inventory) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), inventory.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), inventory.*) catch |operation_error| return operation_error;
         return publish(self.allocator, captured_schema, reference.CapturedCorpus, result);
     }
 };
@@ -57,10 +57,10 @@ pub const Decode = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const captured = values.read(&input.step.data, captured_schema, reference.CapturedCorpus) catch return error.OperationExecutionFailed;
+        const captured = values.read(&input.step.data, captured_schema, reference.CapturedCorpus) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), captured.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), captured.*) catch |operation_error| return operation_error;
         return publish(self.allocator, decoded_schema, reference.DecodedCorpus, result);
     }
 };
@@ -70,10 +70,10 @@ pub const ValidateAccounting = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const decoded = values.read(&input.step.data, decoded_schema, reference.DecodedCorpus) catch return error.OperationExecutionFailed;
+        const decoded = values.read(&input.step.data, decoded_schema, reference.DecodedCorpus) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), decoded.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), decoded.*) catch |operation_error| return operation_error;
         return publish(self.allocator, inputs_schema, reference.Inputs, result);
     }
 };

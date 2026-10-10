@@ -19,12 +19,12 @@ pub const Project = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const authority = @import("required_authority_values.zig");
-        const content = authority.read(&input.step.data, @import("required_authority_workflow.zig").content_schema, .content) catch return error.OperationExecutionFailed;
-        const support = authority.read(&input.step.data, @import("required_authority_workflow.zig").inputs_schema, .inputs) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const content = authority.read(&input.step.data, @import("required_authority_workflow.zig").content_schema, .content) catch |operation_error| return operation_error;
+        const support = authority.read(&input.step.data, @import("required_authority_workflow.zig").inputs_schema, .inputs) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .document = self.action.execute(owner.arena.allocator(), try @import("specification_workflow.zig").readContext(&input.step.data), content, support) catch return error.OperationExecutionFailed };
-        return owned.publish(self.allocator, document_schema, owner, .ok) catch error.OperationExecutionFailed;
+        owner.payload = .{ .document = self.action.execute(owner.arena.allocator(), try @import("specification_workflow.zig").readContext(&input.step.data), content, support) catch |operation_error| return operation_error };
+        return owned.publish(self.allocator, document_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };
 pub const Render = struct {
@@ -33,11 +33,11 @@ pub const Render = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const document = owned.read(&input.step.data, document_schema, .document) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const document = owned.read(&input.step.data, document_schema, .document) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .rendered = self.action.execute(owner.arena.allocator(), document) catch return error.OperationExecutionFailed };
-        return owned.publish(self.allocator, rendered_schema, owner, .ok) catch error.OperationExecutionFailed;
+        owner.payload = .{ .rendered = self.action.execute(owner.arena.allocator(), document) catch |operation_error| return operation_error };
+        return owned.publish(self.allocator, rendered_schema, owner, .ok) catch |operation_error| operation_error;
     }
 };
 pub const Validate = struct {
@@ -46,11 +46,11 @@ pub const Validate = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const document = owned.read(&input.step.data, document_schema, .document) catch return error.OperationExecutionFailed;
-        const bytes = owned.read(&input.step.data, rendered_schema, .rendered) catch return error.OperationExecutionFailed;
+        const document = owned.read(&input.step.data, document_schema, .document) catch |operation_error| return operation_error;
+        const bytes = owned.read(&input.step.data, rendered_schema, .rendered) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        self.action.execute(arena.allocator(), document, bytes) catch return error.OperationExecutionFailed;
+        self.action.execute(arena.allocator(), document, bytes) catch |operation_error| return operation_error;
         return @import("workflow_candidate.zig").publish(self.allocator, validated_schema, bool, true);
     }
 };

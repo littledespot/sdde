@@ -17,10 +17,10 @@ pub const Normalize = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const source = values.read(&input.step.data, @import("specify_invocation_values.zig").invocation, @import("../domain/specify_invocation.zig").Invocation) catch return error.OperationExecutionFailed;
+        const source = values.read(&input.step.data, @import("specify_invocation_values.zig").invocation, @import("../domain/specify_invocation.zig").Invocation) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), source.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), source.*) catch |operation_error| return operation_error;
         return publish(self.allocator, normalized, feature.NormalizedCandidate, result);
     }
 };
@@ -31,10 +31,10 @@ pub const Validate = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const candidate = values.read(&input.step.data, normalized, feature.NormalizedCandidate) catch return error.OperationExecutionFailed;
+        const candidate = values.read(&input.step.data, normalized, feature.NormalizedCandidate) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), candidate.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), candidate.*) catch |operation_error| return operation_error;
         return publish(self.allocator, selector, feature.Selector, result);
     }
 };
@@ -45,10 +45,10 @@ pub const Inspect = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const candidate = values.read(&input.step.data, selector, feature.Selector) catch return error.OperationExecutionFailed;
+        const candidate = values.read(&input.step.data, selector, feature.Selector) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), candidate.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), candidate.*) catch |operation_error| return operation_error;
         return publish(self.allocator, directory, feature.Directory, result);
     }
 };

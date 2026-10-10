@@ -20,7 +20,8 @@ publication. Successful correction may continue to a validated clarification pau
 The [§12.8.1 corrective admission contract](../contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
 defines which findings can establish that pause. Unresolved candidate or review
 failure cannot become `needs_user` merely because another valid question exists.
-That enforcement is implementation work tracked in FIX_002, not a delivered result.
+Historical enforcement work is recorded in [FIX_002](../../fixes/archive/FIX_002.md);
+[FIX01](../../fixes/FIX01.md) tracks current implementation and acceptance gaps.
 
 A clarification pause publishes the complete registered set: incomplete `spec.md`,
 current `reference-context.md`, clarification registry/forms, and a canonical

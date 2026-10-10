@@ -71,11 +71,25 @@ derives mechanically available producer locations from captured sources and
 reference records; packet guidance and the existing schema restrictions reuse
 those facts. Availability does not establish a semantic defect or grant repair
 authority. Localization has its own producer-comparison assignment, without a
-support-assessment instruction. It cannot reopen the fixed finding and may report
-`unlocalized` when the alleged meaning survives. A localized producer supplies its
-exact diagnostic claims, including the one discarded claim of a disposition,
-independently of positive field provenance. Collection and persisted review
-readback enforce the same rule.
+support-assessment instruction. It supplies resolved candidate business values,
+numbered source lines and each producer alongside its actual output. Only eligible
+producers carry selectable locations; other outputs remain supporting evidence.
+It cannot reopen the fixed finding. `candidate` attributes the defect to the
+generated subject while meaning survives upstream; `unlocalized` leaves ownership
+unresolved. Candidate attribution requires current subject-bound claim evidence,
+but those mechanical joins do not prove semantic survival. A localized producer
+supplies its exact diagnostic claims, including the one discarded claim of a disposition,
+independently of positive field provenance. A localized answer must also supply
+captured source lines and an explanation of the selected producer's loss. The
+existing source-selection validator resolves those lines; loss admission verifies
+the source/producer association and retains the comparison with the finding.
+Initial collection, correction, repair authorization and persisted review readback
+enforce the same evidence contract. A location alone cannot authorize upstream
+repair. Valid source coordinates do not prove the explanation's semantic truth.
+The `candidate` and `unlocalized` answers carry no upstream comparison and use the
+existing candidate-local repair or failure path. Neither authorizes upstream
+rebuilding. Candidate repair also rejects an explicitly upstream-localized finding.
+This adds no reviewer, verdict reassessment, retry allowance or repair permission.
 
 ### 22.2 Repair classification
 
@@ -139,6 +153,18 @@ extends identical-evidence redundancy; it grants no evidence reassignment or
 semantic inference. Bind the original diagnostic, old value, revision and complete
 dependencies; retain surviving values/origins and rerun normal full validation.
 No proof means no deletion. Existing retry and token accounting remain unchanged.
+
+**Approved summary-coverage amendment (10 October 2026):** the
+[§16.4 summary contract](16-reference-ingestion.md#164-semantic-extraction-flow) validates
+coverage by membership union and permits overlapping statements. Its exact-duplicate
+normalization produces a validated summary projection before canonical identities;
+it does not mutate the raw repair candidate or widen atomic authorization. Retain
+the original-to-surviving occurrence map, producer origins, raw old values, revision,
+dependency snapshots, active receipts and retry identity. Every raw entry must pass
+its own validation before projection, and repairs re-run union coverage and the
+same normalization. A new array position is never a new repair allowance. Existing
+redundant-projection deletion keeps its separate authorization and proof; overlap
+alone authorizes neither deletion nor coupled replacement.
 
 **Approved conditional-membership amendment (25 September 2026, FIX_002 §31):**
 The specification session's existing entity decision may authorize replacement of
@@ -224,10 +250,10 @@ Keep the rejected value once when
 its containing field adds no other content; retain record siblings when needed for meaning.
 This does not grant new repair targets, semantic reassessment or additional retries.
 
-Specification generation and native unit repair reuse the unit's configured purpose
-prompt (§17.3); repair must not substitute a generic instruction that drops the
-field's semantic purpose. The selected replacement schema and authorization still
-limit writable content. Recover original source meaning within that scope while
+Specification generation uses the unit's configured authoring prompt (§17.3).
+Native unit repair uses the configured repair prompt and the field's semantic
+purpose from its authorized task. The selected replacement schema and authorization
+still limit writable content. Recover original source meaning within that scope while
 preserving correct surrounding content. Mechanical repair acceptance does not prove
 semantic recovery; full coverage and the existing semantic review remain mandatory.
 
@@ -251,7 +277,7 @@ index, rejected chunk/line field and value, using the existing selection for all
 IDs and the captured span for inclusive line bounds. These same facts reach repair
 and reports; they are not a second persisted authority. JSON/schema correction (§22.6) does not replace
 native evidence repair. The diagnostic and optional repeat-feedback work in
-[FIX_002 §25](../../fixes/FIX_002.md#25-principle-citation-conformance--architecture-review)
+[FIX_002 §25](../../fixes/archive/FIX_002.md#25-principle-citation-conformance--architecture-review)
 is not authority to change retry limits, reconsider verdicts or persist new policy.
 
 Example:
@@ -431,7 +457,7 @@ or selecting additional diagnostics. Reuse the existing required-field projectio
 All other §22.6 behavior remains unchanged, including complete-response correction,
 schema/native validation, request ownership, accounting and terminal rejection.
 The [feasibility trace](../reference-notes/model-request-guidance.md#nested-correction-feasibility)
-and [Chunk 18 plan](../../fixes/IMP_001.md#focused-226-decision--child-object-requirements)
+and [historical Chunk 18 plan](../../fixes/archive/IMP_001.md#focused-226-decision--child-object-requirements)
 record evidence, limits and required verification. This amendment grants no new
 repair capability and does not claim improved model compliance.
 
@@ -480,7 +506,7 @@ user clarifications, transport failures, invalid associations or runner failures
 eligible for protocol correction. Existing authorization, full validation, retry
 identities/limits, token accounting and terminal no-publication rules remain in
 force. See [request-level tests](28-testing.md#284-model-fault-injection-tests) and
-the [R45 implementation plan](../../fixes/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance).
+the [historical R45 implementation plan](../../fixes/archive/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance).
 Improved model compliance still requires separately approved live measurement.
 
 ### 22.7 Repair retry limit and escalation

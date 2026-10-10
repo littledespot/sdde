@@ -293,3 +293,21 @@ fn dependentRequest(epoch: @import("domain/execution_reference.zig").Ref) @impor
         .request_ordinal = .{ .value = 1 },
     };
 }
+
+test "native repair digests keep numeric array wire shape for UTF8 and binary bytes" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const json = @import("domain/canonical_json.zig");
+    const strict = @import("domain/strict_json.zig");
+    for ([_]u8{ 0, 'a', 255 }) |byte| {
+        const permit_value: retry.Permit = .{ .key = .{ .scope = @splat(byte), .target = @splat(byte), .family = @splat(byte) }, .authorization = @splat(byte), .revision = 2, .maximum_targets = 3 };
+        const bytes = try json.encode(retry.Permit, a, permit_value);
+        try std.testing.expectEqualDeep(permit_value, try strict.decode(retry.Permit, a, bytes, .{ .maximum_depth = 8 }));
+        const Snapshot = @import("domain/atomic_repair.zig").Snapshot;
+        const stamp: Snapshot = .{ .bytes = @splat(byte) };
+        try std.testing.expectEqualDeep(stamp, try strict.decode(Snapshot, a, try json.encode(Snapshot, a, stamp), .{ .maximum_depth = 8 }));
+    }
+    const wrong = "{\"bytes\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}";
+    try std.testing.expectError(error.InvalidJsonDocument, strict.decode(@import("domain/atomic_repair.zig").Snapshot, a, wrong, .{ .maximum_depth = 8 }));
+}

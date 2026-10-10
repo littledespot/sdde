@@ -3,12 +3,7 @@ const data = @import("../domain/pipeline_data.zig");
 const pipeline = @import("../domain/pipeline.zig");
 const execution_reference = @import("../domain/execution_reference.zig");
 
-pub const Error = std.mem.Allocator.Error || error{
-    InvalidDataSchema,
-    DataSchemaMismatch,
-    DataValueLimitExceeded,
-    MissingRequiredData,
-};
+pub const Error = data.ValueError;
 
 const Owned = struct {
     references: usize = 1,

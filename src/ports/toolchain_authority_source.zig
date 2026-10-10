@@ -2,7 +2,7 @@ const std = @import("std");
 const roots = @import("../domain/bootstrap_root_registry.zig");
 const toolchain = @import("../domain/toolchain.zig");
 
-pub const Error = error{InvalidToolchainSource};
+pub const Error = @import("../domain/operation_error.zig").ToolchainAuthoritySource;
 pub const ProjectCapturer = struct {
     context: *anyopaque,
     capability: ?*const roots.ConfiguredBaseRootCapability = null,

@@ -1,7 +1,11 @@
-Keep fixed_review unchanged. Select from available_loss_locations. Check the
-alleged loss against original sources and captured extraction, dispositions and
-signals. Select the first defective producer
-supported by captured outputs. Poorly authored fields do not establish extraction
-loss. Use unlocalized when meaning survives these producers or no unique defect
-is established. For extraction_claim, bytes selects a chunk ID; never insert
-already extracted meaning. Do not draft a replacement.
+Locate the omission in fixed_review; do not reassess that finding. Compare the
+missing meaning with loss_sources, producers[].output and the resolved subject.
+Only a producer with a non-null location can be selected for upstream loss;
+other producer outputs are supporting evidence only.
+Return candidate when the evidence shows the meaning survived through the upstream
+outputs and is missing only from the candidate. Return localized only for an
+established upstream defect: copy that producer's location, cite its source lines,
+and explain what its output lost in
+comparison.producer_loss. A defect in the candidate is not evidence of loss at
+an upstream producer. Eligible locations and matching IDs do not prove loss.
+Return unlocalized when the supplied evidence cannot establish the owner.

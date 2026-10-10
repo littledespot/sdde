@@ -7,6 +7,6 @@ pub const Action = struct {
     pub fn execute(_: Action, allocator: std.mem.Allocator, current: session.Session, packet: *const @import("../../domain/model_input_packet.zig").Packet, body: []const u8, origin: @import("../../domain/model_candidate_origin.zig").Origin) session.Error!@import("../../domain/specification_candidate.zig").Raw {
         const expected = try session.owner(allocator, current);
         if (!identity.unitOwnerEql(expected, packet.unit()) or packet.purpose() != .initial_generation) return error.InvalidSpecificationUnit;
-        return .{ .body = try allocator.dupe(u8, body), .origin = origin };
+        return .{ .body = @import("../../domain/model_candidate_json.zig").constructBound(allocator, body, packet.integerChoices()) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit, .origin = origin };
     }
 };

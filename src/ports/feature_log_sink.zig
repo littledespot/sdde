@@ -2,15 +2,7 @@ const std = @import("std");
 const log_binding = @import("../domain/feature_log_binding.zig");
 const log_stream = @import("../domain/feature_log_stream.zig");
 
-pub const Error = error{
-    LockUnavailable,
-    InvalidBinding,
-    CorruptStream,
-    SegmentLimitExhausted,
-    SinkFailure,
-    FlushFailure,
-    ReleaseFailure,
-};
+pub const Error = @import("../domain/operation_error.zig").FeatureLogSink;
 
 pub const LockAcquirer = struct {
     context: *anyopaque,

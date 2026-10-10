@@ -23,8 +23,8 @@ pub fn Retire(comptime retirement: transport.Retirement) type {
         pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!@import("../domain/workflow_execution.zig").Candidate {
             const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
             const result = try payload.readCurrent(&input.step.data);
-            const ledger = @import("pipeline_values.zig").read(&input.step.data, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
-            return .{ .outcome = .ok, .delta = context.?.action.execute(ledger, request.id(), payload.status(result)) catch return error.OperationExecutionFailed };
+            const ledger = @import("pipeline_values.zig").read(&input.step.data, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger) catch |operation_error| return operation_error;
+            return .{ .outcome = .ok, .delta = context.?.action.execute(ledger, request.id(), payload.status(result)) catch |operation_error| return operation_error };
         }
     };
 }

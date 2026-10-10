@@ -12,28 +12,33 @@ pub fn validateCount(call: validation.Call, candidate: *const execution.Candidat
     const observed = values.read(&.{ .slots = candidate.delta.data_writes }, invocation.count_schema, counted.Result) catch return .authority;
     if (!observed.operationId().eql(call.operation_id)) return .authority;
     const outcome = observed.outcome() orelse return .authority;
-    if (outcome.* == .allocation_failed) return .{ .operation_failed = error.OperationExecutionFailed };
+    if (outcome.* == .allocation_failed) return .{ .operation_failed = error.OutOfMemory };
     if (outcome.* == .logging_blocked_before_send) return .{ .logging = .LOG_SINK_FAILURE };
     return if (candidate.outcome == invocation.countStatus(outcome.*)) null else .authority;
 }
 
 /// Accounting is unconditional after a call, before runtime/delta publication
 /// checks. Content validation and workflow transitions remain separate steps.
-pub fn reconcile(accounting: *token_runner.Runner, revision: tokens.Revision, call: validation.Call, candidate: ?*const execution.Candidate) ?execution.Rejection {
+pub const InvocationResult = union(enum) { candidate: *const execution.Candidate, failed: execution.OperationError };
+
+pub fn reconcile(accounting: *token_runner.Runner, revision: tokens.Revision, call: validation.Call, observed: InvocationResult) ?execution.Rejection {
     var resolution: tokens.Reconciliation = .unavailable;
-    const rejection = classify(call, candidate, &resolution);
+    const rejection = classify(call, observed, &resolution);
     accounting.reconcile(revision, call.operation_id, resolution) catch |err| switch (err) {
         // Preserve the original failure/cancellation. This ledger state blocks
         // the next call without fabricating zero usage for an unknown delivery.
         error.ProviderTokenUsageUnavailable => {},
         error.WorkflowTokenBudgetExceeded => return .{ .token_budget = error.WorkflowTokenBudgetExceeded },
-        else => return .{ .operation_failed = error.OperationExecutionFailed },
+        else => return .{ .operation_failed = err },
     };
     return rejection;
 }
 
-fn classify(call: validation.Call, candidate: ?*const execution.Candidate, resolution: *tokens.Reconciliation) ?execution.Rejection {
-    const value = candidate orelse return .{ .operation_failed = error.OperationExecutionFailed };
+fn classify(call: validation.Call, result_value: InvocationResult, resolution: *tokens.Reconciliation) ?execution.Rejection {
+    const value = switch (result_value) {
+        .candidate => |value| value,
+        .failed => |cause| return .{ .operation_failed = cause },
+    };
     const observed = values.read(&.{ .slots = value.delta.data_writes }, invocation.schema, result.Result) catch return .authority;
     if (!observed.operationId().eql(call.operation_id)) return .authority;
     const outcome = observed.outcome() orelse return .authority;
@@ -47,7 +52,7 @@ fn classify(call: validation.Call, candidate: ?*const execution.Candidate, resol
             }
         },
         .cancelled => {},
-        .allocation_failed => return .{ .operation_failed = error.OperationExecutionFailed },
+        .allocation_failed => return .{ .operation_failed = error.OutOfMemory },
         .logging_blocked_before_send => {
             resolution.* = .not_sent;
             return .{ .logging = .LOG_SINK_FAILURE };

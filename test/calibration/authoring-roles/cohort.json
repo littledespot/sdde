@@ -1,0 +1,449 @@
+{
+  "schema": "role-calibration/v1",
+  "label_status": "reviewed",
+  "reviewer": "Project user, approved 2026-10-09",
+  "cases": [
+    {
+      "id": "utc-clock",
+      "family": "clock",
+      "split": "development",
+      "input": {
+        "controlled": [
+          {
+            "text": "On startup the application must display `Ready!` and the current date and time in UTC.\n",
+            "kind": "business"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Behavior supports feature authoring and an entity applicability decision of not_applicable. The copied greeting alone supports none of these roles."
+    },
+    {
+      "id": "loan-renewal",
+      "family": "library",
+      "split": "development",
+      "input": {
+        "controlled": [
+          {
+            "text": "A member can renew an eligible loan. The renewal extends the loan due date and displays confirmation to the member.\n",
+            "kind": "business"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Behavior supports all roles and requires member and loan concepts; this label concerns role selection, not the generated entity verdict."
+    },
+    {
+      "id": "runtime-context",
+      "family": "runtime-platform",
+      "split": "development",
+      "input": {
+        "controlled": [
+          {
+            "text": "The implementation environment is TypeScript on Node.js.\n",
+            "kind": "technical"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "description",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "primary_goal",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "primary_user_story",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "entity_basis",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "records",
+          "required": false,
+          "allowed_signal_ids": []
+        }
+      ],
+      "rationale": "An implementation environment supplies no intended product behavior. Leave all feature-authoring roles unsupported rather than inventing a feature from the platform."
+    },
+    {
+      "id": "countdown",
+      "family": "timer",
+      "split": "held_out",
+      "input": {
+        "controlled": [
+          {
+            "text": "A user starts a countdown. The application must sound an alert when the countdown reaches zero. No business data is stored or related.\n",
+            "kind": "business"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Behavior supports all roles, including entity applicability of not_applicable; a displayed or transient value alone is not a business entity."
+    },
+    {
+      "id": "stock-transfer",
+      "family": "warehouse",
+      "split": "held_out",
+      "input": {
+        "controlled": [
+          {
+            "text": "A warehouse operator transfers a stock item from one location to another. The system records the quantity against that item and the source and destination locations.\n",
+            "kind": "business"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Behavior supports all roles and requires item and location relationships."
+    },
+    {
+      "id": "literal-only",
+      "family": "branding",
+      "split": "held_out",
+      "input": {
+        "controlled": [
+          {
+            "text": "`Quasar`\n",
+            "kind": null
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "description",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "primary_goal",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "primary_user_story",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "entity_basis",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "records",
+          "required": false,
+          "allowed_signal_ids": []
+        }
+      ],
+      "rationale": "An isolated copied string has no actor, behavior or scope. It must not acquire authoring roles."
+    },
+    {
+      "id": "notification-ambiguity",
+      "family": "notifications",
+      "split": "held_out",
+      "input": {
+        "controlled": [
+          {
+            "text": "An operator can request a notification. It may be transient or associated with a stored notification record; that choice is unspecified.\n",
+            "kind": "business"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": false,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Feature intent and records are supported. Entity applicability is genuinely underdetermined: assigning its source-backed basis or leaving that role unassigned are both tolerated in this proposed pilot."
+    }
+  ]
+}

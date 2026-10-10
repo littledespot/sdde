@@ -91,6 +91,7 @@ pub const CompiledStep = struct {
     gates: []const @import("workflow_gate.zig").Contract,
     capabilities: []const []const u8,
     retry_authority: ?workflow_retry.CompiledAuthority,
+    iteration: ?@import("workflow_iteration.zig").Descriptor = null,
     // Compiler-proven immutable model-binding requirements, including for pure
     // preparation steps without a provider-call capability.
     model: ?@import("workflow_model.zig").Requirements = null,

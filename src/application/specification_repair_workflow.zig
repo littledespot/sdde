@@ -19,13 +19,13 @@ pub const Authorize = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const rejection = owned.read(&input.step.data, spec.checked_schema, .unit_rejected) catch return error.OperationExecutionFailed;
-        const candidate = owned.read(&input.step.data, spec.parsed_schema, .parsed) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const rejection = owned.read(&input.step.data, spec.checked_schema, .unit_rejected) catch |operation_error| return operation_error;
+        const candidate = owned.read(&input.step.data, spec.parsed_schema, .parsed) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const authorized = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), candidate, rejection) catch |err| return reject(self.allocator, authorization_schema, owner, err);
         owner.payload = .{ .repair_authorization = .{ .authorization = authorized } };
-        var result = owned.publish(self.allocator, authorization_schema, owner, if (authorized.operation == .delete) .more else .ok) catch return error.OperationExecutionFailed;
+        var result = owned.publish(self.allocator, authorization_schema, owner, if (authorized.operation == .delete) .more else .ok) catch |operation_error| return operation_error;
         result.delta.repair_transition = .{ .authorized = authorized.retry orelse return error.OperationExecutionFailed };
         return result;
     }
@@ -36,8 +36,8 @@ pub const BuildInput = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch return error.OperationExecutionFailed;
-        const packet = self.action.execute(self.allocator, try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), state.authorization) catch return error.OperationExecutionFailed;
+        const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
+        const packet = self.action.execute(self.allocator, try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), state.authorization) catch |operation_error| return operation_error;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
     }
 };
@@ -47,14 +47,14 @@ pub const Parse = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch return error.OperationExecutionFailed;
-        const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
+        const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const source = try @import("model_candidate_handoff.zig").read(&input.step.data);
-        owner.payload = .{ .repair_authorization = .{ .authorization = state.authorization, .response = .{ .value = self.action.execute(owner.arena.allocator(), state.authorization, packet, source.body) catch return error.OperationExecutionFailed, .origin = source.origin } } };
+        owner.payload = .{ .repair_authorization = .{ .authorization = state.authorization, .response = .{ .value = self.action.execute(owner.arena.allocator(), state.authorization, packet, source.body) catch |operation_error| return operation_error, .origin = source.origin } } };
         var delta: pipeline.NodeDelta = .{};
-        delta.data_replacements[@intFromEnum(authorization_schema.key)] = values.adopt(self.allocator, authorization_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
+        delta.data_replacements[@intFromEnum(authorization_schema.key)] = values.adopt(self.allocator, authorization_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
     }
 };
@@ -67,20 +67,21 @@ pub const Merge = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch return error.OperationExecutionFailed;
-        const candidate = owned.read(&input.step.data, spec.parsed_schema, .parsed) catch return error.OperationExecutionFailed;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const state = owned.read(&input.step.data, authorization_schema, .repair_authorization) catch |operation_error| return operation_error;
+        const candidate = owned.read(&input.step.data, spec.parsed_schema, .parsed) catch |operation_error| return operation_error;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .parsed = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), candidate, state.authorization, if (state.response) |response| response.value else null, if (state.response) |response| response.origin else null) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .parsed = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), candidate, state.authorization, if (state.response) |response| response.value else null, if (state.response) |response| response.origin else null) catch |operation_error| return operation_error };
         var delta: pipeline.NodeDelta = .{};
-        delta.data_replacements[@intFromEnum(spec.parsed_schema.key)] = values.adopt(self.allocator, spec.parsed_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
+        delta.data_replacements[@intFromEnum(spec.parsed_schema.key)] = values.adopt(self.allocator, spec.parsed_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
         delta.repair_transition = .{ .merged = .{ .permit = state.authorization.retry orelse return error.OperationExecutionFailed, .revision_after = owner.payload.parsed.revision } };
         return .{ .outcome = .ok, .delta = delta };
     }
 };
 fn reject(allocator: std.mem.Allocator, schema: data.Schema, owner: *owned.Owner, err: repair.Error) operations.Error!execution.Candidate {
-    if (err == error.OutOfMemory) return error.OperationExecutionFailed;
+    if (err == error.OutOfMemory) return error.OutOfMemory;
+    owner.rejection = err;
     owner.payload = .rejected;
-    return owned.publish(allocator, schema, owner, if (err == error.UnsafeSpecificationRepair) .blocked else .invalid) catch error.OperationExecutionFailed;
+    return owned.publish(allocator, schema, owner, if (err == error.UnsafeSpecificationRepair) .blocked else .invalid) catch |operation_error| operation_error;
 }

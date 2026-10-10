@@ -1,3 +1,3 @@
-Group supported meaning from assignment.claim_ids. Cover retained semantic
-claims not already covered by accepted signals; do not repeat accepted signals.
-Native code adds nonconflicting token signals.
+Group related claims of the same semantic category into signals. Each signal's
+content must preserve the supported meaning of its selected claims, including
+conditions, triggers and obligation strength. Do not add unsupported behavior.

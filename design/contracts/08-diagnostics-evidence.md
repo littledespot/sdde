@@ -42,8 +42,8 @@ Diagnostics are sorted deterministically by stage, artifact, location, validator
 Evidence is separate from diagnostics. It records facts such as a decoded source location, a successfully parsed AST, a passing command, or a successfully published output set. A checklist or task status is derived from evidence and cannot be set by the LLM.
 
 Source-omission authorization retains its typed rejection alongside the existing
-review findings and origins. `unlocalized_omission` means the review identifies no
-defective producer, so no safe repair target can be authorized;
+review findings and origins. `unlocalized_omission` means the review establishes no
+defective upstream producer, so no upstream repair target can be authorized;
 `invalid_repair_authority` identifies other rejected authority preconditions.
 Reports explain why no repair call occurred; the runner records the same cause.
 These diagnostics neither revise semantic verdicts nor grant repair authority.

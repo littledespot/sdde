@@ -24,25 +24,25 @@ pub const Terminate = struct {
         const self = context.?;
         const facts = try readCurrent(&input.step.data);
         const request = try requests.readCurrent(&input.step.data, requests.prepared_schema);
-        const current = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+        const current = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         const operation_ledger = input.step.model_request_lifecycle orelse return error.OperationExecutionFailed;
-        const owner = self.action.execute(current, operation_ledger, current.revision(), request.id(), facts.expected_status, .{ .terminal = facts.reason }) catch return error.OperationExecutionFailed;
+        const owner = self.action.execute(current, operation_ledger, current.revision(), request.id(), facts.expected_status, .{ .terminal = facts.reason }) catch |operation_error| return operation_error;
         errdefer identity.deinitOwner(owner);
         var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
-        delta.data_replacements[@intFromEnum(requests.ledger_schema.key)] = requests.adoptLedger(self.allocator, owner) catch return error.OperationExecutionFailed;
+        delta.data_replacements[@intFromEnum(requests.ledger_schema.key)] = requests.adoptLedger(self.allocator, owner) catch |operation_error| return operation_error;
         return .{ .outcome = facts.outcome, .delta = delta };
     }
 };
 
 pub fn readCurrent(view: *const @import("../domain/pipeline_data.zig").View) operations.Error!selection.Closure {
     const request = try requests.readCurrent(view, requests.prepared_schema);
-    const current = values.read(view, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+    const current = values.read(view, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
     const record = current.record(request.id()) orelse return error.OperationExecutionFailed;
     if (record.status == .terminal) return error.OperationExecutionFailed;
-    const terminal = values.read(view, @import("workflow_model_accounting.zig").terminal_schema, lifecycle.TerminalOperation) catch return error.OperationExecutionFailed;
+    const terminal = values.read(view, @import("workflow_model_accounting.zig").terminal_schema, lifecycle.TerminalOperation) catch |operation_error| return operation_error;
     if (terminal.record().id.model_request_id != request.id()) return error.OperationExecutionFailed;
-    const source = values.read(view, @import("provider_authorization_workflow.zig").schema, @import("../domain/provider_authorization_result.zig").Result) catch return error.OperationExecutionFailed;
-    const outcome = @import("workflow_provider_authorization.zig").validateTerminal(source, terminal.record()) catch return error.OperationExecutionFailed;
+    const source = values.read(view, @import("provider_authorization_workflow.zig").schema, @import("../domain/provider_authorization_result.zig").Result) catch |operation_error| return operation_error;
+    const outcome = @import("workflow_provider_authorization.zig").validateTerminal(source, terminal.record()) catch |operation_error| return operation_error;
     return .{
         .expected_status = record.status,
         .reason = switch (outcome) {

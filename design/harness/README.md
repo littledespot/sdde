@@ -71,9 +71,9 @@ calibration and broader acceptance remain open. **Reviewed:** 2026-09-15 (docume
 | Full-workflow harness | Real configured generation, publication identity checks, live grading and failure reports. | H-017 broader live/rerun/failure evidence; see retained run results. |
 
 - Historical runs failed before publication and grading.
-- The [FIX_001 analysis](../../fixes/FIX_001.md) retains their dated findings; the
-  [active rollout](../../fixes/IMP_001.md) records completed offline fixes and
-  remaining work.
+- [FIX01](../../fixes/FIX01.md) tracks current corrective work and remaining
+  acceptance; [earlier records](../../fixes/README.md) retain dated findings and
+  implementation evidence.
 - No successful scored live baseline is claimed.
 
 - Mechanical tests establish the harness contracts.

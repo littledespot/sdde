@@ -23,11 +23,13 @@ test "reconciliation rejects the observed native union response and accepts the 
     try candidateCase("reconciliation", "summary", "{\"statements\":[{\"local_key\":1,\"claim_ids\":[1],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"Display the greeting.\"]}}}]}", .unknown_property, "/statements/0/local_key");
 }
 
-test "reconciliation roles have a separate closed native-handle assignment" {
-    try checkCandidate("reconciliation", "roles_assignment", "{\"role_assignments\":[{\"signal_id\":1,\"generation_roles\":[\"title\",\"records\"]}]}");
-    try candidateSchemaCase("reconciliation", "roles_assignment", "{\"role_assignments\":[{\"signal_id\":1,\"generation_roles\":[]}]}", .array_length, "/role_assignments/0/generation_roles");
-    try candidateSchemaCase("reconciliation", "roles_assignment", "{\"role_assignments\":[{\"signal_id\":1,\"generation_roles\":[\"unknown\"]}]}", .enum_mismatch, "/role_assignments/0/generation_roles/0");
-    try candidateCase("reconciliation", "roles_assignment", "{\"role_assignments\":[{\"signal_id\":1,\"claim_ids\":[1],\"generation_roles\":[\"records\"]}]}", .unknown_property, "/role_assignments/0/claim_ids");
+test "reconciliation roles require a complete closed decision table" {
+    const good =
+        \\{"role_decisions":{"title":{"kind":"supported","signal_ids":[1]},"description":{"kind":"unsupported"},"primary_goal":{"kind":"unsupported"},"primary_user_story":{"kind":"unsupported"},"entity_basis":{"kind":"unsupported"},"records":{"kind":"supported","signal_ids":[1]}}}
+    ;
+    try checkCandidate("reconciliation", "roles_assignment", good);
+    try candidateCase("reconciliation", "roles_assignment", "{\"role_assignments\":[]}", .unknown_property, "/role_assignments");
+    try candidateCase("reconciliation", "roles_assignment", "{\"role_decisions\":{}}", .missing_required_property, "/role_decisions/title");
 }
 
 test "compact model JSON keeps sibling objects intact and round trips native unions" {
@@ -348,6 +350,7 @@ test "focused review evidence shapes follow native minima without excluding sour
 test "loss attribution wire variants stay closed across initial review insertion and replacement" {
     const locations = .{
         "{\"kind\":\"unlocalized\"}",
+        "{\"kind\":\"candidate\"}",
         "{\"kind\":\"extraction_claim\",\"bytes\":\"chunk-7\"}",
         "{\"kind\":\"token_classification\",\"source_id\":7,\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}",
         "{\"kind\":\"reconciliation_signal\",\"ordinal\":7}",
@@ -356,11 +359,17 @@ test "loss attribution wire variants stay closed across initial review insertion
     };
     try std.testing.expectEqual(@typeInfo(@import("domain/source_omission.zig").Location).@"union".fields.len, locations.len);
     inline for (locations) |location| {
-        try checkCandidate("support", "loss", location);
+        const comparison = "{\"kind\":\"source_producer_comparison\",\"source\":{\"chunk_id\":{\"bytes\":\"chunk-7\"},\"lines\":{\"first\":1,\"last\":1}},\"producer_loss\":\"MOCK The producer omitted this source obligation.\"}";
+        const wire = if (comptime std.mem.eql(u8, location, "{\"kind\":\"unlocalized\"}") or std.mem.eql(u8, location, "{\"kind\":\"candidate\"}")) location else "{\"kind\":\"localized\",\"location\":" ++ location ++ ",\"comparison\":" ++ comparison ++ "}";
+        try checkCandidate("support", "loss", wire);
         const value = "{\"kind\":\"candidate_omission\",\"loss\":" ++ location ++ ",\"source_ids\":[" ++ response_wire.id ++ "],\"detail\":\"Preserve the deadline.\"}";
         inline for (.{ "finding", "applicability_finding" }) |selection| try candidateCase("support", selection, value, .unknown_property, "/loss");
     }
-    try candidateCase("support", "loss", "{\"kind\":\"unlocalized\",\"value\":null}", .unknown_property, "/value");
+    try candidateCase("support", "loss", "{\"kind\":\"unlocalized\",\"comparison\":null}", .unknown_property, "/comparison");
+    try candidateCase("support", "loss", "{\"kind\":\"candidate\",\"comparison\":null}", .unknown_property, "/comparison");
+    try candidateCase("support", "loss", "{\"kind\":\"candidate\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-chunk\"}}", .unknown_property, "/location");
+    try candidateCase("support", "loss", "{\"location\":{\"kind\":\"unlocalized\"},\"comparison\":null}", .missing_required_property, "/kind");
+    try candidateCase("support", "loss", "{\"kind\":\"localized\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"chunk-7\"}}", .missing_required_property, "/comparison");
     try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"Preserve the deadline.\"}");
 }
 
@@ -434,7 +443,7 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         return nativeWire(@import("domain/specification_generation.zig").ModelResponse, a, bytes);
     } else if (comptime selection != null) {
         const selected = selection.?;
-        if (comptime std.mem.eql(u8, selected, "loss")) return nativeWire(@import("domain/source_omission.zig").Location, a, bytes);
+        if (comptime std.mem.eql(u8, selected, "loss")) return nativeWire(@import("domain/source_omission.zig").Assessment, a, bytes);
         const model = @import("domain/specification_support_model.zig");
         if (comptime std.mem.eql(u8, selected, "finding") or std.mem.eql(u8, selected, "applicability_finding")) return nativeWire(model.Value, a, bytes);
         if (comptime std.mem.eql(u8, selected, "selection")) return nativeWire(model.Selection, a, bytes);
@@ -589,4 +598,49 @@ fn compactRoundTrip(allocator: std.mem.Allocator) !void {
         "{\"value\":{\"kind\":\"choice\",\"id\":9.5}}",     "{\"value\":{\"kind\":\"choice\",\"id\":65536}}",
         "{\"value\":false}",                                "{\"value\":[],\"extra\":0}",
     }) |bad| try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Value, a, bad));
+}
+
+test "native singleton fields reconstruct by bound occurrence without changing raw responses" {
+    try nativeSingletonFields(std.testing.allocator);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, nativeSingletonFields, .{});
+}
+fn nativeSingletonFields(allocator: std.mem.Allocator) !void {
+    const choices = [_]@import("domain/model_result_schema.zig").IntegerChoice{.{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = &.{41}, .singleton = .construct }};
+    const raw = "{\"value\":[\"MOCK surrounding narrative \",{\"kind\":\"exact_copy\"},\" and \",{\"kind\":\"exact_copy\"}]}";
+    const complete = try codec.constructBound(allocator, raw, &choices);
+    defer allocator.free(complete);
+    try std.testing.expectEqualStrings("{\"value\":[\"MOCK surrounding narrative \",{\"kind\":\"exact_copy\",\"claim_id\":41},\" and \",{\"kind\":\"exact_copy\",\"claim_id\":41}]}", complete);
+    try std.testing.expect(std.mem.indexOf(u8, raw, "claim_id") == null);
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const parsed = try codec.decode(@import("domain/specification.zig").BusinessValue, arena.allocator(), complete);
+    try std.testing.expectEqual(@as(u32, 41), parsed.segments[1].exact_copy.claim_id.ordinal);
+    try std.testing.expectEqual(@as(u32, 41), parsed.segments[3].exact_copy.claim_id.ordinal);
+    for ([_][]const u8{
+        "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":41}]}",
+        "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":42}]}",
+    }) |echo| {
+        if (codec.constructBound(allocator, echo, &choices)) |unexpected| {
+            allocator.free(unexpected);
+            return error.TestUnexpectedSuccess;
+        } else |err| {
+            if (err == error.OutOfMemory) return err;
+            try std.testing.expectEqual(error.InvalidJsonDocument, err);
+        }
+    }
+    var different = choices;
+    different[0].allowed = &.{42};
+    const alternate = try codec.constructBound(allocator, raw, &different);
+    defer allocator.free(alternate);
+    try std.testing.expect(std.mem.indexOf(u8, alternate, "\"claim_id\":42") != null);
+    different[0].allowed = &.{ 41, 42 };
+    const undecided = try codec.constructBound(allocator, raw, &different);
+    defer allocator.free(undecided);
+    try std.testing.expectEqualStrings(raw, undecided);
+    if (codec.decode(@import("domain/specification.zig").BusinessValue, arena.allocator(), undecided)) |_| {
+        return error.TestUnexpectedSuccess;
+    } else |err| {
+        if (err == error.OutOfMemory) return err;
+        try std.testing.expectEqual(error.InvalidJsonDocument, err);
+    }
 }

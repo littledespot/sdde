@@ -478,3 +478,37 @@ test "native composition normalizes nested numeric values through the shared clo
         try std.testing.expectError(error.InvalidAssembledCandidate, initial.retainNative(a, binding, invalid));
     }
 }
+
+test "composition reconstructs native singleton choices while retaining the original admitted response" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var adapter: schema_adapter.Adapter = .{};
+    const canonical = try adapter.compiler().compile(a,
+        \\{"type":"object","properties":{"value":{"type":"object","properties":{"kind":{"const":"selected"},"occurrence":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","occurrence"],"additionalProperties":false}},"required":["value"],"additionalProperties":false}
+    );
+    const plan = try adapter.compiler().compileComposition(a, config, canonical);
+    const choices = [_]@import("domain/model_result_schema.zig").IntegerChoice{.{ .target = .{ .tagged = .{ .kind = "selected", .field = "occurrence" } }, .allowed = &.{53}, .singleton = .construct }};
+    const selected = try @import("domain/model_result_schema.zig").restrict(std.testing.allocator, try plan.selectSchema(0, &.{}), &.{}, &choices);
+    defer selected.release();
+    var fixture: Fixture = undefined;
+    try fixture.initWithCompiledSchema(selected.selected());
+    defer fixture.deinit();
+    const id = fixture.base.model_request_id;
+    const base = try packets.create(std.testing.allocator, "{}", id.immutable_unit_owner_id, id.purpose, null);
+    defer packets.release(base);
+    const packet = try packets.withRestrictions(std.testing.allocator, base, &.{}, &choices);
+    defer packets.release(packet);
+    const initial = try runtime.State.init(a, plan, packet, id.stage_run_epoch_id);
+    const binding = try initial.select(a, 0);
+    var answer = try Attempt.accept(&fixture, "{\"value\":{\"kind\":\"selected\"}}");
+    defer answer.deinit();
+    const retained = try initial.retain(a, binding, answer.proof(), answer.producer, fixture.base.requests.ledger().?);
+    const repeated = try retained.retain(a, binding, answer.proof(), answer.producer, fixture.base.requests.ledger().?);
+    try std.testing.expect(repeated.entries.ptr == retained.entries.ptr);
+    const assembled = try repeated.assemble(a);
+    try std.testing.expect(assembled.validate() == null);
+    try std.testing.expectEqualStrings("{\"value\":{\"kind\":\"selected\",\"occurrence\":53}}", assembled.body);
+    try std.testing.expectEqualStrings("{\"value\":{\"kind\":\"selected\"}}", answer.proof().candidate().content());
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationLifecycle, .{ plan, packet, answer.proof(), answer.producer, fixture.base.requests.ledger().? });
+}

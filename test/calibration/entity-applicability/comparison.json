@@ -1,0 +1,412 @@
+{
+  "schema": "entity-applicability-comparison/v1",
+  "label_status": "proposed",
+  "baseline_revision": "031b5f44f3f9056aa2ddd0662312800b0049fbfd",
+  "capture_build_identity": {
+    "revision": "35ded131928ecc0a7b55c92fe5d714f5db99405f",
+    "source_sha256": "a8cb33756412b4c195f3da4b0de64774d4d9d4207560d83dde06d84230044c05",
+    "modified": true
+  },
+  "capture": {
+    "feature": "zig-out/e2e-spec/2026-10-09T08-54-06Z-0efdbc7422d397f5c8192fe26ef96323/project/specs/hello-world",
+    "run": "RUN-691a3d3ff4f423a600ab5c122c19d115",
+    "authoring": {
+      "call": "request-11-inference-1",
+      "context_sha256": "31d1afc1d6c0feb569495c49ca315237a172e91da4f33f5ba1ba89b027b30039"
+    },
+    "review": {
+      "call": "request-26-inference-1",
+      "context_sha256": "461a25905dd40b3e9e5cfe1f7c579c64d586a387590efa9e19d939a97fe57e54"
+    }
+  },
+  "model": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0,
+    "response_mode": "native_schema"
+  },
+  "repeats": 2,
+  "maximum_physical_calls": 32,
+  "cases": [
+    {
+      "id": "captured-startup",
+      "phase": "authoring",
+      "origin": "captured",
+      "exact_claim_ids": [
+        4
+      ],
+      "source_sha256": "49cfe66ae6b41493badef2d9001f54cf2b841cf67c780562620122eefba54487",
+      "expectation": {
+        "decision": "not_applicable",
+        "basis": "Explain that successful startup, displaying a greeting and outputting current UTC time require behavior but no business entities or relationships; those behaviors remain required.",
+        "review_finding": null,
+        "review_defect": null
+      },
+      "schema_sha256": "cb40792da136e3f07e6210a81bd311027ec8fc3c974fa533c88f249433296d45",
+      "baseline_edit": "captured-startup.baseline.edit.json",
+      "baseline_edit_sha256": "32bc6844732ef34b8548378c9962933083e5878447401388bf65da47b5ca5ccd",
+      "candidate_edit": "captured-startup.candidate.edit.json",
+      "candidate_edit_sha256": "37eab5a4dfea5fc3efe66e5cffe2b6fc0ccc08accf8a49918a199357b1190fbd"
+    },
+    {
+      "id": "room-display",
+      "phase": "authoring",
+      "origin": "controlled",
+      "exact_claim_ids": [],
+      "source_sha256": "b28afb2c08f5d9767a0e844fabf7ca968416c7519ddabbeebbeeb1159f7fc17c",
+      "expectation": {
+        "decision": "not_applicable",
+        "basis": "Explain that reading and displaying a current sensor value does not itself require a managed business entity or relationship.",
+        "review_finding": null,
+        "review_defect": null
+      },
+      "schema_sha256": "e72d79362211b726c618a17ba6733b7cfb2cf4f727355f087345ca890380d401",
+      "baseline_edit": "room-display.baseline.edit.json",
+      "baseline_edit_sha256": "1f75b29fe13ffc5cab83789287da66e50b12bd9bd051362679a566a9629e1452",
+      "candidate_edit": "room-display.candidate.edit.json",
+      "candidate_edit_sha256": "e3882fe712f7a56bb0db627742ace4a4535661d014ed15698acc165746820c6b"
+    },
+    {
+      "id": "equipment-register",
+      "phase": "authoring",
+      "origin": "controlled",
+      "exact_claim_ids": [],
+      "source_sha256": "732b73168f8984f6595edcd67507d2ff1b2dc7ae5f1865695ea8a0614dca56e8",
+      "expectation": {
+        "decision": "required",
+        "basis": "Identify equipment as a business entity because it has persistent identity and attributes and can be updated and retrieved.",
+        "review_finding": null,
+        "review_defect": null
+      },
+      "schema_sha256": "e72d79362211b726c618a17ba6733b7cfb2cf4f727355f087345ca890380d401",
+      "baseline_edit": "equipment-register.baseline.edit.json",
+      "baseline_edit_sha256": "67f2fc3bb49e92881a6807c94c3188f033b7076383180feb579614caf542f6d3",
+      "candidate_edit": "equipment-register.candidate.edit.json",
+      "candidate_edit_sha256": "d9e4c0508ae13fc6f06cd9b2c5fcdd6f8baa7ad01c4bd779bbf23d5fe53c3717"
+    },
+    {
+      "id": "course-enrolment",
+      "phase": "authoring",
+      "origin": "controlled",
+      "exact_claim_ids": [],
+      "source_sha256": "38fee3dd31fe9dcd72678cc7469c85b36a8673ceb1ded4c7b0eccb7a18312b20",
+      "expectation": {
+        "decision": "required",
+        "basis": "Explain that identified learners and courses and their many-to-many enrolment relationship are necessary for the required assignment, lookup and removal behavior.",
+        "review_finding": null,
+        "review_defect": null
+      },
+      "schema_sha256": "e72d79362211b726c618a17ba6733b7cfb2cf4f727355f087345ca890380d401",
+      "baseline_edit": "course-enrolment.baseline.edit.json",
+      "baseline_edit_sha256": "7b8323b1e95ee9ef4df0dc125d7467287e309c6119ccb281dd82e90246930484",
+      "candidate_edit": "course-enrolment.candidate.edit.json",
+      "candidate_edit_sha256": "ad79f6176775402bdd93befc0da01cb4f23595b511415bdbe1a08dfb38567939"
+    },
+    {
+      "id": "parking-decision",
+      "phase": "authoring",
+      "origin": "controlled",
+      "exact_claim_ids": [],
+      "source_sha256": "3cb3bbd9182ae3be5673e3fb41bd6d00f1762c870bc592ea8546594f2f291ccd",
+      "expectation": {
+        "decision": "clarification",
+        "basis": "Ask the unresolved aggregate-display versus individually identified vehicle-and-space tracking choice and explain why it determines entity applicability. Do not invent either requirement.",
+        "review_finding": null,
+        "review_defect": null
+      },
+      "schema_sha256": "e72d79362211b726c618a17ba6733b7cfb2cf4f727355f087345ca890380d401",
+      "baseline_edit": "parking-decision.baseline.edit.json",
+      "baseline_edit_sha256": "6ffe1c82c1ed15c5ee3ab84699478becef97dbf9c38133b22ef48bcfd1e30c8a",
+      "candidate_edit": "parking-decision.candidate.edit.json",
+      "candidate_edit_sha256": "fe11f734fe2fe91c04d97340dacdff0827eb202d769ce56e944f5049bae06b67"
+    },
+    {
+      "id": "review-good",
+      "phase": "review",
+      "origin": "controlled",
+      "exact_claim_ids": [
+        4
+      ],
+      "source_sha256": "49cfe66ae6b41493badef2d9001f54cf2b841cf67c780562620122eefba54487",
+      "expectation": {
+        "decision": "not_applicable",
+        "basis": "The startup, greeting and UTC requirements remain represented in the surrounding specification. Assess the entity decision separately from whether its explanation supports it.",
+        "review_finding": "supported",
+        "review_defect": "none"
+      },
+      "schema_sha256": "aff2e262fe798757d107a4bf07f07f42b6ad2d3cd163edc4c97c81bc0e851040",
+      "baseline_edit": "review-good.baseline.edit.json",
+      "baseline_edit_sha256": "cf5a9cca35231324337b7460fcae2920bf73f464e319a7fbf3201165b4c49408",
+      "candidate_edit": "review-good.candidate.edit.json",
+      "candidate_edit_sha256": "62613298ccacf4c7a3f99293521c0859cd6213eddfd6097ee5ba2d8e48a28b54"
+    },
+    {
+      "id": "review-irrelevant",
+      "phase": "review",
+      "origin": "captured",
+      "exact_claim_ids": [
+        4
+      ],
+      "source_sha256": "49cfe66ae6b41493badef2d9001f54cf2b841cf67c780562620122eefba54487",
+      "expectation": {
+        "decision": "not_applicable",
+        "basis": "The startup, greeting and UTC requirements remain represented in the surrounding specification. Assess the entity decision separately from whether its explanation supports it.",
+        "review_finding": "candidate_omission",
+        "review_defect": "basis"
+      },
+      "schema_sha256": "aff2e262fe798757d107a4bf07f07f42b6ad2d3cd163edc4c97c81bc0e851040",
+      "baseline_edit": "review-irrelevant.baseline.edit.json",
+      "baseline_edit_sha256": "57db94b1cb5631f4e39618fb799a2a5f9f82669e8aba710436ba48ad288ed93d",
+      "candidate_edit": "review-irrelevant.candidate.edit.json",
+      "candidate_edit_sha256": "0864c58825132d29852e1e645a9afd563f851a0d31a9c3ee7f33552aaf623ee8"
+    },
+    {
+      "id": "review-wrong",
+      "phase": "review",
+      "origin": "controlled",
+      "exact_claim_ids": [
+        4
+      ],
+      "source_sha256": "49cfe66ae6b41493badef2d9001f54cf2b841cf67c780562620122eefba54487",
+      "expectation": {
+        "decision": "not_applicable",
+        "basis": "The startup, greeting and UTC requirements remain represented in the surrounding specification. Assess the entity decision separately from whether its explanation supports it.",
+        "review_finding": "candidate_omission",
+        "review_defect": "decision"
+      },
+      "schema_sha256": "aff2e262fe798757d107a4bf07f07f42b6ad2d3cd163edc4c97c81bc0e851040",
+      "baseline_edit": "review-wrong.baseline.edit.json",
+      "baseline_edit_sha256": "acfb6895dfb9d8534c7a79f6908a2250f76d22a3a091fde906f37257c27d61d4",
+      "candidate_edit": "review-wrong.candidate.edit.json",
+      "candidate_edit_sha256": "017494a571b1a1e5d26f5d19f88bc2cc8b08b8a5fc685969a549902d6a595af0"
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-startup-baseline-1",
+      "case": "captured-startup",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "captured-startup.baseline.edit.json"
+    },
+    {
+      "id": "captured-startup-candidate-1",
+      "case": "captured-startup",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "captured-startup.candidate.edit.json"
+    },
+    {
+      "id": "room-display-baseline-1",
+      "case": "room-display",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "room-display.baseline.edit.json"
+    },
+    {
+      "id": "room-display-candidate-1",
+      "case": "room-display",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "room-display.candidate.edit.json"
+    },
+    {
+      "id": "equipment-register-baseline-1",
+      "case": "equipment-register",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "equipment-register.baseline.edit.json"
+    },
+    {
+      "id": "equipment-register-candidate-1",
+      "case": "equipment-register",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "equipment-register.candidate.edit.json"
+    },
+    {
+      "id": "course-enrolment-baseline-1",
+      "case": "course-enrolment",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "course-enrolment.baseline.edit.json"
+    },
+    {
+      "id": "course-enrolment-candidate-1",
+      "case": "course-enrolment",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "course-enrolment.candidate.edit.json"
+    },
+    {
+      "id": "parking-decision-baseline-1",
+      "case": "parking-decision",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "parking-decision.baseline.edit.json"
+    },
+    {
+      "id": "parking-decision-candidate-1",
+      "case": "parking-decision",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "parking-decision.candidate.edit.json"
+    },
+    {
+      "id": "review-good-baseline-1",
+      "case": "review-good",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "review-good.baseline.edit.json"
+    },
+    {
+      "id": "review-good-candidate-1",
+      "case": "review-good",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "review-good.candidate.edit.json"
+    },
+    {
+      "id": "review-irrelevant-baseline-1",
+      "case": "review-irrelevant",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "review-irrelevant.baseline.edit.json"
+    },
+    {
+      "id": "review-irrelevant-candidate-1",
+      "case": "review-irrelevant",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "review-irrelevant.candidate.edit.json"
+    },
+    {
+      "id": "review-wrong-baseline-1",
+      "case": "review-wrong",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "review-wrong.baseline.edit.json"
+    },
+    {
+      "id": "review-wrong-candidate-1",
+      "case": "review-wrong",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "review-wrong.candidate.edit.json"
+    },
+    {
+      "id": "captured-startup-candidate-2",
+      "case": "captured-startup",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "captured-startup.candidate.edit.json"
+    },
+    {
+      "id": "captured-startup-baseline-2",
+      "case": "captured-startup",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "captured-startup.baseline.edit.json"
+    },
+    {
+      "id": "room-display-candidate-2",
+      "case": "room-display",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "room-display.candidate.edit.json"
+    },
+    {
+      "id": "room-display-baseline-2",
+      "case": "room-display",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "room-display.baseline.edit.json"
+    },
+    {
+      "id": "equipment-register-candidate-2",
+      "case": "equipment-register",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "equipment-register.candidate.edit.json"
+    },
+    {
+      "id": "equipment-register-baseline-2",
+      "case": "equipment-register",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "equipment-register.baseline.edit.json"
+    },
+    {
+      "id": "course-enrolment-candidate-2",
+      "case": "course-enrolment",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "course-enrolment.candidate.edit.json"
+    },
+    {
+      "id": "course-enrolment-baseline-2",
+      "case": "course-enrolment",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "course-enrolment.baseline.edit.json"
+    },
+    {
+      "id": "parking-decision-candidate-2",
+      "case": "parking-decision",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "parking-decision.candidate.edit.json"
+    },
+    {
+      "id": "parking-decision-baseline-2",
+      "case": "parking-decision",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "parking-decision.baseline.edit.json"
+    },
+    {
+      "id": "review-good-candidate-2",
+      "case": "review-good",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "review-good.candidate.edit.json"
+    },
+    {
+      "id": "review-good-baseline-2",
+      "case": "review-good",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "review-good.baseline.edit.json"
+    },
+    {
+      "id": "review-irrelevant-candidate-2",
+      "case": "review-irrelevant",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "review-irrelevant.candidate.edit.json"
+    },
+    {
+      "id": "review-irrelevant-baseline-2",
+      "case": "review-irrelevant",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "review-irrelevant.baseline.edit.json"
+    },
+    {
+      "id": "review-wrong-candidate-2",
+      "case": "review-wrong",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "review-wrong.candidate.edit.json"
+    },
+    {
+      "id": "review-wrong-baseline-2",
+      "case": "review-wrong",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "review-wrong.baseline.edit.json"
+    }
+  ]
+}

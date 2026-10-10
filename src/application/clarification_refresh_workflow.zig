@@ -18,11 +18,11 @@ pub const BuildSpecificationNeed = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const checked = @import("specification_values.zig").storage.read(&input.step.data, @import("specification_workflow.zig").checked_schema, .checked) catch return error.OperationExecutionFailed;
-        const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch return error.OperationExecutionFailed;
+        const checked = @import("specification_values.zig").storage.read(&input.step.data, @import("specification_workflow.zig").checked_schema, .checked) catch |operation_error| return operation_error;
+        const feature = values.read(&input.step.data, @import("feature_directory_workflow.zig").selector, @import("../domain/feature_directory.zig").Selector) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const result = self.action.execute(arena.allocator(), feature.feature_id, try @import("specification_workflow.zig").readContext(&input.step.data), checked) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(arena.allocator(), feature.feature_id, try @import("specification_workflow.zig").readContext(&input.step.data), checked) catch |operation_error| return operation_error;
         return publish(self.allocator, needs_schema, refresh.Needs, result);
     }
 };
@@ -33,21 +33,32 @@ pub const Refresh = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const captured = values.read(&input.step.data, inputs.inputs_schema, c.Inputs) catch return error.OperationExecutionFailed;
-        const needs = values.read(&input.step.data, needs_schema, refresh.Needs) catch return error.OperationExecutionFailed;
+        const captured = values.read(&input.step.data, inputs.inputs_schema, c.Inputs) catch |operation_error| return operation_error;
+        const needs = values.read(&input.step.data, needs_schema, refresh.Needs) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
+        var rejection: ?operations.Error = null;
         const result: refresh.Result = result: {
             const state = self.action.execute(arena.allocator(), captured.*, needs.*) catch |err| switch (err) {
-                error.AuthenticationRequired => break :result .{ .blocked = .authentication_required },
-                error.ProtectedClarification => break :result .{ .blocked = .protected_clarification },
-                error.ClarificationLimitExceeded => break :result .{ .blocked = .limit_exceeded },
-                else => return error.OperationExecutionFailed,
+                error.AuthenticationRequired => {
+                    rejection = err;
+                    break :result .{ .blocked = .authentication_required };
+                },
+                error.ProtectedClarification => {
+                    rejection = err;
+                    break :result .{ .blocked = .protected_clarification };
+                },
+                error.ClarificationLimitExceeded => {
+                    rejection = err;
+                    break :result .{ .blocked = .limit_exceeded };
+                },
+                else => return err,
             };
             break :result .{ .ready = state };
         };
         var candidate = try publish(self.allocator, state_schema, refresh.Result, result);
         candidate.outcome = if (result == .ready) .ok else .blocked;
+        candidate.diagnostic = rejection;
         return candidate;
     }
 };
@@ -57,12 +68,12 @@ pub const Render = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const captured = values.read(&input.step.data, inputs.inputs_schema, c.Inputs) catch return error.OperationExecutionFailed;
-        const state = values.read(&input.step.data, state_schema, refresh.Result) catch return error.OperationExecutionFailed;
+        const captured = values.read(&input.step.data, inputs.inputs_schema, c.Inputs) catch |operation_error| return operation_error;
+        const state = values.read(&input.step.data, state_schema, refresh.Result) catch |operation_error| return operation_error;
         if (state.* != .ready) return error.OperationExecutionFailed;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const result = self.action.execute(arena.allocator(), state.ready, captured.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(arena.allocator(), state.ready, captured.*) catch |operation_error| return operation_error;
         return publish(self.allocator, views_schema, []const views.View, result);
     }
 };
@@ -72,7 +83,7 @@ pub const Check = struct {
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .needs_user, .blocked };
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const result = values.read(&input.step.data, state_schema, refresh.Result) catch return error.OperationExecutionFailed;
+        const result = values.read(&input.step.data, state_schema, refresh.Result) catch |operation_error| return operation_error;
         return .{ .outcome = context.?.action.execute(result.*), .delta = .{} };
     }
 };
@@ -86,14 +97,14 @@ pub const BuildAuthorityNeeds = struct {
         const self = context.?;
         const authority = @import("required_authority_workflow.zig");
         const owned = @import("required_authority_values.zig");
-        const source = owned.read(&input.step.data, authority.inputs_schema, .inputs) catch return error.OperationExecutionFailed;
-        const observations = owned.read(&input.step.data, authority.observations_schema, .observations) catch return error.OperationExecutionFailed;
-        const result = owned.read(&input.step.data, authority.result_schema, .result) catch return error.OperationExecutionFailed;
+        const source = owned.read(&input.step.data, authority.inputs_schema, .inputs) catch |operation_error| return operation_error;
+        const observations = owned.read(&input.step.data, authority.observations_schema, .observations) catch |operation_error| return operation_error;
+        const result = owned.read(&input.step.data, authority.result_schema, .result) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
         const needs = self.action.execute(arena.allocator(), source, observations, result) catch |err| return switch (err) {
-            error.OutOfMemory => error.OperationExecutionFailed,
-            error.InvalidRequiredAuthority => .{ .outcome = .blocked, .delta = .{} },
+            error.OutOfMemory => error.OutOfMemory,
+            error.InvalidRequiredAuthority => .{ .outcome = .blocked, .delta = .{}, .diagnostic = err },
         };
         return publish(self.allocator, needs_schema, refresh.Needs, needs);
     }

@@ -33,6 +33,7 @@ pub const Adapter = struct {
             },
             .schema_name = "sdde_model_envelope_v1",
             .temperature = description.controls.temperature,
+            .max_output_tokens = description.controls.max_output_tokens,
             .reasoning_effort = request.reasoningEffort(description.reasoning_effort) catch return error.InvalidReplay,
         }, .inference) catch return error.InvalidReplay;
         // A modified request must not persist an authorization secret as content.

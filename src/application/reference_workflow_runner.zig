@@ -14,10 +14,10 @@ pub const NormalizeSelector = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const invocation = values.read(&input.step.data, invocation_values.invocation, invocation_types.Invocation) catch return error.OperationExecutionFailed;
+        const invocation = values.read(&input.step.data, invocation_values.invocation, invocation_types.Invocation) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), invocation.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), invocation.*) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.normalized, reference.NormalizedCandidate, result);
     }
 };
@@ -28,8 +28,8 @@ pub const ValidateSelector = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const candidate = values.read(&input.step.data, schemas.normalized, reference.NormalizedCandidate) catch return error.OperationExecutionFailed;
-        const result = self.action.execute(candidate.*) catch return error.OperationExecutionFailed;
+        const candidate = values.read(&input.step.data, schemas.normalized, reference.NormalizedCandidate) catch |operation_error| return operation_error;
+        const result = self.action.execute(candidate.*) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.selector, reference.RelativeSelector, result);
     }
 };
@@ -40,10 +40,10 @@ pub const InspectDirectory = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const selector = values.read(&input.step.data, schemas.selector, reference.RelativeSelector) catch return error.OperationExecutionFailed;
+        const selector = values.read(&input.step.data, schemas.selector, reference.RelativeSelector) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), selector.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), selector.*) catch |operation_error| return operation_error;
         return publish(self.allocator, schemas.directory, reference.Directory, result);
     }
 };

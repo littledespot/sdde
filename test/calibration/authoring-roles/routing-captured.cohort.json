@@ -1,0 +1,145 @@
+{
+  "schema": "role-calibration/v1",
+  "label_status": "reviewed",
+  "reviewer": "Project user: approved the prepared R7 live comparison on 9 October 2026",
+  "cases": [
+    {
+      "id": "captured-routing-latest",
+      "family": "captured-startup-routing",
+      "split": "development",
+      "input": {
+        "captured": {
+          "feature": "zig-out/e2e-spec/2026-10-09T04-19-22Z-7b67250d97b3daaf1179b772812ddfbf/project/specs/hello-world",
+          "run": "RUN-ea37ff5c4087e2b9f980b1bec102e098",
+          "call": "request-7-inference-1"
+        }
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Proposed review of the latest production premise: signal 1 contains startup, greeting and UTC date/time behavior, supplying all six authoring purposes including an entity applicability assessment. Signal 2 is a copied greeting with no independent behavior. The observed response omitted story, entity basis and records; observed omissions do not determine the labels. Compare the preceding capture separately because upstream claim wording differs."
+    },
+    {
+      "id": "captured-routing-preceding",
+      "family": "captured-startup-routing",
+      "split": "development",
+      "input": {
+        "captured": {
+          "feature": "zig-out/e2e-spec/2026-10-09T03-39-42Z-932157c58a866f39133651ca3f3e8bbb/project/specs/hello-world",
+          "run": "RUN-8d2c7599e5196c57d45748778365080c",
+          "call": "request-7-inference-1"
+        }
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Proposed review of the preceding production premise: signal 1 supplies the startup, greeting and UTC display behavior for all six authoring purposes; the copied greeting in signal 2 supplies none independently. Extraction added current to the date/time statement; this is retained upstream evidence, not a calibration edit. This capture omitted entity basis alone. Both captured cases are initial inference, not post-repair evidence."
+    }
+  ]
+}

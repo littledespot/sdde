@@ -27,6 +27,7 @@ pub const Trace = struct {
     calls: usize = 0,
     call_records: std.ArrayList(Call) = .empty,
     last_rejection: @import("observation.zig").LastModelRejection = .{},
+    progress: @import("progress.zig").Progress,
     sequence: usize = 0,
     current: ?operation.ProviderOperationId = null,
     last_step: ?workflow.WorkflowStepId = null,
@@ -35,10 +36,11 @@ pub const Trace = struct {
 
     pub fn init(store: evidence.Store, invocation: *@import("../../../src/composition/engine_invocation.zig").Assembly) !Trace {
         try store.run.createDirPath(store.io, "evidence");
-        return .{ .store = store, .invocation = invocation, .events = try store.run.createFile(store.io, "events.jsonl", .{ .exclusive = true, .permissions = .fromMode(0o600) }) };
+        return .{ .store = store, .invocation = invocation, .progress = .init(store.allocator), .events = try store.run.createFile(store.io, "events.jsonl", .{ .exclusive = true, .permissions = .fromMode(0o600) }) };
     }
     pub fn close(self: *Trace) void {
         self.last_rejection.deinit(self.store.allocator);
+        self.progress.deinit();
         for (self.call_records.items) |call| {
             self.store.allocator.free(call.step);
             if (call.exception) |bytes| self.store.allocator.free(bytes);
@@ -87,7 +89,12 @@ pub const Trace = struct {
         return self.invocation.bindings().selectedGraph();
     }
     fn invoke(context: *anyopaque) execution.Applied {
-        return cast(context).invocation.bindings().invokeInvocation();
+        const self = cast(context);
+        const result = self.invocation.bindings().invokeInvocation();
+        // The compiled invocation operation is observable before the first graph
+        // step. Reuse the same native projection; it is not a model-call identity.
+        self.recordStep(.{ .bytes = self.invocation.bindings().selectedGraph().authority.invocation_operation_id.bytes }, result) catch |cause| self.fail(cause);
+        return result;
     }
     fn step(context: *anyopaque, id: workflow.WorkflowStepId) execution.Applied {
         const self = cast(context);
@@ -170,8 +177,8 @@ pub const Trace = struct {
             errdefer self.store.allocator.free(request_step);
             try self.call_records.append(self.store.allocator, .{ .origin = origin, .step = request_step });
         }
-        const context = try std.json.Stringify.valueAlloc(self.store.allocator, .{
-            .schema = "model-call-evidence/v1",
+        const context = try std.json.Stringify.valueAlloc(self.store.allocator, @import("call_context.zig").CallContext{
+            .schema = .@"model-call-evidence/v1",
             .call = self.calls,
             .origin = origin,
             .request_step = request.binding_id.operation_id.workflow_step_id.bytes,
@@ -217,6 +224,8 @@ pub const Trace = struct {
         }
         try self.correlate(a, &report);
         self.sequence += 1;
+        try self.progress.observe(self.sequence, id.bytes, report, runner.last_effects);
+        try self.progress.project(a, &report);
         const event = try stepEvent(a, self.sequence, id, result, report);
         try self.events.writeStreamingAll(self.store.io, event);
         try self.events.writeStreamingAll(self.store.io, "\n");
@@ -233,13 +242,20 @@ pub const Trace = struct {
             .exchange = if (report.last_model_call) |call| .{ .call = call, .origin = report.last_model_origin, .request_step = report.last_model_step, .usage = report.last_model_usage, .output = report.last_model_output } else null,
             .candidate_source = if (report.candidate_model_call) |call| .{ .call = call, .origin = report.candidate_error.?.origin(), .request_step = report.candidate_model_step, .output = report.candidate_model_output } else null,
             .provider_error = report.provider_diagnostic,
+            .provider_origin = report.provider_origin,
+            .provider_content_diagnostic = report.provider_content_diagnostic,
             .model_error = report.model_diagnostic,
             .json_error = report.json_error,
             .schema_error = report.schema_error,
             .last_protocol_rejection = report.last_protocol_rejection,
+            .last_provider_rejection = report.last_provider_rejection,
+            .first_observed_defect = report.first_observed_defect,
+            .correction = if (report.corrections.len != 0 and report.corrections[report.corrections.len - 1].sequence == sequence) report.corrections[report.corrections.len - 1] else null,
+            .outstanding_work = report.outstanding_work,
             .exchange_evidence = report.exchange_evidence,
             .retry_error = if (result == .rejected and result.rejected == .retry_limit) try result.rejected.retry_limit.describe(a) else null,
             .candidate_error = report.candidate_error,
+            .last_operation_rejection = report.last_operation_rejection,
             .repairs = report.repairs,
         }, .{});
     }

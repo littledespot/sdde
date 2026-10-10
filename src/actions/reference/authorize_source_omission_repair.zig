@@ -10,7 +10,7 @@ pub const Action = struct {
     pub fn execute(_: Action, a: std.mem.Allocator, extraction: ex.Facts, parsed: r.Parsed, ctx: Context) (ex.Error || rec.Error)!loss.Repair {
         const selected = try loss.select(a, ctx.inputs, extraction.support);
         return .{ .authorization = switch (selected.location) {
-            .unlocalized => return error.InvalidAtomicRepair,
+            .unlocalized, .candidate => return error.InvalidAtomicRepair,
             .extraction_claim, .token_classification => .{ .extraction = try ex.authorize(a, extraction) },
             .reconciliation_signal, .reconciliation_disposition, .reconciliation_conflict => .{ .reconciliation = try rec.authorize(a, parsed, ctx, extraction.support) },
         } };

@@ -7,7 +7,7 @@ const g = @import("../domain/specification_generation.zig");
 const native = @import("../application/reference_extraction_workflow.zig");
 const requests = @import("../application/model_request_workflow.zig");
 const a = @import("../domain/required_authority.zig");
-pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text, occupied_summary, occupied_signals, occupied_conflict, permuted_disposition, permuted_conflict_disposition, misbound_summary, misbound_signals };
+pub const ReconciliationFault = enum { summary_membership, duplicate_disposition, self_relation, cycle, signal_coverage, mixed_selection, conflict_coverage, summary_text, signal_text, conflict_text, occupied_summary, occupied_signals, occupied_conflict, permuted_disposition, permuted_conflict_disposition, misbound_summary, misbound_signals, missing_entity_role, unassigned_roles };
 pub const SupportFault = enum { inconclusive, missing_detail, foreign_source_single, foreign_sources, question_recover, question_exhaust, question_native_exhaust, question_mixed_exhaust, question_evidence_recover, question_evidence_exhaust, question_evidence_alternating };
 // Semantic outcomes remain scripted candidates, not native semantic proof.
 pub const Applicability = enum {
@@ -75,7 +75,42 @@ pub const Options = struct {
 };
 
 pub fn build(allocator: std.mem.Allocator, view: data.View, options: Options) ![]const u8 {
-    return partResponse(allocator, try requests.readCurrent(&view, requests.prepared_schema), try completeResponse(allocator, view, options));
+    const request = try requests.readCurrent(&view, requests.prepared_schema);
+    const body = try partResponse(allocator, request, try completeResponse(allocator, view, options), options.reconciliation_fault);
+    return modelWire(allocator, body, request.packet() orelse return body);
+}
+
+/// Project canonical fixture data to the currently bound response wire shape.
+/// This test helper does not admit or normalize actual provider responses.
+pub fn modelWire(allocator: std.mem.Allocator, body: []const u8, packet: *const @import("../domain/model_input_packet.zig").Packet) ![]const u8 {
+    for (packet.integerChoices()) |choice| {
+        if (choice.constructedValue() != null) break;
+    } else return body;
+    var parsed = try @import("../domain/strict_json.zig").parse(allocator, body, .{ .maximum_depth = 64 }, false, null);
+    try omitScriptedNativeFields(&parsed.value, packet.integerChoices());
+    return std.json.Stringify.valueAlloc(allocator, parsed.value, .{});
+}
+
+// Scripted canonical values are fixture data; model-wire responses omit only
+// their matching determined handles. Independent boundary tests cover admission.
+fn omitScriptedNativeFields(value: *std.json.Value, choices: []const @import("../domain/model_result_schema.zig").IntegerChoice) !void {
+    switch (value.*) {
+        .object => |*object| {
+            for (object.values()) |*child| try omitScriptedNativeFields(child, choices);
+            const kind = object.get("kind") orelse return;
+            if (kind != .string) return;
+            for (choices) |choice| if (choice.constructedValue()) |fixed| {
+                const target = choice.target.tagged;
+                if (!std.mem.eql(u8, target.kind, kind.string)) continue;
+                const selected = object.get(target.field) orelse continue;
+                if (selected != .number_string) return error.InvalidFixture;
+                const id = try @import("../domain/model_payload_schema.zig").exactInteger(selected.number_string);
+                if (id == fixed) _ = object.swapRemove(target.field);
+            };
+        },
+        .array => |*array| for (array.items) |*child| try omitScriptedNativeFields(child, choices),
+        else => {},
+    }
 }
 
 fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Options) ![]const u8 {
@@ -266,7 +301,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const dispositions = try allocator.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
                 proposal.claim_dispositions = dispositions;
                 switch (fault) {
-                    .summary_membership, .summary_text, .occupied_summary, .misbound_summary => {},
+                    .summary_membership, .summary_text, .occupied_summary, .misbound_summary, .missing_entity_role, .unassigned_roles => {},
                     .misbound_signals => if (options.attempt == 1) {
                         const signals = try allocator.alloc(r.SignalProposal, proposal.signals.len + 1);
                         @memcpy(signals[0..proposal.signals.len], proposal.signals);
@@ -327,13 +362,6 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         }
                     },
                 }
-            }
-            if (falseConflict(options.source_loss) or options.reconciliation_fault == .conflict_coverage or options.reconciliation_fault == .conflict_text or options.reconciliation_fault == .occupied_conflict or options.reconciliation_fault == .permuted_conflict_disposition) {
-                var assignments: std.ArrayList(r.RoleAssignment) = .empty;
-                for (proposal.role_assignments) |assignment| {
-                    if (assignment.signal_id.ordinal <= proposal.signals.len) try assignments.append(allocator, assignment);
-                }
-                proposal.role_assignments = try assignments.toOwnedSlice(allocator);
             }
             return @import("reference_reconciliation.zig").modelWire(allocator, .{ .global = proposal });
         },
@@ -499,7 +527,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     try fixtureLoss(&view, inputs, context, mode)
                 else
                     .{ .unlocalized = .{} };
-                return @import("../domain/model_candidate_json.zig").encode(@import("../domain/source_omission.zig").Location, allocator, location);
+                return @import("source_omission_evidence.zig").encode(allocator, inputs, location);
             };
             const selected_index = if (request.id().purpose == .atomic_repair) 0 else try reviewIndex(allocator, inputs, try @import("../domain/specification_support.zig").Source.nextSubject(allocator, inputs, try workflow.prior(.source, progress)));
             const all = try @import("../domain/specification_provenance.zig").items(context);
@@ -577,7 +605,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             };
             if (options.source_loss) |mode| {
                 const location = try fixtureLoss(&view, inputs, context, mode);
-                if (location != .unlocalized) {
+                if (@import("../domain/source_omission.zig").isUpstream(location)) {
                     if (all.entries.len == 0) for (findings) |*finding| {
                         finding.value.kind = .candidate_omission;
                         finding.value.detail = "Extraction lost source-required behavior.";
@@ -844,11 +872,11 @@ fn extractedClaim(allocator: std.mem.Allocator, chunk: r.evidence.identity.Chunk
 /// The scripted complete source remains one fixture; each provider call gets
 /// only its configured fields. Protocol faults are injected afterward
 /// by Driver, so this projection cannot repair or conceal a malformed response.
-fn partResponse(allocator: std.mem.Allocator, request: *const @import("../domain/model_request_handoff.zig").Request, body: []const u8) ![]const u8 {
+fn partResponse(allocator: std.mem.Allocator, request: *const @import("../domain/model_request_handoff.zig").Request, body: []const u8, fault: ?ReconciliationFault) ![]const u8 {
     const part = request.part() orelse {
         const bound = request.packet() orelse return body;
         const definition = bound.resultDefinition() orelse return body;
-        const field: ?[]const u8 = if (std.mem.eql(u8, definition.bytes, "dispositions_assignment")) "claim_dispositions" else if (std.mem.eql(u8, definition.bytes, "signals_assignment")) "signals" else if (std.mem.eql(u8, definition.bytes, "roles_assignment")) "role_assignments" else if (std.mem.eql(u8, definition.bytes, "conflicts_assignment")) "conflicts" else null;
+        const field: ?[]const u8 = if (std.mem.eql(u8, definition.bytes, "dispositions_assignment")) "claim_dispositions" else if (std.mem.eql(u8, definition.bytes, "signals_assignment")) "signals" else if (std.mem.eql(u8, definition.bytes, "roles_assignment")) "role_decisions" else if (std.mem.eql(u8, definition.bytes, "conflicts_assignment")) "conflicts" else null;
         if (field) |name| {
             const parsed = try std.json.parseFromSlice(std.json.Value, allocator, body, .{});
             defer parsed.deinit();
@@ -896,22 +924,26 @@ fn partResponse(allocator: std.mem.Allocator, request: *const @import("../domain
                     if (!present) try pending.append(candidate);
                 }
                 try result.put(allocator, name, .{ .array = pending });
-            } else if (std.mem.eql(u8, name, "role_assignments")) {
+            } else if (std.mem.eql(u8, name, "role_decisions")) {
                 const packet = try std.json.parseFromSlice(std.json.Value, allocator, (request.packet() orelse return error.InvalidSpecificationScript).body(), .{});
                 const groups = packet.value.object.get("accepted").?.object.get("signals").?.array.items;
-                var assignments: std.array_list.Managed(std.json.Value) = .init(allocator);
-                var first = true;
+                var assignments: std.ArrayList(r.RoleAssignment) = .empty;
                 for (groups) |group| {
+                    if (fault == .unassigned_roles) continue;
                     const content = group.object.get("value").?.object.get("content").?.object;
                     if (!std.mem.eql(u8, content.get("kind").?.string, "model") or !std.mem.eql(u8, content.get("model").?.object.get("kind").?.string, "business")) continue;
-                    var assignment: std.json.ObjectMap = .{};
-                    try assignment.put(allocator, "signal_id", group.object.get("signal_id").?);
-                    const roles = (try std.json.parseFromSlice(std.json.Value, allocator, if (first) "[\"title\",\"description\",\"primary_goal\",\"primary_user_story\",\"entity_basis\",\"records\"]" else "[\"records\"]", .{})).value;
-                    first = false;
-                    try assignment.put(allocator, "generation_roles", roles);
-                    try assignments.append(.{ .object = assignment });
+                    var roles: std.ArrayList(r.GenerationRole) = .empty;
+                    if (assignments.items.len == 0) {
+                        for (std.enums.values(r.GenerationRole)) |role| {
+                            if (fault == .missing_entity_role and role == .entity_basis) continue;
+                            try roles.append(allocator, role);
+                        }
+                    } else try roles.append(allocator, .records);
+                    try assignments.append(allocator, .{ .signal_id = .{ .ordinal = @intCast(group.object.get("signal_id").?.integer) }, .generation_roles = try roles.toOwnedSlice(allocator) });
                 }
-                try result.put(allocator, name, .{ .array = assignments });
+                const decisions = try @import("reference_reconciliation.zig").roleDecisions(allocator, assignments.items);
+                const wire = try @import("../domain/model_candidate_json.zig").encode(r.RoleDecisions, allocator, decisions);
+                try result.put(allocator, name, (try std.json.parseFromSlice(std.json.Value, allocator, wire, .{})).value);
             } else if (std.mem.eql(u8, name, "conflicts")) {
                 const packet = try std.json.parseFromSlice(std.json.Value, allocator, (request.packet() orelse return error.InvalidSpecificationScript).body(), .{});
                 try result.put(allocator, name, try @import("reference_reconciliation.zig").explanationWire(allocator, packet.value.object.get("accepted").?.object.get("conflict_groups").?.array.items, result.get(name).?.array.items));

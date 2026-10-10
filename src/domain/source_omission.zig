@@ -5,12 +5,53 @@ const r = @import("reference_reconciliation.zig");
 const authority = @import("required_authority.zig");
 pub const Location = union(enum) {
     unlocalized: struct {},
+    candidate: struct {},
     extraction_claim: r.extraction.identity.ChunkId,
     token_classification: r.extraction.tokens.CandidateId,
     reconciliation_signal: r.SignalId,
     reconciliation_disposition: r.ClaimId,
     reconciliation_conflict: r.ConflictId,
+
+    pub fn eql(self: Location, other: Location) bool {
+        if (std.meta.activeTag(self) != std.meta.activeTag(other)) return false;
+        return switch (self) {
+            .extraction_claim => |id| id.eql(other.extraction_claim),
+            inline else => |value, tag| std.meta.eql(value, @field(other, @tagName(tag))),
+        };
+    }
 };
+/// The selected captured source span and the alleged defect in one producer.
+/// Native validation proves the source/producer joins, not semantic loss.
+pub const Comparison = struct {
+    kind: enum { source_producer_comparison } = .source_producer_comparison,
+    source: struct { chunk_id: r.extraction.identity.ChunkId, lines: @import("source_selections.zig").Selection },
+    producer_loss: []const u8,
+};
+/// Model wire alternatives couple a producer selection to its required evidence.
+/// Canonical findings retain Location and the optional comparison separately.
+pub const Assessment = union(enum) {
+    unlocalized: struct {},
+    candidate: struct {},
+    localized: struct { location: Location, comparison: Comparison },
+};
+/// Candidate loss and unresolved attribution grant no upstream repair target.
+pub fn isUpstream(location: Location) bool {
+    return switch (location) {
+        .unlocalized, .candidate => false,
+        .extraction_claim, .token_classification, .reconciliation_signal, .reconciliation_disposition, .reconciliation_conflict => true,
+    };
+}
+pub const SourceLines = struct { chunk_id: r.extraction.identity.ChunkId, source_id: r.extraction.identity.SourceId, lines: []const @import("source_selections.zig").Choice };
+
+/// Allocations belong to the caller's request arena.
+pub fn sourceLines(a: std.mem.Allocator, sources: r.evidence.Inputs) r.Error![]const SourceLines {
+    var result: std.ArrayList(SourceLines) = .empty;
+    for (sources.chunks.entries) |chunk| {
+        try result.append(a, .{ .chunk_id = chunk.id, .source_id = chunk.source_id, .lines = try @import("source_selections.zig").project(a, sources, .{ .state_id = sources.corpus.state_id, .chunk_id = chunk.id }) });
+    }
+    return result.toOwnedSlice(a);
+}
+
 pub const Support = struct { review: @import("specification_support.zig").Source.Candidate, inputs: authority.Inputs, observations: authority.Observations, result: authority.Result };
 pub const Evidence = struct { finding: authority.Evidence, location: Location };
 pub const Rejection = enum {
@@ -19,7 +60,7 @@ pub const Rejection = enum {
 
     pub fn explanation(self: Rejection) []const u8 {
         return switch (self) {
-            .unlocalized_omission => "The source review reports an omission without identifying a defective producer. No safe repair target can be authorized; the workflow stops without a repair call or publication.",
+            .unlocalized_omission => "The source review reports an omission without establishing a defective upstream producer. No upstream repair target can be authorized.",
             .invalid_repair_authority => "The source omission cannot establish current repair authority. The workflow stops without a repair call or publication.",
         };
     }
@@ -132,7 +173,7 @@ pub fn select(a: std.mem.Allocator, sources: r.evidence.Inputs, support: Support
         const finding = (try authority.supportedOmission(a, support.inputs, support.observations, support.result, entry.requirement)) orelse continue;
         try @import("specification_support_evidence.zig").validate(a, support.inputs, sources, finding);
         for (support.review.review.entries) |review| if (review.requirement_ordinal == finding.id.ordinal) {
-            if (review.value.loss == .unlocalized) {
+            if (!isUpstream(review.value.loss)) {
                 unlocalized = true;
                 continue;
             }
@@ -146,7 +187,7 @@ pub fn select(a: std.mem.Allocator, sources: r.evidence.Inputs, support: Support
 /// that producer's output is eligible as positive business content.
 pub fn diagnosticClaims(records: @import("reference_support.zig").Records, location: Location) ?[]const r.ClaimId {
     return switch (location) {
-        .unlocalized => null,
+        .unlocalized, .candidate => null,
         .extraction_claim, .token_classification => &.{},
         .reconciliation_signal => |id| for (records.signals) |signal| {
             if (std.meta.eql(signal.id, id)) break signal.value.claim_ids;
@@ -164,12 +205,61 @@ pub fn diagnosticClaims(records: @import("reference_support.zig").Records, locat
 
 /// Verify all mechanical joins. Meaning and loss attribution remain explicitly
 /// model-assisted; absence of a unique location cannot authorize a repair.
-pub fn validate(inputs: authority.Inputs, sources: r.evidence.Inputs, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) (authority.Error || r.Error)!void {
-    if (location == .unlocalized) return;
-    if (finding != .candidate_omission or review.source_ids.len == 0) return error.InvalidRequiredAuthority;
+pub fn validate(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evidence.Inputs, subject_id: authority.Id, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) (authority.Error || r.Error)!void {
+    try validateLocation(inputs, sources, subject_id, finding, review, location);
+    if (!isUpstream(location)) {
+        if (review.loss_comparison != null) return error.InvalidRequiredAuthority;
+        return;
+    }
+    const comparison = review.loss_comparison orelse return error.InvalidRequiredAuthority;
+    if (!@import("clarification_inputs.zig").validText(comparison.producer_loss, @import("clarification_inputs.zig").max_text_bytes)) return error.InvalidRequiredAuthority;
+    const scope: r.evidence.Scope = .{ .state_id = sources.corpus.state_id, .chunk_id = comparison.source.chunk_id };
+    const source = try r.evidence.resolve(sources, scope);
+    if (!r.contains(r.extraction.identity.SourceId, review.source_ids, source.source.id)) return error.InvalidRequiredAuthority;
+    const cited = try @import("source_selections.zig").validate(a, sources, scope, &.{comparison.source.lines});
+    defer if (cited == .valid) a.free(cited.valid.entries);
+    if (cited != .valid) return error.InvalidRequiredAuthority;
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
     switch (location) {
-        .unlocalized => unreachable,
+        .unlocalized, .candidate => unreachable,
+        .extraction_claim => |id| if (!id.eql(source.chunk.id)) return error.InvalidRequiredAuthority,
+        .token_classification => |id| {
+            if (!std.meta.eql(id.source_id, source.source.id)) return error.InvalidRequiredAuthority;
+            const matching_chunk = found: {
+                for (records.items.extraction) |chunk| for (chunk.token_classifications) |classification| {
+                    if (std.meta.eql(classification.id(), id)) break :found chunk.scope.chunk_id;
+                };
+                return error.InvalidRequiredAuthority;
+            };
+            if (!matching_chunk.eql(source.chunk.id)) return error.InvalidRequiredAuthority;
+        },
+        .reconciliation_signal, .reconciliation_disposition, .reconciliation_conflict => {
+            const claims = diagnosticClaims(records, location) orelse return error.InvalidRequiredAuthority;
+            for (claims) |claim| {
+                if ((try r.item(records.items, claim)).claim.chunk_id.eql(source.chunk.id)) break;
+            } else return error.InvalidRequiredAuthority;
+        },
+    }
+}
+
+fn validateLocation(inputs: authority.Inputs, sources: r.evidence.Inputs, subject_id: authority.Id, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) (authority.Error || r.Error)!void {
+    if (location == .unlocalized) return;
+    if (finding != .candidate_omission) return error.InvalidRequiredAuthority;
+    if (location == .candidate) {
+        // The evidence owner binds these claims to the current reviewed subject.
+        // Their presence permits this attribution; it does not prove entailment.
+        switch (subject_id.unit) {
+            .feature, .record => {},
+            .source, .signal, .token, .conflict, .decision => return error.InvalidRequiredAuthority,
+        }
+        if (inputs.specification == null and @import("specification_authority.zig").featureField(inputs, subject_id) == null) return error.InvalidRequiredAuthority;
+        if (review.provenance.claim_ids.len == 0) return error.InvalidRequiredAuthority;
+        return;
+    }
+    if (review.source_ids.len == 0) return error.InvalidRequiredAuthority;
+    const records = inputs.references orelse return error.InvalidRequiredAuthority;
+    switch (location) {
+        .unlocalized, .candidate => unreachable,
         .extraction_claim => |id| {
             if (review.provenance.claim_ids.len != 0) return error.InvalidRequiredAuthority;
             const scope: r.evidence.Scope = .{ .state_id = records.items.state_id, .chunk_id = id };
@@ -217,13 +307,11 @@ pub fn validate(inputs: authority.Inputs, sources: r.evidence.Inputs, finding: a
     }
 }
 
-/// Mechanically eligible producer choices, not judgments that meaning was lost.
-/// The same validator governs presentation and admission in every review scope.
-pub fn available(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evidence.Inputs, review: authority.ReviewEvidence) (authority.Error || r.Error)![]const Location {
-    const records = inputs.references orelse return error.InvalidRequiredAuthority;
+/// Existing producer identities, independently of whether this finding may select
+/// them for repair. Comparison evidence must not disappear with repair eligibility.
+pub fn producerLocations(a: std.mem.Allocator, records: @import("reference_support.zig").Records) std.mem.Allocator.Error![]const Location {
     var candidates: std.ArrayList(Location) = .empty;
-    defer candidates.deinit(a);
-    try candidates.append(a, .{ .unlocalized = .{} });
+    errdefer candidates.deinit(a);
     for (records.items.extraction) |chunk| {
         try candidates.append(a, .{ .extraction_claim = chunk.scope.chunk_id });
         for (chunk.token_classifications) |classification| try candidates.append(a, .{ .token_classification = classification.id() });
@@ -231,12 +319,26 @@ pub fn available(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evid
     for (records.dispositions) |disposition| try candidates.append(a, .{ .reconciliation_disposition = disposition.claim_id });
     for (records.signals) |signal| try candidates.append(a, .{ .reconciliation_signal = signal.id });
     for (records.conflicts) |conflict| try candidates.append(a, .{ .reconciliation_conflict = conflict.id });
+    return candidates.toOwnedSlice(a);
+}
+
+/// Mechanically eligible producer choices, not judgments that meaning was lost.
+/// The same validator governs presentation and admission in every review scope.
+pub fn available(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evidence.Inputs, subject_id: authority.Id, review: authority.ReviewEvidence) (authority.Error || r.Error)![]const Location {
+    const records = inputs.references orelse return error.InvalidRequiredAuthority;
+    var candidates: std.ArrayList(Location) = .empty;
+    defer candidates.deinit(a);
+    try candidates.append(a, .{ .unlocalized = .{} });
+    try candidates.append(a, .{ .candidate = .{} });
+    const producers = try producerLocations(a, records);
+    defer a.free(producers);
+    try candidates.appendSlice(a, producers);
     var accepted: std.ArrayList(Location) = .empty;
     errdefer accepted.deinit(a);
     for (candidates.items) |location| {
         var diagnostic = review;
-        if (location != .unlocalized) diagnostic.provenance.claim_ids = diagnosticClaims(records, location) orelse return error.InvalidRequiredAuthority;
-        validate(inputs, sources, .candidate_omission, diagnostic, location) catch |err| switch (err) {
+        if (isUpstream(location)) diagnostic.provenance.claim_ids = diagnosticClaims(records, location) orelse return error.InvalidRequiredAuthority;
+        validateLocation(inputs, sources, subject_id, .candidate_omission, diagnostic, location) catch |err| switch (err) {
             error.InvalidRequiredAuthority => continue,
             else => return err,
         };

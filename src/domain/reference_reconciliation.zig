@@ -67,7 +67,17 @@ pub fn equivalentContent(left: Content, right: Content) bool {
 pub const ValidatedStatement = struct { claim_ids: []const ClaimId, content: Content };
 pub const Statement = struct { id: StatementId, claim_ids: []const ClaimId, content: Content };
 pub const SummaryProposal = struct { statements: []const StatementProposal };
-pub const Summary = struct { id: SummaryId, partition_id: PartitionId, member_claim_ids: []const ClaimId, member_summary_ids: []const SummaryId, statements: []const Statement };
+/// Native projection evidence, excluded from model-facing summaries. Original
+/// candidate indices, field origins and repair occurrences remain unchanged.
+pub const SummaryProjection = struct {
+    source: diagnostic.Source,
+    originals: []const ValidatedStatement,
+    /// At each original candidate index, the retained statement's local index.
+    statement_indices: []const usize,
+    /// Native parent construction; the child's original producer stays in history.
+    carried_from: ?SummaryId = null,
+};
+pub const Summary = struct { id: SummaryId, partition_id: PartitionId, member_claim_ids: []const ClaimId, member_summary_ids: []const SummaryId, statements: []const Statement, projection: SummaryProjection, validation: @import("atomic_repair.zig").Snapshot };
 /// Immutable append-only execution history; appending a summary does not copy
 /// every previous summary or mutate an older workflow value.
 pub const SummaryHistory = struct { value: Summary, previous: ?*const SummaryHistory };
@@ -108,11 +118,7 @@ pub const GenerationRole = enum {
     pub fn purpose(self: GenerationRole, allocator: std.mem.Allocator) @import("required_authority.zig").Error![]const u8 {
         const authority = @import("required_authority.zig");
         const descriptions = @import("required_authority_description.zig");
-        if (self == .records) {
-            const requirements = try descriptions.task(allocator, .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .functional_requirements });
-            const criteria = try descriptions.task(allocator, .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .acceptance_criteria });
-            return std.fmt.allocPrint(allocator, "{s} {s}", .{ requirements, criteria });
-        }
+        if (self == .records) return descriptions.records(allocator);
         const slot: authority.Slot = switch (self) {
             .title => .display_name,
             .description => .description,
@@ -129,6 +135,12 @@ pub const SignalSelectionId = struct {
     ordinal: u32,
     pub const model_scalar = "ordinal";
 };
+/// Complete model assessment; every registered role is required on the wire.
+pub const RoleDecision = union(enum) {
+    supported: struct { signal_ids: []const SignalSelectionId },
+    unsupported: struct {},
+};
+pub const RoleDecisions = std.enums.EnumFieldStruct(GenerationRole, RoleDecision, null);
 pub const RoleAssignment = struct { signal_id: SignalSelectionId, generation_roles: []const GenerationRole };
 pub const ValidatedSignal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: Content, generation_roles: []const GenerationRole };
 pub const ConflictKind = enum { mutually_exclusive, precedence_missing, value_mismatch, scope_mismatch };
@@ -138,12 +150,12 @@ pub const ConflictProposal = struct {
     summary: text.ReferenceSemanticText,
 };
 pub const ValidatedConflict = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, kind: ConflictKind, summary: text.ValidatedReferenceSemanticText, resolution: enum { unresolved } };
-pub const Proposal = struct { conflict_groups: []const @import("reference_conflict_groups.zig").Group = &.{}, claim_dispositions: []const ClaimDispositionProposal, signals: []const SignalProposal, role_assignments: []const RoleAssignment = &.{}, conflicts: []const ConflictProposal };
+pub const Proposal = struct { conflict_groups: []const @import("reference_conflict_groups.zig").Group = &.{}, claim_dispositions: []const ClaimDispositionProposal, signals: []const SignalProposal, role_decisions: ?RoleDecisions = null, conflicts: []const ConflictProposal };
 pub const diagnostic = @import("reference_reconciliation_diagnostic.zig");
 pub const Raw = struct { source: diagnostic.Source = .{}, input: Input, bytes: []const u8 };
 pub const Phase = enum { dispositions, signals, signals_with_conflicts, roles, complete };
-pub const Parsed = struct { phase: Phase = .complete, source: diagnostic.Source = .{}, input: Input, proposal: union(enum) { summary: SummaryProposal, global: Proposal } };
-pub const CheckedSummary = struct { input: Input, statements: []const ValidatedStatement };
+pub const Parsed = struct { phase: Phase = .complete, source: diagnostic.Source = .{}, input: Input, proposal: union(enum) { summary: SummaryProposal, global: Proposal }, carried_from: ?SummaryId = null };
+pub const CheckedSummary = struct { input: Input, statements: []const ValidatedStatement, projection: SummaryProjection, validation: @import("atomic_repair.zig").Snapshot };
 pub const SummaryAssignment = struct { checked: CheckedSummary, id: SummaryId, statement_ids: []const StatementId, next_statement_ordinal: u32 };
 pub const CheckedDispositions = struct { phase: Phase = .complete, source: diagnostic.Source = .{}, input: Input, proposal: Proposal, dispositions: []const ClaimDisposition };
 pub const CheckedSignals = struct { prior: CheckedDispositions, signals: []const ValidatedSignal };

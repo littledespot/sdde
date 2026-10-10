@@ -141,9 +141,12 @@ registration remains. No current project catalogue selects it.
   `input.invokeModel.body`. A model without exact-count support rejects before dispatch.
 - Supported temperature remains `0` (§12.5); selected `reasoning_effort` is a
   top-level field. Both follow the existing binding, not adapter defaults.
+- Under the [2026-10-10 amendment to ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance),
+  bound `maxOutputTokens` maps unchanged to top-level `max_completion_tokens`.
+  An absent allowance omits that field; the API owns its default and supported maximum.
 - Model and streaming fields are omitted because the endpoint fixes them
   ([AWS model parameters](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-openai.html)).
-  No output ceiling, tools, stop sequences or arbitrary parameters are added.
+  No tools, stop sequences or arbitrary parameters are added.
 - Both response modes add the complete compiled result schema once to guidance.
   Native mode also sends its registered structural projection as a JSON object in
   `response_format.json_schema.schema`, with `type: "json_schema"` and name
@@ -219,6 +222,8 @@ attempt and lease. The adapter does not back off, refresh, reroute or replay.
 - Wire fixtures cover canonical projection, URI encoding, strict response and
   usage rejection, secret redaction, native projection, unsupported
   counting, status/type agreement and growing HTTP headers.
+- Output-allowance fixtures cover present and omitted fields, exact selected values
+  and CountTokens wrapping the same serialized inference body without clamping.
 - [Concrete HTTP tests](../../src/bedrock_http_test.zig) exercise the actual serializer,
   response reader and deadline race over event-controlled in-memory connections.
 

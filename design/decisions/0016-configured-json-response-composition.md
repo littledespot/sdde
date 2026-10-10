@@ -17,7 +17,7 @@
 R34 failed before extraction admission: malformed JSON was followed by repeated
 misplacement of token classifications inside a claim. R33 accepted an identical
 initial extraction request, then failed on a generation response. The retained
-[audit](../../fixes/FIX_001.md#shared-contract-assessment--19-september-2026) found
+[audit](../../fixes/archive/FIX_001.md#shared-contract-assessment--19-september-2026) found
 intact evidence and schema delivery. Smaller output responsibilities are a
 reliability hypothesis, not a demonstrated cure.
 
@@ -225,8 +225,8 @@ retain their existing validated string representation with a 128-byte compiler-o
 bound; authored local IDs remain 64 bytes. Retry-exhaustion evidence derives its
 owned name storage from the same compiled bound. The measured Spec graph fits this
 bound; no additional capacity configuration is introduced. Verification and measured
-resource/request costs are recorded in [Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition)
-and its [R36 delivery](../../fixes/IMP_001.md#r36-follow-up--validated-slices-before-cross-slice-reconciliation).
+resource/request costs are recorded in [Chunk 18](../../fixes/archive/IMP_001.md#r34-follow-up--configured-response-decomposition)
+and its [R36 delivery](../../fixes/archive/IMP_001.md#r36-follow-up--validated-slices-before-cross-slice-reconciliation).
 
 Do not introduce request orchestration machinery solely to preserve 512. Detailed
 operations and distinct request identities remain visible. Consolidate only where
@@ -428,4 +428,4 @@ safe boundaries require their own dependency/coverage analysis using this contra
 
 The overall design remains **Proposed design**. Implementation, measurements and
 verification of this accepted amendment are recorded in
-[Chunk 18](../../fixes/IMP_001.md#r34-follow-up--configured-response-decomposition).
+[Chunk 18](../../fixes/archive/IMP_001.md#r34-follow-up--configured-response-decomposition).

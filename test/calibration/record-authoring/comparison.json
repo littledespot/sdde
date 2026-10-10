@@ -1,0 +1,212 @@
+{
+  "schema": "record-authoring-comparison/v1",
+  "label_status": "proposed",
+  "baseline_revision": "35ded131928ecc0a7b55c92fe5d714f5db99405f",
+  "capture": {
+    "feature": "zig-out/e2e-spec/2026-10-09T07-32-23Z-4dea51d8871d149cc721f69b011070b6/project/specs/hello-world",
+    "run": "RUN-9c347f1e66a70d8b81205773a4f1d1e2",
+    "call": "request-12-inference-1",
+    "context_sha256": "e840df59ecc47bbe9e4b70ac873072524a048b9759a323752916af9208645634"
+  },
+  "model": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0,
+    "response_mode": "native_schema"
+  },
+  "repeats": 2,
+  "maximum_physical_calls": 12,
+  "cases": [
+    {
+      "id": "captured-startup",
+      "origin": "captured",
+      "family": "startup-display",
+      "exact_claim_ids": [
+        4
+      ],
+      "source_sha256": "49cfe66ae6b41493badef2d9001f54cf2b841cf67c780562620122eefba54487",
+      "obligations": [
+        {
+          "id": "startup",
+          "meaning": "The application starts successfully."
+        },
+        {
+          "id": "greeting",
+          "meaning": "Starting the application displays the exact greeting."
+        },
+        {
+          "id": "utc",
+          "meaning": "The application outputs the current date and time in UTC."
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "value": "Hello, World!",
+          "meaning": "The greeting is displayed when the application starts."
+        }
+      ],
+      "schema_sha256": "64e66637619987c1e4bdeac90e5354e4ff57b175c3f082e1ec9f5e7ac6705884",
+      "baseline_edit": "captured-startup.baseline.edit.json",
+      "baseline_edit_sha256": "936da30e113dcadf9621d1a8689b36f8f7d71d66e9eab53a2e6724cea78d49cb",
+      "candidate_edit": "captured-startup.candidate.edit.json",
+      "candidate_edit_sha256": "9e95c80d95629e96803725f358698679a31f922a2fcba2d19dffd7c6fcfa778b"
+    },
+    {
+      "id": "room-alert",
+      "origin": "controlled",
+      "family": "temperature-notification",
+      "exact_claim_ids": [],
+      "source_sha256": "0db7880fa1526606962c713be618d5cef0a4e1196521e0827106a678a0778681",
+      "obligations": [
+        {
+          "id": "above-threshold",
+          "meaning": "Notify the operator when measured room temperature exceeds the configured threshold."
+        },
+        {
+          "id": "measurement",
+          "meaning": "The alert includes the measured temperature."
+        },
+        {
+          "id": "boundary",
+          "meaning": "Do not alert at or below the threshold."
+        }
+      ],
+      "literal_expectations": [],
+      "schema_sha256": "b2fcf7202c21e43231db7c8e88464932619ef4c5258eb1fd10dd5056543c3716",
+      "baseline_edit": "room-alert.baseline.edit.json",
+      "baseline_edit_sha256": "a40a8678cd2a192cf36a86e93968d24ead2dd1ce428fcd0bfa494eaa9a5b5625",
+      "candidate_edit": "room-alert.candidate.edit.json",
+      "candidate_edit_sha256": "fc717514a6cb891e87bc9d8106a5abcbbcabeb658ccff2d548aa8bbb2dcff573"
+    },
+    {
+      "id": "connectivity-result",
+      "origin": "controlled",
+      "family": "connectivity-status",
+      "exact_claim_ids": [
+        4,
+        5
+      ],
+      "source_sha256": "c111af0d0fab51f35214c045efad22b6b0d0e12ebb842bafdcb94c1a3e215bf1",
+      "obligations": [
+        {
+          "id": "success",
+          "meaning": "A successful check displays the success label and the check duration."
+        },
+        {
+          "id": "failure",
+          "meaning": "A failed check displays the failure label and the failure reason."
+        },
+        {
+          "id": "truthfulness",
+          "meaning": "A failed check must not be shown as a success."
+        }
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "value": "Connected",
+          "meaning": "Display this label on a successful connectivity check."
+        },
+        {
+          "claim_id": 5,
+          "value": "Unavailable",
+          "meaning": "Display this label on a failed connectivity check."
+        }
+      ],
+      "schema_sha256": "382740e106b176fa289a2d6f3f4213098d0c35fe57812f396ffe859701ba4971",
+      "baseline_edit": "connectivity-result.baseline.edit.json",
+      "baseline_edit_sha256": "b5befd36b97ced0af5e39523f48215300110154c55f53a03c9a535d2b94521b4",
+      "candidate_edit": "connectivity-result.candidate.edit.json",
+      "candidate_edit_sha256": "02f8a2444ee492fc10ce505ac14282dfc98bd04a06b736a6a5831977c05415fd"
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-startup-baseline-1",
+      "case": "captured-startup",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "captured-startup.baseline.edit.json"
+    },
+    {
+      "id": "captured-startup-candidate-1",
+      "case": "captured-startup",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "captured-startup.candidate.edit.json"
+    },
+    {
+      "id": "room-alert-baseline-1",
+      "case": "room-alert",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "room-alert.baseline.edit.json"
+    },
+    {
+      "id": "room-alert-candidate-1",
+      "case": "room-alert",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "room-alert.candidate.edit.json"
+    },
+    {
+      "id": "connectivity-result-baseline-1",
+      "case": "connectivity-result",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "connectivity-result.baseline.edit.json"
+    },
+    {
+      "id": "connectivity-result-candidate-1",
+      "case": "connectivity-result",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "connectivity-result.candidate.edit.json"
+    },
+    {
+      "id": "captured-startup-candidate-2",
+      "case": "captured-startup",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "captured-startup.candidate.edit.json"
+    },
+    {
+      "id": "captured-startup-baseline-2",
+      "case": "captured-startup",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "captured-startup.baseline.edit.json"
+    },
+    {
+      "id": "room-alert-candidate-2",
+      "case": "room-alert",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "room-alert.candidate.edit.json"
+    },
+    {
+      "id": "room-alert-baseline-2",
+      "case": "room-alert",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "room-alert.baseline.edit.json"
+    },
+    {
+      "id": "connectivity-result-candidate-2",
+      "case": "connectivity-result",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "connectivity-result.candidate.edit.json"
+    },
+    {
+      "id": "connectivity-result-baseline-2",
+      "case": "connectivity-result",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "connectivity-result.baseline.edit.json"
+    }
+  ]
+}

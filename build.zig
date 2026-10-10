@@ -113,6 +113,32 @@ pub fn build(b: *std.Build) void {
     b.step("evaluate-spec", "Grade a supplied specification through OpenAI or Bedrock (explicit --live required)").dependOn(&run_evaluator.step);
     b.step("build-rubric-evaluator", "Build the development-only evaluator without an API call").dependOn(&evaluator_exe.step);
     b.step("test-rubric-evaluator", "Test development-only rubric evaluation").dependOn(&run_evaluator_tests.step);
+    const role_calibration = b.addExecutable(.{ .name = "sdde-calibrate-roles", .root_module = b.createModule(.{
+        .root_source_file = b.path("role_calibration.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    }) });
+    const run_roles = b.addRunArtifact(role_calibration);
+    run_roles.has_side_effects = true;
+    if (b.args) |args| run_roles.addArgs(args);
+    b.step("calibrate-roles", "Prepare or run explicitly selected diagnostic role trials (not E2E)").dependOn(&run_roles.step);
+    b.step("build-role-calibration", "Build role calibration without an API call").dependOn(&role_calibration.step);
+    const call_module = b.createModule(.{
+        .root_source_file = b.path("e2e_call.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    });
+    const call_executable = b.addExecutable(.{ .name = "sdde-e2e-call", .root_module = call_module });
+    const run_call = b.addRunArtifact(call_executable);
+    run_call.has_side_effects = true;
+    if (b.args) |args| run_call.addArgs(args);
+    b.step("e2e-call", "Run an explicitly selected captured call with diagnostic model settings").dependOn(&run_call.step);
+    b.step("build-e2e-call", "Build the call diagnostic harness without API calls").dependOn(&call_executable.step);
+    const call_tests = b.addRunArtifact(b.addTest(.{ .root_module = call_module }));
+    call_tests.setCwd(b.path("."));
+    b.step("test-e2e-call", "Test captured-call selection, binding and reporting offline").dependOn(&call_tests.step);
     const e2e_module = b.createModule(.{
         .root_source_file = b.path("e2e.zig"),
         .target = target,
@@ -122,12 +148,14 @@ pub fn build(b: *std.Build) void {
             .{ .name = "unicode_normalization", .module = unicode_module },
         },
     });
-    const provenance_module = b.createModule(.{ .root_source_file = b.path("build/provenance.zig"), .target = b.graph.host, .optimize = optimize });
+    const provenance_module = b.createModule(.{ .root_source_file = b.path("build_provenance.zig"), .target = b.graph.host, .optimize = optimize, .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }} });
     const provenance_tool = b.addExecutable(.{ .name = "capture-build-provenance", .root_module = provenance_module });
     const provenance = b.addRunArtifact(provenance_tool);
     provenance.setCwd(b.path("."));
     provenance.has_side_effects = true;
     const provenance_file = provenance.addOutputFileArg("build-provenance.json");
+    // Only live E2E execution embeds the checkout identity. Offline test builds
+    // must not be invalidated by changes to unrelated provenance inputs.
     e2e_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
     const all_tests_module = b.createModule(.{
         .root_source_file = b.path("tests.zig"),
@@ -138,29 +166,38 @@ pub fn build(b: *std.Build) void {
             .{ .name = "unicode_normalization", .module = unicode_module },
         },
     });
-    all_tests_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
     const all_tests = b.addRunArtifact(b.addTest(.{ .name = "repository-tests", .root_module = all_tests_module }));
     all_tests.setCwd(b.path("."));
     test_step.dependOn(&all_tests.step);
     const integration_module = b.createModule(.{
         .root_source_file = b.path("integration.zig"),
         .target = target,
-        .optimize = optimize,
+        .optimize = .ReleaseSafe,
         .imports = &.{
             .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
             .{ .name = "unicode_normalization", .module = unicode_module },
         },
     });
-    integration_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
     // Imported engine modules retain their own tests in the repository suite.
-    const integration_tests = b.addTest(.{ .root_module = integration_module, .filters = &.{"test.harness.integration.tests."} });
+    const integration_tests = b.addTest(.{ .root_module = integration_module, .filters = &.{ "test.integration.", "test.harness.integration.tests." } });
     const run_integration_tests = b.addRunArtifact(integration_tests);
+    run_integration_tests.setCwd(b.path("."));
     const launcher_tests = b.addSystemCommand(&.{"sh"});
     launcher_tests.addFileArg(b.path("test/harness/integration/launcher_test.sh"));
     launcher_tests.addFileArg(b.path("scripts/e2e-spec.sh"));
-    const integration_step = b.step("test-integration", "Run fixed offline harness and launcher integration tests");
+    const integration_script_tests = b.addSystemCommand(&.{"sh"});
+    integration_script_tests.addFileArg(b.path("test/harness/integration/integration_script_test.sh"));
+    integration_script_tests.addFileArg(b.path("scripts/test-integration.sh"));
+    const integration_step = b.step("test-integration", "Run offline workflow, harness and launcher integration tests");
     integration_step.dependOn(&run_integration_tests.step);
     integration_step.dependOn(&launcher_tests.step);
+    integration_step.dependOn(&integration_script_tests.step);
+    const call_launcher_tests = b.addSystemCommand(&.{"sh"});
+    call_launcher_tests.addFileArg(b.path("test/harness/integration/call_launcher_test.sh"));
+    call_launcher_tests.addFileArg(b.path("scripts/e2e-call.sh"));
+    integration_step.dependOn(&call_launcher_tests.step);
+    b.step("test-e2e-call-launcher", "Test call launcher arguments and environment offline").dependOn(&call_launcher_tests.step);
+
     const e2e_executable = b.addExecutable(.{ .name = "sdde-e2e-spec", .root_module = e2e_module });
     const run_e2e = b.addRunArtifact(e2e_executable);
     run_e2e.has_side_effects = true;
@@ -198,6 +235,28 @@ pub fn build(b: *std.Build) void {
     e2e_extra_case.expectStdErrEqual("Select exactly one E2E case with --case; use --help.\n");
     e2e_smoke.dependOn(&e2e_extra_case.step);
     test_step.dependOn(e2e_smoke);
+    const call_directory = b.addTempFiles();
+    const call_offline = offlineExecutable(b, call_executable);
+    const call_binary = call_directory.addCopyFile(call_offline.getEmittedBin(), call_offline.out_filename);
+    const call_help = std.Build.Step.Run.create(b, "run standalone call diagnostic help without credentials");
+    call_help.addFileArg(call_binary);
+    call_help.addArg("--help");
+    call_help.setCwd(call_directory.getDirectory());
+    call_help.clearEnvironment();
+    call_help.expectExitCode(0);
+    call_help.expectStdErrEqual("");
+    const call_denied = std.Build.Step.Run.create(b, "reject call diagnostics without explicit capture and model settings");
+    call_denied.addFileArg(call_binary);
+    call_denied.setCwd(call_directory.getDirectory());
+    call_denied.clearEnvironment();
+    call_denied.expectExitCode(1);
+    call_denied.expectStdOutEqual("");
+    call_denied.expectStdErrEqual("Invalid arguments; use --help. No API call made.\n");
+    const call_smoke = b.step("smoke-e2e-call", "Test standalone call diagnostic startup without API calls");
+    call_smoke.dependOn(&call_executable.step);
+    call_smoke.dependOn(&call_help.step);
+    call_smoke.dependOn(&call_denied.step);
+    test_step.dependOn(call_smoke);
     const evaluator_directory = b.addTempFiles();
     const evaluator_offline = offlineExecutable(b, evaluator_exe);
     const evaluator_binary = evaluator_directory.addCopyFile(evaluator_offline.getEmittedBin(), evaluator_offline.out_filename);
@@ -219,6 +278,27 @@ pub fn build(b: *std.Build) void {
     evaluator_smoke.dependOn(&evaluator_exe.step);
     evaluator_smoke.dependOn(&evaluator_help.step);
     evaluator_smoke.dependOn(&evaluator_denied.step);
+    const role_offline = offlineExecutable(b, role_calibration);
+    const role_binary = evaluator_directory.addCopyFile(role_offline.getEmittedBin(), role_offline.out_filename);
+    const role_help = std.Build.Step.Run.create(b, "run standalone role calibration help without API calls");
+    role_help.addFileArg(role_binary);
+    role_help.addArg("--help");
+    role_help.setCwd(evaluator_directory.getDirectory());
+    role_help.clearEnvironment();
+    role_help.expectExitCode(0);
+    role_help.expectStdErrEqual("");
+    const role_denied = std.Build.Step.Run.create(b, "reject role calibration without an explicit cohort and binding");
+    role_denied.addFileArg(role_binary);
+    role_denied.setCwd(evaluator_directory.getDirectory());
+    role_denied.clearEnvironment();
+    role_denied.expectExitCode(1);
+    role_denied.expectStdOutEqual("");
+    role_denied.expectStdErrEqual("Invalid arguments; use --help. No API call made.\n");
+    const role_smoke = b.step("smoke-role-calibration", "Test standalone diagnostic startup without live connections");
+    role_smoke.dependOn(&role_calibration.step);
+    role_smoke.dependOn(&role_help.step);
+    role_smoke.dependOn(&role_denied.step);
+    test_step.dependOn(role_smoke);
     _ = evaluator_directory.add("judge.json", "{\"schema\":\"evaluation-config/v1\",\"reasoning_effort\":null,\"temperature\":null,\"timeout_ms\":1000,\"retry_limit\":0,\"retry_delay_ms\":0,\"total_token_budget\":100}");
     for ([_]struct { name: []const u8, provider: []const u8 = "openai", region: ?[]const u8 = null, model: ?[]const u8, key: ?[]const u8, key_name: []const u8 = "TEST_OPENAI_API_KEY", expected: []const u8 }{
         .{ .name = "reject missing test evaluation model", .model = null, .key = null, .expected = "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.\n" },
@@ -605,9 +685,13 @@ pub fn build(b: *std.Build) void {
     lint_command.setName("lint Zig source");
     lint_command.addFileArg(b.path("build.zig"));
     lint_command.addFileArg(b.path("build.zig.zon"));
+    lint_command.addFileArg(b.path("build_provenance.zig"));
     lint_command.addFileArg(b.path("harness.zig"));
+    lint_command.addFileArg(b.path("role_calibration.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));
+    lint_command.addFileArg(b.path("e2e_call.zig"));
     lint_command.addFileArg(b.path("tests.zig"));
+    lint_command.addFileArg(b.path("integration.zig"));
     lint_command.addDirectoryArg(b.path("build"));
     lint_command.addDirectoryArg(b.path("src"));
     lint_command.addDirectoryArg(b.path("test"));
@@ -631,7 +715,7 @@ pub fn build(b: *std.Build) void {
             std.mem.eql(u8, name, "smoke") or std.mem.startsWith(u8, name, "test-") or
             std.mem.startsWith(u8, name, "smoke-"))
         {
-            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step }) catch |err|
+            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step, &run_roles.step, &run_call.step }) catch |err|
                 std.debug.panic("automated step {s} violates manual-only model execution: {s}", .{ name, @errorName(err) });
         }
     }

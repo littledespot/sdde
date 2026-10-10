@@ -54,7 +54,9 @@ pub const Rule = struct {
     disposition_choices: ?dispositions.RepairChoices = null,
     const Guidance = struct {
         rule: d.Rule,
-        requirement: ?[]const u8,
+        /// Diagnostic about the rejected candidate, not replacement scope.
+        /// The authorized target and input constraints govern the repair.
+        failed_requirement: ?[]const u8,
         expected: ?d.Fact,
         content: ?d.ContentKind,
         selection: ?[]const r.ClaimId,
@@ -66,7 +68,7 @@ pub const Rule = struct {
         const relations = self.rejection.relations;
         return .{
             .rule = self.rejection.issue.rule,
-            .requirement = if (self.disposition_choices == null and (expected == .constraint or expected == .text_issue)) self.requirement else null,
+            .failed_requirement = if (self.disposition_choices == null and (expected == .constraint or expected == .text_issue)) self.requirement else null,
             .expected = if (expected == .count or expected == .constraint) null else expected,
             .content = relations.content,
             .selection = if (relations.selection.len == 0) null else relations.selection,
@@ -183,8 +185,6 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
         .summary => {
             if (parsed.proposal != .summary or rejection.issue.rule != .membership) return .{ .blocked = .no_independent_target };
             const statements = parsed.proposal.summary.statements;
-            if (rejection.relations.redundant) |index| return deletion(a, parsed, facts, .{ .statement = index }, rule);
-            if (rejection.relations.competing) return .{ .blocked = .competing_entries };
             for (parsed.input.partition.group.claim_ids) |id| {
                 for (statements) |statement| {
                     if (r.contains(r.ClaimId, statement.claim_ids, id)) break;
@@ -313,7 +313,12 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .delete => return error.InvalidAtomicRepair,
     };
     const scope: d.Constraint.Scope = switch (kind) {
-        .selection => .selection,
+        .selection => .{ .selection = switch (authorization.target) {
+            .statement_selection => .statement,
+            .signal_selection => .signal,
+            .conflict_selection => .conflict,
+            else => return error.InvalidAtomicRepair,
+        } },
         .content => .{ .content = authorization.rule.rejection.relations.content orelse return error.InvalidAtomicRepair },
         .disposition => .{ .disposition = if (authorization.rule.disposition_choices == null) .rules else .choices },
         .summary => .summary,
@@ -352,7 +357,12 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         for (values, authorization.rule.rejection.relations.selection) |*id, claim| id.* = claim.ordinal;
         break :selections values;
     };
-    return packets.withIntegerChoices(a, prepared_input, &.{.{ .target = .{ .path = &.{.{ .property = if (authorization.target == .conflict_selection) "group_id" else "claim_ids" }} }, .definition = .{ .bytes = definition }, .allowed = ids }});
+    return packets.withIntegerChoices(a, prepared_input, &.{.{
+        .target = .{ .path = &.{.{ .property = if (authorization.target == .conflict_selection) "group_id" else "claim_ids" }} },
+        .definition = .{ .bytes = definition },
+        .allowed = ids,
+        .collection = if (authorization.target == .conflict_selection) .sequence else .unique_subset,
+    }});
 }
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
     const kind = try atomic.checkRequest(authorization, input);
@@ -466,7 +476,7 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
                 result.phase = .dispositions;
             },
             .signal_selection, .signal_content, .signal, .insert_signal => {
-                global.role_assignments = &.{};
+                global.role_decisions = null;
                 result.source.fields = try retireRoles(a, result.source.fields);
                 result.phase = if (parsed.phase == .complete or parsed.phase == .signals_with_conflicts) .signals_with_conflicts else .signals;
             },
@@ -682,7 +692,7 @@ fn retireSignals(a: std.mem.Allocator, parsed: r.Parsed, claims: []const r.Claim
         _ = values.orderedRemove(index);
     }
     result.proposal.global.signals = try values.toOwnedSlice(a);
-    result.proposal.global.role_assignments = &.{};
+    result.proposal.global.role_decisions = null;
     result.source.fields = try retireRoles(a, result.source.fields);
     return result;
 }

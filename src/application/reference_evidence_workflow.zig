@@ -22,11 +22,11 @@ pub const Assign = struct {
     action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const source = values.read(&input.step.data, ingestion.inputs_schema, reference.Inputs) catch return error.OperationExecutionFailed;
-        const directory = values.read(&input.step.data, feature_values.directory, feature.Directory) catch return error.OperationExecutionFailed;
+        const source = values.read(&input.step.data, ingestion.inputs_schema, reference.Inputs) catch |operation_error| return operation_error;
+        const directory = values.read(&input.step.data, feature_values.directory, feature.Directory) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), source.*, directory.selector.feature_id) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), source.*, directory.selector.feature_id) catch |operation_error| return operation_error;
         return publish(self.allocator, corpus_schema, evidence.Corpus, result);
     }
 };
@@ -36,10 +36,10 @@ pub const BuildChunks = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const corpus = values.read(&input.step.data, corpus_schema, evidence.Corpus) catch return error.OperationExecutionFailed;
+        const corpus = values.read(&input.step.data, corpus_schema, evidence.Corpus) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), corpus.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), corpus.*) catch |operation_error| return operation_error;
         return publish(self.allocator, chunks_schema, evidence.Chunks, result);
     }
 };
@@ -49,11 +49,11 @@ pub const ValidateChunks = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const source = values.read(&input.step.data, ingestion.inputs_schema, reference.Inputs) catch return error.OperationExecutionFailed;
-        const directory = values.read(&input.step.data, feature_values.directory, feature.Directory) catch return error.OperationExecutionFailed;
-        const corpus = values.read(&input.step.data, corpus_schema, evidence.Corpus) catch return error.OperationExecutionFailed;
-        const chunks = values.read(&input.step.data, chunks_schema, evidence.Chunks) catch return error.OperationExecutionFailed;
-        const result = self.action.execute(source.*, directory.selector.feature_id, corpus.*, chunks.*) catch return error.OperationExecutionFailed;
+        const source = values.read(&input.step.data, ingestion.inputs_schema, reference.Inputs) catch |operation_error| return operation_error;
+        const directory = values.read(&input.step.data, feature_values.directory, feature.Directory) catch |operation_error| return operation_error;
+        const corpus = values.read(&input.step.data, corpus_schema, evidence.Corpus) catch |operation_error| return operation_error;
+        const chunks = values.read(&input.step.data, chunks_schema, evidence.Chunks) catch |operation_error| return operation_error;
+        const result = self.action.execute(source.*, directory.selector.feature_id, corpus.*, chunks.*) catch |operation_error| return operation_error;
         return publish(self.allocator, inputs_schema, evidence.Inputs, result);
     }
 };
@@ -63,11 +63,11 @@ pub const ValidateCitations = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const source = values.read(&input.step.data, inputs_schema, evidence.Inputs) catch return error.OperationExecutionFailed;
-        const proposals = values.read(&input.step.data, proposals_schema, evidence.CitationProposals) catch return error.OperationExecutionFailed;
+        const source = values.read(&input.step.data, inputs_schema, evidence.Inputs) catch |operation_error| return operation_error;
+        const proposals = values.read(&input.step.data, proposals_schema, evidence.CitationProposals) catch |operation_error| return operation_error;
         var scratch: std.heap.ArenaAllocator = .init(self.allocator);
         defer scratch.deinit();
-        const result = self.action.execute(scratch.allocator(), source.*, proposals.*) catch return error.OperationExecutionFailed;
+        const result = self.action.execute(scratch.allocator(), source.*, proposals.*) catch |operation_error| return operation_error;
         return publish(self.allocator, citations_schema, evidence.ValidatedCitations, result);
     }
 };

@@ -16,15 +16,15 @@ pub const PrepareClarifications = struct {
         const self = context.?;
         const read = @import("clarification_input_workflow.zig");
         const refresh = @import("clarification_refresh_workflow.zig");
-        const feature = values.read(&input.step.data, @import("feature_logging_workflow.zig").directory, @import("../domain/feature_directory.zig").Directory) catch return error.OperationExecutionFailed;
-        const paths = values.read(&input.step.data, read.paths_schema, @import("../domain/workflow_artifact_registry.zig").FeaturePaths) catch return error.OperationExecutionFailed;
-        const prior = values.read(&input.step.data, read.captures_schema, c.Captures) catch return error.OperationExecutionFailed;
-        const inputs = values.read(&input.step.data, read.inputs_schema, c.Inputs) catch return error.OperationExecutionFailed;
-        const state = values.read(&input.step.data, refresh.state_schema, @import("../domain/clarification_refresh.zig").Result) catch return error.OperationExecutionFailed;
-        const views = values.read(&input.step.data, refresh.views_schema, []const @import("../domain/clarification_views.zig").View) catch return error.OperationExecutionFailed;
+        const feature = values.read(&input.step.data, @import("feature_logging_workflow.zig").directory, @import("../domain/feature_directory.zig").Directory) catch |operation_error| return operation_error;
+        const paths = values.read(&input.step.data, read.paths_schema, @import("../domain/workflow_artifact_registry.zig").FeaturePaths) catch |operation_error| return operation_error;
+        const prior = values.read(&input.step.data, read.captures_schema, c.Captures) catch |operation_error| return operation_error;
+        const inputs = values.read(&input.step.data, read.inputs_schema, c.Inputs) catch |operation_error| return operation_error;
+        const state = values.read(&input.step.data, refresh.state_schema, @import("../domain/clarification_refresh.zig").Result) catch |operation_error| return operation_error;
+        const views = values.read(&input.step.data, refresh.views_schema, []const @import("../domain/clarification_views.zig").View) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const prepared = self.action.execute(arena.allocator(), feature.*, paths.*, prior.*, inputs.*, state.*, views.*) catch return error.OperationExecutionFailed;
+        const prepared = self.action.execute(arena.allocator(), feature.*, paths.*, prior.*, inputs.*, state.*, views.*) catch |operation_error| return operation_error;
         return publish(self.allocator, prepared_schema, output.Prepared, prepared);
     }
 };
@@ -35,14 +35,14 @@ pub const Publish = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const prepared = values.read(&input.step.data, prepared_schema, output.Prepared) catch return error.OperationExecutionFailed;
+        const prepared = values.read(&input.step.data, prepared_schema, output.Prepared) catch |operation_error| return operation_error;
         var candidate = try publish(self.allocator, published_schema, bool, true);
         errdefer values.destroy(candidate.delta.data_writes[@intFromEnum(published_schema.key)].?);
         candidate.outcome = switch (prepared.terminal_outcome) {
             .ok => .ok,
             .needs_user => .needs_user,
         };
-        self.action.execute(self.allocator, prepared.*) catch return error.OperationExecutionFailed;
+        self.action.execute(self.allocator, prepared.*) catch |operation_error| return operation_error;
         return candidate;
     }
 };

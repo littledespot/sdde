@@ -8,13 +8,14 @@
 [decision index in §32](#32-accepted-and-deferred-implementation-choices) records
 accepted amendments without accepting the remainder of the design. Current
 implementation and known gaps are tracked in the [feature contracts](features/)
-and [FIX_001 rollout](../fixes/IMP_001.md); design requirements are not
+and [FIX01](../fixes/FIX01.md); design requirements are not
 claims that the engine already satisfies them.
 
 **22 September corrective design:** [§12.8.1](contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
 owns clarification admission and candidate-failure precedence;
-[FIX_002](../fixes/FIX_002.md) tracks implementation and semantic validation still
-required. Shared admission and repair precedence have offline verification; the
+[FIX_002](../fixes/archive/FIX_002.md) retains the historical implementation record;
+[FIX01](../fixes/FIX01.md) tracks remaining work. Shared admission and repair
+precedence have offline verification; the
 approved D1 response shapes follow §12.7. Verdict reassessment remains unapproved.
 The overall design remains Proposed.
 
@@ -32,13 +33,13 @@ outputs and unresolved forms, retaining clarification identities/applicable
 answers and protecting user-closed form bytes (§23.2).
 
 **Recent approved guidance:** FIX_001 A1–A3 amend §§12.5, 17.3 and 22.6. The
-[approval record](../fixes/IMP_001.md#5-design-amendment-decisions)
+[approval record](../fixes/archive/IMP_001.md#5-design-amendment-decisions)
 preserves the decision scope; subsequent defect reviews do not grant new authority.
 
 [ADR 0015](decisions/0015-specification-principle-review.md) adds early Spec
 requirement–principle assessment and shared actionable-question preparation.
-Native capture/assessment is implemented; actionable-question preparation and full
-readiness remain tracked in FIX_001. Business and policy ownership stay separate.
+Current implementation and semantic acceptance gaps are tracked in
+[FIX01](../fixes/FIX01.md). Business and policy ownership stay separate.
 
 [ADR 0016](decisions/0016-configured-json-response-composition.md) records the
 user-directed generic JSON response decomposition and deterministic assembly design.
@@ -223,8 +224,11 @@ references, and normative resolutions are retained in the linked sections.
       unresolved clarification forms at the same paths. Form replacement retains the subject
       ID, not the old form bytes.
     - Section 23.2 owns rerun replacement and protection.
-32. Provider APIs own model-call size limits. SDDE adds no request/response
-    byte or per-call token ceilings, including renamed transport/memory budgets.
+32. Provider APIs own model-call size limits. SDDE adds no engine-enforced
+    byte/token capacity ceilings, including renamed transport/memory budgets.
+    An optional slot `maxOutputTokens` requests a provider-enforced output allowance
+    under [ADR 0011](decisions/0011-provider-owned-request-limits.md); omission
+    delegates the provider default without a size-fit check or reservation.
     It records and propagates provider failures/stops and accounts actual input
     plus output tokens against only the execution's total-token budget. Calls
     at or above that budget are prohibited; retries remain explicitly local.
@@ -875,6 +879,9 @@ The new engine is ready for production evaluation when all of the following are 
       complete raw-fallback rules are never truncated.
     - Provider APIs own model-call size limits; no engine/operation/slot byte ceilings, size
       estimates or static-capacity checks gate calls.
+    - Optional positive slot output allowances retain their exact presence/value through
+      binding, request authorization, correction, capture and replay; omission delegates
+      the provider default. Unsupported or substituted controls reject without clamping.
     - Actual reported input/output usage is retained even on budget overshoot, and no subsequent
       call is allowed at or above the execution budget.
     - Configured response parts follow [ADR 0016](decisions/0016-configured-json-response-composition.md):
@@ -1071,7 +1078,7 @@ decision history:
 | [0008](decisions/0008-feature-naming-policy.md) | Superseded by 0010; reference-derived naming is withdrawn. |
 | [0009](decisions/0009-atomic-workflow-execution.md) | Whole-execution validation, fresh reruns, protected clarifications and explicit publication-failure semantics; no recovery transactions. |
 | [0010](decisions/0010-explicit-feature-directory.md) | The supplied validated directory identifies the feature. |
-| [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned per-call limits and actual execution-token accounting. |
+| [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned limits, optional requested output allowances and actual execution-token accounting. |
 | [0012](decisions/0012-workflow-owned-model-request.md) | Retain one execution-owned request/binding/resource identity across explicit YAML operations. |
 | [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |
@@ -1080,7 +1087,7 @@ decision history:
 | [0017](decisions/0017-incomplete-specification-publication.md) | Clarification pauses publish a validated incomplete specification and pending state without completion authority. |
 | [0018](decisions/0018-debug-model-exchange-logging.md) | Debug/trace capture complete credential-redacted production model exchanges, including failed attempts, without silent truncation. |
 | [0019](decisions/0019-single-request-debugger.md) | The native browser debugger inspects captured calls and explicitly replays one selected prompt with immutable parent links and no workflow execution. |
-| [0020](decisions/0020-derived-exact-reference-lineage.md) | One preserved-token claim handle selects an exact occurrence; the shared reference owner derives its lineage and bounds repair. The coordinated format cutover remains to be implemented. |
+| [0020](decisions/0020-derived-exact-reference-lineage.md) | One preserved-token claim handle selects an exact occurrence; the shared reference owner derives its lineage and bounds repair. Provenance-free source bindings and complete authoring-role decisions retain separate wire candidates and native canonical authority. |
 | [0021](decisions/0021-optional-source-preservation-review.md) | Optional source-preservation review before Spec generation, using shared authority/repair contracts and a dedicated configured candidate-repair model slot. |
 | [0022](decisions/0022-native-reference-phase-handoffs.md) | Validated native reconciliation phases, occurrence-bound role selections, semantic conflict groups, native exact-token projections and forced classifications. |
 

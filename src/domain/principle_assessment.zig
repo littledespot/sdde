@@ -87,22 +87,21 @@ pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.
     try p.validateStored(scratch, source_context.inputs, .{ .records = source_context.registry.records, .occurrences = source_context.registry.occurrences }, context.business.references, context.business.brief, context.business.content);
     const assigned = try subjects(scratch, context.business);
     const ledger = try a.build(scratch, inputs);
-    const Requirement = struct { ordinal: u32, subject: a.Id };
-    var requirements: std.ArrayList(Requirement) = .empty;
+    var selected: ?a.Id = null;
     for (ledger.requirements, 0..) |requirement, index| {
         const matches = switch (scope) {
             .finding, .correction => |id| std.meta.eql(id, requirement.seed.id),
         };
-        if (matches) try requirements.append(scratch, .{ .ordinal = @intCast(index + 1), .subject = assigned[index] });
+        if (matches) {
+            if (selected != null or index >= assigned.len) return error.InvalidRequiredAuthority;
+            selected = assigned[index];
+        }
     }
-    if (requirements.items.len != 1) return error.InvalidRequiredAuthority;
-    const projection = @import("specification_projection.zig");
+    const subject = selected orelse return error.InvalidRequiredAuthority;
+    const business = try @import("specification_authority.zig").projectRecords(scratch, context.business.feature, context.business.references, context.business.content, context.business.brief);
     const payload = .{
-        .subject = @as([]const u8, "principle_consistency"),
-        .requirements = requirements.items,
-        .brief = .{ .title = try projection.scalar(scratch, source_context, context.business.brief.title), .description = try projection.scalar(scratch, source_context, context.business.brief.description), .primary_goal = try projection.scalar(scratch, source_context, context.business.brief.primary_goal) },
-        .candidate = try projection.project(scratch, source_context, context.business.content),
-        .entity_basis = try projection.scalar(scratch, source_context, context.business.content.entities.basis),
+        .task = try @import("required_authority_description.zig").task(scratch, subject),
+        .subject = try @import("specification_review_subject.zig").projectBusiness(scratch, business, source_context, subject),
         .principles = try registry.guidance(scratch, context.registry, context.selection),
     };
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
@@ -141,7 +140,7 @@ pub fn canonical(allocator: std.mem.Allocator, inputs: a.Inputs) Error!Canonical
 }
 pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: @import("reference_evidence.zig").Inputs, evidence: a.Evidence) Error!void {
     const review = evidence.review orelse return error.InvalidRequiredAuthority;
-    if (review.loss != null) return error.InvalidRequiredAuthority;
+    if (review.loss != null or review.loss_comparison != null) return error.InvalidRequiredAuthority;
     if (review.principle_registry == null or !std.meta.eql(review.principle_registry.?, (inputs.principle_context orelse return error.InvalidRequiredAuthority).registry.id)) return error.InvalidRequiredAuthority;
     if (!(inputs.references orelse return error.InvalidRequiredAuthority).items.state_id.eql(sources.corpus.state_id) or evidence.method != .model_assisted or
         review.question != null or review.provenance.claim_ids.len != 0 or review.provenance.citation_ids.len != 0 or review.provenance.clarification_response_ids.len != 0 or review.source_ids.len != 0 or

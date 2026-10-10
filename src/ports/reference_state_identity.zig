@@ -1,4 +1,4 @@
-pub const Error = error{IdentityUnavailable};
+pub const Error = @import("../domain/operation_error.zig").ReferenceStateIdentity;
 
 /// Supplies exactly one fresh namespace; no paths, stores or model capability.
 pub const Source = struct {

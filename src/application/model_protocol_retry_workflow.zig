@@ -14,9 +14,9 @@ pub const Build = struct {
         const current = try requests.readCurrent(&input.step.data, requests.prepared_schema);
         const validated = try requests.readCurrent(&input.step.data, requests.validated_schema);
         if (current.id() != validated.id()) return error.OperationExecutionFailed;
-        const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+        const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         const payload = try @import("model_payload_schema_workflow.zig").readCurrent(&input.step.data);
-        var delta = @import("../domain/model_transport.zig").retire(.rejected_attempt, ledger, current.id(), @import("model_payload_schema_workflow.zig").status(payload)) catch return error.OperationExecutionFailed;
+        var delta = @import("../domain/model_transport.zig").retire(.rejected_attempt, ledger, current.id(), @import("model_payload_schema_workflow.zig").status(payload)) catch |operation_error| return operation_error;
         const observation = payload.source().source().outcome();
         if (observation != .validated) return error.OperationExecutionFailed;
         const rejected = observation.validated;
@@ -31,18 +31,18 @@ pub const Build = struct {
             .valid => return error.OperationExecutionFailed,
         };
         var input_id: [64]u8 = undefined;
-        const input_bytes = std.fmt.bufPrint(&input_id, "protocol-{d}", .{ledger.revision().value}) catch return error.OperationExecutionFailed;
-        const source = validated.source(.{ .bytes = input_bytes }) catch return error.OperationExecutionFailed;
+        const input_bytes = std.fmt.bufPrint(&input_id, "protocol-{d}", .{ledger.revision().value}) catch |operation_error| return operation_error;
+        const source = validated.source(.{ .bytes = input_bytes }) catch |operation_error| return operation_error;
         const prompt = current.protocolPrompt() orelse return error.OperationExecutionFailed;
         var parts: @import("../domain/model_request_handoff.zig").ContentBuffer = undefined;
-        const repetition = current.protocolRepetition(rejected, diagnostic) catch return error.OperationExecutionFailed;
-        var prepared = self.action.execute(self.allocator, source, validated.content(&parts), rejected, diagnostic, repetition, prompt) catch return error.OperationExecutionFailed;
-        const next = @import("../domain/model_request_handoff.zig").prepared(validated, prepared, .{ .previous = current, .rejected = rejected, .diagnostic = diagnostic }) catch {
+        const repetition = current.protocolRepetition(rejected, diagnostic) catch |operation_error| return operation_error;
+        var prepared = self.action.execute(self.allocator, source, validated.content(&parts), rejected, diagnostic, repetition, prompt) catch |operation_error| return operation_error;
+        const next = @import("../domain/model_request_handoff.zig").prepared(validated, prepared, .{ .previous = current, .rejected = rejected, .diagnostic = diagnostic }) catch |native_failure| {
             prepared.deinit();
-            return error.OperationExecutionFailed;
+            return native_failure;
         };
         errdefer @import("../domain/model_request_handoff.zig").destroy(next);
-        delta.data_replacements[@intFromEnum(requests.prepared_schema.key)] = requests.adoptRequest(self.allocator, requests.prepared_schema, next) catch return error.OperationExecutionFailed;
+        delta.data_replacements[@intFromEnum(requests.prepared_schema.key)] = requests.adoptRequest(self.allocator, requests.prepared_schema, next) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
     }
 };
@@ -52,7 +52,7 @@ pub const Check = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const current = try requests.readCurrent(&input.step.data, requests.prepared_schema);
-        const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch return error.OperationExecutionFailed;
+        const ledger = values.read(&input.step.data, requests.ledger_schema, identity.ModelRequestIdentityLedger) catch |operation_error| return operation_error;
         return .{ .outcome = context.?.action.execute(ledger, current.id()), .delta = .{} };
     }
 };

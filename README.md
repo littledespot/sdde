@@ -22,14 +22,11 @@ and publication evidence control workflow authority.
   specification generation, validation, authorized atomic repair and registered
   output publication. Evidence selections resolve to engine-owned citations;
   repair retains exact old values, revisions, dependencies and producing-call evidence.
-- Phase 3 repair is [implemented and verified offline](fixes/IMP_001.md#c1-and-c2-delivery--15-september-2026),
-  including sibling-aware selection and native disposition-set equivalence.
-  Shared eligibility (C3) and runtime assembly (20/F10) are also consolidated.
-  Authenticated clarification-answer application, feature-log integration and
-  remaining support-review/publication assurance work are also open. Connected
+- Authenticated clarification-answer application and remaining semantic-review,
+  workload and publication assurance work are open. Connected
   generation does not establish complete Specify acceptance. See
   [F0100](design/features/F0100-SpecWorkflow.md) and the
-  [active FIX_001 rollout](fixes/IMP_001.md).
+  [current FIX01 review and remaining work](fixes/FIX01.md).
 - The development harness runs real generation and grades the actual published
   specification through the selected OpenAI or Bedrock evaluator. A successful
   scored live baseline, human rubric calibration and broader acceptance remain
@@ -76,8 +73,19 @@ separate changed-scope aggregate; run the relevant owning-boundary steps during
 iteration and `zig build verify` before completing cross-cutting work.
 
 `zig build test` runs offline checks of engine internals.
-`./scripts/test-integration.sh` runs the fixed offline harness and launcher
-checks through `zig build test-integration`. `zig build verify` includes both
+`./scripts/test-integration.sh` runs the workflow scenarios, fixed offline harness
+and launcher checks through `zig build test-integration`. The integration test
+executable always uses `ReleaseSafe` optimization with runtime safety checks;
+no command-line options are required.
+
+Each script run prints a pass/fail summary and saves its complete output to a
+unique `.zig-cache/test-integration.*` file, whose path is printed at startup.
+Successful runs keep expected workflow-failure logs in that file; failed runs
+also display the complete output and preserve the build's exit status.
+
+Temporary-project workflow
+scenarios live in `test/integration/workflow_tests.zig` and are excluded from the
+unit-test import tree. `zig build verify` includes both
 as separate steps, plus architecture and smoke checks. The numbered
 specification scenarios exercise engine behavior with fake model responses;
 they do not assess prompt quality. The separately invoked live `e2e-spec`
@@ -146,6 +154,17 @@ includes both call and preparation entries. Replays explicitly identify the user
 Replay command as their initiator and retain the captured workflow origin. Response
 inspection separates provider bytes, extracted text, parsed JSON and schema diagnostics.
 
+With `"logs": { "level": "debug", "console": true }` in `.sddtoolkit.json`,
+the prompt stream beneath the feature's `logs/prompts` retains the entire available
+provider response after credential redaction. Large responses span ordered chunks;
+the chunk size does not truncate the response. Bedrock GPT-OSS reasoning remains
+in the raw response, including when the provider stops at its output limit or
+returns no final answer. In the debugger, select **Response → Raw provider response**
+to inspect it; **Extracted model text** contains only the admitted final answer.
+Interrupted transport retains all received bytes with explicit partial-response
+provenance. `trace` also enables capture; `console` controls the console mirror,
+not file capture.
+
 The Replay tab sends **one selected prompt once**. Exact replay preserves request
 bytes; modified replay lets you edit its prompt, context or schema. Each click may
 incur provider charges and saves a new linked record under the feature's
@@ -195,6 +214,33 @@ The launcher requires an explicit case and loads the checkout's optional
 specification; it cannot establish engine-generation success. Neither harness
 ships with the production executable.
 
+To test one captured generation request, use the separate
+[call diagnostic](design/harness/e2e.md#test-one-captured-call) with an explicit
+retained run, workflow ID, physical call ordinal, registered model and reasoning
+effort:
+
+```sh
+./scripts/e2e-call.sh \
+  --run 'zig-out/e2e-spec/<UTC-date-time>-<unique-id>' \
+  --workflow spec-generation --call 1 \
+  --model openai.gpt-oss-20b-1:0 --reasoning-effort high --repeats 3
+```
+
+Replace the run placeholder with a real capture; the command never selects the
+latest run automatically. Each repeat sends one request, with no automatic retry,
+repair, workflow execution, publication or grading. It preserves source captures
+and saves protocol/schema inspection and usage beneath `zig-out/e2e-call/`;
+semantic quality is not assessed. The launcher shares `.env.e2e` setup with
+`e2e-spec.sh`; `--help` and offline builds make no API calls. Live diagnostics
+require explicit approval for the selected calls and repeat count. They do not
+establish full-workflow E2E acceptance or change browser replay behavior.
+
+The separate [authoring-role calibration](test/calibration/authoring-roles/README.md)
+uses `zig build calibrate-roles` to prepare explicit controlled/captured assignment
+comparisons without API calls. Human-reviewed labels and bounded approval precede
+`--live` diagnostic trials. It reuses production packets, role admission and request
+replay; it is neither an E2E case nor workflow authority.
+
 ## Documentation
 
 | Document | Purpose |
@@ -205,21 +251,17 @@ ships with the production executable.
 | [Feature contracts](design/features/) | Component responsibilities, implementation scope and verification requirements. |
 | [Diagrams](design/diagrams/) | Markdown-fenced Mermaid views of the architecture and workflows. |
 | [Harness backlog](design/harness/README.md) | Remaining integration, calibration and live acceptance work. |
-| [FIX_001 issues](fixes/FIX_001.md) | Issues, retained evidence and required outcomes. |
-| [IMP_001 implementation](fixes/IMP_001.md) | Implementation plan, contract decisions, delivery status and validation evidence. |
+| [FIX01](fixes/FIX01.md) | Current corrective focus, code findings, remaining work and required acceptance evidence. |
+| [Fix records](fixes/README.md) | Active tracking and historical decision/evidence records. |
 
 ### Fix records
 
-Keep each fix in a matching pair under `fixes/`:
-
-- `FIX_XXX.md` describes the issues to be fixed and their required outcomes.
-- `IMP_XXX.md` describes the implementation of that fix, including progress
-  and validation evidence.
-
-Use the same three-digit ID for both files. When the entire fix is implemented
-and its required validation is complete, rename both files to `~FIX_XXX.md`
-and `~IMP_XXX.md`, and update their links. Partially implemented fixes retain
-the active names. FIX_001 remains active because its implementation is incomplete.
+[FIX01](fixes/FIX01.md) is the sole active fix record. Keep outstanding work and
+its implementation/verification status there; remove completed tasks from active
+tracking. Completed FIX01 work and its supporting dated reviews live in
+[Z_FIX01](fixes/Z_FIX01.md); older records and experiments remain under
+`fixes/archive/`. Historical proposals and status statements do not
+create current work, grant approval or establish successful live acceptance.
 
 [Templates](design/templates/), [legacy preset source examples](design/toolchainPresets/)
 and [configuration examples](design/examples/) are design inputs. They are not

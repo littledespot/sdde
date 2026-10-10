@@ -12,6 +12,67 @@ pub const Token = struct { claim_id: r.ClaimId, source_form: tokens.ExtractorId,
 pub const Projection = struct { claims: []const Claim, citations: []const r.extraction.Citation, preserved_tokens: []const Token };
 pub const Source = struct { id: r.extraction.identity.SourceId, text: []const u8 };
 
+/// Resolved source meaning for authoring. Native citations, token identity and
+/// dependency state remain in their existing owners, not in the prose task.
+pub const Requirement = struct { claim_id: r.ClaimId, kind: []const u8, meaning: []const u8, source_id: r.extraction.identity.SourceId };
+pub const ExactLiteral = struct { claim_id: r.ClaimId, value: []const u8, source_id: r.extraction.identity.SourceId };
+pub const Meaning = struct { kind: []const u8, meaning: []const u8 };
+pub const ResolvedClaim = struct { id: r.ClaimId, kind: []const u8, meaning: []const u8, citation_ids: []const r.CitationId, source_id: r.extraction.identity.SourceId };
+pub const ResolvedProjection = struct { claims: []const ResolvedClaim, citations: []const r.extraction.Citation, preserved_tokens: []const Token };
+pub const Text = union(enum) { business: r.text.BusinessText, reference: r.text.ReferenceSemanticText };
+
+/// Caller owns an arena; projected text may borrow validated source bytes.
+pub fn requirement(a: std.mem.Allocator, item: r.Item, inputs: r.evidence.Inputs, registry: @import("passive_literals.zig").Registry) r.Error!Requirement {
+    const scope: r.evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = item.claim.chunk_id };
+    _ = try r.evidence.resolve(inputs, scope);
+    if (item.claim.content == .preserved_token) return .{ .claim_id = item.claim.id, .kind = "preserved_token", .meaning = item.claim.content.preserved_token.value.raw_value.bytes, .source_id = item.source_id };
+    const resolved = try modelMeaning(a, inputs, registry, &.{scope}, item.claim.content.model);
+    return .{ .claim_id = item.claim.id, .kind = resolved.kind, .meaning = resolved.meaning, .source_id = item.source_id };
+}
+
+/// Resolve only display handles authorized by the caller's existing claim scope.
+/// The same projection serves authoring requirements and producer comparisons.
+pub fn modelMeaning(a: std.mem.Allocator, inputs: r.evidence.Inputs, registry: @import("passive_literals.zig").Registry, scopes: []const r.evidence.Scope, value: r.extraction.Content) r.Error!Meaning {
+    return switch (value) {
+        inline else => |content_value, kind| .{ .kind = @tagName(kind), .meaning = try resolveText(a, inputs, registry, scopes, if (comptime kind == .business or kind == .scope_guard) .{ .business = content_value.value } else .{ .reference = content_value.value }) },
+    };
+}
+
+pub fn resolveText(a: std.mem.Allocator, inputs: r.evidence.Inputs, registry: @import("passive_literals.zig").Registry, scopes: []const r.evidence.Scope, value: Text) r.Error![]const u8 {
+    var bytes: std.ArrayList(u8) = .empty;
+    errdefer bytes.deinit(a);
+    for (scopes) |scope| _ = try r.evidence.resolve(inputs, scope);
+    switch (value) {
+        inline else => |text, kind| {
+            const nodes = if (comptime kind == .business) text.segments else text.nodes;
+            for (nodes) |node| switch (node) {
+                .literal => |literal| try bytes.appendSlice(a, literal.value),
+                .passive => |reference| try bytes.appendSlice(a, (try @import("passive_literals.zig").resolveIn(registry, inputs, scopes, reference.passive_literal_id)).value),
+                inline else => |reference, tag| if (comptime std.mem.eql(u8, @tagName(tag), "source")) {
+                    for (scopes) |scope| {
+                        const source = try r.evidence.resolve(inputs, scope);
+                        if (!std.meta.eql(source.source.id, reference.source_id)) continue;
+                        try bytes.appendSlice(a, source.source.path.bytes);
+                        break;
+                    } else return error.InvalidReferenceReconciliation;
+                } else return error.InvalidReferenceReconciliation,
+            };
+        },
+    }
+    return bytes.toOwnedSlice(a);
+}
+
+pub fn resolvedProject(a: std.mem.Allocator, items: []const r.Item, inputs: r.evidence.Inputs, registry: @import("passive_literals.zig").Registry) r.Error!ResolvedProjection {
+    const projected = try project(a, items);
+    defer a.free(projected.claims);
+    const resolved = try a.alloc(ResolvedClaim, items.len);
+    for (items, resolved) |item, *claim| {
+        const text = try requirement(a, item, inputs, registry);
+        claim.* = .{ .id = item.claim.id, .kind = text.kind, .meaning = text.meaning, .citation_ids = item.claim.citation_ids, .source_id = text.source_id };
+    }
+    return .{ .claims = resolved, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens };
+}
+
 pub fn sources(a: std.mem.Allocator, inputs: r.evidence.Inputs) std.mem.Allocator.Error![]const Source {
     const result = try a.alloc(Source, inputs.corpus.sources.len);
     for (inputs.corpus.sources, result) |source, *copy| copy.* = .{ .id = source.id, .text = source.bytes };

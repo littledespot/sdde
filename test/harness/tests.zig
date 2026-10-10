@@ -2,6 +2,17 @@ const std = @import("std");
 const c = @import("contracts.zig");
 const judgment = @import("judgment.zig");
 const packet = @import("packet.zig");
+test {
+    _ = @import("call/tests.zig");
+    _ = @import("call/capture_test.zig");
+    _ = @import("call/report_test.zig");
+    _ = @import("diagnostic_binding_test.zig");
+    _ = @import("roles/tests.zig");
+    _ = @import("records/tests.zig");
+    _ = @import("signals/tests.zig");
+    _ = @import("entities/tests.zig");
+    _ = @import("authoring_guidance/tests.zig");
+}
 
 const case_bytes =
     \\{"schema":"evaluation-case/v1","id":"unrelated-example","sources":[{"id":"requirements","path":"reference/input.md"}],"rubric":"rubric.json"}

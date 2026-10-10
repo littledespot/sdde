@@ -1,11 +1,13 @@
 const g = @import("../domain/specification_generation.zig");
 pub const Payload = union(enum) {
     session: @import("../domain/specification_session.zig").Session,
+    binding_rejected: @import("../domain/specification_source_binding.zig").Rejection,
     raw: @import("../domain/specification_candidate.zig").Raw,
     parsed: @import("../domain/specification_repair.zig").Candidate,
     repair_authorization: struct { authorization: @import("../domain/specification_repair.zig").Authorization, response: ?struct { value: @import("../domain/specification_repair.zig").Replacement, origin: @import("../domain/model_candidate_origin.zig").Origin } = null },
     checked: g.Checked,
     coverage_rejected: @import("../domain/specification_coverage.zig").Rejection,
+    omission_rejected: @import("../domain/specification_coverage_repair.zig").AuthorizationRejection,
     omission_repair: @import("../domain/specification_coverage_repair.zig").ModelRepair,
     coverage_repair: @import("../domain/specification_coverage_repair.zig").Decision,
     coverage: @import("../domain/specification_coverage.zig").Coverage,

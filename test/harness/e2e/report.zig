@@ -278,6 +278,31 @@ fn writeExecutionEvidence(writer: *std.Io.Writer, report: c.Report) !void {
         try std.json.Stringify.value(exchange, .{}, writer);
         try writer.writeAll("\n\n");
     }
+    if (report.last_operation_rejection) |rejection| {
+        try writer.writeAll("Last native operation rejection: ");
+        try std.json.Stringify.value(rejection, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
+    if (report.first_observed_defect) |defect| {
+        try writer.writeAll("First observed defect (chronology, not proven root cause): ");
+        try std.json.Stringify.value(defect, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
+    if (report.last_provider_rejection) |rejection| {
+        try writer.writeAll("Retained provider rejection: ");
+        try std.json.Stringify.value(rejection, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
+    if (report.corrections.len != 0) {
+        try writer.writeAll("Native correction history (event sequence links): ");
+        try std.json.Stringify.value(report.corrections, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
+    if (report.outstanding_work.len != 0) {
+        try writer.writeAll("Invalidated data not rebuilt (may include intentionally retired transport): ");
+        try std.json.Stringify.value(report.outstanding_work, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
     if (report.last_protocol_rejection) |rejection| if (report.last_model_call != rejection.call) {
         try writer.writeAll("Earlier protocol rejection: ");
         try std.json.Stringify.value(rejection, .{}, writer);

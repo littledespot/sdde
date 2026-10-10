@@ -100,6 +100,32 @@ pub const ProtocolRejection = struct {
     json_error: ?@import("../../../src/domain/strict_json.zig").Diagnostic,
     schema_error: ?@import("../../../src/domain/model_schema_diagnostic.zig").Description,
 };
+pub const ProviderRejection = struct {
+    call: ?usize,
+    origin: ?@import("../../../src/domain/model_candidate_origin.zig").Origin,
+    reason: []const u8,
+    content: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderContentDiagnostic,
+};
+pub const ObservedDefect = struct {
+    sequence: usize,
+    step: []const u8,
+    evidence: union(enum) {
+        candidate: @import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic,
+        protocol: ProtocolRejection,
+        provider: ProviderRejection,
+        runner: TerminalRejection,
+        operation: @import("../../../src/domain/workflow_execution.zig").OperationRejection,
+    },
+};
+pub const WorkLink = struct { key: @import("../../../src/domain/pipeline.zig").DataKey, invalidated_at: usize };
+pub const Correction = struct {
+    sequence: usize,
+    step: []const u8,
+    repair: ?@import("../../../src/domain/workflow_retry.zig").Transition,
+    rejection: ?@import("../../../src/domain/operation_error.zig").Code(@import("../../../src/domain/workflow_execution.zig").OperationError),
+    invalidated: []const @import("../../../src/domain/pipeline.zig").DataKey,
+    rebuilt: []const WorkLink,
+};
 pub const ExchangeEvidence = struct {
     raw_response: ?[]const u8,
     text: enum { available, response_absent, budget_stop, not_projected, capture_failed },
@@ -117,6 +143,8 @@ pub const Report = struct {
         zig_version: []const u8,
         target: []const u8,
         optimize: []const u8,
+        inputs_file: ?[]const u8 = null,
+        reconstruction: enum { not_captured, captured, incomplete, redacted } = .not_captured,
     } = null,
     execution_id: ?[]const u8 = null,
     case_source: ?[]const u8 = null,
@@ -127,6 +155,7 @@ pub const Report = struct {
     clarifications: []const @import("../../../src/domain/run_outcome.zig").Clarification = &.{},
     terminal_step: ?[]const u8 = null,
     terminal_rejection: ?TerminalRejection = null,
+    last_operation_rejection: ?@import("../../../src/domain/workflow_execution.zig").OperationRejection = null,
     model_calls: usize = 0,
     total_token_budget: ?u64 = null,
     retry_settings: []const @import("../../../src/domain/workflow_retry.zig").Observation = &.{},
@@ -139,9 +168,14 @@ pub const Report = struct {
     usage_complete: bool = true,
     diagnostic: ?[]const u8 = null,
     provider_diagnostic: ?[]const u8 = null,
+    provider_origin: ?@import("../../../src/domain/model_candidate_origin.zig").Origin = null,
     provider_content_diagnostic: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderContentDiagnostic = null,
     model_diagnostic: ?[]const u8 = null,
     last_protocol_rejection: ?ProtocolRejection = null,
+    last_provider_rejection: ?ProviderRejection = null,
+    first_observed_defect: ?ObservedDefect = null,
+    corrections: []const Correction = &.{},
+    outstanding_work: []const WorkLink = &.{},
     exchange_evidence: ?ExchangeEvidence = null,
     candidate_error: ?@import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic = null,
     repairs: []const @import("../../../src/domain/atomic_repair.zig").Merge = &.{},

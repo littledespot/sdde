@@ -30,9 +30,17 @@ const r = f.r;
 /// is exercised separately against the same native validator.
 fn globalWithoutSpecRoles(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
     var proposal = try f.global(allocator, input);
-    proposal.role_assignments = &.{};
+    proposal.role_decisions = try f.roleDecisions(allocator, &.{});
     return proposal;
 }
+/// A fresh mocked role assessment for reference-only repair tests. This is
+/// explicit candidate data, not a default in the production repair/validator.
+fn mockUnsupportedRoles(allocator: std.mem.Allocator, proposal: r.Proposal) !r.Proposal {
+    var result = proposal;
+    result.role_decisions = try f.roleDecisions(allocator, &.{});
+    return result;
+}
+
 const text = @import("test_fixtures/reference_text.zig");
 const tokens = @import("test_fixtures/reference_tokens.zig");
 const extraction = @import("reference_extraction_test.zig");
@@ -81,6 +89,7 @@ test "authoring roles are assigned after grouping and reject duplicate or foreig
     const groups = (try f.validate_signals.execute(a, dispositions, fixture.context())).valid;
     for (groups.signals) |signal| try std.testing.expectEqual(@as(usize, 0), signal.generation_roles.len);
     const assigned = (try f.validate_roles.execute(a, groups)).valid;
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, checkRoleAllocations, .{groups});
     var found_records = false;
     for (assigned.signals) |signal| {
         if (signal.content == .preserved_token) try std.testing.expectEqual(@as(usize, 0), signal.generation_roles.len);
@@ -89,19 +98,23 @@ test "authoring roles are assigned after grouping and reject duplicate or foreig
     try std.testing.expect(found_records);
 
     var duplicate_roles = groups;
-    const repeated_roles = try a.dupe(r.RoleAssignment, proposal.role_assignments);
-    repeated_roles[0].generation_roles = &.{ .records, .records };
-    duplicate_roles.prior.proposal.role_assignments = repeated_roles;
+    var decisions = proposal.role_decisions.?;
+    const first = decisions.records.supported.signal_ids[0];
+    decisions.records = .{ .supported = .{ .signal_ids = &.{ first, first } } };
+    duplicate_roles.prior.proposal.role_decisions = decisions;
     try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, duplicate_roles)).invalid.issue.rule);
 
-    const bad = try a.alloc(r.RoleAssignment, proposal.role_assignments.len + 1);
-    @memcpy(bad[0..proposal.role_assignments.len], proposal.role_assignments);
-    bad[bad.len - 1] = proposal.role_assignments[0];
     var changed = groups;
-    changed.prior.proposal.role_assignments = bad;
+    decisions = proposal.role_decisions.?;
+    decisions.records = .{ .supported = .{ .signal_ids = &.{.{ .ordinal = 999 }} } };
+    changed.prior.proposal.role_decisions = decisions;
     try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, changed)).invalid.issue.rule);
-    bad[bad.len - 1].signal_id = .{ .ordinal = 999 };
-    try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, changed)).invalid.issue.rule);
+}
+fn checkRoleAllocations(allocator: std.mem.Allocator, groups: r.CheckedSignals) !void {
+    const result = try f.validate_roles.execute(allocator, groups);
+    try std.testing.expect(result == .valid);
+    for (result.valid.signals) |signal| allocator.free(signal.generation_roles);
+    allocator.free(result.valid.signals);
 }
 test "role assignment permits shared roles and rejects unknown native group selections" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -121,13 +134,13 @@ test "role assignment permits shared roles and rejects unknown native group sele
     try std.testing.expectEqual(@as(usize, 2), record_groups);
     const ids = [_]r.ClaimId{ proposal.signals[0].claim_ids[0], proposal.signals[1].claim_ids[0] };
     proposal.signals = &.{.{ .claim_ids = &ids, .content = proposal.signals[0].content }};
-    proposal.role_assignments = &.{.{ .signal_id = .{ .ordinal = 1 }, .generation_roles = &.{ .title, .records } }};
+    proposal.role_decisions = try f.roleDecisions(a, &.{.{ .signal_id = .{ .ordinal = 1 }, .generation_roles = &.{ .title, .records } }});
     parsed.proposal.global = proposal;
     const grouped = (try f.validate_signals.execute(a, (try f.validate_dispositions.execute(a, parsed)).valid, fixture.context())).valid;
     try std.testing.expectEqual(@as(usize, 2), (try f.validate_roles.execute(a, grouped)).valid.signals[0].generation_roles.len);
     for ([_]u32{ 0, 2, 99 }) |bad| {
         var changed = grouped;
-        changed.prior.proposal.role_assignments = &.{.{ .signal_id = .{ .ordinal = bad }, .generation_roles = &.{.records} }};
+        changed.prior.proposal.role_decisions = try f.roleDecisions(a, &.{.{ .signal_id = .{ .ordinal = bad }, .generation_roles = &.{.records} }});
         try std.testing.expectEqual(.role_assignment, (try f.validate_roles.execute(a, changed)).invalid.issue.rule);
     }
 }
@@ -143,7 +156,7 @@ const Fixture = struct {
     }
 };
 
-test "summary repair changes only a rejected field then inserts missing membership and deletes exact redundancy" {
+test "summary repair changes only a rejected field then inserts missing membership before normalization" {
     const repair = @import("domain/reference_reconciliation_repair.zig");
     const Origin = @import("domain/model_candidate_origin.zig").Origin;
     const initial: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
@@ -192,14 +205,12 @@ test "summary repair changes only a rejected field then inserts missing membersh
         @memcpy(duplicates[0..good.statements.len], good.statements);
         duplicates[good.statements.len] = good.statements[0];
         const duplicate: r.Parsed = .{ .input = input, .proposal = .{ .summary = .{ .statements = duplicates } } };
-        const duplicate_rejection = (try f.validate_summary.execute(a, duplicate, fixture.context())).invalid;
-        const deletion = (try repair.authorize(a, duplicate, fixture.context(), duplicate_rejection)).automatic;
-        try std.testing.expect(deletion.authorization.operation == .delete);
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.packet(a, duplicate, fixture.context(), deletion.authorization));
-        const deduplicated = try repair.merge(a, duplicate, fixture.context(), deletion.authorization, null, null);
-        try std.testing.expectEqualDeep(good.statements[1], deduplicated.proposal.summary.statements[0]);
-        try std.testing.expectEqualDeep(good.statements[0], deduplicated.proposal.summary.statements[1]);
-        _ = (try f.validate_summary.execute(a, deduplicated, fixture.context())).valid;
+        const deduplicated = (try f.validate_summary.execute(a, duplicate, fixture.context())).valid;
+        try std.testing.expectEqual(good.statements.len, deduplicated.statements.len);
+        try std.testing.expectEqualDeep(good.statements[0].claim_ids, deduplicated.statements[0].claim_ids);
+        try std.testing.expectEqualDeep(good.statements[1].claim_ids, deduplicated.statements[1].claim_ids);
+        try std.testing.expectEqual(duplicates.len, duplicate.proposal.summary.statements.len);
+        try std.testing.expectEqual(@as(u64, 1), duplicate.source.revision);
     }
 }
 
@@ -287,7 +298,7 @@ test "disposition insertion ignores response metadata and preserves dependent va
         try std.testing.expectEqualDeep(projected.proposal.global.signals, complete.proposal.global.signals[0..1]);
         try std.testing.expectEqualDeep(good.signals[1], complete.proposal.global.signals[1]);
         try std.testing.expectEqual(@as(u64, 4), complete.source.revision);
-        _ = (try f.finish(a, input, complete.proposal.global, fixture.context())).valid;
+        _ = (try f.finish(a, input, try mockUnsupportedRoles(a, complete.proposal.global), fixture.context())).valid;
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, complete, fixture.context(), authorization, .{ .disposition = .{ .retained = .{} } }, origin));
     }
 }
@@ -413,8 +424,23 @@ test "global repair retains graph siblings and all dependent signal and conflict
     const dispositions = (try f.validate_dispositions.execute(a, missing)).valid;
     const coverage = (try f.validate_signals.execute(a, dispositions, fixture.context())).invalid;
     const insert = (try repair.authorize(a, missing, fixture.context(), coverage)).model;
+    const insert_packet = try repair.packet(a, missing, fixture.context(), insert);
+    defer @import("domain/model_input_packet.zig").release(insert_packet);
+    try std.testing.expectEqualStrings("business_text", insert_packet.resultDefinition().?.bytes);
+    const insert_body = (try std.json.parseFromSlice(std.json.Value, a, insert_packet.body(), .{})).value.object;
+    const insert_task = insert_body.get("repair").?.object;
+    const insert_rule = insert_task.get("rule").?.object;
+    try std.testing.expect(!insert_rule.contains("requirement"));
+    try std.testing.expectEqualStrings(r.diagnostic.Constraint.retained_claim_covered.description(), insert_rule.get("failed_requirement").?.string);
+    try std.testing.expectEqualStrings(insert.rule.requirement, insert_rule.get("failed_requirement").?.string);
+    const insert_target = insert_task.get("target").?.object;
+    try std.testing.expectEqualStrings("insert_signal", insert_target.get("unit").?.string);
+    try std.testing.expectEqual(@as(i64, insert.target.insert_signal.claim.ordinal), insert_target.get("claim").?.integer);
+    const insert_constraints = insert_body.get("input").?.object.get("constraints").?.array.items;
+    try std.testing.expectEqual(@as(usize, 1), insert_constraints.len);
+    try std.testing.expectEqualStrings("matching_claim_content", insert_constraints[0].object.get("constraint").?.string);
     const filled = try repair.merge(a, missing, fixture.context(), insert, .{ .content = good.signals[0].content }, null);
-    _ = (try f.finish(a, input, filled.proposal.global, fixture.context())).valid;
+    _ = (try f.finish(a, input, try mockUnsupportedRoles(a, filled.proposal.global), fixture.context())).valid;
     try std.testing.expectEqualDeep(good.signals[1..], filled.proposal.global.signals[0 .. filled.proposal.global.signals.len - 1]);
 
     const duplicate_choices = try a.alloc(r.ClaimDispositionProposal, good.claim_dispositions.len + 1);
@@ -427,7 +453,7 @@ test "global repair retains graph siblings and all dependent signal and conflict
     const duplicate_rejection = (try f.validate_dispositions.execute(a, duplicate)).invalid;
     const remove = (try repair.authorize(a, duplicate, fixture.context(), duplicate_rejection)).automatic;
     const deduplicated = try repair.merge(a, duplicate, fixture.context(), remove.authorization, null, null);
-    _ = (try f.finish(a, input, deduplicated.proposal.global, fixture.context())).valid;
+    _ = (try f.finish(a, input, try mockUnsupportedRoles(a, deduplicated.proposal.global), fixture.context())).valid;
     duplicate_choices[good.claim_dispositions.len].disposition = .{ .superseded = .{ .related_claim_ids = &.{good.claim_dispositions[1].claim_id} } };
     const competing = (try f.validate_dispositions.execute(a, duplicate)).invalid;
     try std.testing.expectEqual(.competing_entries, (try repair.authorize(a, duplicate, fixture.context(), competing)).blocked);
@@ -494,8 +520,20 @@ test "summary signal and conflict repair packets retain precise shared text issu
                 const packet = try repair.packet(std.testing.allocator, parsed, fixture.context(), authorization);
                 defer packets.release(packet);
                 const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+                const repair_input = body.value.object.get("input").?.object;
+                try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Together, the statements must cover every assigned claim ID") == null);
+                if (stage == 0) {
+                    const initial_packet = try @import("domain/reference_model_input.zig").reconciliationCompositionPacket(std.testing.allocator, input, fixture.inputs, fixture.text.registry);
+                    defer packets.release(initial_packet);
+                    const initial_body = (try std.json.parseFromSlice(std.json.Value, a, initial_packet.body(), .{})).value.object;
+                    const purpose = initial_body.get("summary_purpose").?.string;
+                    try std.testing.expect(purpose.len != 0);
+                    try std.testing.expectEqualStrings(purpose, repair_input.get("summary_purpose").?.string);
+                    try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, packet.body(), purpose));
+                } else try std.testing.expect(!repair_input.contains("summary_purpose"));
                 const rule = body.value.object.get("repair").?.object.get("rule").?.object;
-                try std.testing.expectEqualStrings(issue.description(), rule.get("requirement").?.string);
+                try std.testing.expect(!rule.contains("requirement"));
+                try std.testing.expectEqualStrings(issue.description(), rule.get("failed_requirement").?.string);
                 const projected = try json.decode(r.diagnostic.Fact, a, try std.json.Stringify.valueAlloc(a, rule.get("expected").?, .{}));
                 try std.testing.expectEqualDeep(issue, projected.text_issue);
                 try std.testing.expect(!rule.contains("dependencies") and !rule.contains("origin"));
@@ -516,7 +554,7 @@ test "summary signal and conflict repair packets retain precise shared text issu
                     try std.testing.expectEqualDeep(parsed.proposal.global.claim_dispositions, accepted.proposal.global.claim_dispositions);
                     const sibling_start: usize = if (stage == 2) 0 else 1;
                     try std.testing.expectEqualDeep(parsed.proposal.global.signals[sibling_start..], accepted.proposal.global.signals[sibling_start..]);
-                    const outcome = (try f.finish(a, input, accepted.proposal.global, fixture.context())).valid.outcome;
+                    const outcome = (try f.finish(a, input, try mockUnsupportedRoles(a, accepted.proposal.global), fixture.context())).valid.outcome;
                     try std.testing.expectEqual(@as(@TypeOf(outcome), if (stage == 2) .blocked else .complete), outcome);
                 }
                 var stale = fixture.context();
@@ -545,18 +583,7 @@ fn textRejection(a: std.mem.Allocator, parsed: r.Parsed, ctx: f.Context) !?r.dia
     };
 }
 pub fn prepare(allocator: std.mem.Allocator, sources: []const []const u8) !Fixture {
-    const ingestion = @import("domain/reference_ingestion.zig");
-    var inputs = try @import("reference_ingestion_test.zig").read(allocator, "base.md", "");
-    const documents = try allocator.alloc(ingestion.Document, sources.len);
-    for (sources, documents, 0..) |bytes, *document, index| {
-        const read = try @import("reference_ingestion_test.zig").read(allocator, try std.fmt.allocPrint(allocator, "source-{d}.md", .{index}), bytes);
-        document.* = read.documents[0];
-        document.source.ordinal = @intCast(index + 1);
-        const blocks = try allocator.dupe(ingestion.Block, document.blocks);
-        for (blocks) |*block| block.id.source = document.source;
-        document.blocks = blocks;
-    }
-    inputs.documents = documents;
+    const inputs = try @import("reference_ingestion_test.zig").readSources(std.testing.io, allocator, sources);
     var ids: @import("reference_evidence_test.zig").IdSource = .{};
     const citable = try @import("reference_evidence_test.zig").prepare(allocator, &ids, inputs);
     const candidates = try tokens.candidates(allocator, citable);
@@ -1044,7 +1071,7 @@ test "authorized content payloads cover every kind across statement and signal i
                 try std.testing.expectEqualDeep(parsed.proposal.global.claim_dispositions, merged.proposal.global.claim_dispositions);
                 try std.testing.expectEqualDeep(parsed.proposal.global.conflicts, merged.proposal.global.conflicts);
                 try std.testing.expectEqualDeep(parsed.proposal.global.signals[@intFromBool(!insert)..], merged.proposal.global.signals[@intFromBool(!insert)..parsed.proposal.global.signals.len]);
-                _ = (try f.finish(a, input, merged.proposal.global, fixture.context())).valid;
+                _ = (try f.finish(a, input, try mockUnsupportedRoles(a, merged.proposal.global), fixture.context())).valid;
             } else try std.testing.expectEqualDeep(parsed.proposal.summary.statements[@intFromBool(!insert)..], merged.proposal.summary.statements[@intFromBool(!insert)..parsed.proposal.summary.statements.len]);
 
             // Replay R22's native merge sequence: malformed semantics never gain
@@ -1062,7 +1089,7 @@ test "authorized content payloads cover every kind across statement and signal i
                 const recovery_packet = try repair.packet(a, unchanged, fixture.context(), recovery);
                 defer packets.release(recovery_packet);
                 const recovered = try repair.merge(a, unchanged, fixture.context(), recovery, try repair.parse(a, recovery, recovery_packet, try f.repairResponse(a, good)), correction);
-                _ = (try f.finish(a, input, recovered.proposal.global, fixture.context())).valid;
+                _ = (try f.finish(a, input, try mockUnsupportedRoles(a, recovered.proposal.global), fixture.context())).valid;
                 try std.testing.expectError(error.InvalidAtomicRepair, repair.parse(a, recovery, packet, try f.repairResponse(a, good)));
             }
         };
@@ -1281,7 +1308,7 @@ test "reconciliation diagnostics retain native facts and origin while stale cont
     try std.testing.expectError(error.InvalidReferenceReconciliation, f.validate_dispositions.execute(a, .{ .input = changed, .proposal = .{ .global = proposal } }));
 }
 
-test "summary lineage and overlapping signal evidence are constructed from current selections" {
+test "summary union coverage and overlapping signal evidence preserve original claims" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1290,8 +1317,27 @@ test "summary lineage and overlapping signal evidence are constructed from curre
     var progress = try f.initialize(a, fixture.inputs, fixture.extracted, 2);
     while (progress.summary_count + 1 < progress.plan.partitions.len) {
         const input = try f.build_input.execute(a, progress);
-        const checked = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = try f.summary(a, input) } }, fixture.context())).valid;
-        progress = try f.build_summary.execute(a, try f.assign_summary.execute(a, checked));
+        const good = try f.summary(a, input);
+        const checked = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = good } }, fixture.context())).valid;
+        const missing = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = .{ .statements = good.statements[1..] } } }, fixture.context())).invalid;
+        try std.testing.expectEqual(.membership, missing.issue.rule);
+        try std.testing.expectEqualDeep(input.partition.group.claim_ids, missing.issue.expected.claims);
+        try std.testing.expectEqual(input.partition.group.claim_ids.len - 1, missing.issue.observed.claims.len);
+        const duplicates = try a.alloc(r.StatementProposal, good.statements.len + 1);
+        @memcpy(duplicates[0..good.statements.len], good.statements);
+        duplicates[good.statements.len] = good.statements[0];
+        const repeated = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = .{ .statements = duplicates } } }, fixture.context())).valid;
+        try std.testing.expectEqual(checked.statements.len, repeated.statements.len);
+        if (good.statements.len > 1) {
+            const overlapping = try a.dupe(r.StatementProposal, good.statements);
+            overlapping[0].claim_ids = &.{ good.statements[0].claim_ids[0], good.statements[1].claim_ids[0] };
+            const overlap = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = .{ .statements = overlapping } } }, fixture.context())).valid;
+            try std.testing.expectEqual(overlapping.len, overlap.statements.len);
+            try std.testing.expectEqualDeep(overlapping[0].claim_ids, overlap.statements[0].claim_ids);
+            progress = try f.build_summary.execute(a, try f.assign_summary.execute(a, overlap));
+        } else {
+            progress = try f.build_summary.execute(a, try f.assign_summary.execute(a, repeated));
+        }
         try std.testing.expectEqualDeep(input.partition.group.claim_ids, progress.latest.?.value.member_claim_ids);
         try std.testing.expectEqualDeep(input.member_summary_ids, progress.latest.?.value.member_summary_ids);
     }
@@ -1310,7 +1356,600 @@ test "summary lineage and overlapping signal evidence are constructed from curre
     try std.testing.expectEqualDeep(input.items[0].claim.citation_ids[0], result.records.signals[0].value.citation_ids[1]);
 }
 
-test "atomic reconciliation insert delete and packet construction release allocation failures" {
+fn crossSourceSummaryInput(a: std.mem.Allocator, fixture: Fixture) !r.Input {
+    var progress = try f.initialize(a, fixture.inputs, fixture.extracted, 8);
+    while (true) {
+        const input = try f.build_input.execute(a, progress);
+        if (input.partition.group.level == .cross_source) return input;
+        const checked = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = try f.summary(a, input) } }, fixture.context())).valid;
+        progress = try f.build_summary.execute(a, try f.assign_summary.execute(a, checked));
+    }
+}
+
+const reuse_summary = @import("actions/reference/reuse_reference_reconciliation_summary.zig").Action{ .validator = f.validate_summary.validator };
+const check_summary_reuse = @import("actions/reference/check_reference_summary_reuse.zig").Action{ .validator = f.validate_summary.validator };
+
+test "native summaries preserve normalized child content tokens and original producer lineage" {
+    try nativeSummaryCase(std.testing.allocator);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, nativeSummaryCase, .{});
+}
+fn nativeSummaryCase(allocator: std.mem.Allocator) !void {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{"MOCK Display `MOCK READY` and preserve another occurrence `MOCK READY`.\n"});
+    defer fixture.deinit();
+    const input = try f.build_input.execute(a, try f.initialize(a, fixture.inputs, fixture.extracted, 8));
+    const good = try f.summary(a, input);
+    const statements = try a.alloc(r.StatementProposal, good.statements.len + 1);
+    @memcpy(statements[0..good.statements.len], good.statements);
+    statements[good.statements.len] = good.statements[0];
+    const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 2 } };
+    const checked = (try f.validate_summary.execute(a, .{ .input = input, .source = .{ .origin = origin }, .proposal = .{ .summary = .{ .statements = statements } } }, fixture.context())).valid;
+    const previous = try f.build_summary.execute(a, try f.assign_summary.execute(a, checked));
+    const current = try f.build_input.execute(a, previous);
+    const native = try reuse_summary.execute(a, current, fixture.context());
+    try std.testing.expectEqualDeep(r.diagnostic.Source{}, native.source);
+    try std.testing.expectEqualDeep(previous.latest.?.value.id, native.carried_from.?);
+    try std.testing.expectEqual(checked.statements.len, native.proposal.summary.statements.len);
+    const carried = (try f.validate_summary.execute(a, native, fixture.context())).valid;
+    try std.testing.expectEqualDeep(checked.statements, carried.statements);
+    const next = try f.build_summary.execute(a, try f.assign_summary.execute(a, carried));
+    try std.testing.expectEqualDeep(previous.latest.?.value, next.latest.?.previous.?.value);
+    try std.testing.expectEqual(statements.len, next.latest.?.previous.?.value.projection.originals.len);
+    try std.testing.expectEqualDeep(origin, next.latest.?.previous.?.value.projection.source.origin.?);
+    try std.testing.expect(next.latest.?.value.projection.source.origin == null);
+    try std.testing.expectEqualDeep(current.member_summary_ids, next.latest.?.value.member_summary_ids);
+    try std.testing.expectEqual(previous.next_statement_ordinal, next.latest.?.value.statements[0].id.ordinal);
+    var token_count: usize = 0;
+    for (next.latest.?.value.statements) |statement| if (statement.content == .preserved_token) {
+        token_count += 1;
+    };
+    try std.testing.expectEqual(@as(usize, 2), token_count);
+    try std.testing.expectEqualDeep(previous.latest.?.value.validation, next.latest.?.previous.?.value.validation);
+    const final = try f.build_input.execute(a, next);
+    try std.testing.expectEqual(.semantic, try check_summary_reuse.execute(a, final, fixture.context()));
+    try std.testing.expectError(error.InvalidReferenceReconciliation, reuse_summary.execute(a, final, fixture.context()));
+    try @import("domain/reference_reconciliation_validation.zig").history(a, next);
+}
+
+test "summary reuse preserves model work for empty leaf multi-child and final partitions" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "MOCK First.\n", "MOCK Second.\n", "MOCK Third.\n", "MOCK Fourth.\n", "MOCK Fifth.\n", "MOCK Sixth.\n", "MOCK Seventh.\n", "MOCK Eighth.\n", "MOCK Ninth.\n" });
+    defer fixture.deinit();
+    var progress = try f.initialize(a, fixture.inputs, fixture.extracted, 2);
+    var cross_reuse = false;
+    var global_reuse = false;
+    var repeated_reuse = false;
+    var multi_child = false;
+    while (true) {
+        const input = try f.build_input.execute(a, progress);
+        const result = try check_summary_reuse.execute(a, input, fixture.context());
+        if (input.purpose == .global) {
+            try std.testing.expectEqual(.semantic, result);
+            break;
+        }
+        const eligible = input.partition.group.children.len == 1;
+        try std.testing.expectEqual(eligible, result == .reusable);
+        if (result == .reusable) {
+            cross_reuse = cross_reuse or input.partition.group.level == .cross_source;
+            global_reuse = global_reuse or input.partition.group.level == .global;
+            repeated_reuse = repeated_reuse or input.summaries[0].projection.carried_from != null;
+        } else multi_child = multi_child or input.partition.group.children.len > 1;
+        const parsed: r.Parsed = if (result == .reusable) try reuse_summary.execute(a, input, fixture.context()) else .{ .input = input, .proposal = .{ .summary = try f.summary(a, input) } };
+        const checked = (try f.validate_summary.execute(a, parsed, fixture.context())).valid;
+        progress = try f.build_summary.execute(a, try f.assign_summary.execute(a, checked));
+    }
+    try std.testing.expect(cross_reuse and global_reuse and repeated_reuse and multi_child);
+    try @import("domain/reference_reconciliation_validation.zig").history(a, progress);
+    const empty = try prepare(a, &.{});
+    defer empty.deinit();
+    const empty_input = try f.build_input.execute(a, try f.initialize(a, empty.inputs, empty.extracted, 2));
+    try std.testing.expectEqual(.semantic, try check_summary_reuse.execute(a, empty_input, empty.context()));
+}
+
+test "summary reuse rejects substituted child payloads and altered accepted history under unchanged IDs" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{"MOCK Confirm the reservation.\n"});
+    defer fixture.deinit();
+    const input = try crossSourceSummaryInput(a, fixture);
+    for ([_]bool{ false, true }) |alter_history| {
+        var changed = input;
+        const latest = try a.create(r.SummaryHistory);
+        latest.* = input.progress.latest.?.*;
+        const statements = try a.dupe(r.Statement, latest.value.statements);
+        const originals = try a.dupe(r.ValidatedStatement, latest.value.projection.originals);
+        statements[0].content = .{ .model = .{ .business = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "MOCK Cancel the reservation." } }} } } } };
+        originals[0].content = statements[0].content;
+        latest.value.statements = statements;
+        latest.value.projection.originals = originals;
+        changed.summaries = try a.dupe(r.Summary, &.{latest.value});
+        if (alter_history) changed.progress.latest = latest;
+        try std.testing.expectError(error.InvalidReferenceReconciliation, reuse_summary.execute(a, changed, fixture.context()));
+    }
+}
+
+test "summary reuse rejects changed source claim citation and passive evidence even when IDs match" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{"MOCK Display `MOCK READY`.\n"});
+    defer fixture.deinit();
+    const input = try crossSourceSummaryInput(a, fixture);
+    for (0..5) |change| {
+        var current = input;
+        var context = fixture.context();
+        switch (change) {
+            0 => {
+                const sources = try a.dupe(r.evidence.Source, context.inputs.corpus.sources);
+                const bytes = try a.dupe(u8, sources[0].bytes);
+                bytes[0] = 'X';
+                sources[0].bytes = bytes;
+                context.inputs.corpus.sources = sources;
+            },
+            1 => {
+                const items = try a.dupe(r.Item, current.items);
+                items[0].claim.content = .{ .model = .{ .business = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "MOCK A different requirement." } }} } } } };
+                current.items = items;
+            },
+            2 => {
+                const entries = try a.dupe(r.Item, current.progress.plan.layout.items.entries);
+                const citations = try a.dupe(r.extraction.Citation, entries[0].citations);
+                citations[0].value.location.end.byte -= 1;
+                entries[0].citations = citations;
+                current.progress.plan.layout.items.entries = entries;
+                current.items = entries;
+            },
+            3 => context.registry.records = &.{.{ .id = .{ .ordinal = 1 }, .kind = .display_filename, .value = "MOCK.txt" }},
+            4 => current.partition.group.claim_ids = current.partition.group.claim_ids[1..],
+            else => unreachable,
+        }
+        try std.testing.expectError(error.InvalidReferenceReconciliation, reuse_summary.execute(a, current, context));
+    }
+    var stale_policy = fixture.context();
+    stale_policy.registry.grammar.policy.rules = &.{};
+    try std.testing.expectError(error.InvalidNamingPolicy, reuse_summary.execute(a, input, stale_policy));
+    const other_text = try text.prepare(a, fixture.inputs);
+    defer other_text.deinit();
+    var stale_toolchain = fixture.context();
+    stale_toolchain.current = text.safety.value(other_text.owner);
+    try std.testing.expectError(error.StaleNamingPolicy, reuse_summary.execute(a, input, stale_toolchain));
+}
+
+test "native summary proposals are revalidated and corrupted native content cannot enter model repair" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{"MOCK Display `MOCK READY`.\n"});
+    defer fixture.deinit();
+    const input = try crossSourceSummaryInput(a, fixture);
+    const native = try reuse_summary.execute(a, input, fixture.context());
+    for (0..8) |change| {
+        var changed = native;
+        const statements = try a.dupe(r.StatementProposal, native.proposal.summary.statements);
+        changed.proposal.summary.statements = statements;
+        switch (change) {
+            0 => statements[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "MOCK Different accepted-looking meaning." } }} } } },
+            1 => changed.proposal.summary.statements = statements[1..],
+            2 => statements[1].content.preserved_token.token_id.ordinal += 1,
+            3 => statements[0].claim_ids = &.{.{ .ordinal = 999 }},
+            4 => changed.source.origin = .{ .request = .{ .value = 9 }, .attempt = .{ .value = 1 } },
+            5 => changed.source.revision += 1,
+            6 => changed.carried_from.?.ordinal += 1,
+            7 => changed.phase = .signals,
+            else => unreachable,
+        }
+        try std.testing.expectError(error.InvalidReferenceReconciliation, f.validate_summary.execute(a, changed, fixture.context()));
+    }
+}
+
+test "native summary parent starts a native source while retaining repaired child receipts in history" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{"MOCK Record the inspection.\n"});
+    defer fixture.deinit();
+    const input = try f.build_input.execute(a, try f.initialize(a, fixture.inputs, fixture.extracted, 8));
+    const good = try f.summary(a, input);
+    const statements = try a.dupe(r.StatementProposal, good.statements);
+    statements[0].content.model.business.segments = &.{.{ .literal = .{ .value = "MOCK\x01invalid" } }};
+    const parsed: r.Parsed = .{ .input = input, .proposal = .{ .summary = .{ .statements = statements } } };
+    const rejection = (try f.validate_summary.execute(a, parsed, fixture.context())).invalid;
+    const auth = (try repair.authorize(a, parsed, fixture.context(), rejection)).model;
+    const repaired = try repair.merge(a, parsed, fixture.context(), auth, .{ .content = good.statements[0].content }, null);
+    const checked = (try f.validate_summary.execute(a, repaired, fixture.context())).valid;
+    const previous = try f.build_summary.execute(a, try f.assign_summary.execute(a, checked));
+    try std.testing.expect(previous.latest.?.value.projection.source.pending_repair != null);
+    const native = try reuse_summary.execute(a, try f.build_input.execute(a, previous), fixture.context());
+    try std.testing.expectEqualDeep(r.diagnostic.Source{}, native.source);
+    const parent = try f.build_summary.execute(a, try f.assign_summary.execute(a, (try f.validate_summary.execute(a, native, fixture.context())).valid));
+    try std.testing.expectEqualDeep(repaired.source, parent.latest.?.previous.?.value.projection.source);
+    try std.testing.expectEqualDeep(r.diagnostic.Source{}, parent.latest.?.value.projection.source);
+}
+
+test "native reuse binding retains its child after the preceding pipeline value is released" {
+    const owned = @import("domain/reference_candidate_value.zig");
+    const native = @import("application/reference_extraction_workflow.zig");
+    const workflow = @import("application/reference_reconciliation_workflow.zig");
+    const values = @import("application/pipeline_values.zig");
+    const inputs_schema = @import("application/reference_evidence_workflow.zig").inputs_schema;
+    const registry_schema = @import("application/passive_literal_workflow.zig").registry_schema;
+    const toolchain_schema = @import("application/toolchain_workflow_values.zig").valid;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const fixture = try prepare(arena.allocator(), &.{"MOCK Complete the inspection.\n"});
+    var transferred = false;
+    defer if (!transferred) fixture.deinit();
+    const current = try values.adopt(std.testing.allocator, toolchain_schema, text.safety.ValidToolchain, text.safety.Owner, fixture.text.owner, text.safety.value, text.safety.deinitOwner, text.safety.retainedBytes(fixture.text.owner));
+    transferred = true;
+    defer values.destroy(current);
+    const inputs = try values.create(std.testing.allocator, inputs_schema, r.evidence.Inputs, fixture.inputs);
+    defer values.destroy(inputs);
+    const registry = try values.create(std.testing.allocator, registry_schema, text.literals.Registry, fixture.text.registry);
+    defer values.destroy(registry);
+    const captured = capture: {
+        const owner = try owned.create(std.testing.allocator, null);
+        errdefer owned.destroy(owner);
+        owner.payload = .{ .reconciliation_input = try crossSourceSummaryInput(owner.arena.allocator(), fixture) };
+        break :capture try native.publish(std.testing.allocator, workflow.input_schema, owner, .ok);
+    };
+    const prior = captured.delta.data_writes[@intFromEnum(workflow.input_schema.key)].?;
+    const carried = carry: {
+        defer values.destroy(prior);
+        var view: @import("domain/pipeline_data.zig").View = .{};
+        view.slots[@intFromEnum(workflow.input_schema.key)] = prior;
+        view.slots[@intFromEnum(inputs_schema.key)] = inputs;
+        view.slots[@intFromEnum(registry_schema.key)] = registry;
+        view.slots[@intFromEnum(toolchain_schema.key)] = current;
+        const contract = workflow.ReuseSummary.Action.contract;
+        const step: @import("domain/workflow_compilation.zig").CompiledStep = .{ .id = .{ .bytes = "reuse-summary" }, .operation_id = .{ .bytes = contract.id }, .parameters = &.{}, .requires = contract.requires, .produces = contract.produces, .replaces = contract.replaces, .invalidates = contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
+        var binding: workflow.ReuseSummary = .{ .allocator = std.testing.allocator, .action = reuse_summary };
+        break :carry try workflow.ReuseSummary.invoke(&binding, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } });
+    };
+    try std.testing.expectEqual(.ok, carried.outcome);
+    const retained = carried.delta.data_writes[@intFromEnum(workflow.parsed_schema.key)].?;
+    defer values.destroy(retained);
+    const parsed = (try native.read(&.{ .slots = carried.delta.data_writes }, workflow.parsed_schema, .reconciliation_parsed)).payload().reconciliation_parsed;
+    try std.testing.expectEqualDeep(parsed.input.summaries[0].id, parsed.carried_from.?);
+    const checked = (try f.validate_summary.execute(arena.allocator(), parsed, fixture.context())).valid;
+    try std.testing.expectEqualDeep(parsed.input.summaries[0].statements[0].content, checked.statements[0].content);
+    try std.testing.expectEqual(@as(usize, 1), parsed.input.progress.latest.?.value.projection.originals.len);
+}
+
+test "summary normalization preserves occurrence provenance and distinct source literals" {
+    try summaryNormalizationCase(std.testing.allocator);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, summaryNormalizationCase, .{});
+}
+
+fn summaryNormalizationCase(allocator: std.mem.Allocator) !void {
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const first: Origin = .{ .request = .{ .value = 3 }, .attempt = .{ .value = 1 } };
+    const second: Origin = .{ .request = .{ .value = 4 }, .attempt = .{ .value = 2 } };
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "MOCK Display `MOCK READY`.\n", "MOCK Display `MOCK READY`.\n" });
+    defer fixture.deinit();
+    const input = try crossSourceSummaryInput(a, fixture);
+    const good = try f.summary(a, input);
+    try std.testing.expectEqual(@as(usize, 4), good.statements.len);
+    const statements = try a.alloc(r.StatementProposal, 7);
+    @memcpy(statements[0..4], good.statements);
+    statements[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "MOCK Confirm the operation." } }} } } };
+    statements[4] = .{ .claim_ids = &.{ good.statements[0].claim_ids[0], good.statements[2].claim_ids[0] }, .content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "MOCK Confirm both operations." } }} } } } };
+    statements[5] = statements[4];
+    statements[5].claim_ids = &.{ good.statements[2].claim_ids[0], good.statements[0].claim_ids[0] };
+    statements[6] = statements[0];
+    statements[6].content = .{ .model = .{ .business = .{ .segments = &.{ .{ .literal = .{ .value = "MOCK Confirm " } }, .{ .literal = .{ .value = "the operation." } } } } } };
+    const parsed: r.Parsed = .{ .input = input, .source = .{
+        .revision = 7,
+        .origin = first,
+        .fields = &.{.{ .unit = .{ .statement = 6 }, .field = .content, .origin = second }},
+        .statements = .{ .values = &.{ .{ .ordinal = 11 }, .{ .ordinal = 12 }, .{ .ordinal = 13 }, .{ .ordinal = 14 }, .{ .ordinal = 15 }, .{ .ordinal = 16 }, .{ .ordinal = 17 } }, .next_ordinal = 18 },
+    }, .proposal = .{ .summary = .{ .statements = statements } } };
+    const before = try std.json.Stringify.valueAlloc(a, parsed.proposal, .{});
+    const checked = (try f.validate_summary.execute(a, parsed, fixture.context())).valid;
+    try std.testing.expectEqual(@as(usize, 5), checked.statements.len);
+    try std.testing.expectEqualDeep(&[_]usize{ 0, 1, 2, 3, 4, 4, 0 }, checked.projection.statement_indices);
+    try std.testing.expectEqualDeep(parsed.source, checked.projection.source);
+    try std.testing.expectEqualDeep(first, checked.projection.source.at(.{ .statement = 0 }, .content).?);
+    try std.testing.expectEqualDeep(second, checked.projection.source.at(.{ .statement = 6 }, .content).?);
+    try std.testing.expectEqual(@as(u32, 17), (try checked.projection.source.statements.at(6, checked.projection.originals.len)).ordinal);
+    try std.testing.expectEqualDeep(statements[4].claim_ids, checked.statements[4].claim_ids);
+    try std.testing.expect(checked.statements[1].content.preserved_token.token_id.ordinal != checked.statements[3].content.preserved_token.token_id.ordinal);
+    try std.testing.expectEqualStrings(before, try std.json.Stringify.valueAlloc(a, parsed.proposal, .{}));
+    try std.testing.expectEqualDeep(checked, (try f.validate_summary.execute(a, parsed, fixture.context())).valid);
+
+    // Reapplying normalization to its retained statements changes no value.
+    var normalized = parsed;
+    normalized.source = .{};
+    normalized.proposal.summary.statements = statements[0..5];
+    const again = (try f.validate_summary.execute(a, normalized, fixture.context())).valid;
+    try std.testing.expectEqualDeep(checked.statements, again.statements);
+    try std.testing.expectEqualDeep(&[_]usize{ 0, 1, 2, 3, 4 }, again.projection.statement_indices);
+    const progress = try f.build_summary.execute(a, try f.assign_summary.execute(a, checked));
+    try std.testing.expectEqualDeep(checked.projection, progress.latest.?.value.projection);
+    try std.testing.expectEqual(input.progress.next_statement_ordinal + 5, progress.next_statement_ordinal);
+    const final = try f.summaries(a, progress, fixture.context());
+    const packet = try @import("domain/reference_model_input.zig").reconciliationPacket(allocator, final, fixture.inputs, fixture.text.registry, .all);
+    defer @import("domain/model_input_packet.zig").release(packet);
+    const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+    const supplied_summaries = body.value.object.get("summaries").?.array.items;
+    try std.testing.expectEqual(@as(usize, 1), supplied_summaries.len);
+    const supplied = supplied_summaries[0].object;
+    try std.testing.expectEqual(@as(usize, 5), supplied.get("statements").?.array.items.len);
+    for ([_][]const u8{ "projection", "originals", "statement_indices", "source" }) |native_field|
+        try std.testing.expect(!supplied.contains(native_field));
+    _ = (try f.finish(a, final, try globalWithoutSpecRoles(a, final), fixture.context())).valid;
+}
+
+test "summary admission validates every repeated occurrence before normalization" {
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const origin: Origin = .{ .request = .{ .value = 8 }, .attempt = .{ .value = 2 } };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{"MOCK Display `MOCK READY`.\n"});
+    defer fixture.deinit();
+    const input = try f.build_input.execute(a, try f.initialize(a, fixture.inputs, fixture.extracted, 8));
+    const good = try f.summary(a, input);
+    for (0..5) |scenario| {
+        const statements = try a.alloc(r.StatementProposal, good.statements.len + 1);
+        @memcpy(statements[0..good.statements.len], good.statements);
+        const last = statements.len - 1;
+        statements[last] = statements[0];
+        switch (scenario) {
+            0 => statements[last].claim_ids = &.{},
+            1 => statements[last].claim_ids = &.{.{ .ordinal = 999 }},
+            2 => statements[last].claim_ids = &.{ statements[0].claim_ids[0], statements[0].claim_ids[0] },
+            3 => statements[last].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "MOCK Invalid\x01text" } }} } } },
+            4 => statements[last].content = statements[1].content,
+            else => unreachable,
+        }
+        const parsed: r.Parsed = .{ .input = input, .source = .{ .fields = &.{.{ .unit = .{ .statement = last }, .field = .record, .origin = origin }} }, .proposal = .{ .summary = .{ .statements = statements } } };
+        const rejected = (try f.validate_summary.execute(a, parsed, fixture.context())).invalid;
+        try std.testing.expectEqualDeep(r.diagnostic.Unit{ .statement = last }, rejected.unit);
+        try std.testing.expectEqualDeep(origin, rejected.origin.?);
+        try std.testing.expectEqual(([_]r.diagnostic.Rule{ .claim_selection, .claim_selection, .claim_selection, .typed_text, .content })[scenario], rejected.issue.rule);
+        try std.testing.expectEqual(statements.len, parsed.proposal.summary.statements.len);
+    }
+}
+
+test "summary normalization retains repair occurrence identity and inserts missing coverage before collapsing repeats" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    const Origin = @import("domain/model_candidate_origin.zig").Origin;
+    const origin: Origin = .{ .request = .{ .value = 6 }, .attempt = .{ .value = 1 } };
+    const correction: Origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "MOCK Confirm the reservation.\n", "MOCK Issue the receipt.\n" });
+    defer fixture.deinit();
+    const input = try crossSourceSummaryInput(a, fixture);
+    const good = try f.summary(a, input);
+    const statements = try a.dupe(r.StatementProposal, &.{ good.statements[0], good.statements[0], good.statements[1] });
+    var parsed: r.Parsed = .{ .input = input, .source = .{ .origin = origin, .statements = .{ .values = &.{ .{ .ordinal = 4 }, .{ .ordinal = 8 }, .{ .ordinal = 10 } }, .next_ordinal = 11 } }, .proposal = .{ .summary = .{ .statements = statements } } };
+    const checked = (try f.validate_summary.execute(a, parsed, fixture.context())).valid;
+    try std.testing.expectEqualDeep(&[_]usize{ 0, 0, 1 }, checked.projection.statement_indices);
+    statements[1].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "MOCK Invalid\x01text" } }} } } };
+    const rejected = (try f.validate_summary.execute(a, parsed, fixture.context())).invalid;
+    const authorization = (try repair.authorize(a, parsed, fixture.context(), rejected)).model;
+    const merged = try repair.merge(a, parsed, fixture.context(), authorization, .{ .content = good.statements[0].content }, correction);
+    const repaired = (try f.validate_summary.execute(a, merged, fixture.context())).valid;
+    try std.testing.expectEqualDeep(&[_]usize{ 0, 0, 1 }, repaired.projection.statement_indices);
+    try std.testing.expectEqual(@as(u32, 8), (try repaired.projection.source.statements.at(1, repaired.projection.originals.len)).ordinal);
+    try std.testing.expectEqualDeep(correction, repaired.projection.source.at(.{ .statement = 1 }, .content).?);
+    try std.testing.expectEqualDeep(origin, repaired.projection.source.at(.{ .statement = 0 }, .content).?);
+    try std.testing.expectEqual(parsed.source.revision + 1, repaired.projection.source.revision);
+    try std.testing.expect(merged.source.pending_repair != null);
+    try std.testing.expect(merged.source.last_repair != null);
+    try std.testing.expectEqualDeep(merged.source.pending_repair, repaired.projection.source.pending_repair);
+    try std.testing.expectEqualDeep(merged.source.last_repair, repaired.projection.source.last_repair);
+    try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, merged, fixture.context(), authorization, .{ .content = good.statements[0].content }, correction));
+
+    parsed = .{ .input = input, .proposal = .{ .summary = .{ .statements = &.{ good.statements[0], good.statements[0] } } } };
+    const missing = (try f.validate_summary.execute(a, parsed, fixture.context())).invalid;
+    try std.testing.expectEqual(.membership, missing.issue.rule);
+    const insertion = (try repair.authorize(a, parsed, fixture.context(), missing)).model;
+    try std.testing.expect(insertion.operation == .insert);
+    const filled = try repair.merge(a, parsed, fixture.context(), insertion, .{ .content = good.statements[1].content }, correction);
+    try std.testing.expectEqual(@as(usize, 3), filled.proposal.summary.statements.len);
+    try std.testing.expectEqual(@as(u64, 2), filled.source.revision);
+    const normalized = (try f.validate_summary.execute(a, filled, fixture.context())).valid;
+    try std.testing.expectEqualDeep(&[_]usize{ 0, 0, 1 }, normalized.projection.statement_indices);
+    try std.testing.expectEqualDeep(parsed.proposal.summary.statements, filled.proposal.summary.statements[0..2]);
+}
+
+test "summary history rejects corrupted normalization maps and invalid per-statement coverage" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{ "MOCK Confirm the reservation.\n", "MOCK Issue the receipt.\n" });
+    defer fixture.deinit();
+    const input = try crossSourceSummaryInput(a, fixture);
+    const good = try f.summary(a, input);
+    const checked = (try f.validate_summary.execute(a, .{ .input = input, .proposal = .{ .summary = .{ .statements = &.{ good.statements[0], good.statements[0], good.statements[1] } } } }, fixture.context())).valid;
+    const progress = try f.build_summary.execute(a, try f.assign_summary.execute(a, checked));
+    for (0..9) |scenario| {
+        var changed = progress;
+        const latest = try a.create(r.SummaryHistory);
+        latest.* = progress.latest.?.*;
+        changed.latest = latest;
+        const statements = try a.dupe(r.Statement, latest.value.statements);
+        latest.value.statements = statements;
+        const indices = try a.dupe(usize, latest.value.projection.statement_indices);
+        latest.value.projection.statement_indices = indices;
+        switch (scenario) {
+            0 => indices[1] = statements.len,
+            1 => indices[1] = 1,
+            2 => latest.value.projection.originals = latest.value.projection.originals[1..],
+            3 => latest.value.projection.source.revision = 0,
+            4 => statements[0].claim_ids = &.{ statements[0].claim_ids[0], statements[0].claim_ids[0] },
+            5 => statements[0].claim_ids = &.{.{ .ordinal = 999 }},
+            6 => statements[1].claim_ids = statements[0].claim_ids,
+            7 => statements[0].content = .{ .model = .{ .business = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "MOCK Changed the retained meaning." } }} } } } },
+            8 => latest.value.projection.source.statements = .{ .values = &.{ .{ .ordinal = 5 }, .{ .ordinal = 5 }, .{ .ordinal = 6 } }, .next_ordinal = 7 },
+            else => unreachable,
+        }
+        const changed_input = try f.build_input.execute(a, changed);
+        try std.testing.expectError(error.InvalidReferenceReconciliation, @import("domain/reference_reconciliation_validation.zig").input(a, changed_input));
+    }
+}
+
+test "overlapping repeated summaries normalize once without changing coverage repair revision or occurrences" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const requirements = [_][]const u8{ "MOCK Open the inspection.\n", "MOCK Record the measurement.\n", "MOCK Close the inspection.\n" };
+    var fixture = try prepare(a, &requirements);
+    defer fixture.deinit();
+    const claims = try a.dupe(r.extraction.Claim, fixture.extracted.ledger.claims);
+    try std.testing.expectEqual(requirements.len, claims.len);
+    for (claims, requirements) |*claim, requirement| {
+        claim.content = .{ .model = .{ .business = .{ .value = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = std.mem.trimEnd(u8, requirement, "\n") } }}) } } } };
+    }
+    fixture.extracted.ledger.claims = claims;
+    const input = try crossSourceSummaryInput(a, fixture);
+    const good = try f.summary(a, input);
+    const aggregate: r.StatementProposal = .{ .claim_ids = input.partition.group.claim_ids, .content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "MOCK Open the inspection, record the measurement, and close the inspection." } }} } } } };
+    for ([_]usize{ 1, 91 }) |count| {
+        const statements = try a.alloc(r.StatementProposal, count);
+        statements[0] = aggregate;
+        for (statements[1..], 0..) |*statement, index| statement.* = good.statements[index % good.statements.len];
+        const parsed: r.Parsed = .{ .input = input, .proposal = .{ .summary = .{ .statements = statements } } };
+        const checked = (try f.validate_summary.execute(a, parsed, fixture.context())).valid;
+        const retained: usize = if (count == 1) 1 else 4;
+        try std.testing.expectEqual(retained, checked.statements.len);
+        try std.testing.expectEqual(count, checked.projection.originals.len);
+        try std.testing.expectEqualDeep(parsed.source, checked.projection.source);
+        for (checked.projection.statement_indices, 0..) |index, original| {
+            try std.testing.expectEqual(if (original == 0) @as(usize, 0) else 1 + (original - 1) % 3, index);
+            try std.testing.expectEqual(original + 1, (try checked.projection.source.statements.at(original, count)).ordinal);
+        }
+        const progress = try f.build_summary.execute(a, try f.assign_summary.execute(a, checked));
+        try std.testing.expectEqual(input.progress.next_statement_ordinal + retained, progress.next_statement_ordinal);
+        try std.testing.expectEqualDeep(input.partition.group.claim_ids, progress.latest.?.value.member_claim_ids);
+        const final = try f.summaries(a, progress, fixture.context());
+        try std.testing.expectEqual(.complete, (try f.finish(a, final, try globalWithoutSpecRoles(a, final), fixture.context())).valid.outcome);
+    }
+}
+
+test "partition validation binds native iteration to the actual non-final population" {
+    const owned = @import("domain/reference_candidate_value.zig");
+    const native = @import("application/reference_extraction_workflow.zig");
+    const workflow = @import("application/reference_reconciliation_workflow.zig");
+    const values = @import("application/pipeline_values.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const []const u8{ &.{}, &.{"MOCK Confirm the decision.\n"}, &.{ "MOCK Inspect the sample.\n", "MOCK Record the result.\n" } }) |sources| {
+        const fixture = try prepare(a, sources);
+        defer fixture.deinit();
+        const expected = try f.initialize(a, fixture.inputs, fixture.extracted, 2);
+        const plan_value = plan: {
+            const owner = try owned.create(std.testing.allocator, null);
+            errdefer owned.destroy(owner);
+            owner.payload = .{ .reconciliation_plan = expected.plan };
+            break :plan try values.adopt(std.testing.allocator, workflow.plan_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null);
+        };
+        defer values.destroy(plan_value);
+        var view: @import("domain/pipeline_data.zig").View = .{};
+        view.slots[@intFromEnum(workflow.plan_schema.key)] = plan_value;
+        const contract = workflow.ValidatePartitions.Action.contract;
+        const step: @import("domain/workflow_compilation.zig").CompiledStep = .{ .id = .{ .bytes = "validate-partitions" }, .operation_id = .{ .bytes = contract.id }, .parameters = &.{}, .requires = contract.requires, .produces = contract.produces, .replaces = contract.replaces, .invalidates = contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
+        var binding: workflow.ValidatePartitions = .{ .allocator = std.testing.allocator };
+        const initialized = try workflow.ValidatePartitions.invoke(&binding, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } });
+        const progress_value = initialized.delta.data_writes[@intFromEnum(workflow.progress_schema.key)].?;
+        defer values.destroy(progress_value);
+        view.slots[@intFromEnum(workflow.progress_schema.key)] = progress_value;
+        try std.testing.expectEqualDeep(@import("domain/workflow_iteration.zig").Transition{ .limit = expected.plan.partitions.len - 1, .before = 0, .after = 0 }, initialized.iteration.?);
+        try std.testing.expect(std.meta.eql(expected, (try native.read(&view, workflow.progress_schema, .reconciliation_progress)).payload().reconciliation_progress));
+    }
+    try std.testing.expect(!@hasDecl(workflow.ReuseSummary, "retry_limit"));
+    try std.testing.expect(!@hasDecl(workflow.ReuseSummary, "parameters"));
+}
+
+test "summary binding requires current progress and retains normalization evidence after input release" {
+    const owned = @import("domain/reference_candidate_value.zig");
+    const native = @import("application/reference_extraction_workflow.zig");
+    const workflow = @import("application/reference_reconciliation_workflow.zig");
+    const values = @import("application/pipeline_values.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try prepare(a, &.{"MOCK Confirm the decision.\n"});
+    defer fixture.deinit();
+    const input = try f.build_input.execute(a, try f.initialize(a, fixture.inputs, fixture.extracted, 8));
+    const captured = capture: {
+        const owner = try owned.create(std.testing.allocator, null);
+        errdefer owned.destroy(owner);
+        const pa = owner.arena.allocator();
+        const good = try f.summary(pa, input);
+        const statements = try pa.dupe(r.StatementProposal, &.{ good.statements[0], good.statements[0] });
+        const fields = try pa.dupe(r.diagnostic.FieldOrigin, &.{.{ .unit = .{ .statement = 1 }, .field = .content, .origin = .{ .request = .{ .value = 9 }, .attempt = .{ .value = 2 } } }});
+        const checked = (try f.validate_summary.execute(pa, .{ .input = input, .source = .{ .fields = fields }, .proposal = .{ .summary = .{ .statements = statements } } }, fixture.context())).valid;
+        owner.payload = .{ .reconciliation_summary_ids = try f.assign_summary.execute(pa, checked) };
+        break :capture try native.publish(std.testing.allocator, workflow.summary_ids_schema, owner, .ok);
+    };
+    const prior = captured.delta.data_writes[@intFromEnum(workflow.summary_ids_schema.key)].?;
+    const built = build: {
+        defer values.destroy(prior);
+        var view: @import("domain/pipeline_data.zig").View = .{};
+        view.slots[@intFromEnum(workflow.summary_ids_schema.key)] = prior;
+        const plan_value = plan: {
+            const owner = try owned.create(std.testing.allocator, null);
+            errdefer owned.destroy(owner);
+            owner.payload = .{ .reconciliation_plan = input.progress.plan };
+            break :plan try values.adopt(std.testing.allocator, workflow.plan_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null);
+        };
+        defer values.destroy(plan_value);
+        view.slots[@intFromEnum(workflow.plan_schema.key)] = plan_value;
+        const contract = workflow.BuildSummary.Action.contract;
+        const step: @import("domain/workflow_compilation.zig").CompiledStep = .{ .id = .{ .bytes = "build-summary" }, .operation_id = .{ .bytes = contract.id }, .parameters = &.{}, .requires = contract.requires, .produces = contract.produces, .replaces = contract.replaces, .invalidates = contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .gates = &.{}, .capabilities = &.{}, .retry_authority = null };
+        var binding: workflow.BuildSummary = .{ .allocator = std.testing.allocator };
+        for (0..4) |scenario| {
+            var current = input.progress;
+            switch (scenario) {
+                0 => current.plan.partitions = try a.dupe(r.Partition, current.plan.partitions),
+                1 => current.summary_count += 1,
+                2 => current.next_statement_ordinal += 1,
+                3 => {},
+                else => unreachable,
+            }
+            const progress_value = progress: {
+                const owner = try owned.create(std.testing.allocator, null);
+                errdefer owned.destroy(owner);
+                owner.payload = .{ .reconciliation_progress = current };
+                break :progress try values.adopt(std.testing.allocator, workflow.progress_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null);
+            };
+            defer values.destroy(progress_value);
+            view.slots[@intFromEnum(workflow.progress_schema.key)] = progress_value;
+            const invoked = workflow.BuildSummary.invoke(&binding, .{ .step = .{ .data = view, .step = &step, .resources = &.{}, .model_binding = null, .log = .init(try @import("domain/telemetry.zig").WorkflowShortcode.parse("SGEN")) } });
+            if (scenario == 3) break :build try invoked;
+            try std.testing.expectError(error.InvalidReferenceReconciliation, invoked);
+        }
+        unreachable;
+    };
+    try std.testing.expectEqualDeep(@import("domain/workflow_iteration.zig").Transition{ .limit = input.progress.plan.partitions.len - 1, .before = 0, .after = 1 }, built.iteration.?);
+    const retained = built.delta.data_replacements[@intFromEnum(workflow.progress_schema.key)].?;
+    defer values.destroy(retained);
+    var view: @import("domain/pipeline_data.zig").View = .{};
+    view.slots[@intFromEnum(workflow.progress_schema.key)] = retained;
+    const progress = (try native.read(&view, workflow.progress_schema, .reconciliation_progress)).payload().reconciliation_progress;
+    const projection = progress.latest.?.value.projection;
+    try std.testing.expectEqualDeep(&[_]usize{ 0, 0 }, projection.statement_indices);
+    try std.testing.expectEqual(@as(usize, 2), projection.originals.len);
+    try std.testing.expectEqual(@as(u64, 9), projection.source.at(.{ .statement = 1 }, .content).?.request.value);
+    const next = try f.build_input.execute(a, progress);
+    try @import("domain/reference_reconciliation_validation.zig").input(a, next);
+}
+
+test "atomic reconciliation insertion normalization and packet construction release allocation failures" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1343,10 +1982,8 @@ fn reconciliationRepairAllocation(allocator: std.mem.Allocator, parsed: r.Parsed
     var redundant = merged;
     redundant.source.statements = try merged.source.statements.inserting(a, merged.proposal.summary.statements.len, merged.proposal.summary.statements.len);
     redundant.proposal.summary.statements = duplicate;
-    const repeated = (try f.validate_summary.execute(a, redundant, context)).invalid;
-    const deletion = (try repair.authorize(a, redundant, context, repeated)).automatic;
-    const removed = try repair.merge(a, redundant, context, deletion.authorization, null, null);
-    _ = (try f.validate_summary.execute(a, removed, context)).valid;
+    const normalized = (try f.validate_summary.execute(a, redundant, context)).valid;
+    try std.testing.expectEqual(merged.proposal.summary.statements.len, normalized.statements.len);
     try std.testing.expectEqualDeep(parsed.proposal.summary.statements, merged.proposal.summary.statements[0..parsed.proposal.summary.statements.len]);
 }
 
@@ -1385,21 +2022,26 @@ test "mixed claim kinds choose independent selection repair across summaries and
             const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
             const choices = body.value.object.get("repair").?.object.get("rule").?.object;
             try std.testing.expectEqual(@as(i64, business.ordinal), choices.get("selection").?.array.items[0].integer);
-            const constraints = body.value.object.get("input").?.object.get("constraints").?.array.items;
-            var content_rule = false;
-            var token_rule = false;
+            const repair_input = body.value.object.get("input").?.object;
+            try std.testing.expectEqual(!global, repair_input.contains("summary_purpose"));
+            try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Together, the statements must cover every assigned claim ID") == null);
+            const constraints = repair_input.get("constraints").?.array.items;
+            var selection_rule = false;
             for (constraints) |constraint| {
-                content_rule = content_rule or std.mem.eql(u8, constraint.object.get("constraint").?.string, "matching_claim_content");
-                token_rule = token_rule or std.mem.eql(u8, constraint.object.get("constraint").?.string, "exact_selected_token");
+                const name = constraint.object.get("constraint").?.string;
+                selection_rule = selection_rule or std.mem.eql(u8, name, "nonempty_unique_allowed_claims");
+                if (std.mem.eql(u8, name, "nonempty_unique_allowed_claims")) try std.testing.expect(std.mem.indexOf(u8, constraint.object.get("requirement").?.string, "repair.rule.selection") != null);
+                try std.testing.expect(!std.mem.eql(u8, name, "matching_claim_content"));
+                try std.testing.expect(!std.mem.eql(u8, name, "exact_selected_token"));
             }
-            try std.testing.expect(content_rule and token_rule);
+            try std.testing.expect(selection_rule);
             const wire = try std.fmt.allocPrint(a, "{{\"claim_ids\":[{d}]}}", .{business.ordinal});
             var merged = try repair.merge(a, parsed, fixture.context(), authorization, try repair.parse(a, authorization, packet, wire), null);
             if (global) {
                 try std.testing.expectEqualDeep(parsed.proposal.global.signals[0].content, merged.proposal.global.signals[0].content);
                 try std.testing.expectEqualDeep(parsed.proposal.global.signals[1..], merged.proposal.global.signals[1..]);
                 try std.testing.expectEqualDeep(parsed.proposal.global.claim_dispositions, merged.proposal.global.claim_dispositions);
-                _ = (try f.finish(a, input, merged.proposal.global, fixture.context())).valid;
+                _ = (try f.finish(a, input, try mockUnsupportedRoles(a, merged.proposal.global), fixture.context())).valid;
             } else {
                 const missing = (try f.validate_summary.execute(a, merged, fixture.context())).invalid;
                 try std.testing.expectEqual(.membership, missing.issue.rule);
@@ -1410,6 +2052,12 @@ test "mixed claim kinds choose independent selection repair across summaries and
             }
             // The exact old snapshot remains mandatory even for an equivalent edit.
             try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, merged, fixture.context(), authorization, .{ .selection = .{ .claim_ids = &.{business} } }, null));
+            if (!global) {
+                var changed_lineage = parsed;
+                changed_lineage.carried_from = .{ .ordinal = 1 };
+                try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, changed_lineage, fixture.context(), rejected));
+                try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, changed_lineage, fixture.context(), authorization, .{ .selection = .{ .claim_ids = &.{business} } }, null));
+            }
             var changed_purpose = parsed;
             changed_purpose.input.purpose = if (global) .summary else .global;
             try std.testing.expectError(error.InvalidAtomicRepair, repair.packet(a, changed_purpose, fixture.context(), authorization));
@@ -1480,7 +2128,7 @@ test "projection compatibility handles model kinds and indivisible exact tokens 
             defer @import("domain/model_input_packet.zig").release(packet);
             break :model try repair.merge(a, parsed, fixture.context(), auth, try repair.parse(a, auth, packet, try f.repairResponse(a, replacement)), null);
         };
-        if (global) _ = (try f.finish(a, input, merged.proposal.global, fixture.context())).valid else _ = (try f.validate_summary.execute(a, merged, fixture.context())).valid;
+        if (global) _ = (try f.finish(a, input, try mockUnsupportedRoles(a, merged.proposal.global), fixture.context())).valid else _ = (try f.validate_summary.execute(a, merged, fixture.context())).valid;
     };
 }
 
@@ -1513,13 +2161,13 @@ test "empty relationship choices block before model dispatch and genuine conflic
     const duplicate = (try f.finish(a, input, parsed.proposal.global, fixture.context())).invalid;
     const removal = (try repair.authorize(a, parsed, fixture.context(), duplicate)).automatic;
     const merged = try repair.merge(a, parsed, fixture.context(), removal.authorization, null, null);
-    try std.testing.expectEqual(.blocked, (try f.finish(a, input, merged.proposal.global, fixture.context())).valid.outcome);
+    try std.testing.expectEqual(.blocked, (try f.finish(a, input, try mockUnsupportedRoles(a, merged.proposal.global), fixture.context())).valid.outcome);
     conflicts[1].summary = .{ .nodes = &.{.{ .literal = .{ .value = "Eligibility differs." } }} };
     const competing = (try f.finish(a, input, parsed.proposal.global, fixture.context())).invalid;
     try std.testing.expectEqual(.competing_entries, (try repair.authorize(a, parsed, fixture.context(), competing)).blocked);
 }
 
-test "canonical summary and signal redundancy preserves evidence and rejects competing meanings" {
+test "canonical summary redundancy normalizes while signal redundancy retains repair authority" {
     const repair = @import("domain/reference_reconciliation_repair.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -1546,16 +2194,24 @@ test "canonical summary and signal redundancy preserves evidence and rejects com
             values[old.len].content = segmented;
             parsed.proposal.summary.statements = values;
         }
-        const rejected = if (global) (try f.finish(a, input, parsed.proposal.global, fixture.context())).invalid else (try f.validate_summary.execute(a, parsed, fixture.context())).invalid;
-        const removal = (try repair.authorize(a, parsed, fixture.context(), rejected)).automatic;
-        const merged = try repair.merge(a, parsed, fixture.context(), removal.authorization, null, null);
-        if (global) _ = (try f.finish(a, input, merged.proposal.global, fixture.context())).valid else _ = (try f.validate_summary.execute(a, merged, fixture.context())).valid;
         if (global) {
+            const rejected = (try f.finish(a, input, parsed.proposal.global, fixture.context())).invalid;
+            const removal = (try repair.authorize(a, parsed, fixture.context(), rejected)).automatic;
+            const merged = try repair.merge(a, parsed, fixture.context(), removal.authorization, null, null);
+            _ = (try f.finish(a, input, try mockUnsupportedRoles(a, merged.proposal.global), fixture.context())).valid;
             const values = try a.dupe(r.SignalProposal, parsed.proposal.global.signals);
             values[values.len - 1].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "A different supported meaning." } }} } } };
             parsed.proposal.global.signals = values;
             const competing = (try f.finish(a, input, parsed.proposal.global, fixture.context())).invalid;
             try std.testing.expectEqual(.competing_entries, (try repair.authorize(a, parsed, fixture.context(), competing)).blocked);
+        } else {
+            const normalized = (try f.validate_summary.execute(a, parsed, fixture.context())).valid;
+            try std.testing.expectEqual(parsed.proposal.summary.statements.len - 1, normalized.statements.len);
+            const values = try a.dupe(r.StatementProposal, parsed.proposal.summary.statements);
+            values[values.len - 1].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "MOCK A distinct assertion must remain for semantic review." } }} } } };
+            parsed.proposal.summary.statements = values;
+            const distinct = (try f.validate_summary.execute(a, parsed, fixture.context())).valid;
+            try std.testing.expectEqual(values.len, distinct.statements.len);
         }
     }
 }
@@ -1600,21 +2256,28 @@ test "misbound extra projections recover by proven deletion with intact siblings
         try std.testing.expectEqual(.matching_claim_content, rejected.issue.expected.constraint);
         try std.testing.expectEqualDeep(origin, rejected.origin.?);
         try std.testing.expectEqual(index, if (global) rejected.unit.signal else rejected.unit.statement);
-        try std.testing.expect(rejected.relations.content == null);
-        try std.testing.expectEqual(@as(usize, 0), rejected.relations.selection.len);
+        if (global) {
+            try std.testing.expect(rejected.relations.content == null);
+            try std.testing.expectEqual(@as(usize, 0), rejected.relations.selection.len);
+        } else {
+            try std.testing.expect(rejected.relations.content.? == .preserved_token);
+            try std.testing.expectEqualDeep(&[_]r.ClaimId{business.id}, rejected.relations.selection);
+        }
         try std.testing.expectEqual(index, rejected.relations.redundant.?);
         if (global and first) try std.testing.checkAllAllocationFailures(std.testing.allocator, redundantDeletionAllocation, .{ parsed, fixture.context() });
         const automatic = (try repair.authorize(a, parsed, fixture.context(), rejected)).automatic;
         try std.testing.expect(automatic.authorization.operation == .delete);
         const merged = try repair.merge(a, parsed, fixture.context(), automatic.authorization, null, null);
-        try std.testing.expectEqualDeep(good.proposal, merged.proposal);
+        var expected = good.proposal;
+        if (expected == .global) expected.global.role_decisions = null;
+        try std.testing.expectEqualDeep(expected, merged.proposal);
         try std.testing.expectEqual(@as(u64, 2), merged.source.revision);
         for (0..count) |sibling| {
             const unit: r.diagnostic.Unit = if (global) .{ .signal = sibling } else .{ .statement = sibling };
             try std.testing.expectEqualDeep(origin, merged.source.at(unit, .record).?);
         }
         try std.testing.expect((try textRejection(a, merged, fixture.context())) == null);
-        if (global) try std.testing.expectEqual(.complete, (try f.finish(a, input, merged.proposal.global, fixture.context())).valid.outcome);
+        if (global) try std.testing.expectEqual(.complete, (try f.finish(a, input, try mockUnsupportedRoles(a, merged.proposal.global), fixture.context())).valid.outcome);
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, merged, fixture.context(), automatic.authorization, null, null));
         // Even a valid sibling change invalidates the entire original proof.
         const changed_content: r.ContentProposal = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "A different supported requirement." } }} } } };
@@ -1705,7 +2368,7 @@ test "misbound projection deletion rejects missing coverage invalid survivors an
     };
 }
 
-test "misbound redundancy handles aggregate summary diagnostics and distinct exact tokens" {
+test "misbound token deletion and overlapping summary content retain distinct validation contracts" {
     const repair = @import("domain/reference_reconciliation_repair.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -1733,12 +2396,14 @@ test "misbound redundancy handles aggregate summary diagnostics and distinct exa
             try std.testing.expect(rejected.relations.redundant == null and decision != .automatic);
         } else {
             const merged = try repair.merge(a, parsed, fixture.context(), decision.automatic.authorization, null, null);
-            try std.testing.expectEqualDeep(good, merged.proposal.global);
-            try std.testing.expectEqual(.complete, (try f.finish(a, input, merged.proposal.global, fixture.context())).valid.outcome);
+            var expected = good;
+            expected.role_decisions = null;
+            try std.testing.expectEqualDeep(expected, merged.proposal.global);
+            try std.testing.expectEqual(.complete, (try f.finish(a, input, try mockUnsupportedRoles(a, merged.proposal.global), fixture.context())).valid.outcome);
         }
     }
-    // With the same content kind the defect is reported at aggregate membership,
-    // not at one statement. The same proof must still identify a safe deletion.
+    // Same text selected from different source claims is not duplicate evidence.
+    // Overlap alone cannot prove that the extra statement is semantically wrong.
     const summary_fixture = try prepare(a, &.{ "Confirm the request.\n", "Record the decision.\n" });
     defer summary_fixture.deinit();
     var progress = try f.initialize(a, summary_fixture.inputs, summary_fixture.extracted, 8);
@@ -1756,15 +2421,11 @@ test "misbound redundancy handles aggregate summary diagnostics and distinct exa
     @memcpy(statements[0..original.statements.len], original.statements);
     statements[original.statements.len] = original.statements[0];
     statements[original.statements.len].claim_ids = original.statements[1].claim_ids;
-    // An extra individually valid statement still needs the entire membership
-    // check, and no new per-statement acceptance path is introduced.
     const parsed: r.Parsed = .{ .input = summary_input, .proposal = .{ .summary = .{ .statements = statements } } };
-    const rejected = (try textRejection(a, parsed, summary_fixture.context())).?;
-    try std.testing.expect(rejected.unit == .summary);
-    const decision = (try repair.authorize(a, parsed, summary_fixture.context(), rejected)).automatic;
-    const merged = try repair.merge(a, parsed, summary_fixture.context(), decision.authorization, null, null);
-    try std.testing.expectEqualDeep(original, merged.proposal.summary);
-    try std.testing.expect((try textRejection(a, merged, summary_fixture.context())) == null);
+    const checked = (try f.validate_summary.execute(a, parsed, summary_fixture.context())).valid;
+    try std.testing.expectEqual(statements.len, checked.statements.len);
+    try std.testing.expectEqualDeep(statements[0].claim_ids, checked.statements[0].claim_ids);
+    try std.testing.expectEqualDeep(statements[2].claim_ids, checked.statements[2].claim_ids);
 }
 
 test "redundant signal deletion cannot discard a selected superseded claim" {
@@ -1794,7 +2455,7 @@ test "redundant signal deletion cannot discard a selected superseded claim" {
     if (decision == .automatic) try std.testing.expect(decision.automatic.authorization.operation != .delete);
 }
 
-test "occupied sibling membership blocks impossible summary and signal selections" {
+test "summary selection permits overlap while occupied signal membership blocks impossible selections" {
     const repair = @import("domain/reference_reconciliation_repair.zig");
     for ([_][]const u8{ "Display `Hello, World!`.\n", "Confirm `Loan renewed!`.\n" }) |source| for ([_]bool{ false, true }) |global| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -1827,8 +2488,15 @@ test "occupied sibling membership blocks impossible summary and signal selection
         const rejection = (try textRejection(a, parsed, fixture.context())).?;
         try std.testing.expectEqual(.claim_selection, rejection.issue.rule);
         const decision = try repair.authorize(a, parsed, fixture.context(), rejection);
-        try std.testing.expectEqual(@as(usize, 0), rejection.relations.selection.len);
-        try std.testing.expectEqual(.no_independent_target, decision.blocked);
+        if (global) {
+            try std.testing.expectEqual(@as(usize, 0), rejection.relations.selection.len);
+            try std.testing.expectEqual(.no_independent_target, decision.blocked);
+        } else {
+            try std.testing.expectEqual(@as(usize, 1), rejection.relations.selection.len);
+            const repaired = try repair.merge(a, parsed, fixture.context(), decision.model, .{ .selection = .{ .claim_ids = rejection.relations.selection } }, null);
+            const checked = (try f.validate_summary.execute(a, repaired, fixture.context())).valid;
+            try std.testing.expectEqual(parsed.proposal.summary.statements.len, checked.statements.len);
+        }
     };
 }
 
@@ -1880,7 +2548,7 @@ test "equivalent disposition permutations delete only redundant edges and preser
         try std.testing.expect(automatic.authorization.operation == .delete);
         const merged = try repair.merge(a, parsed, fixture.context(), automatic.authorization, null, null);
         try std.testing.expectEqualDeep(original, merged.proposal.global);
-        try std.testing.expectEqual(@as(@FieldType(r.Accounted, "outcome"), if (has_conflict) .blocked else .complete), (try f.finish(a, input, merged.proposal.global, fixture.context())).valid.outcome);
+        try std.testing.expectEqual(@as(@FieldType(r.Accounted, "outcome"), if (has_conflict) .blocked else .complete), (try f.finish(a, input, try mockUnsupportedRoles(a, merged.proposal.global), fixture.context())).valid.outcome);
         try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, merged, fixture.context(), automatic.authorization, null, null));
         // An equivalent permutation still changes the exact dependency/old value.
         const changed_values = try a.dupe(r.ClaimDispositionProposal, values);
@@ -1937,10 +2605,83 @@ test "signal selection admits available and overlapping sets but blocks exhauste
         const wire = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, .{ .selection = .{ .claim_ids = ids } });
         const merged = try repair.merge(a, parsed, fixture.context(), authorization, try repair.parse(a, authorization, packet, wire), null);
         for (signals, 0..) |sibling, index| if (index != selected) try std.testing.expectEqualDeep(sibling, merged.proposal.global.signals[index]);
-        try std.testing.expectEqual(.complete, (try f.finish(a, input, merged.proposal.global, fixture.context())).valid.outcome);
+        try std.testing.expectEqual(.complete, (try f.finish(a, input, try mockUnsupportedRoles(a, merged.proposal.global), fixture.context())).valid.outcome);
         // A model may ignore the choices; the native uniqueness gate still rejects.
         const duplicate = try repair.merge(a, parsed, fixture.context(), authorization, .{ .selection = .{ .claim_ids = good.signals[1].claim_ids } }, null);
         try std.testing.expectEqual(.duplicate_signal, (try f.finish(a, input, duplicate.proposal.global, fixture.context())).invalid.issue.rule);
+    };
+}
+
+test "selection repair response bounds follow authorized compatible claims rather than the original assignment" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    const schema = @import("domain/model_result_schema.zig");
+    const check = @import("model_payload_schema_test.zig").checkDocument;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schemas = try compiler.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited));
+    for ([_][3][]const u8{
+        .{ "MOCK Display `MOCK Greeting`.\n", "MOCK Display the current time.\n", "MOCK Use the declared architecture.\n" },
+        .{ "MOCK Renew the loan with `MOCK Renewed`.\n", "MOCK Issue a receipt.\n", "MOCK Use the declared architecture.\n" },
+    }) |sources| for ([_]bool{ false, true }) |global| {
+        const fixture = try prepare(a, &sources);
+        defer fixture.deinit();
+        var extracted = fixture.extracted;
+        const claims = try a.dupe(r.extraction.Claim, extracted.ledger.claims);
+        claims[claims.len - 1].content = .{ .model = .{ .design = .{ .value = .{ .nodes = &.{.{ .literal = .{ .value = "MOCK Use the declared architecture." } }} } } } };
+        extracted.ledger.claims = claims;
+        const progress = try f.initialize(a, fixture.inputs, extracted, 8);
+        const input = if (global) try f.summaries(a, progress, fixture.context()) else try f.build_input.execute(a, progress);
+        var parsed: r.Parsed = .{ .input = input, .proposal = if (global) .{ .global = try globalWithoutSpecRoles(a, input) } else .{ .summary = try f.summary(a, input) } };
+        if (global) {
+            const signals = try a.dupe(r.SignalProposal, parsed.proposal.global.signals);
+            signals[0].claim_ids = &.{};
+            parsed.proposal.global.signals = signals;
+        } else {
+            const statements = try a.dupe(r.StatementProposal, parsed.proposal.summary.statements);
+            statements[0].claim_ids = &.{};
+            parsed.proposal.summary.statements = statements;
+        }
+        const rejection = (try textRejection(a, parsed, fixture.context())).?;
+        const auth = (try repair.authorize(a, parsed, fixture.context(), rejection)).model;
+        const packet = try repair.packet(a, parsed, fixture.context(), auth);
+        defer packets.release(packet);
+        const allowed = auth.rule.rejection.relations.selection;
+        try std.testing.expectEqual(@as(usize, if (global) 2 else 1), allowed.len);
+        try std.testing.expect(allowed.len < input.partition.group.claim_ids.len);
+        const choice = packet.integerChoices()[packet.integerChoices().len - 1];
+        try std.testing.expectEqual(.unique_subset, choice.collection);
+        try std.testing.expectEqual(allowed.len, choice.allowed.len);
+        for (choice.allowed, allowed) |ordinal, claim| try std.testing.expectEqual(@as(i64, claim.ordinal), ordinal);
+        const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+        const evidence = body.get("input").?.object;
+        try std.testing.expect(!evidence.contains("assignment"));
+        try std.testing.expectEqual(input.items.len, evidence.get("claims").?.array.items.len);
+        const guidance = try std.json.Stringify.valueAlloc(a, evidence.get("constraints").?, .{});
+        try std.testing.expect(std.mem.indexOf(u8, guidance, "repair.rule.selection") != null);
+        for ([_][]const u8{ "assignment.claim_ids", "accepted.signals", "retained_claim_covered", "token_projected", "conflict_claim_covered", "conflict_pair_covered" }) |unrelated|
+            try std.testing.expect(std.mem.indexOf(u8, guidance, unrelated) == null);
+        const selected = try schema.restrict(std.testing.allocator, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+        defer selected.release();
+        const valid = try std.fmt.allocPrint(a, "{{\"claim_ids\":[{d}]}}", .{allowed[0].ordinal});
+        try check(selected.selected().modelBytes(), .{ .bytes = valid });
+        const foreign = try std.fmt.allocPrint(a, "{{\"claim_ids\":[{d}]}}", .{claims[claims.len - 1].id.ordinal});
+        try check(selected.selected().modelBytes(), .{ .bytes = foreign, .rejection = .enum_mismatch, .path = "/claim_ids/0" });
+        const repeated = try a.alloc(r.ClaimId, allowed.len + 1);
+        @memset(repeated, allowed[0]);
+        const too_many = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, .{ .selection = .{ .claim_ids = repeated } });
+        try check(selected.selected().modelBytes(), .{ .bytes = too_many, .rejection = .array_length, .path = "/claim_ids" });
+        if (global) {
+            // The closed schema profile has no uniqueness keyword. Native
+            // validation still rejects repeated IDs within the projected bound.
+            const duplicate: repair.Replacement = .{ .selection = .{ .claim_ids = repeated[0..allowed.len] } };
+            const bytes = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, duplicate);
+            try check(selected.selected().modelBytes(), .{ .bytes = bytes });
+            const merged = try repair.merge(a, parsed, fixture.context(), auth, duplicate, null);
+            try std.testing.expectEqual(.claim_selection, (try textRejection(a, merged, fixture.context())).?.issue.rule);
+        }
     };
 }
 
@@ -2038,7 +2779,7 @@ fn relationRepairAllocation(allocator: std.mem.Allocator, parsed: r.Parsed, ctx:
             .blocked => return error.UnexpectedRepairBlock,
         };
         try std.testing.expectEqual(parsed.source.revision + 1, merged.source.revision);
-        if (merged.proposal == .summary) _ = (try f.validate_summary.execute(a, merged, ctx)).valid else _ = (try f.finish(a, merged.input, merged.proposal.global, ctx)).valid;
+        if (merged.proposal == .summary) _ = (try f.validate_summary.execute(a, merged, ctx)).valid else _ = (try f.finish(a, merged.input, try mockUnsupportedRoles(a, merged.proposal.global), ctx)).valid;
     }
     // Owned diagnostics must remain serializable after native facts/packets die.
     const bytes = try std.json.Stringify.valueAlloc(allocator, copied, .{});
@@ -2080,11 +2821,13 @@ test "conflict selection respects occupied pairs without conflating conflict kin
             const pairs = body.value.object.get("repair").?.object.get("rule").?.object.get("conflicting_pairs").?.array.items;
             try std.testing.expectEqual(@as(usize, 1), pairs.len);
             try std.testing.expectEqualStrings("repair_conflict_selection", packet.resultDefinition().?.bytes);
+            try std.testing.expectEqual(.sequence, packet.integerChoices()[packet.integerChoices().len - 1].collection);
+            try std.testing.expectEqual(@as(usize, 0), body.value.object.get("input").?.object.get("constraints").?.array.items.len);
             try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, "{\"claim_ids\":[1,2]}"));
             const wire = "{\"group_id\":1}";
             const merged = try repair.merge(a, parsed, fixture.context(), authorization, try repair.parse(a, authorization, packet, wire), null);
             try std.testing.expectEqualDeep(conflicts[0], merged.proposal.global.conflicts[0]);
-            try std.testing.expectEqual(.blocked, (try f.finish(a, input, merged.proposal.global, fixture.context())).valid.outcome);
+            try std.testing.expectEqual(.blocked, (try f.finish(a, input, try mockUnsupportedRoles(a, merged.proposal.global), fixture.context())).valid.outcome);
         }
     };
 }
@@ -2142,7 +2885,7 @@ test "repair progress separates restored membership from invalid inserted conten
         try std.testing.expectEqual(.resolved, completed.result);
         if (global) {
             try std.testing.expectEqualDeep(missing.proposal.global.signals, repaired.proposal.global.signals[0..missing.proposal.global.signals.len]);
-            _ = (try f.finish(a, input, repaired.proposal.global, fixture.context())).valid;
+            _ = (try f.finish(a, input, try mockUnsupportedRoles(a, repaired.proposal.global), fixture.context())).valid;
         } else try std.testing.expectEqualDeep(missing.proposal.summary.statements, repaired.proposal.summary.statements[0..missing.proposal.summary.statements.len]);
     };
 }
@@ -2199,18 +2942,18 @@ test "phase assignments reject premature and stale handoffs and retain role diag
     const signals = (try f.validate_signals.execute(a, (try f.validate_dispositions.execute(a, parsed)).valid, fixture.context())).valid;
     const packet = try stage.packet(a, .{ .roles = signals }, fixture.inputs, fixture.context().registry);
     defer @import("domain/model_input_packet.zig").release(packet);
-    const invalid = try stage.collect(a, .{ .roles = signals }, packet, "{\"role_assignments\":[{\"signal_id\":999,\"generation_roles\":[\"records\"]}]}", origin);
+    const invalid = try stage.collect(a, .{ .roles = signals }, packet, try json.encodeSelected(stage.Response, a, .{ .roles = .{ .role_decisions = try f.roleDecisions(a, &.{.{ .signal_id = .{ .ordinal = 999 }, .generation_roles = &.{.records} }}) } }), origin);
     const roles = try f.validate_roles.execute(a, (try f.validate_signals.execute(a, (try f.validate_dispositions.execute(a, invalid)).valid, fixture.context())).valid);
     try std.testing.expectEqual(.role_assignment, roles.invalid.issue.rule);
     try std.testing.expectEqualDeep(origin, roles.invalid.origin.?);
     var stale = signals;
     stale.prior.source.revision += 1;
-    try std.testing.expectError(error.InvalidReferenceReconciliation, stage.collect(a, .{ .roles = stale }, packet, "{\"role_assignments\":[]}", origin));
+    try std.testing.expectError(error.InvalidReferenceReconciliation, stage.collect(a, .{ .roles = stale }, packet, "{}", origin));
     var changed = signals;
     const changed_signals = try a.dupe(r.ValidatedSignal, signals.signals);
     changed_signals[0].content = .{ .model = .{ .business = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "A different accepted meaning." } }} } } } };
     changed.signals = changed_signals;
-    try std.testing.expectError(error.InvalidReferenceReconciliation, stage.collect(a, .{ .roles = changed }, packet, "{\"role_assignments\":[]}", origin));
+    try std.testing.expectError(error.InvalidReferenceReconciliation, stage.collect(a, .{ .roles = changed }, packet, "{}", origin));
     const owner = try @import("domain/reference_candidate_value.zig").create(std.testing.allocator, null);
     owner.payload = .{ .reconciliation_rejected = roles.invalid };
     const descriptor = @import("application/reference_reconciliation_workflow.zig").roles_schema;
@@ -2273,4 +3016,8 @@ test "checked phase facts retire resolved receipts and preserve repairs owned by
         try std.testing.expectEqual(later, facts.source.pending_repair != null);
         if (!later) try std.testing.expectEqual(.resolved, checked.delta.repair_transition.?.validated.result);
     }
+}
+
+test {
+    _ = @import("reference_role_assignment_test.zig");
 }

@@ -22,17 +22,17 @@ pub fn rejection(view: *const data.View) values.Error!?Rejection {
     return if (value.* == .rejected) value.rejected else null;
 }
 pub fn read(view: *const data.View) operations.Error!loss.Repair {
-    return owned.read(view, schema, .repair) catch error.OperationExecutionFailed;
+    return owned.read(view, schema, .repair) catch |operation_error| operation_error;
 }
 pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };
 fn support(view: *const data.View) operations.Error!loss.Support {
-    const review = authority_values.read(view, @import("specification_support_workflow.zig").schema, .support) catch return error.OperationExecutionFailed;
+    const review = authority_values.read(view, @import("specification_support_workflow.zig").schema, .support) catch |operation_error| return operation_error;
     if (review != .accepted) return error.OperationExecutionFailed;
-    return .{ .review = review.accepted.candidate, .inputs = authority_values.read(view, authority.inputs_schema, .inputs) catch return error.OperationExecutionFailed, .observations = authority_values.read(view, authority.observations_schema, .observations) catch return error.OperationExecutionFailed, .result = authority_values.read(view, authority.result_schema, .result) catch return error.OperationExecutionFailed };
+    return .{ .review = review.accepted.candidate, .inputs = authority_values.read(view, authority.inputs_schema, .inputs) catch |operation_error| return operation_error, .observations = authority_values.read(view, authority.observations_schema, .observations) catch |operation_error| return operation_error, .result = authority_values.read(view, authority.result_schema, .result) catch |operation_error| return operation_error };
 }
 fn facts(view: *const data.View) operations.Error!ex.Facts {
-    const source = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch return error.OperationExecutionFailed;
-    const candidates = values.read(view, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch return error.OperationExecutionFailed;
+    const source = values.read(view, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch |operation_error| return operation_error;
+    const candidates = values.read(view, @import("structured_token_workflow.zig").candidates_schema, @import("../domain/structured_tokens.zig").Candidates) catch |operation_error| return operation_error;
     const candidate = try extraction.read(view, extraction.text_schema, .text_validated);
     return .{ .extraction = .{ .inputs = source.*, .candidates = candidates.*, .candidate = candidate.payload().text_validated }, .support = try support(view) };
 }
@@ -47,19 +47,20 @@ pub const Authorize = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         const current = try facts(&input.step.data);
         const state = self.action.execute(owner.arena.allocator(), current, try parsed(&input.step.data), try rec.textContext(&input.step.data)) catch |err| {
-            if (err == error.OutOfMemory) return error.OperationExecutionFailed;
+            if (err == error.OutOfMemory) return error.OutOfMemory;
+            owner.rejection = err;
             owner.payload = .{ .rejected = .{ .reason = if (err == error.UnlocalizedSourceOmission) .unlocalized_omission else .invalid_repair_authority, .support = current.support } };
-            return owned.publish(self.allocator, schema, owner, .invalid) catch error.OperationExecutionFailed;
+            return owned.publish(self.allocator, schema, owner, .invalid) catch |operation_error| operation_error;
         };
         owner.payload = .{ .repair = state };
         const permit = switch (state.authorization) {
             inline else => |auth| auth.retry orelse return error.OperationExecutionFailed,
         };
-        var result = owned.publish(self.allocator, schema, owner, if (state.authorization == .extraction) .ok else .more) catch return error.OperationExecutionFailed;
+        var result = owned.publish(self.allocator, schema, owner, if (state.authorization == .extraction) .ok else .more) catch |operation_error| return operation_error;
         result.delta.repair_transition = .{ .authorized = permit };
         return result;
     }
@@ -70,8 +71,8 @@ pub const BuildInput = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const state = owned.read(&input.step.data, schema, .repair) catch return error.OperationExecutionFailed;
-        const packet = self.action.execute(self.allocator, try facts(&input.step.data), try parsed(&input.step.data), try rec.textContext(&input.step.data), state) catch return error.OperationExecutionFailed;
+        const state = owned.read(&input.step.data, schema, .repair) catch |operation_error| return operation_error;
+        const packet = self.action.execute(self.allocator, try facts(&input.step.data), try parsed(&input.step.data), try rec.textContext(&input.step.data), state) catch |operation_error| return operation_error;
         return @import("model_request_workflow.zig").publishPacket(self.allocator, packet);
     }
 };
@@ -81,14 +82,14 @@ pub const Parse = struct {
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
-        const state = owned.read(&input.step.data, schema, .repair) catch return error.OperationExecutionFailed;
-        const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch return error.OperationExecutionFailed;
+        const state = owned.read(&input.step.data, schema, .repair) catch |operation_error| return operation_error;
+        const packet = values.read(&input.step.data, @import("model_request_workflow.zig").packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
         const handoff = try @import("model_candidate_handoff.zig").read(&input.step.data);
-        const owner = owned.create(self.allocator, input.step.data) catch return error.OperationExecutionFailed;
+        const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        owner.payload = .{ .repair = self.action.execute(owner.arena.allocator(), state, packet, handoff.body, handoff.origin) catch return error.OperationExecutionFailed };
+        owner.payload = .{ .repair = self.action.execute(owner.arena.allocator(), state, packet, handoff.body, handoff.origin) catch |operation_error| return operation_error };
         var delta: pipeline.NodeDelta = .{};
-        delta.data_replacements[@intFromEnum(schema.key)] = values.adopt(self.allocator, schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch return error.OperationExecutionFailed;
+        delta.data_replacements[@intFromEnum(schema.key)] = values.adopt(self.allocator, schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         return .{ .outcome = .ok, .delta = delta };
     }
 };
@@ -106,17 +107,17 @@ pub fn Merge(comptime kind: enum { extraction, reconciliation }, comptime scope:
         action: Action,
         pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
             const self = context.?;
-            const state = owned.read(&input.step.data, schema, .repair) catch return error.OperationExecutionFailed;
+            const state = owned.read(&input.step.data, schema, .repair) catch |operation_error| return operation_error;
             const target = if (kind == .extraction) extraction.text_schema else rec.parsed_schema;
             const prior = try extraction.read(&input.step.data, target, if (kind == .extraction) .text_validated else .reconciliation_parsed);
-            const owner = reference.create(self.allocator, prior) catch return error.OperationExecutionFailed;
+            const owner = reference.create(self.allocator, prior) catch |operation_error| return operation_error;
             errdefer reference.destroy(owner);
-            owner.payload = if (kind == .extraction) .{ .text_validated = self.action.execute(owner.arena.allocator(), try facts(&input.step.data), try rec.textContext(&input.step.data), state) catch return error.OperationExecutionFailed } else .{ .reconciliation_parsed = self.action.execute(owner.arena.allocator(), try parsed(&input.step.data), try rec.textContext(&input.step.data), try support(&input.step.data), state) catch return error.OperationExecutionFailed };
+            owner.payload = if (kind == .extraction) .{ .text_validated = self.action.execute(owner.arena.allocator(), try facts(&input.step.data), try rec.textContext(&input.step.data), state) catch |operation_error| return operation_error } else .{ .reconciliation_parsed = self.action.execute(owner.arena.allocator(), try parsed(&input.step.data), try rec.textContext(&input.step.data), try support(&input.step.data), state) catch |operation_error| return operation_error };
             var delta: pipeline.NodeDelta = .{};
             const permit = (if (kind == .extraction) state.authorization.extraction.retry else state.authorization.reconciliation.retry) orelse return error.OperationExecutionFailed;
             const revision = if (kind == .extraction) owner.payload.text_validated.revision else owner.payload.reconciliation_parsed.source.revision;
             delta.repair_transition = .{ .merged = .{ .permit = permit, .revision_after = revision, .validation = .dependent_review } };
-            delta.data_replacements[@intFromEnum(target.key)] = values.adopt(self.allocator, target, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch return error.OperationExecutionFailed;
+            delta.data_replacements[@intFromEnum(target.key)] = values.adopt(self.allocator, target, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch |operation_error| return operation_error;
             for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
             return .{ .outcome = if (kind == .reconciliation and scope == .specification) .more else .ok, .delta = delta };
         }
@@ -131,7 +132,7 @@ pub const Check = struct {
         const self = context.?;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const source = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch return error.OperationExecutionFailed;
-        return .{ .outcome = if (self.action.execute(arena.allocator(), source.*, try support(&input.step.data)) catch return error.OperationExecutionFailed) .more else .ok, .delta = .{} };
+        const source = values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs) catch |operation_error| return operation_error;
+        return .{ .outcome = if (self.action.execute(arena.allocator(), source.*, try support(&input.step.data)) catch |operation_error| return operation_error) .more else .ok, .delta = .{} };
     }
 };

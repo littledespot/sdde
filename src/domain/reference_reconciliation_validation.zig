@@ -207,14 +207,6 @@ pub fn sameMembers(left: []const r.ClaimId, right: []const r.ClaimId) bool {
     return true;
 }
 
-fn summarySelectionAvailable(values: []const r.StatementProposal, selected: usize, ids: []const r.ClaimId) bool {
-    for (values, 0..) |sibling, index| {
-        if (index == selected) continue;
-        for (ids) |id| if (r.contains(r.ClaimId, sibling.claim_ids, id)) return false;
-    }
-    return true;
-}
-
 pub fn signalSelectionAvailable(values: []const r.SignalProposal, selected: usize, ids: []const r.ClaimId) bool {
     for (values, 0..) |sibling, index| {
         if (index != selected and sameMembers(sibling.claim_ids, ids)) return false;
@@ -264,14 +256,13 @@ pub fn relations(a: std.mem.Allocator, validator: r.text.Validator, ctx: TextCon
             if (!try signalEligible(dispositions, id)) eligible_current = false;
         };
         eligible_current = eligible_current and switch (rejection.unit) {
-            .statement => |index| summarySelectionAvailable(parsed.proposal.summary.statements, index, value.claim_ids),
+            .statement => true,
             .signal => |index| signalSelectionAvailable(parsed.proposal.global.signals, index, value.claim_ids),
             else => unreachable,
         };
         if (eligible_current) result.content = try selectedKind(items, value.claim_ids);
         for (parsed.input.partition.group.claim_ids) |id| {
             if (rejection.unit == .signal and !try signalEligible(dispositions, id)) continue;
-            if (rejection.unit == .statement and !summarySelectionAvailable(parsed.proposal.summary.statements, rejection.unit.statement, &.{id})) continue;
             if (matchingKind(contentKind(value.content), claimKind(try r.item(items, id)))) try selections.append(a, id);
         }
         result.selection = try selections.toOwnedSlice(a);
@@ -281,25 +272,6 @@ pub fn relations(a: std.mem.Allocator, validator: r.text.Validator, ctx: TextCon
         }
     }
     switch (rejection.unit) {
-        .summary, .statement => {
-            const values = parsed.proposal.summary.statements;
-            for (values, 0..) |value, index| {
-                if (rejection.unit == .statement and rejection.unit.statement != index) continue;
-                for (values[0..index]) |prior| {
-                    if (try equivalentContent(a, validator, ctx, items, prior.claim_ids, prior.content, value.claim_ids, value.content)) {
-                        result.redundant = index;
-                        return result;
-                    }
-                    if (rejection.unit == .summary) for (value.claim_ids) |id| {
-                        if (r.contains(r.ClaimId, prior.claim_ids, id)) result.competing = true;
-                    };
-                }
-                if (rejection.unit == .summary and try removableProjection(a, validator, ctx, parsed, dispositions, .{ .statement = index })) {
-                    result.redundant = index;
-                    return result;
-                }
-            }
-        },
         .signal => |index| if (rejection.issue.rule == .duplicate_signal) {
             const value = parsed.proposal.global.signals[index];
             for (parsed.proposal.global.signals[0..index]) |prior| {
@@ -419,8 +391,8 @@ fn equivalentContent(a: std.mem.Allocator, validator: r.text.Validator, ctx: Tex
     return r.equivalentContent(first, second);
 }
 
-/// Replay-independent final lineage gate. Every statement represents original
-/// claims exactly once; no model-supplied membership can shrink the next input.
+/// Replay-independent final lineage gate. Statements collectively cover every
+/// original claim; overlapping expressions cannot shrink the next input.
 pub fn history(allocator: std.mem.Allocator, progress: r.Progress) r.Error!void {
     if (progress.summary_count + 1 != progress.plan.partitions.len) return error.InvalidReferenceReconciliation;
     try historyPrefix(allocator, progress);
@@ -446,11 +418,13 @@ fn historyPrefix(allocator: std.mem.Allocator, progress: r.Progress) r.Error!voi
             if (id.ordinal != child.value + 1) return error.InvalidReferenceReconciliation;
         }
         var represented: std.ArrayList(r.ClaimId) = .empty;
+        defer represented.deinit(allocator);
         for (summary.statements, 0..) |statement, index| {
-            if (statement.id.ordinal != next_statement + index or statement.claim_ids.len == 0) return error.InvalidReferenceReconciliation;
-            try represented.appendSlice(allocator, statement.claim_ids);
+            if (statement.id.ordinal != next_statement + index or claims(progress.plan.layout.items, statement.claim_ids, summary.member_claim_ids) != null) return error.InvalidReferenceReconciliation;
+            try includeMembers(allocator, &represented, statement.claim_ids);
         }
         try r.sameSet(r.ClaimId, represented.items, summary.member_claim_ids);
+        try summaryProjection(summary);
         remaining -= 1;
         history_node = node.previous;
     }
@@ -477,18 +451,106 @@ pub fn checkSummary(allocator: std.mem.Allocator, validator: r.text.Validator, p
     try input(allocator, parsed.input);
     if (parsed.source.revision == 0) return error.InvalidReferenceReconciliation;
     try bind(allocator, parsed.input.progress.plan.layout.items, context, validator);
+    const carried = if (parsed.carried_from) |id| child: {
+        const current = (try reusableSummary(allocator, validator, parsed.input, context)) orelse return error.InvalidReferenceReconciliation;
+        if (id.ordinal != current.id.ordinal or parsed.phase != .complete or !try equalSnapshot(d.Source, allocator, parsed.source, .{})) return error.InvalidReferenceReconciliation;
+        break :child current;
+    } else null;
     const proposal = parsed.proposal.summary;
     const statements = try allocator.alloc(r.ValidatedStatement, proposal.statements.len);
     var represented: std.ArrayList(r.ClaimId) = .empty;
     for (proposal.statements, statements, 0..) |statement, *result, index| {
         result.* = switch (try checkStatement(allocator, validator, context, parsed.input, proposal.statements, index)) {
             .valid => |value| value,
-            .invalid => |issue| return d.reject(r.CheckedSummary, parsed.input, parsed.source, .{ .statement = index }, issue),
+            .invalid => |issue| return if (carried != null) error.InvalidReferenceReconciliation else d.reject(r.CheckedSummary, parsed.input, parsed.source, .{ .statement = index }, issue),
         };
-        try represented.appendSlice(allocator, statement.claim_ids);
+        try includeMembers(allocator, &represented, statement.claim_ids);
     }
-    r.sameSet(r.ClaimId, represented.items, parsed.input.partition.group.claim_ids) catch return d.reject(r.CheckedSummary, parsed.input, parsed.source, .summary, .{ .rule = .membership, .observed = .{ .claims = represented.items }, .expected = .{ .claims = parsed.input.partition.group.claim_ids } });
-    return .{ .valid = .{ .input = parsed.input, .statements = statements } };
+    r.sameSet(r.ClaimId, represented.items, parsed.input.partition.group.claim_ids) catch return if (carried != null) error.InvalidReferenceReconciliation else d.reject(r.CheckedSummary, parsed.input, parsed.source, .summary, .{ .rule = .membership, .observed = .{ .claims = represented.items }, .expected = .{ .claims = parsed.input.partition.group.claim_ids } });
+    represented.deinit(allocator);
+    if (carried) |child| {
+        if (statements.len != child.statements.len) return error.InvalidReferenceReconciliation;
+        for (statements, child.statements) |value, prior| {
+            if (!sameMembers(value.claim_ids, prior.claim_ids) or !r.equivalentContent(value.content, prior.content)) return error.InvalidReferenceReconciliation;
+        }
+    }
+    return .{ .valid = try normalizeSummary(allocator, parsed, statements, context) };
+}
+
+/// Resolve from current validated history, not a supplied child with matching IDs.
+/// Stale authority fails; only structurally different assignments need a model.
+pub fn reusableSummary(a: std.mem.Allocator, validator: r.text.Validator, current: r.Input, context: TextContext) r.Error!?r.Summary {
+    try input(a, current);
+    try bind(a, current.progress.plan.layout.items, context, validator);
+    if (current.purpose != .summary or current.partition.group.children.len != 1 or current.partition.group.claim_ids.len == 0) return null;
+    const child_partition = current.progress.plan.partitions[current.partition.group.children[0].value];
+    var cursor = current.progress.latest;
+    const child = while (cursor) |node| : (cursor = node.previous) {
+        if (node.value.partition_id.ordinal == child_partition.id.ordinal) break node.value;
+    } else return error.InvalidReferenceReconciliation;
+    if (!sameMembers(child.member_claim_ids, current.partition.group.claim_ids)) return error.InvalidReferenceReconciliation;
+    if (!try equalSnapshot(r.Summary, a, child, current.summaries[0])) return error.InvalidReferenceReconciliation;
+    for (current.items) |item| {
+        if (!try equalSnapshot(r.Item, a, item, try r.item(current.progress.plan.layout.items, item.claim.id))) return error.InvalidReferenceReconciliation;
+    }
+    const snapshot = try @import("reference_reconciliation_context.zig").summarySnapshot(a, current.progress.plan.layout.items, child.projection, context);
+    if (!std.meta.eql(snapshot, child.validation)) return error.InvalidReferenceReconciliation;
+    return child;
+}
+
+fn equalSnapshot(comptime T: type, a: std.mem.Allocator, left: T, right: T) r.Error!bool {
+    const snapshot = @import("atomic_repair.zig").snapshot;
+    return std.meta.eql(try snapshot(T, a, left), try snapshot(T, a, right));
+}
+
+fn includeMembers(a: std.mem.Allocator, represented: *std.ArrayList(r.ClaimId), ids: []const r.ClaimId) r.Error!void {
+    for (ids) |id| if (!r.contains(r.ClaimId, represented.items, id)) try represented.append(a, id);
+}
+
+/// Only fully validated collections enter this projection. First occurrence
+/// wins for identical content and evidence; the raw repair candidate is intact.
+fn normalizeSummary(a: std.mem.Allocator, parsed: r.Parsed, originals: []const r.ValidatedStatement, context: TextContext) r.Error!r.CheckedSummary {
+    var retained: std.ArrayList(r.ValidatedStatement) = .empty;
+    errdefer retained.deinit(a);
+    const indices = try a.alloc(usize, originals.len);
+    errdefer a.free(indices);
+    for (originals, indices) |value, *mapped| {
+        mapped.* = for (retained.items, 0..) |prior, index| {
+            if (sameMembers(prior.claim_ids, value.claim_ids) and r.equivalentContent(prior.content, value.content)) break index;
+        } else new: {
+            const index = retained.items.len;
+            try retained.append(a, value);
+            break :new index;
+        };
+    }
+    const projection: r.SummaryProjection = .{ .source = parsed.source, .originals = originals, .statement_indices = indices, .carried_from = parsed.carried_from };
+    const proof = try @import("reference_reconciliation_context.zig").summarySnapshot(a, parsed.input.progress.plan.layout.items, projection, context);
+    return .{ .input = parsed.input, .statements = try retained.toOwnedSlice(a), .projection = projection, .validation = proof };
+}
+
+/// Check the native mapping using already validated text. This never infers
+/// semantic equivalence or reassigns an original occurrence/repair identity.
+fn summaryProjection(summary: r.Summary) r.Error!void {
+    const projection = summary.projection;
+    if (projection.carried_from) |child| {
+        if (summary.member_summary_ids.len != 1 or summary.member_summary_ids[0].ordinal != child.ordinal or child.ordinal >= summary.id.ordinal or projection.source.origin != null or projection.source.pending_repair != null or projection.source.last_repair != null) return error.InvalidReferenceReconciliation;
+    }
+    if (projection.source.revision == 0 or projection.originals.len != projection.statement_indices.len) return error.InvalidReferenceReconciliation;
+    try r.unique(@import("repair_occurrences.zig").Id, projection.source.statements.values);
+    var next_index: usize = 0;
+    for (projection.originals, projection.statement_indices, 0..) |original, index, occurrence| {
+        if (index >= summary.statements.len or index > next_index) return error.InvalidReferenceReconciliation;
+        _ = projection.source.statements.at(occurrence, projection.originals.len) catch return error.InvalidReferenceReconciliation;
+        const retained = summary.statements[index];
+        if (!sameMembers(original.claim_ids, retained.claim_ids) or !r.equivalentContent(original.content, retained.content)) return error.InvalidReferenceReconciliation;
+        if (index == next_index) {
+            for (summary.statements[0..index]) |prior| {
+                if (sameMembers(prior.claim_ids, retained.claim_ids) and r.equivalentContent(prior.content, retained.content)) return error.InvalidReferenceReconciliation;
+            }
+            next_index += 1;
+        }
+    }
+    if (next_index != summary.statements.len) return error.InvalidReferenceReconciliation;
 }
 
 pub fn checkSignals(allocator: std.mem.Allocator, validator: r.text.Validator, prior: r.CheckedDispositions, context: TextContext) r.Error!d.Result(r.CheckedSignals) {
@@ -510,22 +572,23 @@ pub fn checkSignals(allocator: std.mem.Allocator, validator: r.text.Validator, p
 pub fn checkRoles(allocator: std.mem.Allocator, prior: r.CheckedSignals) r.Error!d.Result(r.CheckedSignals) {
     const source = prior.prior.source;
     const input_value = prior.prior.input;
-    const assignments = prior.prior.proposal.role_assignments;
-    const signals = try allocator.dupe(r.ValidatedSignal, prior.signals);
+    const decisions = prior.prior.proposal.role_decisions orelse return error.InvalidReferenceReconciliation;
     if (prior.prior.phase == .dispositions or prior.prior.phase == .signals or prior.prior.phase == .signals_with_conflicts) return error.InvalidReferenceReconciliation;
-    for (assignments, 0..) |assignment, assignment_index| {
-        const invalid: d.Issue = .{ .rule = .role_assignment, .observed = .{ .count = assignment.signal_id.ordinal }, .expected = .{ .constraint = .supported_role_assignment } };
-        const id = assignment.signal_id.ordinal;
-        const selected = for (0..signals.len) |index| {
-            if ((source.signals.at(index, signals.len) catch return error.InvalidReferenceReconciliation).ordinal == id) break index;
-        } else null;
-        if (assignment.generation_roles.len == 0 or selected == null) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
-        if (!try @import("reference_support.zig").eligibleSelection(prior.prior.dispositions, signals[selected.?].claim_ids)) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
-        for (assignments[0..assignment_index]) |earlier| if (earlier.signal_id.ordinal == id) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
-        for (assignment.generation_roles, 0..) |role, index| for (assignment.generation_roles[0..index]) |earlier| {
-            if (role == earlier) return d.reject(r.CheckedSignals, input_value, source, .signals, invalid);
-        };
-        signals[selected.?].generation_roles = assignment.generation_roles;
-    }
+    const roles = @import("reference_role_assignment.zig");
+    const offered = try roles.groups(allocator, source, prior.signals);
+    defer allocator.free(offered);
+    const assignments = switch (try roles.admit(allocator, prior.prior.dispositions, offered, decisions)) {
+        .valid => |values| values,
+        .invalid => |issue| return d.reject(r.CheckedSignals, input_value, source, .signals, issue),
+    };
+    defer allocator.free(assignments);
+    var transferred = false;
+    defer if (!transferred) for (assignments) |assignment| allocator.free(assignment.generation_roles);
+    const signals = try allocator.dupe(r.ValidatedSignal, prior.signals);
+    for (signals) |*signal| signal.generation_roles = &.{};
+    for (assignments) |assignment| for (offered, signals) |group, *signal| {
+        if (group.signal_id.ordinal == assignment.signal_id.ordinal) signal.generation_roles = assignment.generation_roles;
+    };
+    transferred = true;
     return .{ .valid = .{ .prior = prior.prior, .signals = signals } };
 }

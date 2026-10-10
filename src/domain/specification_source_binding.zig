@@ -7,6 +7,17 @@ const spec = @import("specification.zig");
 const evidence = @import("reference_evidence.zig");
 
 pub const Error = r.Error || spec.Error || error{InvalidSpecificationBinding};
+pub const MissingRoles = std.enums.EnumSet(r.GenerationRole);
+pub const EligibleSignal = struct { signal_id: r.SignalId, claim_ids: []const r.ClaimId };
+/// An observed binding gap, never authority to assign a role or retry a model.
+pub const Rejection = struct {
+    state_id: evidence.identity.StateId,
+    partition_id: r.PartitionId,
+    revision: u64,
+    origin: ?@import("model_candidate_origin.zig").Origin,
+    missing_roles: []const r.GenerationRole,
+    eligible_signals: []const EligibleSignal,
+};
 pub const Unit = union(enum) { brief, primary_user_story, entities, records };
 pub const Bound = union(enum) {
     brief: struct { title: spec.Selection, description: spec.Selection, primary_goal: spec.Selection },
@@ -15,35 +26,65 @@ pub const Bound = union(enum) {
     records: struct { signal: r.SignalId, selection: spec.Selection },
 };
 
-/// Presentation of the already bound source selection. Claims and their meaning
-/// remain in the packet's single evidence catalogue; this view grants no authority.
-pub const FieldGuidance = struct { purpose: []const u8, claim_ids: []const r.ClaimId };
+/// Presentation of the already bound source selection. Resolve its meaning next
+/// to the purpose; this borrowed projection never changes native support.
+pub const GuidanceMode = enum { authoring, repair };
+const Requirement = @import("model_evidence.zig").Requirement;
+pub const FieldGuidance = struct { purpose: ?[]const u8 = null, requirements: []const Requirement };
 pub const Guidance = union(enum) {
     brief: struct { title: FieldGuidance, description: FieldGuidance, primary_goal: FieldGuidance },
     primary_user_story: FieldGuidance,
     entities: FieldGuidance,
-    records: struct { purpose: []const u8, signal: r.SignalId, claim_ids: []const r.ClaimId },
+    records: struct { purpose: ?[]const u8 = null, signal: r.SignalId, requirements: []const Requirement },
 };
 
-pub fn guidance(a: std.mem.Allocator, bound: Bound) Error!Guidance {
+pub fn guidance(a: std.mem.Allocator, bound: Bound, mode: GuidanceMode, requirements: []const Requirement, record_kinds: []const spec.Kind) Error!Guidance {
     return switch (bound) {
         .brief => |value| .{ .brief = .{
-            .title = try fieldGuidance(a, .title, value.title),
-            .description = try fieldGuidance(a, .description, value.description),
-            .primary_goal = try fieldGuidance(a, .primary_goal, value.primary_goal),
+            .title = try fieldGuidance(a, .title, value.title, mode, requirements),
+            .description = try fieldGuidance(a, .description, value.description, mode, requirements),
+            .primary_goal = try fieldGuidance(a, .primary_goal, value.primary_goal, mode, requirements),
         } },
-        .primary_user_story => |value| .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, value) },
-        .entities => |value| .{ .entities = try fieldGuidance(a, .entity_basis, value) },
+        .primary_user_story => |value| .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, value, mode, requirements) },
+        .entities => |value| .{ .entities = try fieldGuidance(a, .entity_basis, value, mode, requirements) },
         .records => |value| .{ .records = .{
-            .purpose = try rolePurpose(a, .records),
+            .purpose = if (mode == .authoring) @import("required_authority_description.zig").recordsFor(a, record_kinds) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.InvalidRequiredAuthority => return error.InvalidSpecificationBinding,
+            } else null,
             .signal = value.signal,
-            .claim_ids = value.selection.claim_ids,
+            .requirements = try assignedRequirements(a, value.selection, requirements),
         } },
     };
 }
 
-fn fieldGuidance(a: std.mem.Allocator, role: r.GenerationRole, selected: spec.Selection) Error!FieldGuidance {
-    return .{ .purpose = try rolePurpose(a, role), .claim_ids = selected.claim_ids };
+fn fieldGuidance(a: std.mem.Allocator, role: r.GenerationRole, selected: spec.Selection, mode: GuidanceMode, requirements: []const Requirement) Error!FieldGuidance {
+    return .{ .purpose = try presentedPurpose(a, role, mode), .requirements = try assignedRequirements(a, selected, requirements) };
+}
+fn assignedRequirements(a: std.mem.Allocator, selected: spec.Selection, requirements: []const Requirement) Error![]const Requirement {
+    const result = try a.alloc(Requirement, selected.claim_ids.len);
+    errdefer a.free(result);
+    for (selected.claim_ids, result) |id, *copy| {
+        copy.* = for (requirements) |requirement| {
+            if (id.ordinal == requirement.claim_id.ordinal) break requirement;
+        } else return error.InvalidSpecificationBinding;
+    }
+    return result;
+}
+pub fn assigns(value: Guidance, id: r.ClaimId) bool {
+    switch (value) {
+        .brief => |fields| inline for (std.meta.fields(@TypeOf(fields))) |field| {
+            for (@field(fields, field.name).requirements) |requirement| if (id.ordinal == requirement.claim_id.ordinal) return true;
+        },
+        inline else => |field| for (field.requirements) |requirement| if (id.ordinal == requirement.claim_id.ordinal) return true,
+    }
+    return false;
+}
+fn presentedPurpose(a: std.mem.Allocator, role: r.GenerationRole, mode: GuidanceMode) Error!?[]const u8 {
+    return switch (mode) {
+        .authoring => try rolePurpose(a, role),
+        .repair => null,
+    };
 }
 fn rolePurpose(a: std.mem.Allocator, role: r.GenerationRole) Error![]const u8 {
     return role.purpose(a) catch |err| switch (err) {
@@ -126,18 +167,11 @@ pub fn forUnit(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inp
     };
 }
 
-/// Validate role coverage and stale or ineligible groups before any model call.
-pub fn validate(records: refs.Records, inputs: evidence.Inputs) Error!void {
+/// The single native coverage check for authoring and canonical readback.
+/// Invalid evidence is an error; a valid but incomplete assignment is a gap.
+pub fn missingRoles(records: refs.Records, inputs: evidence.Inputs) Error!MissingRoles {
     if (!records.items.state_id.eql(inputs.corpus.state_id)) return error.InvalidSpecificationBinding;
-    inline for (std.meta.tags(r.GenerationRole)) |role| {
-        var found = false;
-        for (records.signals) |signal| if (hasRole(signal, role)) {
-            if (!try activeSignal(records, signal)) continue;
-            found = true;
-            break;
-        };
-        if (!found) return error.InvalidSpecificationBinding;
-    }
+    var covered: MissingRoles = .initEmpty();
     for (records.signals) |signal| {
         if (signal.value.generation_roles.len == 0) continue;
         if (signal.value.claim_ids.len == 0) return error.InvalidSpecificationBinding;
@@ -147,5 +181,36 @@ pub fn validate(records: refs.Records, inputs: evidence.Inputs) Error!void {
             const item = try r.item(records.items, id);
             _ = evidence.resolve(inputs, .{ .state_id = records.items.state_id, .chunk_id = item.claim.chunk_id }) catch return error.InvalidSpecificationBinding;
         }
+        for (signal.value.generation_roles) |role| covered.insert(role);
     }
+    return covered.complement();
+}
+
+/// Persisted authority requires complete coverage; it cannot retain a gap.
+pub fn validate(records: refs.Records, inputs: evidence.Inputs) Error!void {
+    if ((try missingRoles(records, inputs)).count() != 0) return error.InvalidSpecificationBinding;
+}
+
+pub fn rejection(a: std.mem.Allocator, references: r.Accounted, missing: MissingRoles) Error!Rejection {
+    if (missing.count() == 0) return error.InvalidSpecificationBinding;
+    const records = refs.records(references);
+    const prior = references.records.assignments.checked.prior.prior;
+    const roles = try a.alloc(r.GenerationRole, missing.count());
+    errdefer a.free(roles);
+    var iterator = missing.iterator();
+    var index: usize = 0;
+    while (iterator.next()) |role| : (index += 1) roles[index] = role;
+    var eligible: std.ArrayList(EligibleSignal) = .empty;
+    errdefer eligible.deinit(a);
+    for (records.signals) |signal| if (try activeSignal(records, signal)) {
+        try eligible.append(a, .{ .signal_id = signal.id, .claim_ids = signal.value.claim_ids });
+    };
+    return .{
+        .state_id = records.items.state_id,
+        .partition_id = prior.input.partition.id,
+        .revision = prior.source.revision,
+        .origin = prior.source.at(.signals, .relationship),
+        .missing_roles = roles,
+        .eligible_signals = try eligible.toOwnedSlice(a),
+    };
 }

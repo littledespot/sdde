@@ -52,9 +52,27 @@ fn captured(allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) !
     return .{ .inventory = inventory, .entries = entries, .source_bytes = bytes.len, .budget_revision = 1 };
 }
 pub fn read(allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) !reference.Inputs {
-    var adapter: markdown.Adapter = .{ .io = std.testing.io };
+    return readWithIo(std.testing.io, allocator, path, bytes);
+}
+pub fn readWithIo(io: std.Io, allocator: std.mem.Allocator, path: []const u8, bytes: []const u8) !reference.Inputs {
+    var adapter: markdown.Adapter = .{ .io = io };
     const decoded = try (decode_action.Action{ .decoder = adapter.decoderPort() }).execute(allocator, try captured(allocator, path, bytes));
     return (account_action.Action{}).execute(allocator, decoded);
+}
+/// Shared setup for controlled upstream evidence; no model calls or results.
+pub fn readSources(io: std.Io, allocator: std.mem.Allocator, sources: []const []const u8) !reference.Inputs {
+    var inputs = try readWithIo(io, allocator, "base.md", "");
+    const documents = try allocator.alloc(reference.Document, sources.len);
+    for (sources, documents, 0..) |bytes, *document, index| {
+        const decoded = try readWithIo(io, allocator, try std.fmt.allocPrint(allocator, "source-{d}.md", .{index}), bytes);
+        document.* = decoded.documents[0];
+        document.source.ordinal = @intCast(index + 1);
+        const blocks = try allocator.dupe(reference.Block, document.blocks);
+        for (blocks) |*block| block.id.source = document.source;
+        document.blocks = blocks;
+    }
+    inputs.documents = documents;
+    return inputs;
 }
 
 test "reference inventory normalizes sorts and assigns run-local source IDs without changing names" {

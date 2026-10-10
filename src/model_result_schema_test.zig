@@ -74,6 +74,78 @@ test "integer collection choices preserve required minima and empty optional par
     try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, required, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "handles" }} }, .allowed = &.{} }}));
 }
 
+test "native unique subsets derive collection cardinality without restricting overlapping groups" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const resource = try compile(a, selectionChoices);
+    const nested = resource.select(.{ .bytes = "nested" }).?;
+    const path: []const schema.ChoiceStep = &.{ .{ .property = "records" }, .{ .items = {} }, .{ .property = "handles" } };
+    const one: schema.IntegerChoice = .{ .target = .{ .path = path }, .allowed = &.{7}, .collection = .unique_subset };
+    const selected = try schema.restrict(std.testing.allocator, nested, &.{}, &.{one});
+    defer selected.release();
+    try expectSelection(a, selected.selected(), "{\"records\":[{\"handles\":[7]},{\"handles\":[7]}]}", true);
+    try expectSelection(a, selected.selected(), "{\"records\":[{\"handles\":[7,7]}]}", false);
+    try expectSelection(a, selected.selected(), "{\"records\":[{\"handles\":[]}]}", false);
+    try expectSelection(a, selected.selected(), "{\"records\":[{\"handles\":[2]}]}", false);
+    const handles = schema.findProperty(schema.findProperty(selected.selected().root().object, "records").?.schema.array.items.object, "handles").?.schema;
+    try std.testing.expectEqual(@as(u32, 1), handles.array.maximum);
+    // Uniqueness is an existing native-owner obligation. The closed schema
+    // profile does not claim to enforce duplicates within the derived bound.
+    const two = try schema.restrict(std.testing.allocator, nested, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 2, 7 }, .collection = .unique_subset }});
+    defer two.release();
+    try expectSelection(a, two.selected(), "{\"records\":[{\"handles\":[2,7]},{\"handles\":[7]}]}", true);
+    try expectSelection(a, two.selected(), "{\"records\":[{\"handles\":[2,2]}]}", true);
+    try std.testing.expect(std.mem.indexOf(u8, two.selected().modelBytes(), "uniqueItems") == null);
+    const larger = try schema.restrict(std.testing.allocator, nested, &.{}, &.{.{ .target = .{ .path = path }, .allowed = &.{ 2, 7, 9 }, .collection = .unique_subset }});
+    defer larger.release();
+    try expectSelection(a, larger.selected(), "{\"records\":[{\"handles\":[2,7,9]}]}", false);
+    // Opt-in subset facts never alter another owner's sequence semantics.
+    var sequence = one;
+    sequence.collection = .sequence;
+    const repeated = try schema.restrict(std.testing.allocator, nested, &.{}, &.{sequence});
+    defer repeated.release();
+    try expectSelection(a, repeated.selected(), "{\"records\":[{\"handles\":[7,7]}]}", true);
+    var none = one;
+    none.allowed = &.{};
+    const empty = try schema.restrict(std.testing.allocator, nested, &.{}, &.{none});
+    defer empty.release();
+    try expectSelection(a, empty.selected(), "{\"records\":[]}", true);
+    try expectSelection(a, empty.selected(), "{\"records\":[{\"handles\":[7]}]}", false);
+    const optional = resource.select(.{ .bytes = "selection" }).?;
+    const optional_empty = try schema.restrict(std.testing.allocator, optional, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .allowed = &.{}, .collection = .unique_subset }});
+    defer optional_empty.release();
+    try expectSelection(a, optional_empty.selected(), "{\"source_ids\":[]}", true);
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, resource, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "claim_id" }} }, .allowed = &.{7}, .collection = .unique_subset }}));
+    const required = try compile(a, try fieldSchema(a, "{\"type\":\"array\",\"minItems\":2,\"maxItems\":4,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":10}}"));
+    for ([_][]const i64{ &.{}, &.{7} }) |ids| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, required, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = ids, .collection = .unique_subset }}));
+}
+
+test "unique collection metadata survives packet projections and tagged selection" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, uniqueCollectionPacket, .{});
+}
+
+fn uniqueCollectionPacket(allocator: std.mem.Allocator) !void {
+    const packets = @import("domain/model_input_packet.zig");
+    const base = try packets.create(allocator, "{}", .workflow_step, .initial_generation, null);
+    defer packets.release(base);
+    const selected = try packets.withIntegerChoices(allocator, base, &.{.{ .target = .{ .tagged = .{ .kind = "selection", .field = "handles" } }, .allowed = &.{ 3, 8 }, .collection = .unique_subset }});
+    defer packets.release(selected);
+    const contextual = try packets.withContext(struct { description: []const u8 }, allocator, selected, "assignment", .{ .description = "MOCK native selection" });
+    defer packets.release(contextual);
+    try std.testing.expectEqualDeep(selected.integerChoices(), contextual.integerChoices());
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const resource = try compile(a,
+        \\{"type":"object","properties":{"value":{"type":"object","properties":{"kind":{"const":"selection"},"handles":{"type":"array","minItems":1,"maxItems":8,"items":{"type":"integer","minimum":1,"maximum":10}}},"required":["kind","handles"],"additionalProperties":false}},"required":["value"],"additionalProperties":false}
+    );
+    const narrowed = try schema.restrict(allocator, resource, contextual.excludedVariants(), contextual.integerChoices());
+    defer narrowed.release();
+    try expectSelection(a, narrowed.selected(), "{\"value\":{\"kind\":\"selection\",\"handles\":[3,8]}}", true);
+    try expectSelection(a, narrowed.selected(), "{\"value\":{\"kind\":\"selection\",\"handles\":[3,8,3]}}", false);
+}
+
 test "ID restrictions validate definition and selected part association before omitting sibling locations" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, selectedIdChoices, .{});
 }
@@ -591,4 +663,52 @@ fn restrictChoices(allocator: std.mem.Allocator) !void {
     try std.testing.expect(!narrowed.selected().isRestrictionOf(different));
     const copy = try narrowed.selected().clone(a);
     try std.testing.expectEqualStrings(narrowed.selected().modelBytes(), copy.modelBytes());
+}
+
+test "explicit native singleton construction omits only determined tagged fields" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const canonical = try compile(a,
+        \\{"type":"object","properties":{"value":{"type":"array","minItems":1,"maxItems":4,"items":{"oneOf":[{"type":"string","maxLength":80},{"type":"object","properties":{"kind":{"const":"exact_copy"},"claim_id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","claim_id"],"additionalProperties":false}]}},"count":{"type":"integer","minimum":1,"maximum":100}},"required":["value","count"],"additionalProperties":false}
+    );
+    const single: schema.IntegerChoice = .{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = &.{7}, .singleton = .construct };
+    const fixed = try schema.restrict(std.testing.allocator, canonical, &.{}, &.{single});
+    defer fixed.release();
+    try expectSelection(a, fixed.selected(), "{\"value\":[\"MOCK narrative \",{\"kind\":\"exact_copy\"}],\"count\":8}", true);
+    for ([_][]const u8{
+        "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":7}],\"count\":8}",
+        "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":8}],\"count\":8}",
+        "{\"value\":[{\"kind\":\"exact_copy\",\"unexpected\":7}],\"count\":8}",
+    }) |bad| try expectSelection(a, fixed.selected(), bad, false);
+    // Canonical and ordinary restricted contracts continue to require IDs.
+    try expectSelection(a, canonical, "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", false);
+    var selected = single;
+    selected.singleton = .select;
+    const unchanged = try schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected});
+    defer unchanged.release();
+    try expectSelection(a, unchanged.selected(), "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":7}],\"count\":8}", true);
+    selected = single;
+    selected.allowed = &.{ 7, 9 };
+    const multiple = try schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected});
+    defer multiple.release();
+    try expectSelection(a, multiple.selected(), "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":9}],\"count\":8}", true);
+    try expectSelection(a, multiple.selected(), "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", false);
+    try expectSelection(a, multiple.selected(), "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":8}],\"count\":8}", false);
+    const absent = try schema.restrict(std.testing.allocator, canonical, &.{.{ .kind = "exact_copy" }}, &.{});
+    defer absent.release();
+    try expectSelection(a, absent.selected(), "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", false);
+    // Native construction is explicit tagged scalar policy, never a blanket
+    // omission of all singleton values or optional field/array inference.
+    selected = single;
+    selected.target = .{ .path = &.{.{ .property = "count" }} };
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected}));
+    selected = single;
+    selected.allowed = &.{101};
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected}));
+    selected.allowed = &.{ 7, 7 };
+    try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, canonical, &.{}, &.{selected}));
+    var adapter: parser.Adapter = .{};
+    const captured = try adapter.compiler().compileSelected(a, fixed.selected().modelBytes());
+    try expectSelection(a, captured, "{\"value\":[{\"kind\":\"exact_copy\"}],\"count\":8}", true);
 }

@@ -32,11 +32,15 @@ pub fn unit(index: usize) error{InvalidSpecificationUnit}!g.Unit {
     };
 }
 
-pub fn initialize(feature: @import("feature_identity.zig").FeatureId, context: p.Context) Error!Session {
+pub const Initialization = union(enum) { ready: Session, blocked: binding.Rejection };
+
+pub fn initialize(a: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, context: p.Context) Error!Initialization {
     if (@import("feature_identity.zig").FeatureId.parse(feature.bytes) == null or !p.generationReady(context.references)) return error.InvalidSpecificationUnit;
     _ = try p.items(context);
-    try binding.validate(@import("reference_support.zig").records(context.references), context.inputs);
-    return .{ .feature = feature, .reference_state = context.inputs.corpus.state_id, .record_group_count = try binding.recordCount(@import("reference_support.zig").records(context.references)) };
+    const records = @import("reference_support.zig").records(context.references);
+    const missing = try binding.missingRoles(records, context.inputs);
+    if (missing.count() != 0) return .{ .blocked = try binding.rejection(a, context.references, missing) };
+    return .{ .ready = .{ .feature = feature, .reference_state = context.inputs.corpus.state_id, .record_group_count = try binding.recordCount(records) } };
 }
 
 pub fn currentBinding(a: std.mem.Allocator, current: Session, context: p.Context) Error!binding.Bound {
@@ -64,47 +68,80 @@ pub fn packet(allocator: std.mem.Allocator, current: Session, context: p.Context
     return packetFor(allocator, current, context, current.completed);
 }
 pub fn packetFor(allocator: std.mem.Allocator, current: Session, context: p.Context, index: usize) Error!*packets.Packet {
-    return packetForChoices(allocator, current, context, index, null);
+    return packetForOptions(allocator, current, context, index, .{});
 }
 
+pub const PacketOptions = struct {
+    exact_claims: ?[]const @import("reference_reconciliation.zig").ClaimId = null,
+    task: ?[]const u8 = null,
+};
+
+/// Present the aggregate contract without imposing a floor on each source group.
+const RecordRequirements = struct {
+    scope: enum { assembled_specification } = .assembled_specification,
+    required_families: []const g.spec.Kind = &g.spec.required_record_families,
+};
+
 /// Repair retains all source claims but offers exact-copy choices only from the
-/// bound owning unit. Initial generation passes null and offers current claims.
-pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context: p.Context, index: usize, allowed: ?[]const @import("reference_reconciliation.zig").ClaimId) Error!*packets.Packet {
+/// bound owning unit. An explicit task replaces authoring purposes while retaining
+/// the source binding. Completed units receive only their authorized repair task.
+pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context: p.Context, index: usize, options: PacketOptions) Error!*packets.Packet {
     if (!current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
     const all = try p.items(context);
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    // Completed units are repaired under an atomic target and its evidence.
-    // Their authoring cursor no longer selects a current source assignment.
-    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(index), current.record_cursor));
-    var claims: std.ArrayList(@import("reference_reconciliation.zig").Item) = .empty;
+    const selected = try unit(index);
+    const entity_decision: ?g.spec.ApplicabilityProposal = if (selected == .records) decision: {
+        const checked = current.units[2] orelse return error.InvalidSpecificationUnit;
+        if (checked.unit != .entities or checked.response != .content or checked.response.content != .entities) return error.InvalidSpecificationUnit;
+        break :decision checked.response.content.entities;
+    } else null;
+    const excluded: []const @import("model_result_schema.zig").ExcludedVariant = if (entity_decision != null and entity_decision.?.disposition == .not_applicable) &.{.{ .kind = "entity" }} else &.{};
+    // The schema restriction is also the presentation filter. Descriptions do
+    // not establish another applicability rule or offer an excluded family.
+    var record_kinds: std.ArrayList(g.spec.Kind) = .empty;
+    families: for (std.meta.tags(g.spec.Kind)) |kind| {
+        for (excluded) |entry| if (std.mem.eql(u8, entry.kind, @tagName(kind))) continue :families;
+        try record_kinds.append(a, kind);
+    }
+    const projection = @import("model_evidence.zig");
+    var requirements: std.ArrayList(projection.Requirement) = .empty;
+    var exact_choices: std.ArrayList(projection.ExactLiteral) = .empty;
     var scopes: std.ArrayList(@import("reference_evidence.zig").Scope) = .empty;
     for (context.references.records.assignments.checked.prior.prior.dispositions) |disposition| {
         if (!@import("reference_support.zig").eligibleClaim(disposition.disposition)) continue;
         const item = try @import("reference_reconciliation.zig").item(all, disposition.claim_id);
-        try claims.append(a, item);
+        try requirements.append(a, try projection.requirement(a, item, context.inputs, context.registry));
         try scopes.append(a, .{ .state_id = all.state_id, .chunk_id = item.claim.chunk_id });
+        if (item.claim.content == .preserved_token) {
+            const token = item.claim.content.preserved_token;
+            if (p.permitsExactKind(token.value.kind) and (options.exact_claims == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, options.exact_claims.?, item.claim.id))) {
+                try exact_choices.append(a, .{ .claim_id = item.claim.id, .value = token.value.raw_value.bytes, .source_id = item.source_id });
+            }
+        }
     }
-    const projected = try @import("model_evidence.zig").project(a, claims.items);
-    var exact_choices: std.ArrayList(@import("model_evidence.zig").Token) = .empty;
-    for (projected.preserved_tokens) |token| {
-        if (!p.permitsExactKind(token.kind)) continue;
-        if (allowed == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, allowed.?, token.claim_id)) try exact_choices.append(a, token);
+    // Completed units are repaired under an atomic target and its evidence.
+    // Their authoring cursor no longer selects a current source assignment.
+    const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, selected, current.record_cursor), if (options.task != null) .repair else .authoring, requirements.items, record_kinds.items);
+    var contextual_requirements: std.ArrayList(projection.Requirement) = .empty;
+    for (requirements.items) |requirement| {
+        if (assigned) |selection| if (binding.assigns(selection, requirement.claim_id)) continue;
+        // Exact occurrences have one display catalogue; they are not additional
+        // behavioral requirements merely because their bytes are preserved.
+        if ((try @import("reference_reconciliation.zig").item(all, requirement.claim_id)).claim.content == .preserved_token) continue;
+        try contextual_requirements.append(a, requirement);
     }
-    const offered_scopes = if (allowed) |ids|
+    const offered_scopes = if (options.exact_claims) |ids|
         (@import("reference_support.zig").select(a, all, context.inputs, ids) catch |err| switch (err) {
             error.InvalidReferenceState => return error.InvalidSpecificationUnit,
             else => |other| return other,
         }).scopes
     else
         scopes.items;
-    const selected = try unit(index);
     const payload = .{
-        .unit = selected,
         .source_assignment = assigned,
-        .claims = projected.claims,
-        .citations = projected.citations,
+        .context_requirements = contextual_requirements.items,
         .preserved_tokens = exact_choices.items,
         .sources = try @import("model_evidence.zig").sources(a, context.inputs),
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, offered_scopes),
@@ -117,12 +154,22 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
         .records => "records",
     } });
     defer packets.release(result);
+    if (options.task) |task| {
+        const contextual = try packets.withContext([]const u8, allocator, result, "task", task);
+        packets.release(result);
+        result = contextual;
+    } else {
+        const contextual = try packets.withContext(enum { write }, allocator, result, "operation", .write);
+        packets.release(result);
+        result = contextual;
+    }
     // Only dependent units receive earlier drafts. The evidence catalogue and
     // native dependency snapshots remain complete for generation and repair.
     switch (selected) {
         .brief, .primary_user_story => {},
         .entities, .records => if (current.units[0]) |checked| {
-            const contextual = try packets.withContext(@TypeOf(checked.response.content.brief), allocator, result, "brief", checked.response.content.brief);
+            const business = @import("specification_projection.zig");
+            const contextual = try packets.withContext(business.Brief, allocator, result, "brief", try business.brief(a, context, checked.response.content.brief));
             packets.release(result);
             result = contextual;
         },
@@ -132,18 +179,19 @@ pub fn packetForChoices(allocator: std.mem.Allocator, current: Session, context:
     const input = @import("reference_model_input.zig");
     const passive_ids = try input.passiveIds(a, payload.passive_literals);
     if (selected == .records) {
-        const entities = current.units[2] orelse return error.InvalidSpecificationUnit;
-        if (entities.unit != .entities or entities.response != .content or entities.response.content != .entities) return error.InvalidSpecificationUnit;
-        const contextual = try packets.withContext(@TypeOf(entities.response.content.entities), allocator, result, "entities", entities.response.content.entities);
+        if (assigned != null and options.task == null) {
+            const contextual = try packets.withContext(RecordRequirements, allocator, result, "record_requirements", .{});
+            packets.release(result);
+            result = contextual;
+        }
+        const business = @import("specification_projection.zig");
+        const contextual = try packets.withContext(business.EntityDecision, allocator, result, "entities", try business.entities(a, context, entity_decision.?));
         packets.release(result);
         result = contextual;
-        if (entities.response.content.entities.disposition == .not_applicable) {
-            const fixed = try packets.withExcludedVariants(allocator, result, &.{.{ .kind = "entity" }});
-            defer packets.release(fixed);
-            return input.withTextChoices(allocator, fixed, passive_ids, exact_ids);
-        }
     }
-    return input.withTextChoices(allocator, result, passive_ids, exact_ids);
+    const fixed = try packets.withExcludedVariants(allocator, result, excluded);
+    defer packets.release(fixed);
+    return input.withTextChoices(allocator, fixed, passive_ids, exact_ids);
 }
 
 /// A value-only repair cannot borrow choices from unchanged sibling evidence.

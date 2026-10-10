@@ -5,6 +5,8 @@ const p = @import("specification_provenance.zig");
 const session = @import("specification_session.zig");
 const packets = @import("model_input_packet.zig");
 const candidates = @import("specification_candidate.zig");
+const descriptions = @import("required_authority_description.zig");
+const authority = @import("required_authority.zig");
 pub const Candidate = candidates.Candidate;
 pub const Target = candidates.Target;
 pub const Replacement = candidates.Replacement;
@@ -210,10 +212,16 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
     if (authorization.operation == .delete) return error.InvalidSpecificationRepair;
     const kind = if (authorization.operation == .replace) std.meta.activeTag(authorization.operation.replace) else authorization.operation.insert;
     if (kind == .record and unit != .records) return error.InvalidSpecificationRepair;
-    const base = if (kind == .value)
-        try session.packetForChoices(allocator, current, context, current.completed, (authorization.rule.value_bound orelse return error.InvalidSpecificationRepair).effective)
-    else
-        try session.packet(allocator, current, context);
+    var guidance_arena: std.heap.ArenaAllocator = .init(allocator);
+    defer guidance_arena.deinit();
+    const task = repairTask(guidance_arena.allocator(), authorization) catch |err| return switch (err) {
+        error.InvalidRequiredAuthority => error.InvalidSpecificationRepair,
+        else => |other| other,
+    };
+    const base = try session.packetForOptions(allocator, current, context, current.completed, .{
+        .exact_claims = if (kind == .value) (authorization.rule.value_bound orelse return error.InvalidSpecificationRepair).effective else null,
+        .task = task,
+    });
     defer packets.release(base);
     const definition = switch (kind) {
         .provenance => return error.InvalidSpecificationRepair,
@@ -254,19 +262,63 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
     return atomic.packet(allocator, authorization, contextual, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }));
 }
 
+/// Present the engine-selected target without reviving an authoring assignment.
+fn repairTask(a: std.mem.Allocator, authorization: Authorization) (Error || authority.Error)![]const u8 {
+    const response = authorization.dependencies.candidate.response;
+    const subject: candidates.Subject = switch (authorization.target) {
+        .value => |selected| value: {
+            if (selected.subject == .record) {
+                const record = (try candidates.select(response, .{ .record = selected.subject.record })).record;
+                const slot: authority.Slot = switch (selected.field) {
+                    .value => return error.InvalidSpecificationRepair,
+                    inline else => |_, tag| @field(authority.Slot, @tagName(tag)),
+                };
+                return descriptions.recordTask(a, std.meta.activeTag(record.content), slot);
+            }
+            break :value selected.subject;
+        },
+        .attributed => |selected| selected,
+        .record => return switch (authorization.rule.group orelse return error.InvalidSpecificationRepair) {
+            .membership => |membership| membershipTask(a, membership.disposition),
+        },
+        .provenance => return error.InvalidSpecificationRepair,
+    };
+    const slot: authority.Slot = switch (subject) {
+        .title => .display_name,
+        .description => .description,
+        .primary_goal => .primary_goal,
+        .story => .primary_user_story,
+        .entity_basis => .entities,
+        .record => return error.InvalidSpecificationRepair,
+    };
+    return descriptions.task(a, .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot });
+}
+
+fn membershipTask(a: std.mem.Allocator, disposition: g.spec.Applicability) authority.Error![]const u8 {
+    var permitted: std.ArrayList(g.spec.Kind) = .empty;
+    defer permitted.deinit(a);
+    for (std.meta.tags(g.spec.Kind)) |kind| {
+        if (!g.spec.entityMembershipSatisfied(disposition, @intFromBool(kind == .entity))) continue;
+        try permitted.append(a, kind);
+    }
+    return descriptions.recordsFor(a, permitted.items);
+}
+
 pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_value: *const packets.Packet, bytes: []const u8) Error!Replacement {
     const kind = try atomic.checkRequest(authorization, packet_value);
     const codec = @import("model_candidate_json.zig");
+    const canonical = try codec.constructBound(allocator, bytes, packet_value.integerChoices());
+    defer allocator.free(canonical);
     return switch (kind) {
         .provenance => error.InvalidSpecificationRepair,
-        .value => .{ .value = try codec.decode(g.spec.BusinessValue, allocator, bytes) },
+        .value => .{ .value = try codec.decode(g.spec.BusinessValue, allocator, canonical) },
         .attributed => blk: {
             if (authorization.operation != .replace or authorization.operation.replace != .attributed) return error.InvalidSpecificationRepair;
-            const value = try codec.decode(g.spec.Wire.AttributedValue, allocator, bytes);
+            const value = try codec.decode(g.spec.Wire.AttributedValue, allocator, canonical);
             break :blk .{ .attributed = .{ .value = value.value, .provenance = authorization.operation.replace.attributed.provenance } };
         },
         .record => blk: {
-            const value = try codec.decode(g.spec.Wire.RecordProposal, allocator, bytes);
+            const value = try codec.decode(g.spec.Wire.RecordProposal, allocator, canonical);
             const selected = switch (authorization.operation) {
                 .replace => |prior| if (prior == .record) prior.record.provenance else return error.InvalidSpecificationRepair,
                 .insert => blk_selection: {

@@ -141,7 +141,8 @@ The internal test environment supplies the evaluation selection:
 - Complete local judgment validation still owns criterion coverage, score bounds,
   dispositions and exact source/specification evidence. Native schema requests do
   not authorize accepting malformed or unsupported judgments.
-- No tools, `max_completion_tokens`, truncation or provider-specific retry policy is added.
+- The evaluator supplies no output allowance, so its requests omit
+  `max_completion_tokens`. No tools, truncation or provider-specific retry policy is added.
 - Stopped and malformed output never becomes a grade; validated usage is retained even
   when content is rejected.
 
@@ -275,6 +276,10 @@ For scored criteria, the percentage is:
 - Each invocation captures inputs once and receives a new random evaluation ID.
 - The existing output directory receives exclusively created `eval-<id>.json` and
   `eval-<id>.md` files with owner-only file permissions.
+- A matching `eval-<id>/` directory uses the same evaluation trace store as generated
+  specification grading. Each attempt retains its serialized request, raw provider
+  response, available final text and outcome with known credentials redacted. Capture
+  failure aborts evaluation; a score is never reported without its required evidence.
 - Existing files, including specifications and clarifications, are never replaced.
 - Reports are retained until the operator removes them; no pruning, transaction store or
   resume path is created.

@@ -103,6 +103,7 @@ const OwnerStorage = struct {
 };
 
 pub const ValidationError = error{
+    InvalidAccountingTransition,
     InvalidAttemptClassification,
     ModelAttemptAccountingRevisionConflict,
     ModelAttemptValueConflict,
