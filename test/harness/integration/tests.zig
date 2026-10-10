@@ -1112,7 +1112,7 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         for ([_][]const u8{ try @import("../e2e/report.zig").renderMarkdown(a, decoded), try @import("../e2e/report.zig").terminal(a, decoded, "runs", "case") }) |output| {
             try std.testing.expect(std.mem.indexOf(u8, output, bytes) != null);
             try std.testing.expect(std.mem.indexOf(u8, output, "native-validation") != null);
-            if (diagnostic == .support_findings) try std.testing.expect(std.mem.indexOf(u8, output, "No safe repair target can be authorized") != null);
+            if (diagnostic == .support_findings) try std.testing.expect(std.mem.indexOf(u8, output, "No upstream repair target can be authorized") != null);
         }
     }
 }

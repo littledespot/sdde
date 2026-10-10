@@ -7791,7 +7791,8 @@ test "protocol correction retains summary and signal guidance selection bounds c
         try std.testing.expectEqualStrings(packet.body(), original_parts[1].user);
         try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Other claims are supporting evidence") != null);
         try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "summary_purpose") != null);
-        try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "every assigned claim ID exactly once") != null);
+        try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "Together, the statements must cover every assigned claim ID") != null);
+        try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "Claims may be combined, split across statements or selected by overlapping statements") != null);
         try std.testing.expect(std.mem.indexOf(u8, packet.body(), "MOCK Renewed!") != null);
         for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode" }) |step|
             try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);

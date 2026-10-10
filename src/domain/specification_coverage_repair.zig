@@ -152,6 +152,7 @@ pub fn authorizeOmission(a: std.mem.Allocator, validator: @import("typed_text.zi
     for (support.result.entries) |entry| {
         const evidence = (try authority.supportedOmission(a, support.inputs, support.observations, support.result, entry.requirement)) orelse continue;
         try @import("specification_support_evidence.zig").validate(a, support.inputs, context.inputs, evidence);
+        if (@import("source_omission.zig").isUpstream(evidence.review.?.loss orelse return error.InvalidSpecificationCoverageRepair)) continue;
         if (evidence.review.?.provenance.claim_ids.len == 0) continue;
         const target = omissionTarget(candidate, entry.requirement, current) catch |err| switch (err) {
             error.UnsafeSpecificationOmissionRepair => continue,

@@ -96,8 +96,12 @@ pub fn bindLoss(required: evidence.Requirements, value: Canonical, assessment: @
             bound.loss = .{ .unlocalized = .{} };
             bound.loss_comparison = null;
         },
+        .candidate => {
+            bound.loss = .{ .candidate = .{} };
+            bound.loss_comparison = null;
+        },
         .localized => |selected| {
-            if (selected.location == .unlocalized) return error.InvalidJsonDocument;
+            if (!@import("source_omission.zig").isUpstream(selected.location)) return error.InvalidJsonDocument;
             bound.loss = selected.location;
             bound.loss_comparison = selected.comparison;
         },

@@ -463,7 +463,13 @@ subgraphs:
         on: {ok: initialize-summary, failed: end.failed}
       select-composition:
         use: check-reference-reconciliation-purpose
-        on: {ok: initialize-global, more: reconciliation-packet, failed: end.failed}
+        on: {ok: initialize-global, more: check-summary-reuse, failed: end.failed}
+      check-summary-reuse:
+        use: check-reference-summary-reuse
+        on: {ok: reuse-summary, more: reconciliation-packet, failed: end.failed}
+      reuse-summary:
+        use: reuse-reference-reconciliation-summary
+        on: {ok: validate-summary, failed: end.failed}
       initialize-summary:
         use: initialize-json-composition
         with: {composition: reconciliation-summary}

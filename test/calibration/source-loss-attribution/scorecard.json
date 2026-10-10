@@ -1,0 +1,1908 @@
+{
+  "status": "completed",
+  "assessment": "model-assisted, non-blinded inspection of the frozen case evidence and actual responses; independently reviewed; not deterministic semantic proof",
+  "not_workflow_or_e2e_evidence": true,
+  "artifact_root": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb",
+  "frozen_manifest_sha256": "b54322c0c841913d62fe527ac1334ea9b3d5b02a23474a91bfe76b765436502b",
+  "quality_gate": "failed",
+  "summary": {
+    "baseline": {
+      "trials": 8,
+      "json_schema_admitted": 8,
+      "correct_location_or_candidate": 2,
+      "wrong_upstream_localizations": 6,
+      "source_ranges_manually_invalid": 0,
+      "wrong_upstream_localizations_with_valid_source_range": 6,
+      "missed_identifiable_upstream_losses": 0,
+      "input_tokens": 11384,
+      "output_tokens": 1081,
+      "round_trip_ms": 6896
+    },
+    "candidate": {
+      "trials": 8,
+      "json_schema_admitted": 8,
+      "correct_location_or_candidate": 1,
+      "wrong_upstream_localizations": 5,
+      "source_ranges_manually_invalid": 4,
+      "wrong_upstream_localizations_with_valid_source_range": 1,
+      "missed_identifiable_upstream_losses": 2,
+      "input_tokens": 13728,
+      "output_tokens": 975,
+      "round_trip_ms": 7869
+    },
+    "overall": {
+      "physical_sends": 16,
+      "retries": 0,
+      "corrections": 0,
+      "repairs": 0,
+      "judges": 0,
+      "e2e_runs": 0,
+      "input_tokens": 25112,
+      "output_tokens": 2056,
+      "prefix_normalization_count": 14,
+      "native_loss_admission": "not_assessed",
+      "unknown_ownership_semantic_quality": "unmeasured",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "credential_and_session_token_scan": "no_matches"
+    }
+  },
+  "trials": [
+    {
+      "trial": "captured-description-baseline-1",
+      "status": "received",
+      "call_id": "4433c96e2a1baa13a97f0e6f60b33fc8",
+      "stop_reason": "stop",
+      "input_tokens": 2169,
+      "output_tokens": 141,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 10858,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "wrong_upstream_location",
+      "wrong_upstream_localization": true,
+      "unnecessary_upstream_rebuilding_risk": "conditional_on_native_admission",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "available_target_not_selected_by_response",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The omitted meaning survives extraction and reconciliation; the defect is in the candidate description.",
+      "source_producer_candidate_evidence": {
+        "source": "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n- Must also output date and time in UTC\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "The application must start successfully."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          },
+          {
+            "id": 2,
+            "content": {
+              "model": {
+                "segments": [
+                  "When started, the application must display `Hello, World!`."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              2
+            ]
+          },
+          {
+            "id": 3,
+            "content": {
+              "model": {
+                "segments": [
+                  "The application must also output the current date and time in UTC."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              3
+            ]
+          },
+          {
+            "id": 4,
+            "content": {
+              "token_id": 1,
+              "kind": "preserved_token"
+            },
+            "citation_ids": [
+              4
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1,
+                2,
+                3
+              ],
+              "citation_ids": [
+                1,
+                2,
+                3
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "The application must start successfully.When started, the application must display `Hello, World!`.The application must also output the current date and time in UTC."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "value": {
+              "claim_ids": [
+                4
+              ],
+              "citation_ids": [
+                4
+              ],
+              "content": {
+                "token_id": 1,
+                "kind": "preserved_token"
+              }
+            }
+          }
+        ],
+        "candidate_description": "When started, the application displays { \"kind\":\"exact_copy\" } and outputs the current date and time in UTC.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 6,
+                "last": 6
+              }
+            },
+            "producer_loss": "The candidate description states it displays { \"kind\":\"exact_copy\" } instead of the required literal \"Hello, World!\". The source line 6 contains the exact string `Hello, World!`, which is missing from the candidate output."
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": "unsupported_producer_loss",
+      "notes": "Incorrect extraction attribution: cited source and intact producer meaning do not support loss at extraction.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 1022,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": true,
+        "reason": "Selected line IDs exist in the supplied numbered source."
+      },
+      "request_sha256": "a358ab4d2d09a49c88d96f5dd90d251be70fde8ca3e207f050b972e41bf731f5",
+      "response_sha256": "7842a3ebef93512c44d7cfb46dfcdce72e2db730090585db91750399be9c36c1",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/captured-description-baseline-1.call.json"
+    },
+    {
+      "trial": "captured-description-candidate-1",
+      "status": "received",
+      "call_id": "7f763a1d221314afd654719ff66b7959",
+      "stop_reason": "stop",
+      "input_tokens": 2963,
+      "output_tokens": 163,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 14254,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "wrong_upstream_location",
+      "wrong_upstream_localization": true,
+      "unnecessary_upstream_rebuilding_risk": "conditional_on_native_admission",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "available_target_not_selected_by_response",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The omitted meaning survives extraction and reconciliation; the defect is in the candidate description.",
+      "source_producer_candidate_evidence": {
+        "source": "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n- Must also output date and time in UTC\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "The application must start successfully."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          },
+          {
+            "id": 2,
+            "content": {
+              "model": {
+                "segments": [
+                  "When started, the application must display `Hello, World!`."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              2
+            ]
+          },
+          {
+            "id": 3,
+            "content": {
+              "model": {
+                "segments": [
+                  "The application must also output the current date and time in UTC."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              3
+            ]
+          },
+          {
+            "id": 4,
+            "content": {
+              "token_id": 1,
+              "kind": "preserved_token"
+            },
+            "citation_ids": [
+              4
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1,
+                2,
+                3
+              ],
+              "citation_ids": [
+                1,
+                2,
+                3
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "The application must start successfully.When started, the application must display `Hello, World!`.The application must also output the current date and time in UTC."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "value": {
+              "claim_ids": [
+                4
+              ],
+              "citation_ids": [
+                4
+              ],
+              "content": {
+                "token_id": 1,
+                "kind": "preserved_token"
+              }
+            }
+          }
+        ],
+        "candidate_description": "When started, the application displays { \"kind\":\"exact_copy\" } and outputs the current date and time in UTC.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 6,
+                "last": 6
+              }
+            },
+            "producer_loss": "The application must display `Hello, World!`. "
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": "unsupported_producer_loss",
+      "notes": "Incorrect extraction attribution: cited source and intact producer meaning do not support loss at extraction.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 1157,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": true,
+        "reason": "Selected line IDs exist in the supplied numbered source."
+      },
+      "request_sha256": "1c3c45f64991e5e69a645bdb40516729caa789c3d6bed081548608565a8d3c71",
+      "response_sha256": "b5ac5b295277c3a8482a6d164c4e02f99f47fa20878ba9429c306d5164e99986",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/captured-description-candidate-1.call.json"
+    },
+    {
+      "trial": "downstream-loan-baseline-1",
+      "status": "received",
+      "call_id": "fdecc67d83b8f7c4034902d361ad74c7",
+      "stop_reason": "stop",
+      "input_tokens": 1185,
+      "output_tokens": 112,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 6927,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "wrong_upstream_location",
+      "wrong_upstream_localization": true,
+      "unnecessary_upstream_rebuilding_risk": "conditional_on_native_admission",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "available_target_not_selected_by_response",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The omitted meaning survives extraction and reconciliation; the defect is in the candidate description.",
+      "source_producer_candidate_evidence": {
+        "source": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1
+              ],
+              "citation_ids": [
+                1
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          }
+        ],
+        "candidate_description": "The service extends the due date by seven days when renewal is requested.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 1,
+                "last": 1
+              }
+            },
+            "producer_loss": "The candidate description omits the eligibility and no‑reservation conditions on renewal."
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": "unsupported_producer_loss",
+      "notes": "Incorrect extraction attribution: cited source and intact producer meaning do not support loss at extraction.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 818,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": true,
+        "reason": "Selected line IDs exist in the supplied numbered source."
+      },
+      "request_sha256": "5d4dc473574352f90fa1205888a4a11d049630e84edd9aac2f652695fa4bd798",
+      "response_sha256": "85df888be985002d67730b4130f5beba530a9302e80e8b7d33433836776da84b",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/downstream-loan-baseline-1.call.json"
+    },
+    {
+      "trial": "downstream-loan-candidate-1",
+      "status": "received",
+      "call_id": "ae16dbf744dc1c55dc6fbff8cfdf2587",
+      "stop_reason": "stop",
+      "input_tokens": 1327,
+      "output_tokens": 101,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 7574,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "candidate",
+      "returned_location": null,
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "correct_candidate",
+      "wrong_upstream_localization": false,
+      "unnecessary_upstream_rebuilding_risk": "none",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "existing_description_target_supported_no_repair_executed",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The omitted meaning survives extraction and reconciliation; the defect is in the candidate description.",
+      "source_producer_candidate_evidence": {
+        "source": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1
+              ],
+              "citation_ids": [
+                1
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          }
+        ],
+        "candidate_description": "The service extends the due date by seven days when renewal is requested.",
+        "actual_answer": {
+          "kind": "candidate"
+        }
+      },
+      "comparison_assertion_supported": null,
+      "unsupported_evidence_or_false_gap": null,
+      "notes": "Correct explicit candidate attribution; no repair executed.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 898,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": true,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": null,
+        "reason": null
+      },
+      "request_sha256": "dd66ddfe2a1689fd0160edae84b68793c8d78a736b901084698da2f687a93954",
+      "response_sha256": "6e73656e15af7dc0f9a640d3657003591b3937904945a44ffc26a1eaefcf1f82",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/downstream-loan-candidate-1.call.json"
+    },
+    {
+      "trial": "source-only-extraction-baseline-1",
+      "status": "received",
+      "call_id": "6229a54e1aa5c9f51d7e37eb6fa9950f",
+      "stop_reason": "stop",
+      "input_tokens": 1139,
+      "output_tokens": 129,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 6713,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "correct_location_unsubstantiated_comparison",
+      "wrong_upstream_localization": false,
+      "unnecessary_upstream_rebuilding_risk": "none",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "upstream_target_selected",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The pump-stop obligation exists only on source line 1; the extracted claim and signal express only the separate display requirement.",
+      "source_producer_candidate_evidence": {
+        "source": "When the reservoir falls below the minimum, the pump must stop until the level recovers.\nThe controller must display the measured level.\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "The controller must display the measured level."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1
+              ],
+              "citation_ids": [
+                1
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "The controller must display the measured level."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          }
+        ],
+        "candidate_description": "The controller displays the measured reservoir level.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 1,
+                "last": 1
+              }
+            },
+            "producer_loss": "The candidate description omits the required pump stop below the minimum and its duration until recovery."
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": null,
+      "notes": "Correct extraction location, but the comparison only repeats the candidate defect and does not describe what the extraction output lacks.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 918,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": true,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": true,
+        "reason": "Selected line IDs exist in the supplied numbered source."
+      },
+      "request_sha256": "8a8b034f7ffd651e083f8e42686b329654659664cf60c263999873f97a33cc3d",
+      "response_sha256": "146494b2b81cee8030ce4fe37141c4f9ca52571e0996d7210ac6c544a66ff077",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/source-only-extraction-baseline-1.call.json"
+    },
+    {
+      "trial": "source-only-extraction-candidate-1",
+      "status": "received",
+      "call_id": "a9fe75b161ae7976e53b4e5b437c3c77",
+      "stop_reason": "stop",
+      "input_tokens": 1217,
+      "output_tokens": 47,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 7050,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "unlocalized",
+      "returned_location": null,
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "missed_identifiable_upstream_loss",
+      "wrong_upstream_localization": false,
+      "unnecessary_upstream_rebuilding_risk": "none",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "unestablished_unlocalized",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The pump-stop obligation exists only on source line 1; the extracted claim and signal express only the separate display requirement.",
+      "source_producer_candidate_evidence": {
+        "source": "When the reservoir falls below the minimum, the pump must stop until the level recovers.\nThe controller must display the measured level.\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "The controller must display the measured level."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1
+              ],
+              "citation_ids": [
+                1
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "The controller must display the measured level."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          }
+        ],
+        "candidate_description": "The controller displays the measured reservoir level.",
+        "actual_answer": {
+          "kind": "unlocalized"
+        }
+      },
+      "comparison_assertion_supported": null,
+      "unsupported_evidence_or_false_gap": null,
+      "notes": "Unlocalized misses an identifiable extraction loss despite supplied source and extraction evidence.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 699,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": null,
+        "reason": null
+      },
+      "request_sha256": "6d68c23aeaac38d9b9da44932e7cee32159bfe7abde0bf4301036c5018fde5fc",
+      "response_sha256": "bdbcda40a2585d89fadd418d8e91e4c48619c8e56e011ffd26788618a62103ea",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/source-only-extraction-candidate-1.call.json"
+    },
+    {
+      "trial": "reconciliation-condition-baseline-1",
+      "status": "received",
+      "call_id": "af90ed275d9fe63f83f36e4411a8ad83",
+      "stop_reason": "stop",
+      "input_tokens": 1199,
+      "output_tokens": 132,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 6952,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "wrong_upstream_location",
+      "wrong_upstream_localization": true,
+      "unnecessary_upstream_rebuilding_risk": "conditional_on_native_admission",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "upstream_target_selected",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The extraction claim retains the operator-confirmation condition; reconciliation signal 1 drops it.",
+      "source_producer_candidate_evidence": {
+        "source": "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness.\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1
+              ],
+              "citation_ids": [
+                1
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "The fan remains off while the chamber door is open and may restart when the door closes."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          }
+        ],
+        "candidate_description": "The fan stays off while the door is open and restarts after the door closes.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 1,
+                "last": 1
+              }
+            },
+            "producer_loss": "The producer omitted the requirement that the operator must confirm readiness before the fan may restart after the door closes."
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": "unsupported_producer_loss",
+      "notes": "Wrong extraction location; the defect belongs to reconciliation signal 1.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 897,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": true,
+        "reason": "Selected line IDs exist in the supplied numbered source."
+      },
+      "request_sha256": "1b4073a978e6f859b1fc7da72a9b5eabfeb08da8c3719aa8d36df9f66b4dad6f",
+      "response_sha256": "5923800ba38eaf8c564ec56c84f8f47b31aa2dc512eec5c2de40c889a5ac109a",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/reconciliation-condition-baseline-1.call.json"
+    },
+    {
+      "trial": "reconciliation-condition-candidate-1",
+      "status": "received",
+      "call_id": "260456a5c9d4b2ffd803e6c0fd8193f1",
+      "stop_reason": "stop",
+      "input_tokens": 1357,
+      "output_tokens": 153,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 7647,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "wrong_upstream_location",
+      "wrong_upstream_localization": true,
+      "unnecessary_upstream_rebuilding_risk": "invalid_source_span_would_block_unchanged_response",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "upstream_target_selected",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The extraction claim retains the operator-confirmation condition; reconciliation signal 1 drops it.",
+      "source_producer_candidate_evidence": {
+        "source": "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness.\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1
+              ],
+              "citation_ids": [
+                1
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "The fan remains off while the chamber door is open and may restart when the door closes."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          }
+        ],
+        "candidate_description": "The fan stays off while the door is open and restarts after the door closes.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 1,
+                "last": 2
+              }
+            },
+            "producer_loss": "operator confirmation"
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": "unsupported_producer_loss",
+      "notes": "Wrong extraction location; the defect belongs to reconciliation signal 1. The source range is also mechanically invalid; native admission was not executed.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 1618,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": false,
+        "reason": "Selected range includes a line ID absent from the supplied numbered source."
+      },
+      "request_sha256": "56ce823b1c5ad2d023957b0cf40aa4b0617a3c6dcdbcb8891a7f87167f568fd4",
+      "response_sha256": "389d2a98ed2e982587de35f8116eb76cf6d36a1c1d24c31eaaa9b47e276de45d",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/reconciliation-condition-candidate-1.call.json"
+    },
+    {
+      "trial": "captured-description-candidate-2",
+      "status": "received",
+      "call_id": "6b2cc208db0eaf6cb72f17e5796971de",
+      "stop_reason": "stop",
+      "input_tokens": 2963,
+      "output_tokens": 143,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 14254,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "wrong_upstream_location",
+      "wrong_upstream_localization": true,
+      "unnecessary_upstream_rebuilding_risk": "invalid_source_span_would_block_unchanged_response",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "available_target_not_selected_by_response",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The omitted meaning survives extraction and reconciliation; the defect is in the candidate description.",
+      "source_producer_candidate_evidence": {
+        "source": "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n- Must also output date and time in UTC\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "The application must start successfully."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          },
+          {
+            "id": 2,
+            "content": {
+              "model": {
+                "segments": [
+                  "When started, the application must display `Hello, World!`."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              2
+            ]
+          },
+          {
+            "id": 3,
+            "content": {
+              "model": {
+                "segments": [
+                  "The application must also output the current date and time in UTC."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              3
+            ]
+          },
+          {
+            "id": 4,
+            "content": {
+              "token_id": 1,
+              "kind": "preserved_token"
+            },
+            "citation_ids": [
+              4
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1,
+                2,
+                3
+              ],
+              "citation_ids": [
+                1,
+                2,
+                3
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "The application must start successfully.When started, the application must display `Hello, World!`.The application must also output the current date and time in UTC."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "value": {
+              "claim_ids": [
+                4
+              ],
+              "citation_ids": [
+                4
+              ],
+              "content": {
+                "token_id": 1,
+                "kind": "preserved_token"
+              }
+            }
+          }
+        ],
+        "candidate_description": "When started, the application displays { \"kind\":\"exact_copy\" } and outputs the current date and time in UTC.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 1,
+                "last": 8
+              }
+            },
+            "producer_loss": "The candidate description omitted the required display text \"Hello, World!\" which is present in the upstream extraction claim."
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": "unsupported_producer_loss",
+      "notes": "Incorrect extraction attribution: cited source and intact producer meaning do not support loss at extraction. Its own explanation says the required greeting is present upstream, contradicting its selected extraction location. The source range is also mechanically invalid; native admission was not executed.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 988,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": false,
+        "reason": "Selected range includes a line ID absent from the supplied numbered source."
+      },
+      "request_sha256": "1c3c45f64991e5e69a645bdb40516729caa789c3d6bed081548608565a8d3c71",
+      "response_sha256": "30d89a8f09e90b7f168bb90d3d679bac1b25c5cc3e4769b4ab13661d11768cc8",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/captured-description-candidate-2.call.json"
+    },
+    {
+      "trial": "captured-description-baseline-2",
+      "status": "received",
+      "call_id": "5d0ce166a2d9c6729477545a7c1ea1c5",
+      "stop_reason": "stop",
+      "input_tokens": 2169,
+      "output_tokens": 142,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 10858,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "wrong_upstream_location",
+      "wrong_upstream_localization": true,
+      "unnecessary_upstream_rebuilding_risk": "conditional_on_native_admission",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "available_target_not_selected_by_response",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The omitted meaning survives extraction and reconciliation; the defect is in the candidate description.",
+      "source_producer_candidate_evidence": {
+        "source": "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n- Must also output date and time in UTC\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "The application must start successfully."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          },
+          {
+            "id": 2,
+            "content": {
+              "model": {
+                "segments": [
+                  "When started, the application must display `Hello, World!`."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              2
+            ]
+          },
+          {
+            "id": 3,
+            "content": {
+              "model": {
+                "segments": [
+                  "The application must also output the current date and time in UTC."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              3
+            ]
+          },
+          {
+            "id": 4,
+            "content": {
+              "token_id": 1,
+              "kind": "preserved_token"
+            },
+            "citation_ids": [
+              4
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1,
+                2,
+                3
+              ],
+              "citation_ids": [
+                1,
+                2,
+                3
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "The application must start successfully.When started, the application must display `Hello, World!`.The application must also output the current date and time in UTC."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          },
+          {
+            "id": 2,
+            "value": {
+              "claim_ids": [
+                4
+              ],
+              "citation_ids": [
+                4
+              ],
+              "content": {
+                "token_id": 1,
+                "kind": "preserved_token"
+              }
+            }
+          }
+        ],
+        "candidate_description": "When started, the application displays { \"kind\":\"exact_copy\" } and outputs the current date and time in UTC.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 6,
+                "last": 6
+              }
+            },
+            "producer_loss": "The candidate description states the application displays { \"kind\":\"exact_copy\" } instead of the required literal \"Hello, World!\". The source line 6 contains the exact string `Hello, World!`, which is missing from the candidate output."
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": "unsupported_producer_loss",
+      "notes": "Incorrect extraction attribution: cited source and intact producer meaning do not support loss at extraction.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 951,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": true,
+        "reason": "Selected line IDs exist in the supplied numbered source."
+      },
+      "request_sha256": "a358ab4d2d09a49c88d96f5dd90d251be70fde8ca3e207f050b972e41bf731f5",
+      "response_sha256": "b455f2222471fe0c466bd82e66215334950ead8f31f2ff06fb2b054d634347af",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/captured-description-baseline-2.call.json"
+    },
+    {
+      "trial": "downstream-loan-candidate-2",
+      "status": "received",
+      "call_id": "c3d0e4c3d9abd6e6583beebc554694b7",
+      "stop_reason": "stop",
+      "input_tokens": 1327,
+      "output_tokens": 173,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 7574,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "wrong_upstream_location",
+      "wrong_upstream_localization": true,
+      "unnecessary_upstream_rebuilding_risk": "invalid_source_span_would_block_unchanged_response",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "available_target_not_selected_by_response",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The omitted meaning survives extraction and reconciliation; the defect is in the candidate description.",
+      "source_producer_candidate_evidence": {
+        "source": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1
+              ],
+              "citation_ids": [
+                1
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          }
+        ],
+        "candidate_description": "The service extends the due date by seven days when renewal is requested.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 1,
+                "last": 2
+              }
+            },
+            "producer_loss": "The candidate omitted the eligibility and no-reservation conditions on renewal."
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": "unsupported_producer_loss",
+      "notes": "Incorrect extraction attribution: cited source and intact producer meaning do not support loss at extraction. The source range is also mechanically invalid; native admission was not executed.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 1118,
+      "normalization": "none",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": false,
+        "reason": "Selected range includes a line ID absent from the supplied numbered source."
+      },
+      "request_sha256": "dd66ddfe2a1689fd0160edae84b68793c8d78a736b901084698da2f687a93954",
+      "response_sha256": "3f4046aca38cc47330e4ac36369f705b79510c59fcf117e612f47d3ec5ef82aa",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/downstream-loan-candidate-2.call.json"
+    },
+    {
+      "trial": "downstream-loan-baseline-2",
+      "status": "received",
+      "call_id": "7ef4df3722a96d30ee25654a25927905",
+      "stop_reason": "stop",
+      "input_tokens": 1185,
+      "output_tokens": 112,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 6927,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "wrong_upstream_location",
+      "wrong_upstream_localization": true,
+      "unnecessary_upstream_rebuilding_risk": "conditional_on_native_admission",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "available_target_not_selected_by_response",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The omitted meaning survives extraction and reconciliation; the defect is in the candidate description.",
+      "source_producer_candidate_evidence": {
+        "source": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1
+              ],
+              "citation_ids": [
+                1
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          }
+        ],
+        "candidate_description": "The service extends the due date by seven days when renewal is requested.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 1,
+                "last": 1
+              }
+            },
+            "producer_loss": "The candidate description omits the eligibility and no‑reservation conditions on renewal."
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": "unsupported_producer_loss",
+      "notes": "Incorrect extraction attribution: cited source and intact producer meaning do not support loss at extraction.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 785,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": true,
+        "reason": "Selected line IDs exist in the supplied numbered source."
+      },
+      "request_sha256": "5d4dc473574352f90fa1205888a4a11d049630e84edd9aac2f652695fa4bd798",
+      "response_sha256": "18f5b9bbb713b293f1eabe4b6a8bf246f06b11d5e74a87c6b9ca2e0b0bcf2819",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/downstream-loan-baseline-2.call.json"
+    },
+    {
+      "trial": "source-only-extraction-candidate-2",
+      "status": "received",
+      "call_id": "6afad84b9991a6789eeb64801aa9ffe3",
+      "stop_reason": "stop",
+      "input_tokens": 1217,
+      "output_tokens": 42,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 7050,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "unlocalized",
+      "returned_location": null,
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "missed_identifiable_upstream_loss",
+      "wrong_upstream_localization": false,
+      "unnecessary_upstream_rebuilding_risk": "none",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "unestablished_unlocalized",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The pump-stop obligation exists only on source line 1; the extracted claim and signal express only the separate display requirement.",
+      "source_producer_candidate_evidence": {
+        "source": "When the reservoir falls below the minimum, the pump must stop until the level recovers.\nThe controller must display the measured level.\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "The controller must display the measured level."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1
+              ],
+              "citation_ids": [
+                1
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "The controller must display the measured level."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          }
+        ],
+        "candidate_description": "The controller displays the measured reservoir level.",
+        "actual_answer": {
+          "kind": "unlocalized"
+        }
+      },
+      "comparison_assertion_supported": null,
+      "unsupported_evidence_or_false_gap": null,
+      "notes": "Unlocalized misses an identifiable extraction loss despite supplied source and extraction evidence.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 389,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": null,
+        "reason": null
+      },
+      "request_sha256": "6d68c23aeaac38d9b9da44932e7cee32159bfe7abde0bf4301036c5018fde5fc",
+      "response_sha256": "bf01f1ce7942d1140ce03313aaf3330df3e23449c51d0a4484126510d306cca0",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/source-only-extraction-candidate-2.call.json"
+    },
+    {
+      "trial": "source-only-extraction-baseline-2",
+      "status": "received",
+      "call_id": "15e1dcdfeadfe8fa61352d566c492365",
+      "stop_reason": "stop",
+      "input_tokens": 1139,
+      "output_tokens": 141,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 6713,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "correct_location_unsubstantiated_comparison",
+      "wrong_upstream_localization": false,
+      "unnecessary_upstream_rebuilding_risk": "none",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "upstream_target_selected",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The pump-stop obligation exists only on source line 1; the extracted claim and signal express only the separate display requirement.",
+      "source_producer_candidate_evidence": {
+        "source": "When the reservoir falls below the minimum, the pump must stop until the level recovers.\nThe controller must display the measured level.\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "The controller must display the measured level."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1
+              ],
+              "citation_ids": [
+                1
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "The controller must display the measured level."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          }
+        ],
+        "candidate_description": "The controller displays the measured reservoir level.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 1,
+                "last": 2
+              }
+            },
+            "producer_loss": "The candidate description omits the required pump stop below the minimum and its duration until recovery."
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": null,
+      "notes": "Correct extraction location, but the comparison only repeats the candidate defect and does not describe what the extraction output lacks.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 711,
+      "normalization": "none",
+      "correct_location_or_candidate": true,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": true,
+        "reason": "Selected line IDs exist in the supplied numbered source."
+      },
+      "request_sha256": "8a8b034f7ffd651e083f8e42686b329654659664cf60c263999873f97a33cc3d",
+      "response_sha256": "c88cdade28b3bbfb30a577e066a396b4894c0109b7bfb46ce7801459055373e8",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/source-only-extraction-baseline-2.call.json"
+    },
+    {
+      "trial": "reconciliation-condition-candidate-2",
+      "status": "received",
+      "call_id": "36f86125b737779e13ffed7add8169e8",
+      "stop_reason": "stop",
+      "input_tokens": 1357,
+      "output_tokens": 153,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 7647,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "wrong_upstream_location",
+      "wrong_upstream_localization": true,
+      "unnecessary_upstream_rebuilding_risk": "invalid_source_span_would_block_unchanged_response",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "upstream_target_selected",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The extraction claim retains the operator-confirmation condition; reconciliation signal 1 drops it.",
+      "source_producer_candidate_evidence": {
+        "source": "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness.\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1
+              ],
+              "citation_ids": [
+                1
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "The fan remains off while the chamber door is open and may restart when the door closes."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          }
+        ],
+        "candidate_description": "The fan stays off while the door is open and restarts after the door closes.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 1,
+                "last": 2
+              }
+            },
+            "producer_loss": "operator confirmation"
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": "unsupported_producer_loss",
+      "notes": "Wrong extraction location; the defect belongs to reconciliation signal 1. The source range is also mechanically invalid; native admission was not executed.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 1002,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": false,
+        "reason": "Selected range includes a line ID absent from the supplied numbered source."
+      },
+      "request_sha256": "56ce823b1c5ad2d023957b0cf40aa4b0617a3c6dcdbcb8891a7f87167f568fd4",
+      "response_sha256": "083219f6f498782f089b59716eebc0bf80d2af8abb06b4001fade073c651b28e",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/reconciliation-condition-candidate-2.call.json"
+    },
+    {
+      "trial": "reconciliation-condition-baseline-2",
+      "status": "received",
+      "call_id": "170e3d0875edaed820ab389a2cb4e4e3",
+      "stop_reason": "stop",
+      "input_tokens": 1199,
+      "output_tokens": 172,
+      "latency_ms": null,
+      "complete_provider_request_bytes": 6952,
+      "json_admission": "valid",
+      "schema_admission": "valid",
+      "native_loss_admission": "not_assessed",
+      "returned_kind": "localized",
+      "returned_location": {
+        "kind": "extraction_claim",
+        "bytes": "chunk-1"
+      },
+      "fixed_verdict_reassessed": false,
+      "attribution_assessment": "wrong_upstream_location",
+      "wrong_upstream_localization": true,
+      "unnecessary_upstream_rebuilding_risk": "conditional_on_native_admission",
+      "actual_upstream_rebuilds": "not_executed",
+      "candidate_local_repair_potential": "upstream_target_selected",
+      "candidate_local_repair_success": "not_executed",
+      "repair_induced_harm": "not_executed",
+      "missing_meaning_assessment": "The extraction claim retains the operator-confirmation condition; reconciliation signal 1 drops it.",
+      "source_producer_candidate_evidence": {
+        "source": "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness.\n",
+        "extracted_claims": [
+          {
+            "id": 1,
+            "content": {
+              "model": {
+                "segments": [
+                  "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness."
+                ],
+                "kind": "business"
+              },
+              "kind": "model"
+            },
+            "citation_ids": [
+              1
+            ]
+          }
+        ],
+        "signals": [
+          {
+            "id": 1,
+            "value": {
+              "claim_ids": [
+                1
+              ],
+              "citation_ids": [
+                1
+              ],
+              "content": {
+                "model": {
+                  "segments": [
+                    "The fan remains off while the chamber door is open and may restart when the door closes."
+                  ],
+                  "kind": "business"
+                },
+                "kind": "model"
+              }
+            }
+          }
+        ],
+        "candidate_description": "The fan stays off while the door is open and restarts after the door closes.",
+        "actual_answer": {
+          "kind": "localized",
+          "location": {
+            "kind": "extraction_claim",
+            "bytes": "chunk-1"
+          },
+          "comparison": {
+            "kind": "source_producer_comparison",
+            "source": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "lines": {
+                "first": 1,
+                "last": 1
+              }
+            },
+            "producer_loss": "The producer output \"The fan remains off while the chamber door is open and may restart when the door closes.\" omits the requirement that the operator must confirm readiness before the fan may restart, which is explicitly stated in the source: \"after the door closes, it may restart only when the operator confirms readiness.\""
+          }
+        }
+      },
+      "comparison_assertion_supported": false,
+      "unsupported_evidence_or_false_gap": "unsupported_producer_loss",
+      "notes": "Wrong extraction location; the defect belongs to reconciliation signal 1. The explanation quotes and correctly criticizes signal content while naming extraction.",
+      "run_id": "debugger-3200c9a3354527fbec59ef6c8cc1b1bb",
+      "round_trip_ms": 794,
+      "normalization": "removed_leading_brace_quote",
+      "correct_location_or_candidate": false,
+      "source_line_assessment": {
+        "method": "manual mechanical inspection only; native loss admission not executed",
+        "valid": true,
+        "reason": "Selected line IDs exist in the supplied numbered source."
+      },
+      "request_sha256": "1b4073a978e6f859b1fc7da72a9b5eabfeb08da8c3719aa8d36df9f66b4dad6f",
+      "response_sha256": "c4de102b7099d01b6ec687133059b3787f7569c1b21a2b811be5169416b7e227",
+      "call_artifact": "zig-out/source-loss-attribution-comparison/2026-10-10T03-17-07Z-3200c9a3354527fb/results/reconciliation-condition-baseline-2.call.json"
+    }
+  ]
+}

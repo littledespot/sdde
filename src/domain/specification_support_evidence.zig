@@ -84,7 +84,7 @@ pub const Requirements = struct {
     source_preservation: bool = false,
 
     pub fn rule(self: Requirements, finding: a.Finding, loss: @import("source_omission.zig").Location) Rule {
-        const diagnostic = if (finding == .candidate_omission and loss != .unlocalized) @import("source_omission.zig").diagnosticClaims(self.records, loss) else null;
+        const diagnostic = if (finding == .candidate_omission and @import("source_omission.zig").isUpstream(loss)) @import("source_omission.zig").diagnosticClaims(self.records, loss) else null;
         return .{
             .minimum = if (diagnostic != null and diagnostic.?.len != 0) .claim_required else if (self.source_preservation and finding == .supported) .claim_or_source_required else minimum(finding),
             .claims = if (diagnostic) |claims| .{ .exact = claims } else if (self.positive_claims == .exact_set) .{ .exact = self.eligible_claim_ids } else .{ .eligible = self.eligible_claim_ids },
@@ -147,7 +147,7 @@ pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence
     if (rule.claims == .exact) r.sameSet(r.ClaimId, rule.claims.exact, proposed.claim_ids) catch return reject(.wrong_claim_set, rule);
     if (rule.provenance) |expected| sameProvenance(expected, provenance) catch return reject(.wrong_candidate_provenance, rule);
     const review: a.ReviewEvidence = .{ .loss = loss, .loss_comparison = comparison, .detail = detail, .provenance = provenance, .source_ids = source_ids };
-    @import("source_omission.zig").validate(allocator, inputs, sources, finding, review, loss) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else reject(.invalid_loss, rule);
+    @import("source_omission.zig").validate(allocator, inputs, sources, id, finding, review, loss) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else reject(.invalid_loss, rule);
     return .{ .accepted = review };
 }
 fn reject(issue: Issue, rule: Rule) Admission {

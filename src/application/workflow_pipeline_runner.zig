@@ -34,6 +34,7 @@ const invocation_validation = @import("../domain/provider_invocation_validation.
 const operation_completion = @import("provider_operation_completion_workflow.zig");
 const operation_termination = @import("provider_operation_termination_workflow.zig");
 const retry = @import("../domain/workflow_retry.zig");
+const iteration = @import("../domain/workflow_iteration.zig");
 const event_capture = @import("workflow_event_capture.zig");
 
 const ExpectedAccounting = union(enum) {
@@ -60,6 +61,8 @@ pub const Runner = struct {
     publication_finalizer: ?@import("../ports/feature_log_activation.zig").Finalizer = null,
     retry_execution_counts: [definition.max_steps]u64 = [_]u64{0} ** definition.max_steps,
     repair_retry: retry.State,
+    native_iteration: iteration.State = .{},
+    remaining_step_executions: usize,
     events_closed: bool = false,
     last_effects: ?execution.AppliedEffects = null,
     last_operation_rejection: ?execution.OperationRejection = null,
@@ -86,6 +89,7 @@ pub const Runner = struct {
                 selected.graph.authority.total_model_token_budget,
             ),
             .repair_retry = retry.State.init(allocator),
+            .remaining_step_executions = selected.graph.authority.maximum_step_executions,
         };
     }
 
@@ -129,7 +133,7 @@ pub const Runner = struct {
             .produces = authority.invocation_outputs,
             .side_effect = .none,
         };
-        return self.applyCandidate(occurrence, contract, &candidate, .none);
+        return self.applyCandidate(occurrence, contract, &candidate, .none, null);
     }
 
     fn invokeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
@@ -343,6 +347,10 @@ pub const Runner = struct {
             }
             if (self.eventsActive()) if (self.events().retryAttempt(id, admitted_count, false)) |failure| return .{ .rejected = .{ .logging = failure } };
         }
+        // The compiler supplies the retry-derived allowance. Only a committed
+        // advance through a validated finite population grants another traversal.
+        if (self.remaining_step_executions == 0) return .{ .rejected = .authority };
+        self.remaining_step_executions -= 1;
         var authorization: ?authorization_binding.Binding = null;
         var authorization_published = false;
         defer if (authorization) |bound| {
@@ -439,7 +447,7 @@ pub const Runner = struct {
             const result = values.read(&.{ .slots = candidate.delta.data_writes }, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
             break :prepared bound.validate(result, candidate.outcome) catch |err| return authorizationRejected(err);
         } else false;
-        const applied = self.applyCandidate(occurrence, stepPipelineContract(step.*), &candidate, expected);
+        const applied = self.applyCandidate(occurrence, stepPipelineContract(step.*), &candidate, expected, step.iteration);
         authorization_published = prepared and applied == .outcome and applied.outcome == .ok;
         if (applied == .outcome and self.eventsActive()) {
             if (self.logDiagnostics(step.*, candidate)) |failure| return .{ .rejected = .{ .logging = failure } };
@@ -592,12 +600,35 @@ pub const Runner = struct {
         return true;
     }
 
-    fn applyCandidate(self: *Runner, occurrence: envelope_module.Occurrence, contract: pipeline.NodeContract, candidate: *execution.Candidate, expected: ExpectedAccounting) execution.Applied {
+    fn applyCandidate(self: *Runner, occurrence: envelope_module.Occurrence, contract: pipeline.NodeContract, candidate: *execution.Candidate, expected: ExpectedAccounting, iteration_contract: ?iteration.Descriptor) execution.Applied {
         if (candidate.diagnostic) |cause| if (cause == error.OutOfMemory) return .{ .rejected = .{ .operation_failed = error.OutOfMemory } };
         if (candidate.diagnostic != null and switch (candidate.outcome) {
             .invalid, .blocked, .failed => false,
             .ok, .more, .needs_user, .cancelled => true,
         }) return .{ .rejected = .authority };
+        var iteration_pending: ?iteration.Pending = null;
+        var remaining_after = self.remaining_step_executions;
+        if (iteration_contract) |descriptor| {
+            if (candidate.outcome == descriptor.outcome) {
+                const transition = candidate.iteration orelse return .{ .rejected = .authority };
+                const scope = self.envelope.origins[@intFromEnum(descriptor.scope)] orelse return .{ .rejected = .authority };
+                const progress_index = @intFromEnum(descriptor.progress);
+                const progress_origin = self.envelope.origins[progress_index];
+                if (self.envelope.checkCurrentAuthority(descriptor.scope) != null) return .{ .rejected = .authority };
+                if (candidate.delta.data_invalidations.contains(descriptor.scope) or
+                    candidate.delta.data_replacements[@intFromEnum(descriptor.scope)] != null or
+                    candidate.delta.data_invalidations.contains(descriptor.progress)) return .{ .rejected = .authority };
+                switch (descriptor.kind) {
+                    .initialize => if (candidate.delta.data_writes[progress_index] == null) return .{ .rejected = .authority },
+                    .advance => {
+                        if (candidate.delta.data_replacements[progress_index] == null or
+                            self.envelope.checkCurrentAuthority(descriptor.progress) != null) return .{ .rejected = .authority };
+                        remaining_after = std.math.add(usize, remaining_after, self.selected.graph.authority.steps.len) catch return .{ .rejected = .authority };
+                    },
+                }
+                iteration_pending = self.native_iteration.prepare(descriptor, transition, scope.generation, if (progress_origin) |origin| origin.generation else null) catch return .{ .rejected = .authority };
+            } else if (candidate.iteration != null) return .{ .rejected = .authority };
+        } else if (candidate.iteration != null) return .{ .rejected = .authority };
         var request_owner: ?*identity.Owner = null;
         defer if (request_owner) |owner| identity.deinitOwner(owner);
         if (candidate.delta.data_replacements[@intFromEnum(pipeline.DataKey.model_request_identity_ledger)] != null) {
@@ -673,6 +704,11 @@ pub const Runner = struct {
             effects.replacements.insert(@enumFromInt(index));
         };
         self.envelope.applyOccurrence(occurrence, contract, &candidate.delta, candidate.outcome) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .authority };
+        if (iteration_pending) |prepared| {
+            const progress = self.envelope.origins[@intFromEnum(iteration_contract.?.progress)].?;
+            self.native_iteration.commit(prepared, progress.generation) catch unreachable;
+            self.remaining_step_executions = remaining_after;
+        }
         self.last_effects = effects;
         if (candidate.diagnostic) |cause| self.last_operation_rejection = .{ .cause = @import("../domain/operation_error.zig").code(execution.OperationError, cause), .outcome = candidate.outcome };
         // No repair-state mutation occurs between preparation and this allocation-
@@ -732,6 +768,7 @@ fn contractMatchesStep(
         contract.side_effect == step.side_effect and
         contract.runner_accounting == step.runner_accounting and
         contract.repair_role == step.repair_role and
+        std.meta.eql(contract.iteration, step.iteration) and
         gateIdsMatch(contract.gates, step.gates) and
         retryContractMatches(contract, step);
 }

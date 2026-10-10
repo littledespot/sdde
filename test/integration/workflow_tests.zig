@@ -1157,7 +1157,11 @@ test "configured role assessment exhausts repeated omitted decisions without aut
     try testSpecificationWorkflows(.role_decision_exhaustion);
 }
 
-fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation, role_decision_recovery, role_decision_exhaustion }) !void {
+test "configured native summary reuse advances a fresh validated plan after upstream regeneration" {
+    try testSpecificationWorkflows(.reuse_regeneration);
+}
+
+fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation, role_decision_recovery, role_decision_exhaustion, reuse_regeneration }) !void {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
     const faults = [_]@import("../../src/test_fixtures/spec_generation_driver.zig").Fault{
@@ -1231,12 +1235,14 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         .source_preservation => preservation_start,
         .role_decision_recovery => role_decision_start,
         .role_decision_exhaustion => role_decision_start + 1,
+        .reuse_regeneration => preservation_start + 1,
     };
     const case_range_end: usize = switch (workflow_cases) {
         .existing => role_decision_start,
         .source_preservation => costs.len,
         .role_decision_recovery => role_decision_start + 1,
         .role_decision_exhaustion => preservation_start,
+        .reuse_regeneration => preservation_start + 2,
     };
     defer timing.report(io, "specification-generation", costs[case_range_begin..case_range_end]) catch |err| std.debug.panic("scenario timing report failed: {s}", .{@errorName(err)});
     for (case_range_begin..case_range_end) |scenario| {
@@ -1321,7 +1327,12 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         };
         const definition = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", allocator, .limited(1_048_576));
         defer allocator.free(definition);
-        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = definition });
+        // These cases exercise two independent model-summary request lifecycles.
+        // Two-claim partitions supply another leaf instead of a reusable parent.
+        const two_summary_requests = summary_scenario or (brief_scenario and (scenario - brief_start) % 2 == 0);
+        const configured_definition = if (two_summary_requests) try std.mem.replaceOwned(u8, allocator, definition, "group-size: 8", "group-size: 2") else definition;
+        defer if (two_summary_requests) allocator.free(configured_definition);
+        try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = configured_definition });
         inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-roles.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "story.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "principle.prompt.md", "support.schema.json", "repair.prompt.md" }) |name| {
             const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name, allocator, .limited(1_048_576));
             defer allocator.free(bytes);
@@ -1493,6 +1504,15 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         }
         const result = driver.run();
         cost.enter(.assertions);
+        if (workflow_cases == .reuse_regeneration) {
+            try std.testing.expectEqual(workflow.OutcomeTag.ok, result.executionStatus().?);
+            try std.testing.expectEqual(@as(usize, 2), driver.carried_summaries);
+            try std.testing.expectEqual(@as(usize, 1), driver.source_repair_calls);
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            try std.testing.expect(view.contains(.published_workflow_output));
+            try std.testing.expect(!view.contains(.validated_reference_summary) and !view.contains(.reference_summary_identities));
+            try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
+        }
         if (global_scenario) try @import("../../src/test_fixtures/global_protocol_sequence.zig").verify(&driver, result);
         if (summary_scenario) try @import("../../src/test_fixtures/summary_protocol_sequence.zig").verify(&driver, result);
         if (role_decision_scenario) try driver.verifyRoleDecisionSequence(result);
@@ -1507,6 +1527,12 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         } else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (review_scope_attack or driver.role_decision_fault == .exhaust or driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_correction or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}; operation: {s}; candidate: {any}\n", .{ scenario, result, driver.rejected_operation orelse "none", try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
+        if (scenario == 0) {
+            try std.testing.expectEqual(@as(usize, 1), driver.carried_summaries);
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            try std.testing.expect(view.contains(.published_workflow_output));
+            try std.testing.expect(!view.contains(.validated_reference_summary) and !view.contains(.reference_summary_identities));
+        }
         if (preservation_scenario) {
             try std.testing.expect(driver.initial_source_review_calls != 0);
             try std.testing.expect(driver.candidate_review_calls != 0);
@@ -1669,7 +1695,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             defer readback.deinit();
             const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
             _ = try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
-            try std.testing.expectEqual(@as(usize, 801), graph.authority.steps.len);
+            try std.testing.expectEqual(@as(usize, 803), graph.authority.steps.len);
         }
         if (applicability) |mode| {
             const samples = @import("../../src/test_fixtures/spec_generation_responses.zig");

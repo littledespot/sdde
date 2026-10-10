@@ -186,10 +186,12 @@ through the existing runner and stage gates. No new retry mechanism, schema
 registry, evidence store, provider mode or model prompt for reassembly is
 authorized.
 
-The R6 loss-evidence amendment advances the shared state to
-`specification-state/v8`. Source-review findings retain the selected source lines
-and producer-loss comparison required by §22.1; completed readback validates that
-evidence through the same owner as live collection. Earlier state versions reject.
+The R6 attribution amendment advances the shared state to
+`specification-state/v9`. Source-review findings distinguish explicit candidate
+loss from unresolved attribution. Upstream attribution retains the selected source
+lines and producer-loss comparison required by §22.1; candidate attribution retains
+subject-bound claims without an upstream comparison. Completed readback validates
+that evidence through the same owner as live collection. Earlier state versions reject.
 This changes neither `S`, `E`, `L` nor the exact-reference representation.
 
 This decision records the runtime contract, not a claim that live quality

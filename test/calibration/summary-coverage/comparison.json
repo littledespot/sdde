@@ -1,0 +1,266 @@
+{
+  "status": "prepared_not_run",
+  "purpose": "Summary assignment guidance comparison; planning data only, not a workflow or engine runtime contract.",
+  "parent": {
+    "artifact_root": "zig-out/e2e-spec/2026-10-10T00-32-22Z-4b66d7fb9b7b4b4d9bce6f612fe04e41/evidence/generation/call-000004",
+    "run": "RUN-fbe2842d3c70b12334e33cdb10a47a17",
+    "call": "request-4-inference-1",
+    "context_sha256": "fb50fb3e69f9fa6c4bb58e37ac345c8d4337284166128a95da9023f6b9f866b3",
+    "response_sha256": "b5c220829162428898c80a2b8f523f12d9d3519a998d75253e98ef1eb26450ec"
+  },
+  "settings": {
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0,
+    "max_output_tokens": 16384,
+    "response_mode": "native_schema"
+  },
+  "maximum_physical_calls": 16,
+  "cases": [
+    {
+      "id": "captured-startup",
+      "kind": "captured",
+      "sources": [],
+      "obligations": [
+        "The application must start successfully.",
+        "On startup the application must display the exact greeting Hello, World!.",
+        "The application must output the date and time in UTC."
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 4,
+          "source_id": 1,
+          "value": "Hello, World!",
+          "context": "startup greeting"
+        }
+      ],
+      "edits": {
+        "baseline": {
+          "path": "captured-startup.baseline.edit.json",
+          "sha256": "832156025602bb6078f28396b1a18e4e518a675f845a5cfac73928ca998e231f"
+        },
+        "candidate": {
+          "path": "captured-startup.candidate.edit.json",
+          "sha256": "9cd6150e50da517028ac52ee697cc2630c48715fb4b2a6aaa201441e0dcf9aa7"
+        }
+      }
+    },
+    {
+      "id": "loan-renewal",
+      "kind": "controlled",
+      "sources": [
+        {
+          "source_id": 1,
+          "text": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.\n"
+        },
+        {
+          "source_id": 2,
+          "text": "If a loan has a reservation, the service must refuse renewal and must leave its due date unchanged.\n"
+        },
+        {
+          "source_id": 3,
+          "text": "Only after renewal succeeds, the service must notify the borrower of the new due date.\n"
+        }
+      ],
+      "obligations": [
+        "Eligibility and absence of reservation are conditions for seven-day extension after a renewal request.",
+        "A reservation requires refusal and no due-date change.",
+        "Notification includes the new due date and occurs only after successful renewal."
+      ],
+      "literal_expectations": [],
+      "edits": {
+        "baseline": {
+          "path": "loan-renewal.baseline.edit.json",
+          "sha256": "681c1f872b607b411e3f0f259e18d891802ef796d97ca34253256c9ed96eb82e"
+        },
+        "candidate": {
+          "path": "loan-renewal.candidate.edit.json",
+          "sha256": "b82caa2347d760c378382b2b7c0bae1b007cc94fc8ceb1fa4a03063a9be55bb7"
+        }
+      }
+    },
+    {
+      "id": "valve-occurrences",
+      "kind": "controlled",
+      "sources": [
+        {
+          "source_id": 1,
+          "text": "When the north valve test confirms closure, the display must show `Closed` for the north valve until its next test.\n"
+        },
+        {
+          "source_id": 2,
+          "text": "When the south valve test confirms closure, the display must show `Closed` for the south valve until its next test.\n"
+        }
+      ],
+      "obligations": [
+        "North-valve confirmed closure triggers its own Closed status until its next test.",
+        "South-valve confirmed closure triggers its own Closed status until its next test.",
+        "Equal literal bytes retain two distinct source occurrences; neither requirement substitutes for the other."
+      ],
+      "literal_expectations": [
+        {
+          "claim_id": 3,
+          "source_id": 1,
+          "value": "Closed",
+          "context": "north-valve status"
+        },
+        {
+          "claim_id": 4,
+          "source_id": 2,
+          "value": "Closed",
+          "context": "south-valve status"
+        }
+      ],
+      "edits": {
+        "baseline": {
+          "path": "valve-occurrences.baseline.edit.json",
+          "sha256": "7f7482f0897453f4074312204c6a1bace73027578044f33f59e5ebcdbe445a66"
+        },
+        "candidate": {
+          "path": "valve-occurrences.candidate.edit.json",
+          "sha256": "c085b2869b2cce1172b8ad003732d38d61e2966e4ab55b8775e0fa5868932607"
+        }
+      }
+    },
+    {
+      "id": "reservoir-control",
+      "kind": "controlled",
+      "sources": [
+        {
+          "source_id": 1,
+          "text": "If the reservoir falls below its minimum operating level, the controller must stop the pump until the level recovers.\n"
+        }
+      ],
+      "obligations": [
+        "A level below the minimum requires pump shutdown.",
+        "The shutdown lasts until the level recovers."
+      ],
+      "literal_expectations": [],
+      "edits": {
+        "baseline": {
+          "path": "reservoir-control.baseline.edit.json",
+          "sha256": "f093340f9f4d6421b588dfbedb45576a92a06d47b663ae270d6e014ca4aca3c9"
+        },
+        "candidate": {
+          "path": "reservoir-control.candidate.edit.json",
+          "sha256": "767d8edae701823400caf89cd2759a2ca6979d239f0dbc2d1ea1031c8ca07136"
+        }
+      }
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-startup-baseline-1",
+      "case": "captured-startup",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "captured-startup.baseline.edit.json"
+    },
+    {
+      "id": "captured-startup-candidate-1",
+      "case": "captured-startup",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "captured-startup.candidate.edit.json"
+    },
+    {
+      "id": "loan-renewal-baseline-1",
+      "case": "loan-renewal",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "loan-renewal.baseline.edit.json"
+    },
+    {
+      "id": "loan-renewal-candidate-1",
+      "case": "loan-renewal",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "loan-renewal.candidate.edit.json"
+    },
+    {
+      "id": "valve-occurrences-baseline-1",
+      "case": "valve-occurrences",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "valve-occurrences.baseline.edit.json"
+    },
+    {
+      "id": "valve-occurrences-candidate-1",
+      "case": "valve-occurrences",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "valve-occurrences.candidate.edit.json"
+    },
+    {
+      "id": "reservoir-control-baseline-1",
+      "case": "reservoir-control",
+      "arm": "baseline",
+      "repeat": 1,
+      "edit": "reservoir-control.baseline.edit.json"
+    },
+    {
+      "id": "reservoir-control-candidate-1",
+      "case": "reservoir-control",
+      "arm": "candidate",
+      "repeat": 1,
+      "edit": "reservoir-control.candidate.edit.json"
+    },
+    {
+      "id": "captured-startup-candidate-2",
+      "case": "captured-startup",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "captured-startup.candidate.edit.json"
+    },
+    {
+      "id": "captured-startup-baseline-2",
+      "case": "captured-startup",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "captured-startup.baseline.edit.json"
+    },
+    {
+      "id": "loan-renewal-candidate-2",
+      "case": "loan-renewal",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "loan-renewal.candidate.edit.json"
+    },
+    {
+      "id": "loan-renewal-baseline-2",
+      "case": "loan-renewal",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "loan-renewal.baseline.edit.json"
+    },
+    {
+      "id": "valve-occurrences-candidate-2",
+      "case": "valve-occurrences",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "valve-occurrences.candidate.edit.json"
+    },
+    {
+      "id": "valve-occurrences-baseline-2",
+      "case": "valve-occurrences",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "valve-occurrences.baseline.edit.json"
+    },
+    {
+      "id": "reservoir-control-candidate-2",
+      "case": "reservoir-control",
+      "arm": "candidate",
+      "repeat": 2,
+      "edit": "reservoir-control.candidate.edit.json"
+    },
+    {
+      "id": "reservoir-control-baseline-2",
+      "case": "reservoir-control",
+      "arm": "baseline",
+      "repeat": 2,
+      "edit": "reservoir-control.baseline.edit.json"
+    }
+  ]
+}

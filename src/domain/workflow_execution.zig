@@ -19,6 +19,7 @@ pub const Candidate = struct {
     delta: pipeline.NodeDelta,
     /// Expected rejection evidence; operational failure uses the error union.
     diagnostic: ?OperationError = null,
+    iteration: ?@import("workflow_iteration.zig").Transition = null,
 };
 
 /// Diagnostic facts from the last accepted in-memory application. Failed deltas

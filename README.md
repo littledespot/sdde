@@ -154,6 +154,17 @@ includes both call and preparation entries. Replays explicitly identify the user
 Replay command as their initiator and retain the captured workflow origin. Response
 inspection separates provider bytes, extracted text, parsed JSON and schema diagnostics.
 
+With `"logs": { "level": "debug", "console": true }` in `.sddtoolkit.json`,
+the prompt stream beneath the feature's `logs/prompts` retains the entire available
+provider response after credential redaction. Large responses span ordered chunks;
+the chunk size does not truncate the response. Bedrock GPT-OSS reasoning remains
+in the raw response, including when the provider stops at its output limit or
+returns no final answer. In the debugger, select **Response → Raw provider response**
+to inspect it; **Extracted model text** contains only the admitted final answer.
+Interrupted transport retains all received bytes with explicit partial-response
+provenance. `trace` also enables capture; `console` controls the console mirror,
+not file capture.
+
 The Replay tab sends **one selected prompt once**. Exact replay preserves request
 bytes; modified replay lets you edit its prompt, context or schema. Each click may
 incur provider charges and saves a new linked record under the feature's

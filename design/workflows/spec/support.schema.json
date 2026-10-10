@@ -98,6 +98,18 @@
           "type": "object",
           "properties": {
             "kind": {
+              "const": "candidate"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
               "const": "unlocalized"
             }
           },

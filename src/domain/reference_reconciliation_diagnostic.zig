@@ -101,7 +101,7 @@ pub const Constraint = enum {
         };
         if (scope == .assignment) switch (scope.assignment) {
             .summary, .signals => {
-                if (scope.assignment == .summary and self == .nonempty_unique_allowed_claims) return "Each statement must select a nonempty, unique subset of assignment.claim_ids. Across the returned statements, include every assigned claim ID exactly once. Other claims are supporting evidence; native code adds preserved-token statements.";
+                if (scope.assignment == .summary and self == .nonempty_unique_allowed_claims) return "Each statement must select a nonempty, unique subset of assignment.claim_ids. Together, the statements must cover every assigned claim ID. Claims may be combined, split across statements or selected by overlapping statements. Other claims are supporting evidence; native code adds preserved-token statements.";
                 if (self == .nonempty_unique_allowed_claims) return "Select a nonempty, unique subset of assignment.claim_ids. Other claims are supporting evidence and cannot be selected.";
                 if (scope.assignment == .signals) return switch (self) {
                     .retained_claim_covered => "Cover every retained claim in assignment.claim_ids that is not already covered by accepted.signals.",

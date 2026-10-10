@@ -69,13 +69,13 @@ pub fn verify(driver: *@import("spec_generation_driver.zig").Driver, result: @im
     try std.testing.expectEqual(driver.calls, ledger.accounted_operations.items.len);
     try std.testing.expectEqual(@as(u128, driver.calls) * (driver.fake.invocation_plan.complete.input_tokens + driver.fake.invocation_plan.complete.output_tokens), ledger.committed());
     const operations = ledger.accounted_operations.items;
-    const attempts = [_]u32{ 1, 2, 1, 1, 1, 1, 2, 1, 2, 1, 2, 3 };
-    const assignments = [_]usize{ 0, 0, 2, 3, 4, 5, 5, 7, 7, 9, 9, 9 };
-    for (operations[0..12], attempts, assignments) |operation, attempt, first| {
+    const attempts = [_]u32{ 1, 2, 1, 1, 1, 1, 2, 1, 2, 3 };
+    const assignments = [_]usize{ 0, 0, 2, 3, 4, 5, 5, 7, 7, 7 };
+    for (operations[0..10], attempts, assignments) |operation, attempt, first| {
         try std.testing.expectEqual(attempt, operation.id.model_attempt_ordinal.value);
         try std.testing.expect(operation.id.model_request_id == operations[first].id.model_request_id);
     }
-    try std.testing.expect(operations[7].id.model_request_id != operations[9].id.model_request_id);
+    try std.testing.expect(operations[5].id.model_request_id != operations[7].id.model_request_id);
     const view: data.View = .{ .slots = driver.runner.envelope.slots };
     const extraction = (try native.read(&view, native.parsed_schema, .parsed)).payload().parsed;
     const producers = extraction.entries[0].producers.?;
@@ -85,7 +85,7 @@ pub fn verify(driver: *@import("spec_generation_driver.zig").Driver, result: @im
     try std.testing.expectEqual(@as(usize, if (exhausted) 1 else 2), driver.reconciliation_merges);
     try std.testing.expectEqual(@as(usize, 0), driver.unchanged_reconciliation_merges);
     if (exhausted) {
-        try std.testing.expectEqual(@as(usize, 12), driver.calls);
+        try std.testing.expectEqual(@as(usize, 10), driver.calls);
         try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
         try std.testing.expectEqual(@as(u32, 2), result.execution_rejected.retry_limit.limit.value);
         try std.testing.expectEqual(@as(u64, 3), result.execution_rejected.retry_limit.completed_executions);

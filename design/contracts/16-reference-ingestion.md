@@ -233,6 +233,44 @@ The linked diagram and this sequence are normative; an orchestrator must require
 
 `README.md` is flagged as an organizer for presentation, but its claims remain peer authoritative. A conflict with a sibling is treated like any other authoritative conflict.
 
+**Approved summary-coverage amendment (10 October 2026):** a summary's statement
+membership union must equal its complete partition membership. Each statement still
+selects a nonempty, unique subset of authorized claims and passes the existing
+category, citation, exact-token and lineage checks. Combined, split and overlapping
+statements are valid representations; repetition across statements is not itself
+competing authority. Partition membership and disposition cardinality retain their
+separate exact-set rules.
+
+Only after every statement validates may the native summary projection collapse
+exact duplicates through the shared typed-content equivalence owner. Equivalence
+requires the same claim membership and equivalent validated content, preserving
+source evidence and obligations. Keep the first equivalent occurrence in response
+order, retain the original-to-surviving occurrence mapping and producer origins,
+and allocate canonical identities from the normalized projection. The raw response,
+candidate, stable repair occurrences, old values, revisions and retry accounting
+remain unchanged. Invalid entries, different source occurrences and merely similar
+or paraphrased text cannot disappear through normalization. Admission, history and
+repaired candidates enforce the same coverage rule. This amendment neither adds a
+summary semantic reviewer nor proves supported meaning from coverage alone; it
+authorizes no new coupled repair or continuation outcome.
+
+**Approved summary carry-forward amendment (10 October 2026):** before requesting
+a non-final summary, the workflow explicitly checks whether its nonempty partition
+contains one current validated child with unchanged claim membership. Resolve that
+child from canonical execution history and verify its projection, source evidence
+and text-validation dependencies against current inputs. A stale or altered child
+fails; it must not fall back to model summarization. Empty partitions, leaf
+partitions and partitions with multiple children retain their model path; final
+global reconciliation retains its semantic phase gates.
+
+For an eligible child, construct the parent's candidate natively and use the same
+summary validation, identity allocation and construction actions. Recheck typed
+content and exact tokens, preserve statement order, memberships and child lineage,
+and allocate the parent's own canonical identities. The child's original producer
+and repair provenance remain in history; the native parent records the child link
+without a fabricated provider origin or inherited repair receipt. This is reuse of
+validated content, not semantic approval or an additional persisted authority.
+
 Conflict classification must distinguish incompatible source requirements from
 compatible overlap, repetition, or different business/technical classifications.
 Its existing summary must explain the incompatible meanings and cite their claims;

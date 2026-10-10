@@ -815,19 +815,26 @@ content. The loss owner validates the exact producer/claim/source combination;
 packet guidance, selected schemas, collection and readback project those same rules.
 Source-only evidence is valid only for loss locations that permit it. A selected
 signal/conflict requires its exact producer claims; disposition loss may use its
-claim or source-only evidence. An unlocalized finding retains ordinary eligibility.
+claim or source-only evidence. A `candidate` attribution means the fixed omission
+belongs to the generated subject while its meaning survived upstream; it requires
+a current candidate and nonempty subject-bound claim evidence. `unlocalized`
+means no reliable attribution was established. Both retain ordinary eligibility.
 Native source-review evidence retains `loss` and its source-line/producer-loss
 comparison, so readback repeats the same source and producer joins. A localized
-answer without comparison evidence rejects; unlocalized and non-omission findings
-carry no comparison. Principle evidence has neither. `specification-state/v8` rejects earlier
+answer without comparison evidence rejects; `candidate`, `unlocalized` and non-omission
+findings carry no comparison. Principle evidence has neither. `specification-state/v9` rejects earlier
 snapshot contracts rather than silently supplying a missing binding. ADR 0020
 governs the derived exact-reference lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
 **Source-review response contract (28 September 2026):** the model chooses a
 semantic finding, detail, and any genuinely selectable source. When the finding
-is candidate omission, a separate call selects a loss location and supplies the
-required source-line/producer comparison against that fixed finding;
+is candidate omission, a separate call attributes it to the candidate, an upstream
+producer, or leaves it unlocalized. Its dedicated input contains the fixed finding,
+resolved candidate business values, numbered source lines and producers
+paired with their actual outputs. Only eligible producers carry selectable locations;
+other outputs remain supporting evidence; support-assessment instructions are absent.
+An upstream selection supplies the required source-line/producer comparison;
 every selected generation, source-review and repair schema rejects `provenance`.
 The engine constructs the canonical claim selection from the current bound
 source group, candidate evidence or selected diagnostic producer. A selected

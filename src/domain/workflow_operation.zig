@@ -39,6 +39,7 @@ pub const Contract = struct {
     repair_role: @import("workflow_retry.zig").Role = .none,
     gates: []const []const u8 = &.{},
     retry_limit: ?RetryLimitDescriptor = null,
+    iteration: ?@import("workflow_iteration.zig").Descriptor = null,
 
     // The typed slot is the sole binding declaration, not permission to call
     // a provider. Operational capabilities derive independently from ports.

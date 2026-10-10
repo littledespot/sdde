@@ -111,10 +111,10 @@ pub fn Contract(comptime purpose: Purpose) type {
         }
         pub fn packetFor(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, scope: Scope) Error!*packets.Packet {
             if (purpose == .principles) return principles.packet(allocator, inputs, context, scope);
-            return packetForContext(allocator, inputs, context, scope, .focused);
+            return packetForContext(allocator, inputs, context, scope);
         }
 
-        fn packetForContext(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, scope: Scope, subject_scope: subjects.Scope) Error!*packets.Packet {
+        fn packetForContext(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, scope: Scope) Error!*packets.Packet {
             var arena: std.heap.ArenaAllocator = .init(allocator);
             defer arena.deinit();
             const scratch = arena.allocator();
@@ -133,7 +133,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             const assigned = [_]Requirement{.{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, target), .permitted_not_applicable = if (required == .review) required.review else null, .evidence = evidence_rule.guidance() }};
             const projected = try @import("model_evidence.zig").project(scratch, all.entries);
             const sources = try @import("model_evidence.zig").sources(scratch, context.inputs);
-            const subject = try subjects.project(scratch, inputs, context, target, subject_scope);
+            const subject = try subjects.project(scratch, inputs, context, target);
             const reconstruction = subject != .candidate_field and subject != .reference_signal;
             const payload = .{ .subject = subject, .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
             const encoded = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
@@ -158,7 +158,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             const body = try std.json.Stringify.valueAlloc(scratch, projected_input, .{});
             const slot = try reviewSlot(scratch, inputs, target);
             const definition: ?@import("model_result_schema.zig").DefinitionId = .{ .bytes = if (inputs.projection == .source_preservation) "preservation_finding" else if (required == .review) "applicability_finding" else "finding" };
-            const packet = try packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = all.state_id.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = slot } } }, .{ .semantic_review = .{ .bytes = slot } }, definition);
+            const packet = try reviewPacket(allocator, inputs, all.state_id, body, slot, definition);
             defer packets.release(packet);
             const ids = try scratch.alloc(i64, evidence_rule.eligible_source_ids.len);
             for (ids, evidence_rule.eligible_source_ids) |*id, source| id.* = source.ordinal;
@@ -178,27 +178,26 @@ pub fn Contract(comptime purpose: Purpose) type {
             if (finding.requirement_ordinal != ordinal or finding.value.kind != .candidate_omission) return error.InvalidRequiredAuthority;
             const ledger = try a.build(scratch, inputs);
             if (ordinal > ledger.requirements.len) return error.InvalidRequiredAuthority;
-            const base = try packetForContext(allocator, inputs, context, .{ .finding = ledger.requirements[ordinal - 1].seed.id }, .dependencies);
-            defer packets.release(base);
-            const fixed = .{ .finding = .{ .kind = finding.value.kind, .detail = finding.value.detail, .source_ids = finding.value.source_ids } };
-            const contextual = try packets.withContext(@TypeOf(fixed), allocator, base, "fixed_review", fixed);
-            defer packets.release(contextual);
+            const target = ledger.requirements[ordinal - 1].seed.id;
+            const records = inputs.references orelse return error.InvalidRequiredAuthority;
+            const all = try p.items(context);
+            if (!acceptsProjection(inputs.projection) or !a.contains(a.Authority, inputs.authorities, .{ .reference = all.state_id }) or !records.items.state_id.eql(all.state_id)) return error.InvalidRequiredAuthority;
             const loss = @import("source_omission.zig");
-            const locations = try loss.available(scratch, inputs, context.inputs, .{ .detail = finding.value.detail, .source_ids = finding.value.source_ids, .provenance = .{ .claim_ids = finding.value.provenance.claim_ids, .citation_ids = &.{}, .clarification_response_ids = finding.value.provenance.clarification_response_ids } });
-            const available_locations = try packets.withContext([]const loss.Location, allocator, contextual, "available_loss_locations", locations);
-            defer packets.release(available_locations);
-            const source_lines = try loss.sourceLines(scratch, context.inputs);
-            const available = try packets.withContext([]const loss.SourceLines, allocator, available_locations, "loss_sources", source_lines);
-            defer packets.release(available);
+            const locations = try loss.available(scratch, inputs, context.inputs, target, .{ .detail = finding.value.detail, .source_ids = finding.value.source_ids, .provenance = .{ .claim_ids = finding.value.provenance.claim_ids, .citation_ids = &.{}, .clarification_response_ids = finding.value.provenance.clarification_response_ids } });
+            const payload = .{
+                .fixed_review = .{ .finding = .{ .kind = finding.value.kind, .detail = finding.value.detail, .source_ids = finding.value.source_ids } },
+                .subject = try subjects.projectLoss(scratch, inputs, context, target),
+                .loss_sources = try loss.sourceLines(scratch, context.inputs),
+                .producers = try @import("source_omission_context.zig").project(scratch, records, context, locations),
+            };
+            const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
             const schema = @import("model_result_schema.zig");
             var excluded: std.ArrayList(schema.ExcludedVariant) = .empty;
-            try excluded.appendSlice(scratch, contextual.excludedVariants());
             const has_producer = for (locations) |location| {
-                if (location != .unlocalized) break true;
+                if (loss.isUpstream(location)) break true;
             } else false;
             if (!has_producer) try excluded.append(scratch, .{ .kind = "localized" });
             var choices: std.ArrayList(schema.IntegerChoice) = .empty;
-            try choices.appendSlice(scratch, contextual.integerChoices());
             for (std.enums.values(std.meta.Tag(loss.Location))) |kind| {
                 var ordinals: std.ArrayList(i64) = .empty;
                 var sources: std.ArrayList(i64) = .empty;
@@ -207,7 +206,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (std.meta.activeTag(location) != kind) continue;
                     count += 1;
                     const selected_id: ?i64 = switch (location) {
-                        .unlocalized, .extraction_claim => null,
+                        .unlocalized, .candidate, .extraction_claim => null,
                         .token_classification => |id| token: {
                             if (std.mem.indexOfScalar(i64, sources.items, id.source_id.ordinal) == null) try sources.append(scratch, id.source_id.ordinal);
                             break :token id.ordinal;
@@ -225,16 +224,14 @@ pub fn Contract(comptime purpose: Purpose) type {
                 if (ordinals.items.len != 0) try choices.append(scratch, .{ .target = .{ .tagged = .{ .kind = @tagName(kind), .field = "ordinal" } }, .allowed = ordinals.items });
                 if (sources.items.len != 0) try choices.append(scratch, .{ .target = .{ .tagged = .{ .kind = @tagName(kind), .field = "source_id" } }, .allowed = sources.items });
             }
-            const slot = try std.fmt.allocPrint(scratch, "{s}-loss", .{base.unit().semantic_review.review_slot_id.bytes});
-            var unit = base.unit();
-            unit.semantic_review.review_slot_id.bytes = slot;
-            var loss_body = try @import("strict_json.zig").decode(std.json.Value, scratch, available.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
-            // Numbered captured source lines replace the raw duplicate source view.
-            _ = loss_body.object.orderedRemove("sources");
-            const body = try std.json.Stringify.valueAlloc(scratch, loss_body, .{});
-            const result = try packets.create(allocator, body, unit, .{ .semantic_review = .{ .bytes = slot } }, .{ .bytes = "loss" });
+            const slot = try std.fmt.allocPrint(scratch, "{s}-loss", .{try reviewSlot(scratch, inputs, target)});
+            const result = try reviewPacket(allocator, inputs, all.state_id, body, slot, .{ .bytes = "loss" });
             defer packets.release(result);
             return packets.withRestrictions(allocator, result, excluded.items, choices.items);
+        }
+
+        fn reviewPacket(allocator: std.mem.Allocator, inputs: a.Inputs, state: r.evidence.identity.StateId, body: []const u8, slot: []const u8, definition: ?@import("model_result_schema.zig").DefinitionId) Error!*packets.Packet {
+            return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = state.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = slot } } }, .{ .semantic_review = .{ .bytes = slot } }, definition);
         }
 
         pub fn collectLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: Collection, packet: *const packets.Packet, bytes: []const u8) Error!Collection {

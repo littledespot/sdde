@@ -11,7 +11,41 @@ Current unresolved work and revised feasibility are consolidated in FIX01.
 
 Original section identifiers and evidence links are retained for traceability.
 Old run/build artifacts that were already unavailable have not been recreated.
-§9.20 remains active in [FIX01](FIX01.md#920-cross-model-response-variation-and-summary-recovery--10-october-2026).
+The completed §9.20 recommendations and supporting review are archived below;
+[FIX01 §9.20](FIX01.md#920-cross-model-response-variation-and-summary-recovery--10-october-2026)
+retains only their outstanding acceptance and proposed follow-ups.
+
+## Completed work index
+
+This is an archive index, not an implementation checklist.
+
+| Completed bounded work | Historical record |
+| --- | --- |
+| R3 resolved policy-review subjects | [R3](#r3--complete-resolve-the-assigned-policy-review-subject) |
+| R4 shared family meanings, requiredness and collection projection | [R4](#r4--explicit-shared-record-family-meanings) |
+| R4/§8 selected repair-task and completed entity-review projections | [§9.6](#96-r48-projection-follow-up-implementation--9-october-2026) |
+| R7 focused/routing calibration and executed comparisons | [R7](#r7--high-focused-role-calibration-complete-broader-calibration-remains-open), [§9.7](#97-r7-routing-calibration-follow-up--9-october-2026) |
+| Complete role-decision contract and its executed comparison | [§9.9](#99-complete-role-decision-implementation--9-october-2026) |
+| R9 main diagnostics, build capture and evaluator tracing | [R9](#r9--medium-preserve-native-diagnostics-and-reconstruction-evidence) |
+| R10 typed role-coverage blocking and attribution | [R10](#r10--high-incomplete-authoring-role-coverage-stops-at-the-generation-handoff) |
+| Authoring projection and native determined exact-reference IDs | [§9.11](#911-authoring-input-simplification--9-october-2026) |
+| Record projection and source-loss comparison evidence | [§9.12](#912-call-12-authoring-projection-and-loss-evidence-follow-up--9-october-2026) |
+| Signal assignment scope and schema projection | [§9.13](#913-call-6-semantic-assignment-scope-and-response-projection--9-october-2026) |
+| Entity purpose and purpose-neutral fragment guidance | [§9.14](#914-entity-applicability-and-explanation-guidance--10-october-2026) |
+| Story/record guidance and executed 28-call comparison | [§9.15](#915-story-and-record-authoring-guidance--10-october-2026) |
+| Executed 16-call composition-example experiment; production promotion withheld | [§9.16](#916-call-10-composition-example-experiment--10-october-2026) |
+| Shared summary and extraction guidance | [§9.17](#917-shared-reconciliation-summary-guidance--10-october-2026), [§9.18](#918-extraction-assignment-guidance--10-october-2026) |
+| Tagged loss-localization response contract | [§9.19](#919-loss-localization-response-contract--10-october-2026) |
+| Summary union coverage and accepted duplicate projection | [§9.21](#921-summary-coverage-and-native-duplicate-projection--10-october-2026) |
+| R6 resolved loss comparison and executed 16-call pilot | [§9.23](#923-r6-attribution-mechanics-and-executed-comparison--10-october-2026) |
+| Validated single-child summary carry-forward | [§9.22](#922-validated-single-child-summary-carry-forward--10-october-2026) |
+
+**Stale item removed:** the former §8 listed determined exact-occurrence selectors
+as outstanding. [Shared projection](../src/domain/reference_model_input.zig#L201)
+already constructs the sole `exact_copy` ID natively; the selected schema and
+[codec](../src/domain/model_candidate_json.zig#L14) omit/reconstruct it and reject
+an obsolete echoed ID. Initial collection, composition and repair use that owner.
+This completes that bounded transfer, not the wider responsibility audit.
 
 ## 1. Scope, baseline and evidence
 
@@ -3315,3 +3349,404 @@ This closes a structural mismatch; it does not establish correct semantic loss
 attribution or improved live completion. R9's localization-origin gap (§9.12),
 earlier authoring defects and broader R6/R7 calibration remain open. No live call
 or E2E run is part of this change.
+
+### 9.20 Completed summary recommendations and supporting review — 10 October 2026
+
+**Archived scope:** historical failure analysis, the approved recommendations 1–2
+and completed review checks moved from FIX01. The recommendations below preserve
+their original scope; [§9.21](#921-summary-coverage-and-native-duplicate-projection--10-october-2026)
+and [§9.22](#922-validated-single-child-summary-carry-forward--10-october-2026)
+remain the implementation and verification records. Dated statements about pending
+work are historical. Current acceptance gaps and proposed recommendations 3–5 stay
+in [FIX01 §9.20](FIX01.md#920-cross-model-response-variation-and-summary-recovery--10-october-2026).
+This move grants no new implementation or live-run approval.
+
+#### Original review context
+
+The summary failure inspected by the initial critical review is
+[10 October, 11:32:22 AEDT](../zig-out/e2e-spec/2026-10-10T00-32-22Z-4b66d7fb9b7b4b4d9bce6f612fe04e41/report.md).
+It stopped at the fourth physical call after 87 native duplicate deletions, with
+`competing_entries`: the summary contained an overview and individual statements
+referencing the same three claims. Its low-reasoning response finished normally.
+No specification was published or graded. §9.20 retains the input/output evidence.
+
+**Earlier summary finding:** the failed run's summary contract equated complete claim
+accounting with disjoint statement membership. Recommendation 1 now changes the
+shared admission/history contract to union coverage and normalizes proven duplicates
+only after validating every statement. Its implementation record is in
+[Z_FIX01 §9.21](#921-summary-coverage-and-native-duplicate-projection--10-october-2026).
+Fresh live meaning-preservation evidence remains pending; native acceptance alone
+does not establish that compatible or incompatible prose is supported.
+
+These findings refine §9.20 rather than establish live quality improvement.
+The earlier review used code, contracts, tests as source, retained exchanges and
+recorded experiments. Its historical test totals in Z_FIX01 were not rerun during
+that documentation audit. Subsequent implementation and verification of
+recommendation 1 are recorded separately in Z_FIX01 §9.21.
+
+#### Evidence and causal limits
+
+The inspected [run](../zig-out/e2e-spec/2026-10-10T00-32-22Z-4b66d7fb9b7b4b4d9bce6f612fe04e41/report.md)
+used `openai.gpt-oss-20b-1:0`, low reasoning, temperature 0 and a requested
+16,384-token output allowance. It stopped after four calls and 7,941 accounted
+tokens, before authoring, publication or rubric evaluation.
+
+- [Call 3](../zig-out/e2e-spec/2026-10-10T00-32-22Z-4b66d7fb9b7b4b4d9bce6f612fe04e41/evidence/generation/call-000003/model_output.txt)
+  produced an admitted within-source summary of startup, greeting and UTC output.
+- [Call 4's assignment](../zig-out/e2e-spec/2026-10-10T00-32-22Z-4b66d7fb9b7b4b4d9bce6f612fe04e41/evidence/generation/call-000004/context.json)
+  supplied that sole child summary and the original evidence. It explicitly required
+  claims 1–3 exactly once. The missing-rule explanation therefore does not apply.
+- [Its response](../zig-out/e2e-spec/2026-10-10T00-32-22Z-4b66d7fb9b7b4b4d9bce6f612fe04e41/evidence/generation/call-000004/model_output.txt)
+  contained 91 statements: one combined `[1,2,3]` and 30 copies of each singleton.
+  The provider finished with `stop`; JSON/schema admission passed. This was not
+  output-limit exhaustion or missing final JSON.
+- Native repair deleted 87 identical duplicates. The remaining aggregate and three
+  singletons still referenced each semantic claim twice; the native token statement
+  remained present. Authorization stopped at `competing_entries`, revision 88.
+  The four distinct semantic expressions preserve compatible requirements on
+  inspection. Their shared IDs establish overlap, not contradictory source meaning.
+
+The trace establishes the rejection mechanism, not why the model repeated itself.
+This run cannot isolate prompt, model or provider causation, establish a reliability
+rate, or assess §9.19, which it did not reach.
+
+#### Owning architectural gaps
+
+At the time of that run, the [feature contract](../design/features/F0100-SpecWorkflow.md#L564)
+required every summary claim exactly once. Both
+[summary admission and history validation](../src/domain/reference_reconciliation_validation.zig#L429)
+flattened statement memberships and enforced that partition. Relation analysis marked
+overlap as competing; [repair authorization](../src/domain/reference_reconciliation_repair.zig#L185)
+blocked it after exact redundancy checks. That failure followed the old policy;
+recommendation 1 replaces this summary-only restriction across those owners.
+
+That representation constraint is stronger than complete source accounting.
+[Downstream input construction](../src/actions/reference/build_reference_reconciliation_input.zig#L9)
+retrieves original claims from native partition membership, and shared guidance
+treats summaries as supporting context. Multiple expressions of a claim do not
+inherently create multiple source authorities. Signals already permit overlapping
+evidence under their separately validated contract.
+
+Two other constraints amplify the failure: the
+[partitioner](../src/domain/reference_reconciliation_partition.zig#L23) creates a
+cross-source summary even for one child, and the
+[redundant-projection proof](../src/domain/reference_reconciliation_validation.zig#L356)
+requires the whole surviving collection to be valid before that deletion can be
+authorized. The latter can prevent a safe local repair when another independent
+defect remains. That repair-policy restriction remains separate; accepted summary
+duplicates now normalize under recommendation 1.
+
+The selected schema permits `statements.maxItems: 4294967295`; projection bounds
+each statement's selected IDs but not the enclosing collection. The Bedrock schema
+profile omits `maxItems`. Tightening cardinality alone is not the remedy: a small
+collection can still overlap or omit meaning. If overlapping propositions are
+admitted, a maximum equal to claim count no longer follows from coverage and must
+not become an arbitrary restriction. Preserve ADR 0011's provider-owned limits.
+
+#### Approved recommendations 1 and 2 — historical scope
+
+1. **Separate summary coverage from grouping; normalize proven repetition — implemented mechanics.**
+   Keep nonempty, unique, authorized IDs within each statement. Across statements,
+   validate complete coverage using their union rather than disjoint membership.
+   Allow combined, split and overlapping source-backed expressions through structural
+   admission; downstream review and final validation still apply. There is no current
+   per-summary semantic review or loss-repair target: the optional preservation check
+   assesses final references, and specification review assesses generated subjects.
+   Neither IDs nor downstream review certify every summary proposition. Compare
+   adverse summary content with preservation enabled and disabled; do not add a
+   summary reviewer implicitly or describe relaxed admission as semantic approval.
+   Preserve category, citation, exact-token and lineage checks. Native normalization
+   may collapse identical validated content
+   only with equivalent evidence and obligations, reusing the existing equivalence
+   owner and retaining the raw response and provenance. Different source occurrences
+   or paraphrases cannot be discarded merely because their text looks similar.
+   Apply normalization through the existing typed-content/equivalence owner before
+   canonical summary identities. Define deterministic survivor order and a mapping
+   from original to retained occurrences: repair occurrence IDs and field origins
+   already exist before canonical IDs. Preserve raw evidence, old-value/revision
+   bindings, active receipts and retry identity; invalid entries cannot disappear
+   merely because a valid-looking duplicate exists. Prove idempotence and repair
+   behavior after index shifts rather than adding a parallel normalization policy.
+   Update admission, history, selection eligibility, guidance, normalization/repair
+   facts, fixtures and tests together. Do not weaken `sameSet` globally: disposition
+   completeness, identities and required-authority cardinality remain exact.
+
+2. **Carry forward a validated child when no semantic transformation is needed — implemented mechanics.**
+   For a non-final summary partition with one validated child, identical claim
+   membership, unchanged source evidence and no additional semantic responsibility,
+   construct the parent natively from that content. Preserve hierarchy, citations,
+   lineage and native identity assignment. Construct from exact current history and
+   source/policy/text dependencies, not a
+   supplied child payload with a matching ID. Revalidate content, token ownership,
+   allocation lifetime and candidate retirement; retain a genuine native origin.
+   Use registered operations and explicit workflow transitions, not a call-number,
+   model or fixture branch.
+   Final disposition/signal/role/conflict work remains separate. Empty, multi-child
+   and changed-membership cases must retain their appropriate existing paths.
+   The [implementation record](#922-validated-single-child-summary-carry-forward--10-october-2026)
+   covers current-history/dependency proof, explicit eligibility and construction
+   operations, ordinary summary validation and allocation, and runner-owned finite
+   iteration bound to the validated partitions. Each accepted summary advances the
+   current cursor once; reuse has no retry parameter. Stale or substituted evidence
+   fails before reuse, and upstream repair establishes a fresh validated pass.
+
+#### Completed contract amendments and review verification
+
+The approved representation and normalization implementation includes coordinated amendments
+to [§16.4](../design/contracts/16-reference-ingestion.md#164-semantic-extraction-flow),
+[F0100](../design/features/F0100-SpecWorkflow.md),
+[ADR 0022](../design/decisions/0022-native-reference-phase-handoffs.md) and applicable
+[§22](../design/contracts/22-repair.md) language.
+Native carry-forward must preserve the declared hierarchy and lineage contract.
+**Prior review verification (before recommendation 1 implementation):** producers, consumers, validators, history, repair,
+review and harness contracts were inspected with independent read-only audits.
+Completed records moved to Z_FIX01; the active review, archive indexes and affected
+documentation links were updated. That audit changed no production code, contract
+semantics, tests or live executions. `git diff --check`, all 59 active local links and all 26
+incoming FIX01/Z_FIX01 anchors passed. Archived §§9.6–9.19 retain their original
+text. The archive retains 21 pre-existing unavailable file/anchor references and
+introduces none; those references are not fresh validation evidence.
+
+Recommendation 1 implementation and its separate verification are recorded in
+[Z_FIX01 §9.21](#921-summary-coverage-and-native-duplicate-projection--10-october-2026).
+
+### 9.21 Summary coverage and native duplicate projection — 10 October 2026
+
+**Scope:** explicitly approved FIX01 §9.20 recommendation 1. Native single-child
+carry-forward, new semantic reviewers and expanded coupled repair remain separate.
+The governing design stays Proposed with its accepted amendments.
+
+Summary admission and history now require the union of statement memberships to
+cover the partition, while each statement retains nonempty, unique, authorized
+IDs and the existing typed-content checks. Compatible grouping is no longer rejected
+solely for overlapping membership. Shared initial/correction guidance and repair
+selection use this rule; signal, conflict and disposition contracts are unchanged.
+
+After every raw statement and collection coverage pass, the existing canonical
+typed-content equivalence plus equal claim membership collapses exact duplicates.
+The first equivalent occurrence survives. Native checked/history values retain
+validated originals, their source origins and the original-index-to-retained-index
+map; model-facing evidence excludes this bookkeeping. Canonical IDs are allocated
+after projection. Raw parsed candidates, occurrence IDs, revisions, old-value
+preconditions, dependencies and retry permits stay unchanged, so normalization
+does not create deletion retries or reset an allowance. An invalid repeated entry
+still rejects at its original index. Repair operates on that unchanged candidate,
+then passes through the same validation and normalization.
+
+The implementation uses the existing validation, text equivalence, immutable owner,
+model projection and repair owners. It removes the superseded summary-only
+selection-exclusion and competing-overlap rules. The separate proof for deletion
+of an invalid misbound projection remains unchanged. No persisted state shape,
+provider policy, selected response schema or generic runner branch is added.
+
+Contracts/guidance updated: §16.4, §22, ADR 0022, F0100, the affected action contracts,
+model-request guidance and the call-tree description. Tests cover all summary
+levels, overlapping coverage, canonical fragment equality, distinct source/token
+occurrences, missing/foreign/repeated IDs, invalid duplicates, mapping/history
+corruption, unchanged repair origins/receipts, repeated collections and allocation
+failures. Existing signal/conflict negative cases retain their stricter contracts.
+The reported failure shape is covered with unrelated requirements: one overview
+plus 30 copies of each of three details (91 entries) retains four statements,
+preserves occurrence mapping and repair revision, and completes reconciliation.
+
+**Verification passed:**
+
+- `zig build test-reference-reconciliation test-reference-model-input test-model-request-workflow --summary all`:
+  **697/697 tests** during implementation.
+- `zig build test-reference-reconciliation lint test-architecture --summary all`:
+  **281/281 tests**, plus lint.
+- `zig build test-reference-reconciliation --summary all`: **158/158 tests**
+  after the final 91-entry regression refinement.
+- `zig build verify --summary all`: **142/142 steps, 1,417/1,417 tests** on the
+  final code/test revision, including the separate offline integration suite and
+  clean-environment packaged executable checks.
+- Zig formatting and `git diff --check`: passed. Prepared comparison JSON,
+  request hashes, paired schemas, trial count and local documentation links checked.
+
+The bounded implementation and offline verification are complete.
+
+**Live evidence:** a [16-call comparison](../test/calibration/summary-coverage/README.md)
+is prepared with captured and unrelated inputs, fixed settings, paired guidance,
+unchanged repetitions and independent obligation/false-acceptance assessment.
+No new live calls are authorized or executed by this record. Debugger replay checks
+JSON/schema, not native summary admission; normalizer mechanics are established by
+offline tests. Meaning-preservation improvement and actual E2E publication/rubric
+quality remain pending in the active FIX01 record.
+
+### 9.22 Validated single-child summary carry-forward — 10 October 2026
+
+**Scope:** explicitly approved FIX01 §9.20 recommendation 2. A non-final,
+nonempty summary partition with one unchanged validated child now uses native
+construction instead of another model summary. Final reconciliation, leaf and
+multiple-child summaries retain their existing semantic assignments. This change
+does not add a semantic reviewer, revise authoring, or expand repair authority.
+
+The shared reconciliation validator resolves the child from current execution
+history. It compares supplied evidence with that history and verifies the child's
+acceptance fingerprint against its original statement projection, current claims,
+citations, source bytes, exact-token registry and text-policy dependencies. Same IDs
+alone are insufficient. Altered or stale evidence fails before reuse. The existing
+snapshot owner supplies this execution-local proof; no persisted authority or
+parallel freshness mechanism is introduced.
+
+Two registered operations separate eligibility from construction because they have
+different output contracts. YAML routes eligible inputs through native construction
+and the existing summary validator, identity allocator and builder; other valid
+assignments retain the model path. The user-directed iteration correction replaces
+the summary-reuse retry parameter with the shared finite-iteration contract.
+Partition validation establishes the actual non-final partition count; accepted
+summary construction advances the current cursor exactly once. The runner binds
+facts to current plan/progress generations and commits them with pipeline data.
+Stale, repeated, skipped or exhausted progress fails. Initialization cannot cycle
+without an independent retry guard; upstream repair may initialize a newly
+validated plan. Each committed advancement adds one graph traversal to the
+retry-derived execution allowance. Model/repair retry policy and the workflow
+token budget remain unchanged; YAML still owns all transitions.
+
+The parent retains the child's normalized statement order, claim memberships,
+citations and exact tokens, and receives its own canonical identities. Original
+response/repair provenance and occurrence mapping remain on the child in immutable
+history. The native parent records its child link and has no fabricated provider
+origin or inherited repair receipts. Native candidates revalidate before acceptance;
+their corruption is an engine failure, not permission for model repair. Repair
+dependency snapshots also bind the native lineage marker. The existing immutable
+owner retains borrowed content after earlier pipeline values are released. Normal
+summary construction retires the consumed candidate values.
+
+Offline coverage includes valid carry-forward across hierarchy levels, repeated
+native carry, duplicate-normalized children, distinct source/token occurrences,
+altered supplied/history content, stale source/claim/citation/policy dependencies,
+native candidate tampering, real binding lifetime and allocation failure. Offline
+integration verifies publication through the native route, no model call/token
+charge for that route, retirement of intermediates and successful native reuse
+after upstream regeneration. Existing protocol tests still exercise separate model
+summary request lifecycles using independent leaf partitions.
+
+Contracts/guidance updated: §16.4, reference action contracts, ADR 0022, F0100,
+model-request guidance and the call-tree diagram. The iteration correction also
+updates §§6.2–6.3 and the compiler/runner finite-cycle contract. Model response
+schemas, prompts and persisted reference state are unchanged.
+
+**Verification before the iteration correction:**
+
+- `zig build test-reference-reconciliation test-reference-model-input --summary all`:
+  **349/349 tests**.
+- `zig build lint test-architecture --summary all`: **123/123 tests**, plus lint.
+- `zig build test-integration --summary all`: **91/91 tests**, including native
+  reuse and configured exhaustion during upstream regeneration.
+- `zig build verify --summary all`: **142/142 steps, 1,425/1,425 tests**, including
+  separate offline integration and clean-environment packaged-executable checks.
+- Zig formatting, `git diff --check` and new carry-forward documentation links passed.
+
+The initial carry-forward implementation passed those checks. The iteration
+correction replaces its configured-guard regression with successful regenerated
+plan processing and adds shared finite-progress rejection coverage.
+
+**Iteration-correction verification:**
+
+- `zig build test-reference-reconciliation --summary all`: **169/169 tests**,
+  including actual empty/one/multiple-source iteration populations and rejected
+  stale plan/progress bindings.
+- `zig build test-integration --summary all`: **91/91 tests**, **6/6 steps**,
+  including successful native reuse after one upstream repair creates a new plan.
+- `zig build test-workflow-graph --summary all`: **156/156 tests**, including
+  generic finite iteration, invalid/resetting cycles, stale authority and atomic
+  rejection without committing progress or granting additional allowance.
+- `zig build test-architecture test-pipeline-envelope --summary all`:
+  **151/151 tests**.
+- `zig build lint --summary all` and `git diff --check` passed.
+- `zig build verify --summary all`: **142/142 steps, 1,439/1,439 tests**,
+  including separate offline integration and clean-environment packaging checks.
+
+**Live evidence:** no new live calls or E2E run executed for this implementation.
+Avoiding an unnecessary rewrite preserves the previously accepted content; it does
+not establish that the child's meaning is correct or resolve downstream authoring
+and loss-localization defects. Actual publication and rubric quality remain separate
+live acceptance work.
+
+### 9.23 R6 attribution mechanics and executed comparison — 10 October 2026
+
+**Archived completion:** the bounded implementation, offline verification and all
+16 approved diagnostic calls finished. The semantic quality gate failed; archiving
+this executed work does not mark the recovery objective complete. Current limits,
+latest E2E findings and the proposed recovery follow-up remain in
+[active R6](FIX01.md#r6--semantic-repair-attribution-and-remaining-recovery-policy).
+Historical verification below was not rerun during this documentation move.
+
+The tagged localization schema and source/producer comparison evidence are implemented
+and archived. They prove permitted shape and evidence association, not whether
+meaning was lost at the chosen producer. In the retained 10 October run
+`2026-10-10T02-17-38Z-e9ca8a70c7f7cb4c45f002ba9ded8dee`, call 14 chose extraction
+although its explanation described the defective description. The relevant extracted
+claim, exact token and signals survived; call 29 inserted duplicate behavior and
+call 35 regenerated the same defective description.
+
+**Current implementation — mechanics complete and offline verified; live quality gate failed:**
+the loss call now has a dedicated assignment containing resolved candidate business
+values, the fixed omission, numbered source lines and producers paired with
+their actual outputs. Only eligible producers carry selectable locations; other
+outputs remain supporting evidence. Repair eligibility must not hide upstream
+meaning from comparison, including when a finding has no source selection or a
+signal spans additional sources. It no longer inherits support-assessment
+instructions or asks the model to join a separate producer-location catalogue to
+scattered outputs.
+The shared response contract distinguishes `candidate` (meaning survived upstream)
+from `unlocalized` (ownership uncertain) and `localized` (upstream producer defect).
+Native admission preserves current subject-bound claims for candidate attribution,
+rejects upstream comparison data on that alternative, and retains the existing
+candidate-local repair or failure path. Upstream findings cannot authorize candidate
+repair. A brief cannot make an unauthored story, entity decision or collection a
+candidate target; reference-owned subjects cannot select candidate attribution.
+Passive/source references and exact tokens resolve through shared projection,
+with citations retained beside producer text. Genuine source-only loss remains
+eligible for upstream repair. Production, protocol correction and persisted readback share the contract;
+the canonical state advances to `specification-state/v9` without a legacy reader.
+These mechanics do not prove the model's attribution is semantically correct.
+
+**Verification:** `zig build test-specification-generation --summary all` passed
+276/276 tests. `zig build verify --summary all` passed 1,442/1,442 tests and
+142/142 steps, including lint, architecture checks, separate offline integration
+tests and clean native packaging smoke checks. Regressions cover candidate versus
+upstream routing, unchanged unknown ownership, genuine source-only loss, invalid
+and stale evidence, correction/readback, allocation failure, resolved exact values,
+and supporting-only producers when source selection narrows. `git diff --check`
+and the frozen comparison's fixture/hash integrity checks also passed. These are
+offline mechanics checks, not live semantic or E2E acceptance.
+
+The [approved comparison](../test/calibration/source-loss-attribution/README.md)
+executed all **16 diagnostic calls**: four cases, two arms and two repetitions,
+with no extra reviewer, correction, retry, repair or E2E calls. Both arms used the
+same Bedrock GPT-OSS-20B model, low reasoning, temperature 0 and native schema.
+All responses completed and passed JSON/selected-schema admission after existing
+provider response handling (14 used the existing prefix normalization). No model
+correction calls ran. The candidate failed the declared semantic quality gate:
+
+| Case and expected owner | Baseline, two trials | R6 candidate, two trials |
+| --- | --- | --- |
+| Captured description: candidate | Both incorrectly chose extraction | Both incorrectly chose extraction |
+| Loan conditions: candidate | Both incorrectly chose extraction | One correct candidate attribution; one incorrectly chose extraction |
+| Source-only missing requirement: extraction | Correct location twice, but explanations described the candidate defect | Both returned `unlocalized` despite the supplied extraction-loss evidence |
+| Lost restart condition: reconciliation signal | Both incorrectly chose extraction | Both incorrectly chose extraction |
+
+Location correctness and adequate producer-loss explanation are separate measures.
+The second captured candidate response explicitly said the required text was present
+in the upstream extraction claim, yet still selected extraction as defective. This
+is a contradictory attribution, not absent input evidence. Other explanations
+restated a source obligation or described the candidate rather than establishing
+loss in the selected producer. Four candidate responses also cited nonexistent
+source lines; the existing native source-selection validator would reject those
+spans. These isolated replays did not execute native loss admission or repair.
+
+Actual provider usage was **12,465 tokens for baseline and 14,703 for candidate**
+(27,168 total). One improved loan trial does not establish overall improvement;
+genuine extraction localization regressed and the captured failure persists.
+Do not mark R6's semantic objective complete or present this implementation as a
+proven recovery fix. Its next measured acceptance must establish consistent owner
+selection and producer-specific comparison evidence while preserving genuine
+upstream-loss detection. Do not infer semantic truth from IDs, source spans,
+keywords or response shape, or introduce another repair/retry authority.
+
+Uncertain attribution retains its existing safe path and offline coverage; this
+pilot does not establish reliability on genuinely unknown ownership.
+Frozen diagnostic edits are manually projected against the production builders;
+they are not E2E execution or proof of successful repair/publication.

@@ -4,7 +4,6 @@ const authority = @import("required_authority.zig");
 const spec = @import("specification.zig");
 const provenance = @import("specification_provenance.zig");
 
-pub const Scope = enum { focused, dependencies };
 pub const Field = struct { slot: authority.Slot, text: []const u8, provenance: spec.Provenance, record: ?spec.IdentifiedRecord = null };
 pub const Subject = union(enum) {
     source_preservation: struct {},
@@ -12,7 +11,6 @@ pub const Subject = union(enum) {
     collection: Collection,
     entity_applicability: EntityApplicability,
     reference_signal: struct { signal: @import("model_evidence.zig").Signal, exact_value: ?[]const u8 = null },
-    producer_localization: struct { target: ?Field, candidate: ?spec.IdentifiedContent, brief: ?spec.Brief },
     candidate_support: struct {
         instruction: []const u8 = "Assess the assigned requirement in the surrounding candidate. Preserve required, optional, excluded and prohibited roles; matching words or citations alone do not establish support. Resolve passive references to their display values; a filename does not express the behavior in that file. Accept source-backed exclusions; optional sections need no filler.",
         candidate: ?spec.IdentifiedContent,
@@ -88,11 +86,9 @@ pub fn projectBusiness(a: std.mem.Allocator, inputs: authority.Inputs, context: 
     };
 }
 
-/// Focus the current target without changing evidence eligibility. Producer
-/// localization retains dependencies but has no support-assessment instruction.
-pub fn project(a: std.mem.Allocator, inputs: authority.Inputs, context: provenance.Context, id: authority.Id, scope: Scope) (provenance.Error || authority.Error)!Subject {
+/// Focus the current target without changing evidence eligibility.
+pub fn project(a: std.mem.Allocator, inputs: authority.Inputs, context: provenance.Context, id: authority.Id) (provenance.Error || authority.Error)!Subject {
     const target = try field(a, inputs, context, id);
-    if (scope == .dependencies) return .{ .producer_localization = .{ .target = target, .candidate = inputs.specification, .brief = inputs.brief } };
     if (target) |selected| return .{ .candidate_field = selected };
     if (inputs.specification != null and inputs.brief != null and id.unit == .feature) switch (id.slot) {
         .acceptance_criteria, .functional_requirements, .scenario_coverage => return .{ .collection = (try projectBusiness(a, inputs, context, id)).collection },
@@ -114,4 +110,52 @@ pub fn project(a: std.mem.Allocator, inputs: authority.Inputs, context: provenan
     }
     if (inputs.specification == null and inputs.brief == null) return .{ .source_preservation = .{} };
     return .{ .candidate_support = .{ .candidate = inputs.specification, .brief = inputs.brief } };
+}
+
+/// Attribution compares business values, not canonical fragment bookkeeping.
+/// It keeps the assigned subject and its surrounding candidate without importing
+/// the source-review task or offering another verdict.
+pub const LossSubject = union(enum) {
+    business: BusinessSubject,
+    brief_field: struct { slot: authority.Slot, text: []const u8, brief: @import("specification_projection.zig").Brief },
+    pending_subject: struct { slot: authority.Slot, brief: ?@import("specification_projection.zig").Brief = null },
+    reference: union(enum) {
+        source: @import("reference_identity.zig").SourceId,
+        signal: @import("source_omission_context.zig").Signal,
+        token: @import("model_evidence.zig").Token,
+        conflict: @import("source_omission_context.zig").Conflict,
+    },
+};
+
+pub fn projectLoss(a: std.mem.Allocator, inputs: authority.Inputs, context: provenance.Context, id: authority.Id) (provenance.Error || authority.Error)!LossSubject {
+    if (id.unit != .feature and id.unit != .record) {
+        const evidence = @import("model_evidence.zig");
+        const records = inputs.references orelse return error.InvalidRequiredAuthority;
+        return .{ .reference = switch (id.unit) {
+            .source => |source| .{ .source = source },
+            .signal => |signal_id| found: {
+                for (records.signals) |signal| if (std.meta.eql(signal.id, signal_id)) break :found .{ .signal = try @import("source_omission_context.zig").projectSignal(a, records, context, signal) };
+                return error.InvalidRequiredAuthority;
+            },
+            .token => |token| found: {
+                const view = try evidence.project(a, records.items.entries);
+                for (view.preserved_tokens) |selected| if (std.meta.eql(selected.id, token)) break :found .{ .token = selected };
+                return error.InvalidRequiredAuthority;
+            },
+            .conflict => |conflict_id| found: {
+                for (records.conflicts) |conflict| if (std.meta.eql(conflict.id, conflict_id)) break :found .{ .conflict = try @import("source_omission_context.zig").projectConflict(a, records, context, conflict) };
+                return error.InvalidRequiredAuthority;
+            },
+            else => return error.InvalidRequiredAuthority,
+        } };
+    }
+    if (inputs.specification != null and inputs.brief != null) return .{ .business = try projectBusiness(a, inputs, context, id) };
+    if (inputs.brief) |brief| {
+        const resolved = try @import("specification_projection.zig").brief(a, context, brief);
+        if (try field(a, inputs, context, id)) |target| return .{ .brief_field = .{ .slot = id.slot, .text = target.text, .brief = resolved } };
+        return .{ .pending_subject = .{ .slot = id.slot, .brief = resolved } };
+    }
+    // A pre-authoring role review has no candidate to blame. Its current bound
+    // producers and the fixed finding remain in the surrounding loss packet.
+    return .{ .pending_subject = .{ .slot = id.slot } };
 }

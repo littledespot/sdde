@@ -17,6 +17,52 @@ const binding_fixture = @import("workflow_binding_test_fixture.zig");
 const values = @import("application/pipeline_values.zig");
 const gate_module = @import("domain/workflow_gate.zig");
 
+test "finite native iteration compiles registered progress without a YAML retry allowance" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parser: parser_adapter.Adapter = .{};
+    var result_schema: result_schema_parser.Adapter = .{};
+    const registry: operation_registry.Registry = .{
+        .operations = &.{
+            .{ .contract = .{ .id = "finite.input", .kind = .invocation, .produces = &.{.raw_engine_config}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = operation_bindings.bind(void, null, unusedOperation) },
+            .{ .contract = .{ .id = "finite.initialize", .kind = .step, .requires = &.{.raw_engine_config}, .produces = &.{.engine_config}, .outcomes = &.{.ok}, .side_effect = .none, .iteration = .{ .kind = .initialize, .scope = .raw_engine_config, .progress = .engine_config } }, .binding = operation_bindings.bind(void, null, unusedOperation) },
+            .{ .contract = .{ .id = "finite.advance", .kind = .step, .requires = &.{ .raw_engine_config, .engine_config }, .replaces = &.{.engine_config}, .outcomes = &.{ .ok, .more }, .side_effect = .none, .iteration = .{ .kind = .advance, .scope = .raw_engine_config, .progress = .engine_config, .outcome = .more } }, .binding = operation_bindings.bind(void, null, unusedOperation) },
+        },
+        .data_schemas = &.{ values.schema(.raw_engine_config, u32, 1, null), values.schema(.engine_config, u32, 1, null) },
+        .policies = &.{.{ .id = "finite.policy@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok}, .total_model_token_budget = .{ .value = 1 } }},
+        .gates = &.{},
+    };
+    const yaml =
+        \\schema: workflow/v1
+        \\id: finite-native
+        \\version: 1
+        \\shortcode: FINI
+        \\invoke: finite.input
+        \\policy: finite.policy@1
+        \\start: initialize
+        \\steps:
+        \\  initialize:
+        \\    use: finite.initialize
+        \\    on: {ok: advance}
+        \\  advance:
+        \\    use: finite.advance
+        \\    on: {ok: end.ok, more: advance}
+    ;
+    const raw = try (parse.Action{ .parser = parser.parser() }).execute(a, &.{.{ .ordinal = 1, .bytes = yaml }});
+    const definitions = try (validate_schema.Action{}).execute(a, raw);
+    const manifest = try (resolve_resources.Action{}).execute(a, emptyInventory(), definitions);
+    const graphs = try (compile.Action{ .registry = &registry, .result_schema_compiler = result_schema.compiler() }).execute(a, definitions, emptyInventory(), manifest, &.{});
+    _ = try (validate_graphs.Action{}).execute(a, graphs);
+    for (graphs[0].authority.steps) |step| {
+        const registered = registry.resolveOperation(step.operation_id).?;
+        try std.testing.expectEqualDeep(registered.contract.iteration, step.iteration);
+        try std.testing.expect(step.retry_authority == null);
+        try std.testing.expectEqual(@as(usize, 0), step.parameters.len);
+    }
+    try std.testing.expectEqual(@as(usize, 2), graphs[0].authority.maximum_step_executions);
+}
+
 test "YAML operation IDs are unversioned and reject version selectors and fields" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

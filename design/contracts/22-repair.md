@@ -71,9 +71,14 @@ derives mechanically available producer locations from captured sources and
 reference records; packet guidance and the existing schema restrictions reuse
 those facts. Availability does not establish a semantic defect or grant repair
 authority. Localization has its own producer-comparison assignment, without a
-support-assessment instruction. It cannot reopen the fixed finding and may report
-`unlocalized` when the alleged meaning survives. A localized producer supplies its
-exact diagnostic claims, including the one discarded claim of a disposition,
+support-assessment instruction. It supplies resolved candidate business values,
+numbered source lines and each producer alongside its actual output. Only eligible
+producers carry selectable locations; other outputs remain supporting evidence.
+It cannot reopen the fixed finding. `candidate` attributes the defect to the
+generated subject while meaning survives upstream; `unlocalized` leaves ownership
+unresolved. Candidate attribution requires current subject-bound claim evidence,
+but those mechanical joins do not prove semantic survival. A localized producer
+supplies its exact diagnostic claims, including the one discarded claim of a disposition,
 independently of positive field provenance. A localized answer must also supply
 captured source lines and an explanation of the selected producer's loss. The
 existing source-selection validator resolves those lines; loss admission verifies
@@ -81,9 +86,10 @@ the source/producer association and retains the comparison with the finding.
 Initial collection, correction, repair authorization and persisted review readback
 enforce the same evidence contract. A location alone cannot authorize upstream
 repair. Valid source coordinates do not prove the explanation's semantic truth.
-An `unlocalized` answer carries no upstream comparison and uses the existing
-candidate-local repair or failure path. This adds no reviewer, verdict reassessment,
-retry allowance or continuation rule.
+The `candidate` and `unlocalized` answers carry no upstream comparison and use the
+existing candidate-local repair or failure path. Neither authorizes upstream
+rebuilding. Candidate repair also rejects an explicitly upstream-localized finding.
+This adds no reviewer, verdict reassessment, retry allowance or repair permission.
 
 ### 22.2 Repair classification
 
@@ -147,6 +153,18 @@ extends identical-evidence redundancy; it grants no evidence reassignment or
 semantic inference. Bind the original diagnostic, old value, revision and complete
 dependencies; retain surviving values/origins and rerun normal full validation.
 No proof means no deletion. Existing retry and token accounting remain unchanged.
+
+**Approved summary-coverage amendment (10 October 2026):** the
+[§16.4 summary contract](16-reference-ingestion.md#164-semantic-extraction-flow) validates
+coverage by membership union and permits overlapping statements. Its exact-duplicate
+normalization produces a validated summary projection before canonical identities;
+it does not mutate the raw repair candidate or widen atomic authorization. Retain
+the original-to-surviving occurrence map, producer origins, raw old values, revision,
+dependency snapshots, active receipts and retry identity. Every raw entry must pass
+its own validation before projection, and repairs re-run union coverage and the
+same normalization. A new array position is never a new repair allowance. Existing
+redundant-projection deletion keeps its separate authorization and proof; overlap
+alone authorizes neither deletion nor coupled replacement.
 
 **Approved conditional-membership amendment (25 September 2026, FIX_002 §31):**
 The specification session's existing entity decision may authorize replacement of

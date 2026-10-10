@@ -31,7 +31,9 @@ flowchart LR
     VALIDATE_EX -. "Invalid selections or claims" .-> EX_REPAIR["model-request-with-context<br/>repair-prompt<br/>Authorized extraction repair"]
 
     ROOT --> RC["reconcile-references"]
-    RC --> SUMMARY["summary<br/>reconciliation-prompt<br/>1 call per summary partition"]
+    RC --> SUMMARY_ROUTE["Check summary reuse<br/>Non-final partitions"]
+    SUMMARY_ROUTE -. "Current single child;<br/>unchanged dependencies" .-> SUMMARY_REUSE["Native carry-forward<br/>Validate, identify and build summary"]
+    SUMMARY_ROUTE -. "Semantic summarization required" .-> SUMMARY["summary<br/>reconciliation-prompt<br/>1 call per remaining summary partition"]
     RC --> GLOBAL["Native global phase handoffs<br/>4 validated semantic assignments"]
     GLOBAL --> DISPOSITIONS["dispositions<br/>dispositions-prompt"]
     GLOBAL --> SIGNALS["signals<br/>signals-prompt"]
@@ -74,8 +76,16 @@ extracted claims and hierarchy.
 
 Empty token collections and classifications forced by `no_feature_claim` are
 constructed natively; positive token-only extraction still needs semantic
-classification. Summary order follows semantic response order, then native token
-claim order. See [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md).
+classification. Summary coverage uses the union of statement selections, permitting
+overlap. Exact duplicates normalize only after all statements validate; retained
+semantic response order precedes native token claim order. Raw repair occurrences
+remain unchanged. A non-final, nonempty partition with one current validated child
+and unchanged membership, evidence and text dependencies carries that child forward
+without a model call. Explicit workflow actions recheck eligibility and use the
+same summary validation, identity allocation and construction path. Stale or altered
+children fail; original provider and repair provenance remain on the child in
+history. Final global semantic phases are unchanged. See
+[ADR 0022](../decisions/0022-native-reference-phase-handoffs.md).
 Summary and signal `assignment.claim_ids` contain only eligible semantic claims;
 the full token/citation evidence remains visible. Conflict explanations receive
 native group handles without a separate claim-selection assignment.

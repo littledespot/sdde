@@ -67,7 +67,17 @@ pub fn equivalentContent(left: Content, right: Content) bool {
 pub const ValidatedStatement = struct { claim_ids: []const ClaimId, content: Content };
 pub const Statement = struct { id: StatementId, claim_ids: []const ClaimId, content: Content };
 pub const SummaryProposal = struct { statements: []const StatementProposal };
-pub const Summary = struct { id: SummaryId, partition_id: PartitionId, member_claim_ids: []const ClaimId, member_summary_ids: []const SummaryId, statements: []const Statement };
+/// Native projection evidence, excluded from model-facing summaries. Original
+/// candidate indices, field origins and repair occurrences remain unchanged.
+pub const SummaryProjection = struct {
+    source: diagnostic.Source,
+    originals: []const ValidatedStatement,
+    /// At each original candidate index, the retained statement's local index.
+    statement_indices: []const usize,
+    /// Native parent construction; the child's original producer stays in history.
+    carried_from: ?SummaryId = null,
+};
+pub const Summary = struct { id: SummaryId, partition_id: PartitionId, member_claim_ids: []const ClaimId, member_summary_ids: []const SummaryId, statements: []const Statement, projection: SummaryProjection, validation: @import("atomic_repair.zig").Snapshot };
 /// Immutable append-only execution history; appending a summary does not copy
 /// every previous summary or mutate an older workflow value.
 pub const SummaryHistory = struct { value: Summary, previous: ?*const SummaryHistory };
@@ -144,8 +154,8 @@ pub const Proposal = struct { conflict_groups: []const @import("reference_confli
 pub const diagnostic = @import("reference_reconciliation_diagnostic.zig");
 pub const Raw = struct { source: diagnostic.Source = .{}, input: Input, bytes: []const u8 };
 pub const Phase = enum { dispositions, signals, signals_with_conflicts, roles, complete };
-pub const Parsed = struct { phase: Phase = .complete, source: diagnostic.Source = .{}, input: Input, proposal: union(enum) { summary: SummaryProposal, global: Proposal } };
-pub const CheckedSummary = struct { input: Input, statements: []const ValidatedStatement };
+pub const Parsed = struct { phase: Phase = .complete, source: diagnostic.Source = .{}, input: Input, proposal: union(enum) { summary: SummaryProposal, global: Proposal }, carried_from: ?SummaryId = null };
+pub const CheckedSummary = struct { input: Input, statements: []const ValidatedStatement, projection: SummaryProjection, validation: @import("atomic_repair.zig").Snapshot };
 pub const SummaryAssignment = struct { checked: CheckedSummary, id: SummaryId, statement_ids: []const StatementId, next_statement_ordinal: u32 };
 pub const CheckedDispositions = struct { phase: Phase = .complete, source: diagnostic.Source = .{}, input: Input, proposal: Proposal, dispositions: []const ClaimDisposition };
 pub const CheckedSignals = struct { prior: CheckedDispositions, signals: []const ValidatedSignal };

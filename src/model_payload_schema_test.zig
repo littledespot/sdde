@@ -81,7 +81,11 @@ test "loss responses couple localization to producer comparison in the selected 
     ;
     for ([_]Case{
         .{ .bytes = "{\"kind\":\"unlocalized\"}" },
+        .{ .bytes = "{\"kind\":\"candidate\"}" },
         .{ .bytes = "{}", .rejection = .missing_required_property, .path = "/kind" },
+        .{ .bytes = "{\"kind\":\"candidate\",\"comparison\":null}", .rejection = .unknown_property, .path = "/comparison" },
+        .{ .bytes = "{\"kind\":\"candidate\",\"comparison\":" ++ comparison ++ "}", .rejection = .unknown_property, .path = "/comparison" },
+        .{ .bytes = "{\"kind\":\"candidate\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"}}", .rejection = .unknown_property, .path = "/location" },
         .{ .bytes = "{\"kind\":\"unlocalized\",\"comparison\":null}", .rejection = .unknown_property, .path = "/comparison" },
         .{ .bytes = "{\"kind\":\"unlocalized\",\"comparison\":" ++ comparison ++ "}", .rejection = .unknown_property, .path = "/comparison" },
         .{ .bytes = "{\"kind\":\"unlocalized\",\"location\":{\"kind\":\"unlocalized\"}}", .rejection = .unknown_property, .path = "/location" },
@@ -90,6 +94,7 @@ test "loss responses couple localization to producer comparison in the selected 
         .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"}}", .rejection = .missing_required_property, .path = "/comparison" },
         .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"},\"comparison\":null}", .rejection = .type_mismatch, .path = "/comparison" },
         .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"unlocalized\"},\"comparison\":" ++ comparison ++ "}", .rejection = .unknown_variant, .path = "/location/kind" },
+        .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"candidate\"},\"comparison\":" ++ comparison ++ "}", .rejection = .unknown_variant, .path = "/location/kind" },
         .{ .bytes = "{\"kind\":\"localized\",\"comparison\":" ++ comparison ++ "}", .rejection = .missing_required_property, .path = "/location" },
     }) |case| try checkDocument(selected.modelBytes(), case);
     for ([_][]const u8{
@@ -136,12 +141,12 @@ test "loss protocol correction preserves the complete selected contract in both 
             if (mode == .native_schema) {
                 const shape = wire.value.object.get("response_format").?.object.get("json_schema").?.object.get("schema").?;
                 const choices = shape.object.get("anyOf").?.array.items;
-                try std.testing.expectEqual(@as(usize, 2), choices.len);
+                try std.testing.expectEqual(@as(usize, 3), choices.len);
                 for (choices) |choice| {
                     const properties = choice.object.get("properties").?.object;
                     const tag = properties.get("kind").?.object.get("const").?.string;
                     try std.testing.expect(!choice.object.get("additionalProperties").?.bool);
-                    if (std.mem.eql(u8, tag, "unlocalized")) {
+                    if (std.mem.eql(u8, tag, "unlocalized") or std.mem.eql(u8, tag, "candidate")) {
                         try std.testing.expectEqual(@as(usize, 1), properties.count());
                         try std.testing.expectEqual(@as(usize, 1), choice.object.get("required").?.array.items.len);
                     } else {
@@ -151,7 +156,10 @@ test "loss protocol correction preserves the complete selected contract in both 
                         try std.testing.expectEqualStrings("object", properties.get("comparison").?.object.get("type").?.string);
                         const locations = properties.get("location").?.object.get("anyOf").?.array.items;
                         try std.testing.expectEqual(@as(usize, 5), locations.len);
-                        for (locations) |location| try std.testing.expect(!std.mem.eql(u8, "unlocalized", location.object.get("properties").?.object.get("kind").?.object.get("const").?.string));
+                        for (locations) |location| {
+                            const location_kind = location.object.get("properties").?.object.get("kind").?.object.get("const").?.string;
+                            try std.testing.expect(!std.mem.eql(u8, "unlocalized", location_kind) and !std.mem.eql(u8, "candidate", location_kind));
+                        }
                     }
                 }
             }

@@ -159,6 +159,7 @@ fn graphProjectsDefinition(
     }
     var transition_count: usize = 0;
     for (graph.authority.steps, declared.steps) |compiled, step| {
+        if (!@import("workflow_iteration.zig").validProjection(compiled)) return false;
         if (!@import("workflow_operation.zig").validAccounting(compiled.runner_accounting, compiled.requires, compiled.produces, compiled.side_effect, compiled.retry_authority != null)) return false;
         if (!@import("workflow_model.zig").validProjection(compiled)) return false;
         if (!@import("workflow_model_request_lifecycle.zig").validProjection(compiled)) return false;

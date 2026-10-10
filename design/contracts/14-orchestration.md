@@ -49,6 +49,11 @@ workflow without branching on workflow names:
 - Unknown workflow IDs, missing operation bindings, unhandled outcomes, invalid graphs, and
   capability-policy failures stop before the selected graph runs.
 - The runner remains the sole node invocation and delta-application owner.
+- The runner also owns execution allowance and finite-iteration state. It starts
+  with the compiled retry-derived allowance and adds one graph traversal only
+  after an accepted finite cursor advancement commits with its delta under
+  [§6.3](06-pipeline-nodes.md#63-reordering-and-composition-rules). The orchestrator
+  neither inspects population data nor chooses an implicit loop successor.
 
 - An invocation operation has one responsibility: turn the preserved workflow-specific arguments
   into that workflow's validated typed run context.
@@ -74,6 +79,11 @@ Bounded collection operations may return `more` for successful progress with
 remaining work. It is a registered, non-terminal outcome: YAML declares its
 successor and every cycle still requires the existing monotonic bound. No policy
 may admit `end.more`; it grants no acceptance, gate or completion authority.
+
+Native iteration may instead use the registered finite-population and cursor
+contract in §6.3. The runner requires current scope/progress generations and exact
+forward advancement; initialization cannot cycle without an independent retry
+guard. This introduces no retry parameter, model allowance or hidden transition.
 
 Configured JSON part composition is specified once in
 [ADR 0016](../decisions/0016-configured-json-response-composition.md). It reuses

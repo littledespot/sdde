@@ -62,8 +62,54 @@ pub const Partition = struct {
 // Closed compile-time bindings: each invokes exactly one named action. These
 // share only ownership plumbing, not a workflow graph, dispatcher or capability.
 pub const AssignPartitions = Unary(@import("../actions/reference/assign_reference_reconciliation_partitions.zig").Action, layout_schema, .reconciliation_layout, plan_schema, .reconciliation_plan);
-pub const ValidatePartitions = Unary(@import("../actions/reference/validate_reference_reconciliation_partitions.zig").Action, plan_schema, .reconciliation_plan, progress_schema, .reconciliation_progress);
+pub const ValidatePartitions = struct {
+    pub const Action = @import("../actions/reference/validate_reference_reconciliation_partitions.zig").Action;
+    pub const iteration: @import("../domain/workflow_iteration.zig").Descriptor = .{ .kind = .initialize, .scope = .reference_reconciliation_plan, .progress = .reference_reconciliation_progress };
+    allocator: std.mem.Allocator,
+    action: Action = .{},
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const prior = try extraction.read(&input.step.data, plan_schema, .reconciliation_plan);
+        const owner = try owned.create(self.allocator, prior);
+        errdefer owned.destroy(owner);
+        const progress = try self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_plan);
+        owner.payload = .{ .reconciliation_progress = progress };
+        var result = try extraction.publish(self.allocator, progress_schema, owner, .ok);
+        result.iteration = .{ .limit = progress.plan.partitions.len - 1, .before = 0, .after = 0 };
+        return result;
+    }
+};
 pub const BuildInput = Unary(@import("../actions/reference/build_reference_reconciliation_input.zig").Action, progress_schema, .reconciliation_progress, input_schema, .reconciliation_input);
+pub const CheckSummaryReuse = struct {
+    pub const Action = @import("../actions/reference/check_reference_summary_reuse.zig").Action;
+    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .failed };
+    allocator: std.mem.Allocator,
+    action: Action,
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const prior = try extraction.read(&input.step.data, input_schema, .reconciliation_input);
+        var arena: std.heap.ArenaAllocator = .init(self.allocator);
+        defer arena.deinit();
+        const result = try self.action.execute(arena.allocator(), prior.payload().reconciliation_input, try textContext(&input.step.data));
+        return .{ .outcome = switch (result) {
+            .reusable => .ok,
+            .semantic => .more,
+        }, .delta = .{} };
+    }
+};
+pub const ReuseSummary = struct {
+    pub const Action = @import("../actions/reference/reuse_reference_reconciliation_summary.zig").Action;
+    allocator: std.mem.Allocator,
+    action: Action,
+    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
+        const self = context.?;
+        const prior = try extraction.read(&input.step.data, input_schema, .reconciliation_input);
+        const owner = try owned.create(self.allocator, prior);
+        errdefer owned.destroy(owner);
+        owner.payload = .{ .reconciliation_parsed = try self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_input, try textContext(&input.step.data)) };
+        return extraction.publish(self.allocator, parsed_schema, owner, .ok);
+    }
+};
 pub const Parse = Unary(@import("../actions/reference/parse_reference_reconciliation_result.zig").Action, raw_schema, .reconciliation_raw, parsed_schema, .reconciliation_parsed);
 pub const ValidateSummary = ValidationStage(true, @import("../actions/reference/validate_reference_reconciliation_summary.zig").Action, parsed_schema, .reconciliation_parsed, summary_schema, .reconciliation_summary);
 pub const AssignSummary = Unary(@import("../actions/reference/assign_reference_summary_identities.zig").Action, summary_schema, .reconciliation_summary, summary_ids_schema, .reconciliation_summary_ids);
@@ -93,18 +139,29 @@ pub const BuildRecords = Unary(@import("../actions/reference/build_reference_rec
 
 pub const BuildSummary = struct {
     pub const Action = @import("../actions/reference/build_reference_reconciliation_summary.zig").Action;
+    pub const iteration: @import("../domain/workflow_iteration.zig").Descriptor = .{ .kind = .advance, .scope = .reference_reconciliation_plan, .progress = .reference_reconciliation_progress };
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const prior = try extraction.read(&input.step.data, summary_ids_schema, .reconciliation_summary_ids);
+        const plan = (try extraction.read(&input.step.data, plan_schema, .reconciliation_plan)).payload().reconciliation_plan;
+        const progress = (try extraction.read(&input.step.data, progress_schema, .reconciliation_progress)).payload().reconciliation_progress;
+        // Immutable native values retain these exact slices/history pointers;
+        // an assignment from an older pass cannot advance the current cursor.
+        if (plan.partitions.len == 0 or !std.meta.eql(plan, progress.plan) or
+            !std.meta.eql(progress, prior.payload().reconciliation_summary_ids.checked.input.progress)) return error.InvalidReferenceReconciliation;
         const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         owner.payload = .{ .reconciliation_progress = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_summary_ids) catch |operation_error| return operation_error };
         var delta: @import("../domain/pipeline.zig").NodeDelta = .{};
         delta.data_replacements[@intFromEnum(progress_schema.key)] = values.adopt(self.allocator, progress_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
-        return .{ .outcome = .ok, .delta = delta };
+        return .{ .outcome = .ok, .delta = delta, .iteration = .{
+            .limit = plan.partitions.len - 1,
+            .before = progress.summary_count,
+            .after = owner.payload.reconciliation_progress.summary_count,
+        } };
     }
 };
 pub const Account = struct {

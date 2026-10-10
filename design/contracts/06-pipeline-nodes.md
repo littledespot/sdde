@@ -182,8 +182,9 @@ Every orchestrator must:
 - branch only on typed `Outcome` and diagnostic metadata;
 - pass immutable envelopes between children;
 - coordinate a bounded cycle only when its runner-owned binding carries the
-  compiler-validated limit declared explicitly by that YAML operation
-  instance;
+  compiler-validated retry limit declared explicitly by that YAML operation
+  instance, or a registered finite-iteration contract bound to a validated
+  population and a strictly advancing cursor;
 - never open files, call models, parse responses, render content, validate rules, execute commands, or mutate task state directly;
 - be testable with spy/fake child nodes;
 - allow child orchestrators, while preventing cycles in the orchestration graph.
@@ -220,6 +221,19 @@ Actions and orchestrators can be reorganized without changing their implementati
    lacks such a guard before runtime. Native repair progress uses the registered
    roles, finite keys and monotonic per-key counts in [§22.7](22-repair.md#227-repair-retry-limit-and-escalation);
    it does not reset a graph counter or hide child execution.
+8. Native iteration over a validated finite population uses registered initializer
+   and advancement contracts, with explicit scope and progress data keys. Only
+   the declared advancing outcome guards a cycle; failure edges do not. The
+   runner binds the population limit and cursor to their current generations,
+   accepts exactly one cursor increment per advancement, and rejects stale,
+   repeated, skipped or exhausted progress. Initialization cannot lie on a cycle
+   that bypasses an independent retry guard. A new validated scope after upstream
+   repair may initialize a fresh pass; the same scope cannot reset its cursor.
+   Native facts and pipeline values commit together. Each accepted advancement
+   adds one graph traversal to the runner's retry-derived execution allowance;
+   rejected deltas add none. This is finite iteration, not semantic retry policy,
+   and does not alter model retry limits or the workflow token budget. YAML owns
+   every transition; the generic engine remains capability-free.
 
 This enables, for example, swapping one filename validator implementation,
 moving source parsing earlier, or composing a declared semantic-review step

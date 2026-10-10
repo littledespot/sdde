@@ -5,10 +5,10 @@ const authority = @import("../domain/required_authority.zig");
 const refs = @import("../domain/reference_reconciliation.zig");
 
 pub fn comparison(inputs: authority.Inputs, location: loss.Location) !?loss.Comparison {
-    if (location == .unlocalized) return null;
+    if (!loss.isUpstream(location)) return null;
     const records = inputs.references orelse return error.InvalidFixture;
     const chunk_id = switch (location) {
-        .unlocalized => unreachable,
+        .unlocalized, .candidate => unreachable,
         .extraction_claim => |id| id,
         .token_classification => |id| found: {
             for (records.items.extraction) |chunk| for (chunk.token_classifications) |classification| {
@@ -26,6 +26,10 @@ pub fn comparison(inputs: authority.Inputs, location: loss.Location) !?loss.Comp
 }
 
 pub fn encode(a: std.mem.Allocator, inputs: authority.Inputs, location: loss.Location) ![]const u8 {
-    const assessment: loss.Assessment = if (location == .unlocalized) .{ .unlocalized = .{} } else .{ .localized = .{ .location = location, .comparison = (try comparison(inputs, location)).? } };
+    const assessment: loss.Assessment = switch (location) {
+        .unlocalized => .{ .unlocalized = .{} },
+        .candidate => .{ .candidate = .{} },
+        else => .{ .localized = .{ .location = location, .comparison = (try comparison(inputs, location)).? } },
+    };
     return @import("../domain/model_candidate_json.zig").encode(loss.Assessment, a, assessment);
 }

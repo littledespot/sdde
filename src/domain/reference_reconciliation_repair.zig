@@ -185,8 +185,6 @@ pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rej
         .summary => {
             if (parsed.proposal != .summary or rejection.issue.rule != .membership) return .{ .blocked = .no_independent_target };
             const statements = parsed.proposal.summary.statements;
-            if (rejection.relations.redundant) |index| return deletion(a, parsed, facts, .{ .statement = index }, rule);
-            if (rejection.relations.competing) return .{ .blocked = .competing_entries };
             for (parsed.input.partition.group.claim_ids) |id| {
                 for (statements) |statement| {
                     if (r.contains(r.ClaimId, statement.claim_ids, id)) break;

@@ -605,7 +605,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             };
             if (options.source_loss) |mode| {
                 const location = try fixtureLoss(&view, inputs, context, mode);
-                if (location != .unlocalized) {
+                if (@import("../domain/source_omission.zig").isUpstream(location)) {
                     if (all.entries.len == 0) for (findings) |*finding| {
                         finding.value.kind = .candidate_omission;
                         finding.value.detail = "Extraction lost source-required behavior.";

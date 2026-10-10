@@ -182,6 +182,7 @@ pub const Registry = struct {
 };
 
 fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
+    if (!@import("../domain/workflow_iteration.zig").validContract(contract, capabilities)) return false;
     if (!operation.validRepair(contract.repair_role, if (contract.retry_limit) |limit| limit.scope else null, contract.runner_accounting, contract.side_effect)) return false;
     if (contract.repair_role != .none and (contract.kind != .step or capabilities.len != 0)) return false;
     if (!@import("../domain/workflow_model_invocation.zig").validContract(contract, capabilities)) return false;

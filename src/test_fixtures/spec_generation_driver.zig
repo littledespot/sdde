@@ -29,6 +29,7 @@ pub const Driver = struct {
     candidate_review_calls: usize = 0,
     loss_calls: usize = 0,
     generation_calls: usize = 0,
+    carried_summaries: usize = 0,
     measurement_prefix: ?[]const u8 = null,
     source_gaps: bool = false,
     source_loss: ?@import("spec_generation_responses.zig").SourceLoss = null,
@@ -126,7 +127,7 @@ pub const Driver = struct {
             try std.testing.expectEqual(@as(usize, 1), matches);
         }
         if (exhausted) {
-            try std.testing.expectEqual(@as(usize, 8), self.calls);
+            try std.testing.expectEqual(@as(usize, 7), self.calls);
             const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
             const parsed = try @import("../application/reference_extraction_workflow.zig").read(&view, reconciliation.parsed_schema, .reconciliation_parsed);
             try std.testing.expectEqual(.dispositions, parsed.payload().reconciliation_parsed.phase);
@@ -456,9 +457,33 @@ pub const Driver = struct {
                 before_merge.slots[index] = values.retain(self.runner.envelope.slots[index].?) catch unreachable;
             }
         };
+        const accounted_before = self.runner.tokenLedger().accounted_operations.items.len;
         const result = self.runner.bindings().invokeStep(id);
         if (result == .rejected) for (self.runner.selected.graph.authority.steps) |entry| {
             if (std.mem.eql(u8, entry.id.bytes, id.bytes)) self.rejected_operation = entry.operation_id.bytes;
+        };
+        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "reuse-reference-reconciliation-summary")) {
+            const view: data.View = .{ .slots = self.runner.envelope.slots };
+            const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
+            const extraction = @import("../application/reference_extraction_workflow.zig");
+            if (result.status() == .ok) {
+                const parsed = (extraction.read(&view, reconciliation.parsed_schema, .reconciliation_parsed) catch unreachable).payload().reconciliation_parsed;
+                std.testing.expect(parsed.source.origin == null) catch unreachable;
+                std.testing.expect(parsed.source.pending_repair == null and parsed.source.last_repair == null) catch unreachable;
+                std.testing.expectEqual(@as(u64, 1), parsed.source.revision) catch unreachable;
+                std.testing.expectEqual(@as(usize, 1), parsed.input.member_summary_ids.len) catch unreachable;
+                std.testing.expect(!view.contains(requests.packet_schema.key) and !view.contains(.json_composition)) catch unreachable;
+                std.testing.expectEqual(accounted_before, self.runner.tokenLedger().accounted_operations.items.len) catch unreachable;
+                self.carried_summaries += 1;
+            }
+        };
+        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "check-reference-summary-reuse") and result.status() == .more) {
+            const view: data.View = .{ .slots = self.runner.envelope.slots };
+            std.testing.expect(!view.contains(.parsed_reference_reconciliation)) catch unreachable;
+        };
+        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "build-reference-reconciliation-summary") and result.status() == .ok) {
+            const view: data.View = .{ .slots = self.runner.envelope.slots };
+            for (@import("../actions/reference/build_reference_reconciliation_summary.zig").Action.contract.invalidates) |key| std.testing.expect(!view.contains(key)) catch unreachable;
         };
         if (semantic_parent) |parent| {
             std.testing.expectEqual(.ok, result.status()) catch unreachable;

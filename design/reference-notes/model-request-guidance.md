@@ -28,10 +28,21 @@ This summarizes the existing contracts in
   repair: preserve selected meaning, conditions, triggers and obligation strength;
   original claims and cited sources govern earlier summaries, and incompatible
   meanings remain distinct. Complete-summary assignments require every assigned
-  semantic claim ID exactly once across statements; native code adds token
-  statements. This coverage instruction is absent from partial repairs and signal
-  assignments. Protocol correction retains the original packet. These are semantic
-  directions, not native proof of preservation or permission to enlarge a repair.
+  semantic claim ID in the union of statements, with nonempty unique selections
+  inside each statement. Combined, split and overlapping expressions are permitted;
+  native code adds token statements. This coverage instruction is absent from partial
+  repairs and signal assignments. Protocol correction retains the original packet.
+  After every statement validates, the native summary projection keeps the first of
+  any exact duplicates with the same claim membership and equivalent typed content;
+  the raw candidate and repair occurrences remain intact. Different source occurrences
+  and paraphrases are not deduplicated by similar display text. Coverage and
+  normalization do not prove meaning preservation or enlarge repair authority.
+- A non-final, nonempty summary partition with one current validated child and
+  unchanged membership/evidence/text dependencies carries its content forward
+  natively. Explicit workflow actions check eligibility before any model packet and
+  feed the existing summary validation/identity/build path. Stale or altered history
+  fails; other summary partitions retain their existing request path. The native
+  parent links to the child's retained provenance without claiming a new model call.
 - Content references preserved-token IDs; `preserved_tokens` retains exact values
   and citations across reconciliation, generation, review and repair.
 - Extraction selects source lines as `{first: {ordinal}, last: {ordinal}}`, with
@@ -53,16 +64,17 @@ This summarizes the existing contracts in
 - Authoring dependencies use resolved brief text and entity applicability/basis;
   canonical provenance and fragment bookkeeping stay native. Record purposes and
   selected schema alternatives derive from the same native eligibility decision.
-- Loss localization keeps its omission verdict fixed. An upstream location requires
-  captured source lines and a producer-loss comparison; the existing source and
-  loss validators check association and retain the evidence for repair/readback.
-  The shared response schema couples these choices: `unlocalized` has no payload;
-  `localized` requires an eligible producer `location` and `comparison`. Native
-  binding constructs the canonical unlocalized location and null comparison.
-  An empty producer catalogue excludes `localized`. Initial requests, native
-  provider guidance and protocol corrections use this same selected schema.
-  This does not prove semantic loss. `unlocalized` retains the existing
-  candidate-local repair or failure route, without a new reviewer or retry.
+- Loss localization keeps its omission verdict fixed. The dedicated packet pairs
+  each producer with its actual output, alongside resolved candidate
+  business values and numbered source lines. Only eligible producers carry selectable
+  locations; other outputs remain supporting evidence. It omits support-assessment guidance.
+  `candidate` means the defect is downstream and meaning survived upstream;
+  `unlocalized` means ownership remains uncertain. Neither carries a comparison.
+  `localized` requires an eligible upstream `location` and source/producer `comparison`.
+  Shared admission checks current evidence association; it does not prove semantic
+  loss. Schema choices follow the same eligibility in initial and correction calls.
+  Candidate and unlocalized answers retain the existing safe candidate-local repair
+  or failure route; they grant no upstream target or broader repair authority.
 
 Native operation causes and expected domain rejections survive into CLI, telemetry
 and harness evidence through the closed operation contract. The harness records

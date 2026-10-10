@@ -22,8 +22,9 @@ fn runSelected(children: bindings.ChildBindings) run_outcome.Outcome {
     if (invocation.outcome != .ok) return .{ .execution = invocation.outcome };
 
     var current = graph.authority.start_step_id;
-    var visited: usize = 0;
-    while (visited < graph.authority.maximum_step_executions) : (visited += 1) {
+    // The runner owns retry and finite native-progress accounting. The engine
+    // follows only admitted outcomes and compiled transitions.
+    while (true) {
         const applied = children.invokeStep(current);
         if (applied == .rejected) return .{ .execution_rejected = applied.rejected };
         const target = resolveTransition(graph.authority.transitions, current, applied.outcome) orelse {
@@ -34,7 +35,6 @@ fn runSelected(children: bindings.ChildBindings) run_outcome.Outcome {
             .step => |next| current = next,
         }
     }
-    return .{ .execution = .failed };
 }
 
 fn selectionTerminal(step: bindings.SelectionStepOutcome) ?run_outcome.Outcome {

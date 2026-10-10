@@ -7,6 +7,57 @@ const bindings = @import("application/workflow_operation_binding.zig");
 const fixture = @import("workflow_binding_test_fixture.zig");
 const workflow = @import("domain/workflow.zig");
 
+test "native iteration contracts require finite progress ownership without retry or capabilities" {
+    const entries = [_]Entry{
+        .{ .contract = .{
+            .id = "test.initialize",
+            .kind = .step,
+            .requires = &.{.raw_engine_config},
+            .produces = &.{.engine_config},
+            .outcomes = &.{.ok},
+            .side_effect = .none,
+            .iteration = .{ .kind = .initialize, .scope = .raw_engine_config, .progress = .engine_config },
+        }, .binding = bindings.bind(void, null, fixture.unused) },
+        .{ .contract = .{
+            .id = "test.advance",
+            .kind = .step,
+            .requires = &.{ .raw_engine_config, .engine_config },
+            .replaces = &.{.engine_config},
+            .outcomes = &.{.ok},
+            .side_effect = .none,
+            .iteration = .{ .kind = .advance, .scope = .raw_engine_config, .progress = .engine_config },
+        }, .binding = bindings.bind(void, null, fixture.unused) },
+    };
+    const registry: Registry = .{ .operations = &entries, .policies = &.{}, .gates = &.{}, .data_schemas = &.{
+        .{ .key = .raw_engine_config, .version = 1, .type_name = "finite-scope", .maximum_bytes = null },
+        .{ .key = .engine_config, .version = 1, .type_name = "finite-progress", .maximum_bytes = null },
+    } };
+    try std.testing.expect(registry.validate());
+    for (entries, 0..) |_, index| for (0..9) |fault| {
+        var changed = entries;
+        const contract = &changed[index].contract;
+        switch (fault) {
+            0 => contract.requires = &.{},
+            1 => contract.iteration.?.scope = .engine_config,
+            2 => contract.iteration.?.outcome = .more,
+            3 => contract.iteration.?.outcome = .failed,
+            4 => contract.retry_limit = .{ .maximum = 1 },
+            5 => contract.repair_role = .validate,
+            6 => contract.side_effect = .model_call,
+            7 => contract.invalidates = &.{.raw_engine_config},
+            8 => if (index == 0) {
+                contract.produces = &.{};
+            } else {
+                contract.replaces = &.{};
+            },
+            else => unreachable,
+        }
+        var rejected = registry;
+        rejected.operations = &changed;
+        try std.testing.expect(!rejected.validate());
+    };
+}
+
 test "model-call contracts require complete invocation inputs and owned result publication" {
     const native = @import("application/model_invocation_workflow.zig");
     const selection = @import("domain/workflow_model_invocation.zig");

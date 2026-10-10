@@ -233,6 +233,11 @@ pub const PipelineEnvelope = struct {
         return null;
     }
 
+    pub fn checkCurrentAuthority(self: *const PipelineEnvelope, key: pipeline.DataKey) ?gate.Rejection {
+        var checked = std.enums.EnumSet(pipeline.DataKey).initEmpty();
+        return self.checkAuthorityLineage(key, &checked);
+    }
+
     // A projection cannot keep a gate current after one of its sources changes.
     // Replacement's self-input is the superseded revision, not a dependency on
     // itself; all other recorded input generations must still be available.

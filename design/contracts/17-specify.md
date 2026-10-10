@@ -134,9 +134,12 @@ Typed content covers these concerns; each concern does not require a separate ca
   Exact and passive references resolve through the canonical text projector.
   These read-only assignments do not certify support or alter evidence eligibility.
   Coverage assessments retain surrounding candidate context. Separate loss
-  localization retains the target, candidate and upstream reconstruction context
-  without a support-assessment instruction; it compares a fixed alleged loss with
-  captured producers and may report `unlocalized` when meaning survives.
+  localization supplies the resolved target, surrounding business values and each
+  producer beside its actual output, without a support-assessment instruction.
+  Ineligible producers remain supporting evidence with no selectable location.
+  It compares the fixed alleged loss with captured producers and
+  reports `candidate` when meaning survives upstream and
+  is missing from the generated subject, or `unlocalized` when ownership is uncertain.
   Initial findings and authorized review corrections reuse this projection.
   A candidate-omission finding triggers a separate
   loss-location call with the finding fixed; that call cannot revise the verdict.
@@ -145,8 +148,8 @@ Typed content covers these concerns; each concern does not require a separate ca
   selection through the existing source-line validator and verifies its association
   with the selected producer. The comparison is retained with review evidence;
   valid coordinates and nonempty explanation do not prove semantic loss.
-  `unlocalized` has no upstream comparison and preserves the existing candidate-local
-  repair or failure decision. The engine validates the location, comparison and
+  `candidate` and `unlocalized` have no upstream comparison and preserve the
+  existing candidate-local repair or failure decision. The engine validates the location, comparison and
   complete review before repair or publication.
   For a positive finding with a fixed claim set, the engine
   supplies that set from the current requirement rule; the response omits

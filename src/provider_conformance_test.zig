@@ -172,9 +172,21 @@ test "shared fake and Bedrock inference conformance: identity usage owned conten
 }
 
 test "Bedrock captures exact serialized requests and raw responses before response admission" {
-    const Expected = enum { complete, malformed, stopped, rejected, http_error };
+    const reasoning = try std.testing.allocator.alloc(u8, 170000);
+    defer std.testing.allocator.free(reasoning);
+    @memset(reasoning, 'r');
+    const reasoning_complete = try std.fmt.allocPrint(std.testing.allocator, "{{\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":\"<reasoning>{s}</reasoning>{{}}\"}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":10,\"completion_tokens\":16384,\"total_tokens\":16394}}}}", .{reasoning});
+    defer std.testing.allocator.free(reasoning_complete);
+    const reasoning_stopped = try std.mem.replaceOwned(u8, std.testing.allocator, reasoning_complete, "\"stop\"", "\"length\"");
+    defer std.testing.allocator.free(reasoning_stopped);
+    const reasoning_unfinished = try std.mem.replaceOwned(u8, std.testing.allocator, reasoning_complete, "</reasoning>{}", "");
+    defer std.testing.allocator.free(reasoning_unfinished);
+    const Expected = enum { complete, malformed, stopped, rejected, missing_final, http_error };
     const cases = [_]struct { body: []const u8, status: u16 = 200, exception: ?[]const u8 = null, expected: Expected }{
         .{ .body = @import("bedrock_transport_test_fixture.zig").complete, .expected = .complete },
+        .{ .body = reasoning_complete, .expected = .complete },
+        .{ .body = reasoning_stopped, .expected = .stopped },
+        .{ .body = reasoning_unfinished, .expected = .missing_final },
         .{ .body = "\xffnot-json", .expected = .malformed },
         .{ .body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}", .expected = .stopped },
         .{ .body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"unknown\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}", .expected = .rejected },
@@ -205,6 +217,7 @@ test "Bedrock captures exact serialized requests and raw responses before respon
             .malformed => try std.testing.expectEqual(.response_invalid, observed.failed.cause),
             .stopped => try std.testing.expectEqual(.output_limit, observed.completed.raw_result.stopped.reason),
             .rejected => try std.testing.expectEqual(.invalid_content, observed.completed.raw_result.rejected.reason),
+            .missing_final => try std.testing.expectEqual(.missing_final_text, observed.completed.raw_result.rejected.reason),
             .http_error => try std.testing.expectEqual(.throttled, observed.failed.cause),
         }
     }

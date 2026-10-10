@@ -102,10 +102,10 @@ test "reconciliation assignments scope instructions while retaining complete sou
     }
 }
 
-test "summary purpose and exact claim coverage apply across every summary level" {
+test "summary purpose and union claim coverage apply across every summary level" {
     const r = reconciliation.r;
     const purpose = "Summary statements consolidate selected claims without adding or dropping meaning. Preserve conditions, triggers and obligation strength. Original claims and their cited source text govern; earlier summaries are supporting context. Keep incompatible meanings distinct without choosing a winner.";
-    const coverage = "Each statement must select a nonempty, unique subset of assignment.claim_ids. Across the returned statements, include every assigned claim ID exactly once. Other claims are supporting evidence; native code adds preserved-token statements.";
+    const coverage = "Each statement must select a nonempty, unique subset of assignment.claim_ids. Together, the statements must cover every assigned claim ID. Claims may be combined, split across statements or selected by overlapping statements. Other claims are supporting evidence; native code adds preserved-token statements.";
     for ([_][5][]const u8{
         .{ "MOCK Start the application.\n", "MOCK Display the greeting.\n", "MOCK Show the UTC time.\n", "MOCK Refresh when requested.\n", "MOCK Display `Ready!`.\n" },
         .{ "MOCK Renew eligible loans.\n", "MOCK Keep overdue loans unchanged.\n", "MOCK Show the new deadline.\n", "MOCK Notify the borrower after renewal.\n", "MOCK Display `Renewed!`.\n" },
@@ -117,10 +117,12 @@ test "summary purpose and exact claim coverage apply across every summary level"
         defer fixture.deinit();
         var progress = try reconciliation.initialize(a, fixture.inputs, fixture.extracted, 2);
         var levels = std.EnumSet(r.Level).initEmpty();
+        var carried_child_in_packet = false;
         while (true) {
             const current = try reconciliation.build_input.execute(a, progress);
             if (current.purpose == .global) break;
             levels.insert(current.partition.group.level);
+            for (current.summaries) |summary| carried_child_in_packet = carried_child_in_packet or summary.projection.carried_from != null;
             const packet = try input.reconciliationCompositionPacket(std.testing.allocator, current, fixture.inputs, fixture.text.registry);
             defer packets.release(packet);
             const selected = try packets.withAssignmentContext(std.testing.allocator, packet, .{ .bytes = "summary" });
@@ -151,11 +153,18 @@ test "summary purpose and exact claim coverage apply across every summary level"
             try std.testing.expectEqualStrings(purpose, shared_body.get("summary_purpose").?.string);
             const shared_rules = try std.json.Stringify.valueAlloc(a, shared_body.get("constraints").?, .{});
             try std.testing.expect(std.mem.indexOf(u8, shared_rules, "unique_nonzero") != null);
-            try std.testing.expect(std.mem.indexOf(u8, shared_rules, "every assigned claim ID exactly once") == null);
+            try std.testing.expect(std.mem.indexOf(u8, shared_rules, "Together, the statements must cover every assigned claim ID") == null);
 
-            const checked = (try reconciliation.validate_summary.execute(a, .{ .input = current, .proposal = .{ .summary = try reconciliation.summary(a, current) } }, fixture.context())).valid;
+            const selection = @import("actions/reference/check_reference_summary_reuse.zig").Action{ .validator = text.validator };
+            const reuse = @import("actions/reference/reuse_reference_reconciliation_summary.zig").Action{ .validator = text.validator };
+            const candidate: r.Parsed = if (try selection.execute(a, current, fixture.context()) == .reusable)
+                try reuse.execute(a, current, fixture.context())
+            else
+                .{ .input = current, .proposal = .{ .summary = try reconciliation.summary(a, current) } };
+            const checked = (try reconciliation.validate_summary.execute(a, candidate, fixture.context())).valid;
             progress = try reconciliation.build_summary.execute(a, try reconciliation.assign_summary.execute(a, checked));
         }
+        try std.testing.expect(carried_child_in_packet);
         for (std.enums.values(r.Level)) |level| try std.testing.expect(levels.contains(level));
     }
 }
@@ -302,7 +311,7 @@ fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const 
                 try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "exact_selected_token") == null);
                 try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "assignment.claim_ids") != null);
                 try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "accepted.signals") != null);
-                try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "every assigned claim ID exactly once") == null);
+                try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "Together, the statements must cover every assigned claim ID") == null);
                 try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "Different sets may overlap") != null);
                 try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, encoded_rules, "native code"));
                 try checkSemanticAssignment(a, selected, global.items, dispositions.dispositions);
@@ -694,7 +703,9 @@ pub fn checkProjectedPacket(a: std.mem.Allocator, bytes: []const u8) !void {
             } else return error.MissingTokenEvidence;
         }
     }
-    if (body.get("summaries")) |summaries| for (summaries.array.items) |summary| {
+    const summary_values = body.get("summaries") orelse if (body.get("assignment")) |assignment| assignment.object.get("summaries") else null;
+    if (summary_values) |summaries| for (summaries.array.items) |summary| {
+        for ([_][]const u8{ "projection", "validation", "carried_from", "originals", "statement_indices" }) |native_field| try std.testing.expect(!summary.object.contains(native_field));
         for (summary.object.get("statements").?.array.items) |statement| {
             _ = try codec.decode(r.ContentProposal, a, try std.json.Stringify.valueAlloc(a, statement.object.get("content").?, .{}));
         }

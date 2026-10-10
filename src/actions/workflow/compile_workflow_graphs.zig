@@ -72,6 +72,7 @@ pub const Action = struct {
                     .gates = try compileGates(allocator, self.registry, entry.contract.gates),
                     .capabilities = entry.binding.capabilities(),
                     .retry_authority = retry_authority,
+                    .iteration = entry.contract.iteration,
                     .model = if (entry.contract.requiresModelBinding())
                         @import("../../domain/workflow_model.zig").resolve(parameters) orelse return invalid()
                     else
