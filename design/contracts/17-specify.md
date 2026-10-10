@@ -133,31 +133,20 @@ Typed content covers these concerns; each concern does not require a separate ca
   Signal review presents the selected native signal and any resolved exact value.
   Exact and passive references resolve through the canonical text projector.
   These read-only assignments do not certify support or alter evidence eligibility.
-  Coverage assessments retain surrounding candidate context. Separate loss
-  localization supplies the resolved target, surrounding business values and each
-  producer beside its actual output, without a support-assessment instruction.
-  Ineligible producers remain supporting evidence with no selectable location.
-  It compares the fixed alleged loss with captured producers and
-  reports `candidate` when meaning survives upstream and
-  is missing from the generated subject, or `unlocalized` when ownership is uncertain.
-  Initial findings and authorized review corrections reuse this projection.
-  A candidate-omission finding triggers a separate
-  loss-location call with the finding fixed; that call cannot revise the verdict.
-  A selected upstream location also supplies a source selection and a comparison
-  explaining what that producer failed to preserve. Native admission resolves the
-  selection through the existing source-line validator and verifies its association
-  with the selected producer. The comparison is retained with review evidence;
-  valid coordinates and nonempty explanation do not prove semantic loss.
-  `candidate` and `unlocalized` have no upstream comparison and preserve the
-  existing candidate-local repair or failure decision. The engine validates the location, comparison and
-  complete review before repair or publication.
+  Coverage assessments retain surrounding candidate context. A candidate omission
+  triggers the separate bound-preservation comparison in [§22.1](22-repair.md).
+  Its packet presents the fixed finding, resolved subject, numbered source lines,
+  assigned original-claim collections and supporting producer context. Every
+  comparison receives one evidenced `preserved`, `lost` or `uncertain` assessment;
+  native code derives attribution without allowing a new verdict or culprit choice.
+  The complete review and retained comparison must revalidate before repair or
+  publication. Valid coordinates and fluent explanations are not semantic proof.
   For a positive finding with a fixed claim set, the engine
   supplies that set from the current requirement rule; the response omits
   `provenance` and is rejected if it echoes it. The engine constructs invariant
   empty clarification-response IDs and unlocalized loss. Selectable source
-  choices remain explicit. For candidate omission, the separately selected loss
-  location determines whether its diagnostic claims are constructed or selected;
-  the closed decoder enforces that conditional rule before admission. The full
+  choices remain explicit. For candidate omission, the natively derived producer determines its diagnostic
+  claims; the closed comparison response cannot select that producer or claims. The full
   canonical review is validated before it contributes to clarification, repair
   or publication.
 - There is no unreferenced command description to use as provenance.

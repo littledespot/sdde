@@ -1,5 +1,12 @@
 # Entity-applicability guidance comparison
 
+**Superseded preparation — 10 October 2026:** the review arms predate Phase 2's
+required original-source premise for omissions. Their frozen schemas and hashes
+are retained as historical preparation, not current production evidence. Do not
+run the commands below as a current comparison. Prepare and freeze new paired
+review requests using the production packet/schema before requesting approval;
+do not silently replace one arm or reuse this manifest's hashes.
+
 This is a prepared, **not run**, 32-call diagnostic using the existing request
 debugger. It compares the shared decision purpose and field-purpose guidance;
 it does not execute a workflow, repair a candidate or establish E2E success.

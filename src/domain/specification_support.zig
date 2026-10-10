@@ -23,7 +23,7 @@ pub fn Contract(comptime purpose: Purpose) type {
         const principles = @import("principle_assessment.zig");
         const evidence_admission = if (purpose == .source) admission else principles;
         const Origin = @import("model_candidate_origin.zig").Origin;
-        pub const Error = @import("strict_json.zig").Error || a.Error || p.Error || packets.Error || principles.Error;
+        pub const Error = @import("strict_json.zig").Error || a.Error || p.Error || packets.Error || principles.Error || (if (purpose == .source) @import("source_omission_binding.zig").ComparisonError else error{});
         pub const Review = struct { entries: []const Finding };
         pub const Finding = struct { requirement_ordinal: u32, value: Value };
         /// A review judges support or an explicitly permitted applicability exception.
@@ -165,76 +165,82 @@ pub fn Contract(comptime purpose: Purpose) type {
             return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = definition, .allowed = ids }});
         }
 
-        /// A source omission's producer is a separate semantic assignment.
-        /// Its result cannot revise the already admitted finding.
-        pub fn packetForLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate) Error!*packets.Packet {
+        fn lossFinding(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate) Error!struct { finding: Finding, target: a.Id } {
             if (purpose != .source) return error.InvalidRequiredAuthority;
-            var arena: std.heap.ArenaAllocator = .init(allocator);
-            defer arena.deinit();
-            const scratch = arena.allocator();
             const ordinal = candidate.pending_localization orelse return error.InvalidRequiredAuthority;
             if (ordinal == 0 or ordinal > candidate.review.entries.len) return error.InvalidRequiredAuthority;
             const finding = candidate.review.entries[ordinal - 1];
             if (finding.requirement_ordinal != ordinal or finding.value.kind != .candidate_omission) return error.InvalidRequiredAuthority;
-            const ledger = try a.build(scratch, inputs);
+            const ledger = try a.build(allocator, inputs);
             if (ordinal > ledger.requirements.len) return error.InvalidRequiredAuthority;
-            const target = ledger.requirements[ordinal - 1].seed.id;
             const records = inputs.references orelse return error.InvalidRequiredAuthority;
             const all = try p.items(context);
             if (!acceptsProjection(inputs.projection) or !a.contains(a.Authority, inputs.authorities, .{ .reference = all.state_id }) or !records.items.state_id.eql(all.state_id)) return error.InvalidRequiredAuthority;
-            const loss = @import("source_omission.zig");
-            const locations = try loss.available(scratch, inputs, context.inputs, target, .{ .detail = finding.value.detail, .source_ids = finding.value.source_ids, .provenance = .{ .claim_ids = finding.value.provenance.claim_ids, .citation_ids = &.{}, .clarification_response_ids = finding.value.provenance.clarification_response_ids } });
+            return .{ .finding = finding, .target = ledger.requirements[ordinal - 1].seed.id };
+        }
+
+        pub const ComparisonError = Error || @import("source_omission_binding.zig").ComparisonError;
+
+        pub fn comparisonAssignment(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate) ComparisonError!@import("source_omission.zig").comparisons.Assignment {
+            const fixed = try lossFinding(allocator, inputs, context, candidate);
+            return @import("source_omission_binding.zig").build(allocator, inputs, context.inputs, fixed.target, fixed.finding.requirement_ordinal, candidate.revision, .{
+                .detail = fixed.finding.value.detail,
+                .source_ids = fixed.finding.value.source_ids,
+                .provenance = .{ .claim_ids = fixed.finding.value.provenance.claim_ids, .citation_ids = &.{}, .clarification_response_ids = fixed.finding.value.provenance.clarification_response_ids },
+            });
+        }
+
+        pub fn packetForLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate) ComparisonError!*packets.Packet {
+            var arena: std.heap.ArenaAllocator = .init(allocator);
+            defer arena.deinit();
+            const scratch = arena.allocator();
+            const assigned = try comparisonAssignment(scratch, inputs, context, candidate);
+            const presentation = @import("source_omission_context.zig");
+            const ModelMember = struct { id: @import("source_omission.zig").comparisons.MemberId, requirement: presentation.ClaimMeaning };
+            const ModelView = struct { id: @import("source_omission.zig").comparisons.Id, members: []const ModelMember };
+            const views = try scratch.alloc(ModelView, assigned.comparisons.len);
+            var claim_ids: std.ArrayList(r.ClaimId) = .empty;
+            for (assigned.comparisons, views) |view, *projected| {
+                const members = try scratch.alloc(ModelMember, view.members.len);
+                for (view.members, members) |member, *projected_member| {
+                    projected_member.* = .{ .id = member.id, .requirement = try presentation.claimMeaning(scratch, assigned.facts.records.items, member.claim_id, context) };
+                    if (!r.contains(r.ClaimId, claim_ids.items, member.claim_id)) try claim_ids.append(scratch, member.claim_id);
+                }
+                projected.* = .{ .id = view.id, .members = members };
+            }
             const payload = .{
-                .fixed_review = .{ .finding = .{ .kind = finding.value.kind, .detail = finding.value.detail, .source_ids = finding.value.source_ids } },
-                .subject = try subjects.projectLoss(scratch, inputs, context, target),
-                .loss_sources = try loss.sourceLines(scratch, context.inputs),
-                .producers = try @import("source_omission_context.zig").project(scratch, records, context, locations),
+                .fixed_finding = .{ .detail = assigned.finding.detail, .target_purpose = try @import("required_authority_description.zig").task(scratch, assigned.finding.subject) },
+                .sources = assigned.sources,
+                .comparisons = views,
+                .supporting_evidence = .{
+                    .deficient_subject = presentation.fixedSubject(try subjects.projectLoss(scratch, inputs, context, assigned.finding.subject)),
+                    .producers = try presentation.comparisonSupport(scratch, assigned.facts.records, context, assigned.finding.source_ids, claim_ids.items),
+                },
             };
             const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
-            const schema = @import("model_result_schema.zig");
-            var excluded: std.ArrayList(schema.ExcludedVariant) = .empty;
-            const has_producer = for (locations) |location| {
-                if (loss.isUpstream(location)) break true;
-            } else false;
-            if (!has_producer) try excluded.append(scratch, .{ .kind = "localized" });
-            var choices: std.ArrayList(schema.IntegerChoice) = .empty;
-            for (std.enums.values(std.meta.Tag(loss.Location))) |kind| {
-                var ordinals: std.ArrayList(i64) = .empty;
-                var sources: std.ArrayList(i64) = .empty;
-                var count: usize = 0;
-                for (locations) |location| {
-                    if (std.meta.activeTag(location) != kind) continue;
-                    count += 1;
-                    const selected_id: ?i64 = switch (location) {
-                        .unlocalized, .candidate, .extraction_claim => null,
-                        .token_classification => |id| token: {
-                            if (std.mem.indexOfScalar(i64, sources.items, id.source_id.ordinal) == null) try sources.append(scratch, id.source_id.ordinal);
-                            break :token id.ordinal;
-                        },
-                        .reconciliation_signal => |id| id.ordinal,
-                        .reconciliation_disposition => |id| id.ordinal,
-                        .reconciliation_conflict => |id| id.ordinal,
-                    };
-                    if (selected_id) |id| if (std.mem.indexOfScalar(i64, ordinals.items, id) == null) try ordinals.append(scratch, id);
-                }
-                if (count == 0) {
-                    try excluded.append(scratch, .{ .kind = @tagName(kind) });
-                    continue;
-                }
-                if (ordinals.items.len != 0) try choices.append(scratch, .{ .target = .{ .tagged = .{ .kind = @tagName(kind), .field = "ordinal" } }, .allowed = ordinals.items });
-                if (sources.items.len != 0) try choices.append(scratch, .{ .target = .{ .tagged = .{ .kind = @tagName(kind), .field = "source_id" } }, .allowed = sources.items });
-            }
-            const slot = try std.fmt.allocPrint(scratch, "{s}-loss", .{try reviewSlot(scratch, inputs, target)});
-            const result = try reviewPacket(allocator, inputs, all.state_id, body, slot, .{ .bytes = "loss" });
-            defer packets.release(result);
-            return packets.withRestrictions(allocator, result, excluded.items, choices.items);
+            const slot = try std.fmt.allocPrint(scratch, "{s}-loss", .{try reviewSlot(scratch, inputs, assigned.finding.subject)});
+            const packet = try reviewPacket(allocator, inputs, context.inputs.corpus.state_id, body, slot, .{ .bytes = "preservation_comparisons" });
+            defer packets.release(packet);
+            if (assigned.comparisons.len == 0) return packets.withIntegerChoices(allocator, packet, &.{});
+            const ids = try scratch.alloc(i64, assigned.comparisons.len);
+            for (assigned.comparisons, ids) |view, *id| id.* = view.id.ordinal;
+            return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = &.{ .{ .property = "assessments" }, .items, .{ .property = "comparison_id" } } }, .definition = .{ .bytes = "preservation_comparisons" }, .allowed = ids }});
+        }
+
+        pub fn admitComparisons(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate, retained: @import("source_omission.zig").comparisons.Assignment, bytes: []const u8) ComparisonError!@import("source_omission.zig").comparisons.Attribution {
+            var arena: std.heap.ArenaAllocator = .init(allocator);
+            defer arena.deinit();
+            const scratch = arena.allocator();
+            const owner = @import("source_omission.zig").comparisons;
+            const current = try comparisonAssignment(scratch, inputs, context, candidate);
+            return owner.admit(scratch, retained, current, context.inputs, try @import("model_candidate_json.zig").decode(owner.Response, scratch, bytes));
         }
 
         fn reviewPacket(allocator: std.mem.Allocator, inputs: a.Inputs, state: r.evidence.identity.StateId, body: []const u8, slot: []const u8, definition: ?@import("model_result_schema.zig").DefinitionId) Error!*packets.Packet {
             return packets.create(allocator, body, .{ .semantic_review = .{ .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = state.bytes }, .feature_id = inputs.feature, .unit_slot_id = .{ .bytes = "required-information" } } }, .review_slot_id = .{ .bytes = slot } } }, .{ .semantic_review = .{ .bytes = slot } }, definition);
         }
 
-        pub fn collectLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: Collection, packet: *const packets.Packet, bytes: []const u8) Error!Collection {
+        pub fn collectLoss(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: Collection, packet: *const packets.Packet, bytes: []const u8, origin: ?Origin) Error!Collection {
             if (purpose != .source) return error.InvalidRequiredAuthority;
             const candidate = switch (prior) {
                 .accepted => |value| value.candidate,
@@ -244,12 +250,26 @@ pub fn Contract(comptime purpose: Purpose) type {
             const expected = try packetForLoss(allocator, inputs, context, candidate);
             defer packets.release(expected);
             try checkPacket(expected, packet);
-            const location = try @import("model_candidate_json.zig").decode(@import("source_omission.zig").Assessment, allocator, bytes);
+            const owner = @import("source_omission.zig").comparisons;
+            const assigned = try comparisonAssignment(allocator, inputs, context, candidate);
+            const response = try @import("model_candidate_json.zig").decode(owner.Response, allocator, bytes);
+            const proof: owner.Evidence = .{ .assignment = assigned, .response = response, .origin = origin };
+            const attribution = owner.admit(allocator, assigned, assigned, context.inputs, response) catch |err| {
+                if (err == error.OutOfMemory) return error.OutOfMemory;
+                const fixed = try lossFinding(allocator, inputs, context, candidate);
+                const rule = try admission.requirements(allocator, inputs, context.inputs, fixed.target);
+                const diagnostics = try allocator.dupe(Diagnostic, &.{.{ .issue = .invalid_evidence, .requirement = fixed.target, .ordinal = fixed.finding.requirement_ordinal, .revision = candidate.revision, .origin = origin, .entry_index = fixed.finding.requirement_ordinal - 1, .evidence = .{ .issue = .invalid_loss, .rule = rule.rule(.candidate_omission, .{ .unlocalized = .{} }) } }});
+                var rejected = candidate;
+                const rejected_entries = try allocator.dupe(Finding, candidate.review.entries);
+                rejected_entries[fixed.finding.requirement_ordinal - 1].value.preservation = proof;
+                rejected.review.entries = rejected_entries;
+                return .{ .rejected = .{ .candidate = rejected, .rejection = .{ .diagnostics = diagnostics } } };
+            };
             const ordinal = candidate.pending_localization orelse return error.InvalidRequiredAuthority;
             const ledger = try a.build(allocator, inputs);
             const required = try admission.requirements(allocator, inputs, context.inputs, ledger.requirements[ordinal - 1].seed.id);
             const entries = try allocator.dupe(Finding, candidate.review.entries);
-            entries[ordinal - 1].value = try source_model.bindLoss(required, entries[ordinal - 1].value, location);
+            entries[ordinal - 1].value = try source_model.bindLoss(required, entries[ordinal - 1].value, owner.location(attribution), proof);
             var next = candidate;
             next.review.entries = entries;
             next.pending_localization = null;
@@ -361,11 +381,14 @@ pub fn Contract(comptime purpose: Purpose) type {
                     const before = diagnostics.items.len;
                     if (purpose == .source) if (decisionOf(finding.value) == .not_applicable and required != .review) try diagnostics.append(allocator, diagnostic(proposed, .invalid_decision, requirement.seed.id, ordinal, position));
                     const semantic = decisionOf(finding.value).finding();
-                    var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail, finding.value.loss, finding.value.loss_comparison);
+                    var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail, finding.value.loss, finding.value.preservation);
                     const rejection: ?Diagnostic = if (reviewed == .rejected) rejected: {
                         var invalid = diagnostic(proposed, .invalid_evidence, requirement.seed.id, ordinal, position);
                         if (purpose == .source) if (reviewed.rejected.issue == .invalid_finding) {
                             invalid.issue = .invalid_decision;
+                        };
+                        if (purpose == .source) if (reviewed.rejected.issue == .invalid_loss) {
+                            if (finding.value.preservation) |proof| invalid.origin = proof.origin;
                         };
                         invalid.evidence = reviewed.rejected;
                         break :rejected invalid;
@@ -432,7 +455,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (evidence.finding != .supported) return error.InvalidRequiredAuthority;
                     break :blk Decision.not_applicable;
                 } else try Decision.fromFinding(evidence.finding);
-                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .kind = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .question = review.question, .loss = review.loss orelse return error.InvalidRequiredAuthority, .loss_comparison = review.loss_comparison } };
+                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .kind = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .question = review.question, .loss = review.loss orelse return error.InvalidRequiredAuthority, .preservation = review.preservation } };
             }
             var empty = inputs;
             empty.evidence = &.{};

@@ -1,5 +1,25 @@
 # Source-loss attribution comparison
 
+**Contract cutover:** the retained files below are historical culprit-selection
+comparisons. Their schemas/edits must not be submitted as current production
+`preservation_comparisons` requests. FIX01-01 Phase 2 replaces that contract;
+[Phases 3–4](../../../fixes/FIX01-01.md#phase-3--compare-semantic-outcomes) own new
+semantic comparison and live recovery evidence. The previous approvals are consumed.
+
+For the new candidate, obtain the packet from `Source.packetForLoss` and the
+selected/restricted `support.schema.json` definition, rather than copying an old
+edit. `Source.comparisonAssignment` and `comparisons.admit` own native evaluation.
+Native offline tests cover candidate loss, source-only extraction, dispositions,
+signal/conflict ownership, source/member joins, inherited loss, composite uncertainty,
+unsupported roles, stale assignments and readback. The schema alone is insufficient.
+Exported edits must be checked against those actual packet/schema bytes before
+freezing a new plan; no new candidate exports or live scores are claimed here.
+
+The old reconciliation-condition case describes faulty signal prose while original
+assigned claims still preserve the condition. It is not evidence that authoring
+consumed a deficient input. A future paired case must distinguish direct signal
+review from downstream candidate attribution; keep the old scorecard unchanged.
+
 **Completed; the candidate failed the declared quality gate.** All **16 approved
 diagnostic calls** ran once under
 [design §28.8](../../../design/contracts/28-testing.md#288-model-conformance-comparisons),
@@ -241,3 +261,23 @@ same frozen evidence. It is not deterministic semantic proof. The failed gate
 does not establish improved semantic attribution, successful R6 recovery or a
 basis for production promotion. Candidate-local repair success, unknown-ownership
 semantic quality, publication and rubric quality remain unmeasured.
+
+## Bound preservation follow-up
+
+The [Phase 3 comparison](bound-preservation/README.md) freezes new paired requests
+for the current native-bound contract, including direct-signal and inherited-loss
+premises. All 32 approved calls executed; its semantic gate failed (7/16 candidate
+native admissions, 2/16 correct admitted attributions). Its approval is consumed.
+The [projection follow-up](bound-preservation/projection/README.md) retained the
+same native contract and executed a separately approved 32 calls. It improved
+native admission to 16/16 and correct attribution to 14/16, but failed the gate on
+two false role-loss judgments. Both allowances are consumed. Historical comparisons
+and failed scorecards remain unchanged; conditional E2E has not run.
+
+## Latest comparison
+
+The [meaning-versus-representation follow-up](bound-preservation/meaning/README.md)
+executed all 32 approved calls. Both arms admitted 16/16 and correctly attributed
+14/16, repeating the two false role-loss judgments. It did not improve semantic
+outcomes. **96 diagnostic calls are consumed; Phase 3 remains unaccepted and Phase 4
+E2E remains unstarted.** The frozen plans, source facts and failed gates are retained.

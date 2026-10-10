@@ -114,13 +114,22 @@ fn checked(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs,
     return .{ .claim_ids = selected.claim_ids, .clarification_response_ids = &.{} };
 }
 
-pub fn roleClaims(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, role: r.GenerationRole) Error!spec.Selection {
+/// Recorded role membership, including an empty assignment. This is evidence,
+/// not authorization to author; roleClaims applies the nonempty admission.
+pub fn roleClaimIds(a: std.mem.Allocator, records: refs.Records, role: r.GenerationRole) Error![]const r.ClaimId {
     var claims: std.ArrayList(r.ClaimId) = .empty;
+    errdefer claims.deinit(a);
     for (records.signals) |signal| {
         if (!hasRole(signal, role) or !try activeSignal(records, signal)) continue;
         for (signal.value.claim_ids) |id| if (!r.contains(r.ClaimId, claims.items, id)) try claims.append(a, id);
     }
-    return checked(a, records, inputs, claims.items);
+    return claims.toOwnedSlice(a);
+}
+
+pub fn roleClaims(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, role: r.GenerationRole) Error!spec.Selection {
+    const claims = try roleClaimIds(a, records, role);
+    errdefer a.free(claims);
+    return checked(a, records, inputs, claims);
 }
 
 pub fn recordCount(records: refs.Records) Error!usize {

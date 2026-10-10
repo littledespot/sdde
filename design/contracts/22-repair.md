@@ -66,30 +66,48 @@ selection under ADR 0020, using the same binding check as canonical readback.
 Aggregate evidence from several groups cannot authorize an invented association
 or a cross-group insertion; it remains an unsafe candidate repair.
 
-Loss localization retains the fixed review verdict. The existing loss validator
-derives mechanically available producer locations from captured sources and
-reference records; packet guidance and the existing schema restrictions reuse
-those facts. Availability does not establish a semantic defect or grant repair
-authority. Localization has its own producer-comparison assignment, without a
-support-assessment instruction. It supplies resolved candidate business values,
-numbered source lines and each producer alongside its actual output. Only eligible
-producers carry selectable locations; other outputs remain supporting evidence.
-It cannot reopen the fixed finding. `candidate` attributes the defect to the
-generated subject while meaning survives upstream; `unlocalized` leaves ownership
-unresolved. Candidate attribution requires current subject-bound claim evidence,
-but those mechanical joins do not prove semantic survival. A localized producer
-supplies its exact diagnostic claims, including the one discarded claim of a disposition,
-independently of positive field provenance. A localized answer must also supply
-captured source lines and an explanation of the selected producer's loss. The
-existing source-selection validator resolves those lines; loss admission verifies
-the source/producer association and retains the comparison with the finding.
-Initial collection, correction, repair authorization and persisted review readback
-enforce the same evidence contract. A location alone cannot authorize upstream
-repair. Valid source coordinates do not prove the explanation's semantic truth.
-The `candidate` and `unlocalized` answers carry no upstream comparison and use the
-existing candidate-local repair or failure path. Neither authorizes upstream
-rebuilding. Candidate repair also rejects an explicitly upstream-localized finding.
-This adds no reviewer, verdict reassessment, retry allowance or repair permission.
+An omission must identify nonempty authorized sources at review admission, even
+when its subject also fixes claim evidence. Loss comparison retains that admitted
+omission, its subject, detail, selected sources and revision. Native code binds complete evidence collections on the
+actual dataflow path to that subject. Original source support and the deficient
+subject are fixed premises; neither is reassessed. The model returns exactly one
+`preserved`, `lost` or `uncertain` assessment per assigned comparison ID, with
+source spans, assessed member IDs and an explanation. Shared identical views are
+assessed once. Other producer outputs are supporting context, not selectable
+culprits or permission to expand the finding.
+
+Native admission rejects missing, duplicate, foreign or stale comparisons and
+invalid source/member joins. It derives attribution backwards through the bound
+path: preserved input and lost output establish the boundary's owner; lost input
+and lost output establish only inherited absence. Required uncertainty, composite
+ownership or unavailable facts leave attribution unresolved. Preserved original
+claims assigned to authoring cut off upstream blame; signal paraphrases are not
+substituted for those claims. Native checks do not prove the semantic labels or
+explanations. A forced no-feature extraction owns its forced classifications;
+a separately classified claims collection does not identify a unique extraction
+or classification culprit merely because meaning is missing.
+
+Attribution is separate from atomic permission. Derived upstream locations supply
+the existing diagnostic claim sets and must pass the existing target, old-value,
+revision and dependency checks. Known role or summary defects retain explicit
+unsupported-repair identities and cannot fall back to another producer or candidate.
+Unresolved attribution grants no upstream rebuilding; independently authorized
+candidate-local checks remain available. No new exact-reference, role, summary,
+entity-decision, retry or verdict-reassessment permission is added.
+
+Collection, correction, authorization and readback use this one comparison
+contract. Canonical evidence retains native facts, bindings, the complete response
+and its comparison-call origin separately from the review-finding origin. Rebuild
+bindings from current canonical facts before deriving any retained attribution;
+request logs and stored digests are not authority. Changed producers or candidate
+facts retire dependent evidence through existing invalidation. The cached location
+must equal the rederived result. Native `invalid_loss` remains terminal; protocol
+correction fixes only its existing permitted protocol defects.
+
+Signal-content repair preserves the validated unique member set. That ordered set,
+within the existing source-state and producer scope, identifies its review retry
+across regenerated signal ordinals. Changed membership cannot resolve that defect
+or reset its allowance. Other regenerated subjects retain their existing policy.
 
 ### 22.2 Repair classification
 

@@ -69,8 +69,9 @@ records retain engine-constructed `provenance.claim_ids` for traceability.
 Generation, source-review and repair responses reject `provenance` in every
 selected schema. The bound unit, current ledger and authorized repair target
 supply claim identity; the response supplies business content, a semantic
-verdict, and any genuinely selectable source or loss location. Fixed diagnostic
-claims are constructed after a selected loss location. Source-only negative
+verdict, and any genuinely selectable source. Bound preservation assessments
+replace model-selected loss locations; diagnostic claims follow native attribution
+under §22.1. Source-only negative
 evidence constructs an empty canonical selection where its rule permits it.
 No response may add claims to a sibling or turn the eligible catalogue into
 support. Missing, stale, ambiguous or out-of-scope binding blocks or returns
@@ -186,13 +187,13 @@ through the existing runner and stage gates. No new retry mechanism, schema
 registry, evidence store, provider mode or model prompt for reassembly is
 authorized.
 
-The R6 attribution amendment advances the shared state to
-`specification-state/v9`. Source-review findings distinguish explicit candidate
-loss from unresolved attribution. Upstream attribution retains the selected source
-lines and producer-loss comparison required by §22.1; candidate attribution retains
-subject-bound claims without an upstream comparison. Completed readback validates
-that evidence through the same owner as live collection. Earlier state versions reject.
-This changes neither `S`, `E`, `L` nor the exact-reference representation.
+The user-authorized FIX01-01 Phase 2 amendment supersedes the R6 culprit-selection
+contract and advances the shared state to `specification-state/v10`. Native-bound
+preservation comparisons derive attribution under §22.1. Findings retain canonical
+facts and comparison evidence; collection and readback reconstruct the same bindings
+and reject mismatched derived locations. Finding and comparison origins remain
+distinct. Earlier versions reject. This changes neither `S`, `E`, `L` nor exact
+reference representation or repair permissions.
 
 This decision records the runtime contract, not a claim that live quality
 evaluation has passed. The baseline and test checkpoints remain

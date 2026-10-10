@@ -1,0 +1,584 @@
+{
+  "parent": {
+    "artifact_root": "zig-out/e2e-spec/2026-10-10T02-17-38Z-e9ca8a70c7f7cb4c45f002ba9ded8dee/evidence/generation/call-000014",
+    "run": "RUN-ebb17bc64a64a01ef7d1134b87e37f35",
+    "call": "request-14-inference-1",
+    "context_sha256": "94aa8a6d66eda6302bedd06db458986ca0139944491c9cb700e9499939cc1902",
+    "request_sha256": "a358ab4d2d09a49c88d96f5dd90d251be70fde8ca3e207f050b972e41bf731f5",
+    "response_sha256": "88ebb9eeeb1200f6d5393e520144c980a22669206bfa390efe03f8b04bdf3ea8",
+    "selected_schema_sha256": "35997abd4ae43ef4284a52a00f1bb0bfeb1043652199e70b2eef92b85544ca47",
+    "authored_description_origin_call": 8
+  },
+  "settings": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0,
+    "max_output_tokens": 16384,
+    "response_mode": "native_schema"
+  },
+  "maximum_physical_calls": 32,
+  "repetitions_per_case_arm": 2,
+  "retries_corrections_repairs_judges_e2e": 0,
+  "quality_gate": {
+    "candidate_completed_schema_and_native_minimum": 15,
+    "candidate_false_upstream_maximum": 0,
+    "candidate_false_candidate_maximum": 0,
+    "extraction_correct_required": 2,
+    "direct_signal_correct_required": 2,
+    "wrong_role_correct_required": 2,
+    "unresolved_owner_safe_required": 2,
+    "candidate_defects_correct_minimum": 7,
+    "candidate_unnecessary_uncertain_maximum": 1,
+    "candidate_evidence_adequate_minimum": 14,
+    "correct_attribution_improvement_minimum": 2,
+    "no_case_accuracy_regression": true
+  },
+  "status": "prepared_not_run",
+  "paths_base": "..",
+  "comparison_factor": "shared preservation presentation: omit claim-category labels and clarify expressed meaning versus representation; same assignments, source evidence, schema, native admission and repair permissions",
+  "baseline": {
+    "manifest": "projection/comparison.json",
+    "manifest_sha256": "52d31c01fa4dac9ed4fae688c740a8c159f9c0cd40964e8aac7626a406e668f9",
+    "arm": "candidate",
+    "native_admission": "required for both arms"
+  },
+  "limitations": [
+    "All eight cases are observed regression inputs, not a new holdout.",
+    "This tests a presentation bundle, not a causal claim about one sentence.",
+    "Two repetitions cannot establish reliability across models or inputs.",
+    "Missing literal is represented by the captured candidate defect; genuine upstream loss controls cover missing behavior and role exclusion. This does not calibrate every token-classification loss.",
+    "No E2E publication or recovery claim follows from diagnostic success.",
+    "The unchanged improvement gate requires two more correct admitted attributions than concurrent baseline; a high baseline score may make superiority inconclusive."
+  ],
+  "cases": [
+    {
+      "id": "captured-description",
+      "expected": "candidate",
+      "expected_comparisons": [
+        "preserved",
+        "preserved"
+      ],
+      "cohort": "development",
+      "native_packet_sha256": "9d1d2e3eaad22db2c24ac43bf9e2ce87a309ce3d3bb37bfc6e83d27a49ad8026",
+      "edits": {
+        "baseline": {
+          "path": "projection/captured-description.candidate.edit.json",
+          "sha256": "7bf049b854c0edcdae5f7f8f41db000b04d6c5333a85efe1391a9b08586e30b4",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 4498,
+          "schema_bytes": 1074,
+          "provider_request_path": "projection/captured-description.candidate.request.json",
+          "provider_request_sha256": "7fe45bd13f372887375980f50fb5785155f5f510e1a0bf8c0d062c974157774c",
+          "provider_request_bytes": 8753
+        },
+        "candidate": {
+          "path": "meaning/captured-description.candidate.edit.json",
+          "sha256": "e5b4f29e0371db380b83465033b51b90cbb9ecc8867a4243c8e59f7ea2529b2d",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 4128,
+          "schema_bytes": 1074,
+          "provider_request_path": "meaning/captured-description.candidate.request.json",
+          "provider_request_sha256": "5307124bc62ac421f22e048c9061d60e8da9953b3c74d3c821adbdeefad5f0ec",
+          "provider_request_bytes": 8495
+        }
+      }
+    },
+    {
+      "id": "loan-candidate",
+      "expected": "candidate",
+      "expected_comparisons": [
+        "preserved"
+      ],
+      "cohort": "development",
+      "native_packet_sha256": "19f0fd51cbf07859aca7c35a5c36b6f546e1392dcee46a8a35e453c22f832f8c",
+      "edits": {
+        "baseline": {
+          "path": "projection/loan-candidate.candidate.edit.json",
+          "sha256": "300d7bf43b90aa5420274e1d3f3fe16ff180487a42b79385f261fb2f6519726b",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 2036,
+          "schema_bytes": 1072,
+          "provider_request_path": "projection/loan-candidate.candidate.request.json",
+          "provider_request_sha256": "fb8ea82d1059eccba7a39b5eabeaef871bb83f07645f64644b87728275c54451",
+          "provider_request_bytes": 5923
+        },
+        "candidate": {
+          "path": "meaning/loan-candidate.candidate.edit.json",
+          "sha256": "f674ee9b0e87f02471d9edc1277c244296ee6deaf902ce7aef3453c1d2037a38",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 1964,
+          "schema_bytes": 1072,
+          "provider_request_path": "meaning/loan-candidate.candidate.request.json",
+          "provider_request_sha256": "9f740983d56f473a34047c4c2903a750109288a77c013f729f3b1f19789d9589",
+          "provider_request_bytes": 6023
+        }
+      }
+    },
+    {
+      "id": "extraction-inherited",
+      "expected": "extraction_claim",
+      "expected_comparisons": [
+        "lost",
+        "lost"
+      ],
+      "cohort": "development",
+      "native_packet_sha256": "697c63cb60d21919914c604ab82ea1ecf07140c1c4eff800c7d6fa1219e29b3b",
+      "edits": {
+        "baseline": {
+          "path": "projection/extraction-inherited.candidate.edit.json",
+          "sha256": "e80cd7ba51baf43f745c99c85f3f4fe00a584b7242a28f9e3dda5fab1dd1f737",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 2446,
+          "schema_bytes": 1074,
+          "provider_request_path": "projection/extraction-inherited.candidate.request.json",
+          "provider_request_sha256": "9b6e712fb89889024bba29a4c38df10cf400f42f8a675a7e858b0a8b248f2573",
+          "provider_request_bytes": 6449
+        },
+        "candidate": {
+          "path": "meaning/extraction-inherited.candidate.edit.json",
+          "sha256": "7bebeb284245b824e69b4590025611d24baf22c5d2de20a17e4cac6035e7d2fa",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 2284,
+          "schema_bytes": 1074,
+          "provider_request_path": "meaning/extraction-inherited.candidate.request.json",
+          "provider_request_sha256": "95c29efb2fd371dbc00115408a11008b34a540931a34180491a3182a08741bff",
+          "provider_request_bytes": 6439
+        }
+      }
+    },
+    {
+      "id": "fan-direct-signal",
+      "expected": "reconciliation_signal",
+      "expected_comparisons": [
+        "preserved"
+      ],
+      "cohort": "development",
+      "native_packet_sha256": "f00d49343adf73051f3f4756ab2505bbe46e2ef6b733a8f5d2c47c363789689a",
+      "edits": {
+        "baseline": {
+          "path": "projection/fan-direct-signal.candidate.edit.json",
+          "sha256": "1dd5d3f880f8937d4ddcac94a0f68336dd0f2b3505bee638452e6c31ff7070d8",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 1802,
+          "schema_bytes": 1072,
+          "provider_request_path": "projection/fan-direct-signal.candidate.request.json",
+          "provider_request_sha256": "f5b9290a64f0491c995dab4fb52193e71b3bb401c0696c3b738b066fdfc40783",
+          "provider_request_bytes": 5683
+        },
+        "candidate": {
+          "path": "meaning/fan-direct-signal.candidate.edit.json",
+          "sha256": "26f622ad9e2f3ca59454fcfe811aa79e77185a11174cc4d3dee4909aef98dac9",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 1730,
+          "schema_bytes": 1072,
+          "provider_request_path": "meaning/fan-direct-signal.candidate.request.json",
+          "provider_request_sha256": "3a47b9619380e0d119714687363f82813ca42a3e4a9cc3c3271ffce9d43039aa",
+          "provider_request_bytes": 5783
+        }
+      }
+    },
+    {
+      "id": "joint-two-sources",
+      "expected": "candidate",
+      "expected_comparisons": [
+        "preserved"
+      ],
+      "cohort": "known_regression",
+      "native_packet_sha256": "4b9f48df7e1ca92edbaf62616af604b84861a0867a8c8e734074ba6365c746a4",
+      "edits": {
+        "baseline": {
+          "path": "projection/joint-two-sources.candidate.edit.json",
+          "sha256": "9d4a0aef38743dc16ffae10a11883a51d257fda5de400fece60e8bd46b06ac96",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 2460,
+          "schema_bytes": 1072,
+          "provider_request_path": "projection/joint-two-sources.candidate.request.json",
+          "provider_request_sha256": "616acba382dd8cd925fd93bbf4c42e7edada8b1605c9b3038d117af2ee4b55f3",
+          "provider_request_bytes": 6440
+        },
+        "candidate": {
+          "path": "meaning/joint-two-sources.candidate.edit.json",
+          "sha256": "c63f36e1cf81a7f643ee9c0d985c0e9fb41d09c9c9caadff916ff14d3cb10ca2",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 2316,
+          "schema_bytes": 1072,
+          "provider_request_path": "meaning/joint-two-sources.candidate.request.json",
+          "provider_request_sha256": "55a1af9cf284067189deb8c84dbe0eb9722860ad707c4ed19030fb4ae3081bb5",
+          "provider_request_bytes": 6452
+        }
+      }
+    },
+    {
+      "id": "wrong-role-assignment",
+      "expected": "unsupported_role",
+      "expected_comparisons": [
+        "preserved",
+        "lost"
+      ],
+      "cohort": "known_regression",
+      "native_packet_sha256": "538977a95399e54637902cf5ff335a61505035f3ea2619d4e2e10b16358e9267",
+      "edits": {
+        "baseline": {
+          "path": "projection/wrong-role-assignment.candidate.edit.json",
+          "sha256": "a225bed44f0b5388dc232e58000e6d90f659f7ca178d656f6340a05abb7b12a4",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 2515,
+          "schema_bytes": 1074,
+          "provider_request_path": "projection/wrong-role-assignment.candidate.request.json",
+          "provider_request_sha256": "25a9b3c986c2bc9174d1aafe70748b3e85254dd8e84315f03959fe7a174ae3de",
+          "provider_request_bytes": 6511
+        },
+        "candidate": {
+          "path": "meaning/wrong-role-assignment.candidate.edit.json",
+          "sha256": "b9dcdd9595d370a03effa12233dcfcc559b844d2daf88c31ec34d1d2ca2f8444",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 2353,
+          "schema_bytes": 1074,
+          "provider_request_path": "meaning/wrong-role-assignment.candidate.request.json",
+          "provider_request_sha256": "57e41390fb1cd94f1afcf09e8d56cd9b60046f3638774c703d47f4ba12747bc6",
+          "provider_request_bytes": 6501
+        }
+      }
+    },
+    {
+      "id": "unresolved-multiple-producers",
+      "expected": "unlocalized",
+      "expected_comparisons": [
+        "lost"
+      ],
+      "cohort": "known_regression",
+      "native_packet_sha256": "6d2e12437c568f7edba0214a5c087d82387d62243a2a45cb8ad19b75b7018fb2",
+      "edits": {
+        "baseline": {
+          "path": "projection/unresolved-multiple-producers.candidate.edit.json",
+          "sha256": "24cf8b17ba74f063ed355ab8648ce649dc7fe6b3c79da643b03f92bab8210865",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 2474,
+          "schema_bytes": 1072,
+          "provider_request_path": "projection/unresolved-multiple-producers.candidate.request.json",
+          "provider_request_sha256": "3a95ac24161ac698b8d950fa9611aaf22d32a999a79c4ed64216ef0b2ec073e5",
+          "provider_request_bytes": 6468
+        },
+        "candidate": {
+          "path": "meaning/unresolved-multiple-producers.candidate.edit.json",
+          "sha256": "b30b35284d0ed866b6457fba3bd0cc712f53b86888415bf0ef324c12cd706854",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 2330,
+          "schema_bytes": 1072,
+          "provider_request_path": "meaning/unresolved-multiple-producers.candidate.request.json",
+          "provider_request_sha256": "4a4991ba58ea3475c930d11583d2c4864c7b806e3daaf773c7489529f119161b",
+          "provider_request_bytes": 6480
+        }
+      }
+    },
+    {
+      "id": "parking-candidate",
+      "expected": "candidate",
+      "expected_comparisons": [
+        "preserved"
+      ],
+      "cohort": "known_regression",
+      "native_packet_sha256": "9705db5bf0f7d9b89851687e4c4712142413c1b8d7b59bd1854eff3876383a20",
+      "edits": {
+        "baseline": {
+          "path": "projection/parking-candidate.candidate.edit.json",
+          "sha256": "b7df18093ca9991f6c64a52236b012a772a1d2f4aa741d24586ea0a44c98355c",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 1986,
+          "schema_bytes": 1072,
+          "provider_request_path": "projection/parking-candidate.candidate.request.json",
+          "provider_request_sha256": "6899980e4d3d578c752be17ba14e9c843b2587abaea7d6cb2025d40570587694",
+          "provider_request_bytes": 5873
+        },
+        "candidate": {
+          "path": "meaning/parking-candidate.candidate.edit.json",
+          "sha256": "95354eeec1e39b80a928b3c694be56f8e73c134b7d4f581bad9ac35bd3146d70",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 1914,
+          "schema_bytes": 1072,
+          "provider_request_path": "meaning/parking-candidate.candidate.request.json",
+          "provider_request_sha256": "c028a7f1a8a92a42e7fc45217081e3ff6a7f004728bc48a0f6b40f9fb3dc8e87",
+          "provider_request_bytes": 5973
+        }
+      }
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-description-baseline-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "projection/captured-description.candidate.edit.json"
+    },
+    {
+      "id": "captured-description-candidate-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "meaning/captured-description.candidate.edit.json"
+    },
+    {
+      "id": "loan-candidate-baseline-1",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "projection/loan-candidate.candidate.edit.json"
+    },
+    {
+      "id": "loan-candidate-candidate-1",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "meaning/loan-candidate.candidate.edit.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "projection/extraction-inherited.candidate.edit.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "meaning/extraction-inherited.candidate.edit.json"
+    },
+    {
+      "id": "fan-direct-signal-baseline-1",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "projection/fan-direct-signal.candidate.edit.json"
+    },
+    {
+      "id": "fan-direct-signal-candidate-1",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "meaning/fan-direct-signal.candidate.edit.json"
+    },
+    {
+      "id": "joint-two-sources-baseline-1",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "projection/joint-two-sources.candidate.edit.json"
+    },
+    {
+      "id": "joint-two-sources-candidate-1",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "meaning/joint-two-sources.candidate.edit.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "projection/wrong-role-assignment.candidate.edit.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "meaning/wrong-role-assignment.candidate.edit.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "projection/unresolved-multiple-producers.candidate.edit.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "meaning/unresolved-multiple-producers.candidate.edit.json"
+    },
+    {
+      "id": "parking-candidate-baseline-1",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "projection/parking-candidate.candidate.edit.json"
+    },
+    {
+      "id": "parking-candidate-candidate-1",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "meaning/parking-candidate.candidate.edit.json"
+    },
+    {
+      "id": "captured-description-candidate-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "meaning/captured-description.candidate.edit.json"
+    },
+    {
+      "id": "captured-description-baseline-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "projection/captured-description.candidate.edit.json"
+    },
+    {
+      "id": "loan-candidate-candidate-2",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "meaning/loan-candidate.candidate.edit.json"
+    },
+    {
+      "id": "loan-candidate-baseline-2",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "projection/loan-candidate.candidate.edit.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "meaning/extraction-inherited.candidate.edit.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "projection/extraction-inherited.candidate.edit.json"
+    },
+    {
+      "id": "fan-direct-signal-candidate-2",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "meaning/fan-direct-signal.candidate.edit.json"
+    },
+    {
+      "id": "fan-direct-signal-baseline-2",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "projection/fan-direct-signal.candidate.edit.json"
+    },
+    {
+      "id": "joint-two-sources-candidate-2",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "meaning/joint-two-sources.candidate.edit.json"
+    },
+    {
+      "id": "joint-two-sources-baseline-2",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "projection/joint-two-sources.candidate.edit.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "meaning/wrong-role-assignment.candidate.edit.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "projection/wrong-role-assignment.candidate.edit.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "meaning/unresolved-multiple-producers.candidate.edit.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "projection/unresolved-multiple-producers.candidate.edit.json"
+    },
+    {
+      "id": "parking-candidate-candidate-2",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "meaning/parking-candidate.candidate.edit.json"
+    },
+    {
+      "id": "parking-candidate-baseline-2",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "projection/parking-candidate.candidate.edit.json"
+    }
+  ],
+  "sources": [
+    {
+      "path": "src/domain/source_omission_binding.zig",
+      "sha256": "ebdd6afd0895dfbbe44dc1778e3021b01d5c2811b1527a463968d61bac8b080f"
+    },
+    {
+      "path": "src/domain/source_omission_comparison.zig",
+      "sha256": "faa301380d3b9a8be93ba43a7ec065dab1625d9c2d8c8a5cf90250f4157f232c"
+    },
+    {
+      "path": "src/domain/specification_support.zig",
+      "sha256": "7d3c4bcf49341ad1c27020ceee132ef7e40048f6c7b5bd78173c39c2290dddeb"
+    },
+    {
+      "path": "src/domain/source_omission_context.zig",
+      "sha256": "1c675d4181537152e8f9612373035753d2fd74b3b923fbf51d27f0a182fac0b3"
+    },
+    {
+      "path": "design/workflows/spec/support-loss.prompt.md",
+      "sha256": "ead02788de3c01572c2b1d85c4f74e6332f657cb6f73ac0e87b0cf7490cac9b9"
+    },
+    {
+      "path": "design/workflows/spec/support.schema.json",
+      "sha256": "f8285e781065ec47defd8175245613ad7ca489b119cb6543195744502d59bec3"
+    },
+    {
+      "path": "src/test_fixtures/source_loss_calibration.zig",
+      "sha256": "a48c2786534ce9bf5ff75eb19660eed8691551a08cd555c2349059a391fe2d29"
+    },
+    {
+      "path": "test/calibration/source-loss-attribution/bound-preservation/cases.json",
+      "sha256": "d9307e093705b966e65e6e645560767b98131d040ea8e73685392345f05bb58c"
+    }
+  ]
+}

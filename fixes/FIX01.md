@@ -174,8 +174,12 @@ that the originating defect or the complete recovery path improved.
 
 #### Proposed recovery follow-up and implementation order
 
-**Status: recommendations, not implemented.** This documentation update does not
-authorize code changes, new repair permissions, verdict reassessment or live calls.
+**Status:** item 1's implementation and lifecycle cutover are complete under
+[FIX01-01 Phase 2](FIX01-01.md#phase-2--complete-the-lifecycle-and-offline-verification):
+395/395 focused tests and 1,454/1,454 full offline tests pass. Semantic comparison
+and live recovery/publication remain Phases 3 and 4. The remaining recommendations
+are not implemented. This status does not authorize
+new repair permissions, verdict reassessment or live calls.
 Reuse the current owners; do not introduce a second recovery framework or hardcode
 this source, model, call number or extraction-to-spec sequence in the generic engine.
 
@@ -194,6 +198,24 @@ this source, model, call number or extraction-to-spec sequence in the generic en
    inference. Reuse the existing loss call, not an additional judge or a call per
    producer. Associations and routing can be checked natively; preservation remains
    model-assisted and must be tested against the failed R6 baseline.
+   **10 October status:** the contract and recovery mechanics are implemented and
+   verified offline in [FIX01-01](FIX01-01.md). Its first 32-call comparison failed:
+   7/16 candidate responses passed native admission and 2/16 yielded correct
+   admitted attribution, with one false upstream attribution. The shared request
+   projection follow-up removes competing IDs, source coordinates and assessed-subject
+   ambiguity. Its [separately approved 32-call comparison](../test/calibration/source-loss-attribution/bound-preservation/projection/README.md#results--10-october-2026)
+   improved admission to 16/16 and correct attribution to 14/16 (baseline 8/16 and
+   6/16), but still failed two gates: it falsely diagnosed role loss when a business
+   claim expressed the literal without a separate preserved-token member. Separate
+   meaning preservation from canonical representation in the next candidate.
+   That shared presentation follow-up is now implemented: resolved claim meanings
+   omit extraction-category labels, and guidance distinguishes expressed behavior
+   from its representation. Its [32-call comparison](../test/calibration/source-loss-attribution/bound-preservation/meaning/README.md)
+   executed under fresh approval: both arms admitted 16/16 and correctly attributed
+   14/16, repeating the same two false role-loss judgments. Category removal and
+   clarified guidance did not improve outcomes. Semantic acceptance and conditional
+   production E2E remain open. All three diagnostic
+   allowances are consumed. Do not count measured improvement as completion.
 2. **Enable the smallest justified repair while retaining unaffected work.** If
    comparison establishes that the obligation survived upstream, use candidate-local
    repair. An established upstream loss uses its existing producer repair and

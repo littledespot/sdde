@@ -69,41 +69,27 @@ test "reconciliation repair definitions admit only the natively selected payload
     }
 }
 
-test "loss responses couple localization to producer comparison in the selected schema" {
+test "preservation responses require closed assessments and reject culprit selection" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const compiled = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .limited(1_048_576)));
-    const selected = compiled.select(.{ .bytes = "loss" }).?;
-    const comparison =
-        \\{"kind":"source_producer_comparison","source":{"chunk_id":{"bytes":"MOCK-source"},"lines":{"first":2,"last":3}},"producer_loss":"MOCK producer omitted the source condition."}
-    ;
+    try std.testing.expect(compiled.select(.{ .bytes = "loss" }) == null);
+    const finding = compiled.select(.{ .bytes = "finding" }).?;
+    try checkDocument(finding.modelBytes(), .{ .bytes = "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"MOCK Missing deadline.\"}" });
+    try checkDocument(finding.modelBytes(), .{ .bytes = "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"MOCK Missing deadline.\"}", .rejection = .array_length, .path = "/source_ids" });
+    const selected = compiled.select(.{ .bytes = "preservation_comparisons" }).?;
     for ([_]Case{
-        .{ .bytes = "{\"kind\":\"unlocalized\"}" },
-        .{ .bytes = "{\"kind\":\"candidate\"}" },
-        .{ .bytes = "{}", .rejection = .missing_required_property, .path = "/kind" },
-        .{ .bytes = "{\"kind\":\"candidate\",\"comparison\":null}", .rejection = .unknown_property, .path = "/comparison" },
-        .{ .bytes = "{\"kind\":\"candidate\",\"comparison\":" ++ comparison ++ "}", .rejection = .unknown_property, .path = "/comparison" },
-        .{ .bytes = "{\"kind\":\"candidate\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"}}", .rejection = .unknown_property, .path = "/location" },
-        .{ .bytes = "{\"kind\":\"unlocalized\",\"comparison\":null}", .rejection = .unknown_property, .path = "/comparison" },
-        .{ .bytes = "{\"kind\":\"unlocalized\",\"comparison\":" ++ comparison ++ "}", .rejection = .unknown_property, .path = "/comparison" },
-        .{ .bytes = "{\"kind\":\"unlocalized\",\"location\":{\"kind\":\"unlocalized\"}}", .rejection = .unknown_property, .path = "/location" },
-        .{ .bytes = "{\"location\":{\"kind\":\"unlocalized\"},\"comparison\":null}", .rejection = .missing_required_property, .path = "/kind" },
-        .{ .bytes = "{\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"},\"comparison\":" ++ comparison ++ "}", .rejection = .missing_required_property, .path = "/kind" },
-        .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"}}", .rejection = .missing_required_property, .path = "/comparison" },
-        .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"},\"comparison\":null}", .rejection = .type_mismatch, .path = "/comparison" },
-        .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"unlocalized\"},\"comparison\":" ++ comparison ++ "}", .rejection = .unknown_variant, .path = "/location/kind" },
-        .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"candidate\"},\"comparison\":" ++ comparison ++ "}", .rejection = .unknown_variant, .path = "/location/kind" },
-        .{ .bytes = "{\"kind\":\"localized\",\"comparison\":" ++ comparison ++ "}", .rejection = .missing_required_property, .path = "/location" },
+        .{ .bytes = "{\"assessments\":[]}" },
+        .{ .bytes = "{}", .rejection = .missing_required_property, .path = "/assessments" },
+        .{ .bytes = "{\"assessments\":[],\"kind\":\"candidate\"}", .rejection = .unknown_property, .path = "/kind" },
+        .{ .bytes = "{\"assessments\":[],\"location\":{}}", .rejection = .unknown_property, .path = "/location" },
     }) |case| try checkDocument(selected.modelBytes(), case);
-    for ([_][]const u8{
-        "{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-source\"}",
-        "{\"kind\":\"token_classification\",\"source_id\":1,\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":2}",
-        "{\"kind\":\"reconciliation_signal\",\"ordinal\":1}",
-        "{\"kind\":\"reconciliation_disposition\",\"ordinal\":1}",
-        "{\"kind\":\"reconciliation_conflict\",\"ordinal\":1}",
-    }) |location| try checkDocument(selected.modelBytes(), .{ .bytes = try std.fmt.allocPrint(a, "{{\"kind\":\"localized\",\"location\":{s},\"comparison\":{s}}}", .{ location, comparison }) });
+    for ([_][]const u8{ "preserved", "lost", "uncertain" }) |verdict| {
+        const bytes = try std.fmt.allocPrint(a, "{{\"assessments\":[{{\"comparison_id\":1,\"result\":\"{s}\",\"sources\":[{{\"chunk_id\":{{\"bytes\":\"MOCK source\"}},\"lines\":{{\"first\":1,\"last\":2}}}}],\"members\":[1,2],\"explanation\":\"MOCK assessed meaning.\"}}]}}", .{verdict});
+        try checkDocument(selected.modelBytes(), .{ .bytes = bytes });
+    }
 }
 
 test "loss protocol correction preserves the complete selected contract in both response modes" {
@@ -112,11 +98,11 @@ test "loss protocol correction preserves the complete selected contract in both 
     const a = arena.allocator();
     var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const compiled = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .limited(1_048_576)));
-    const selected = compiled.select(.{ .bytes = "loss" }).?;
+    const selected = compiled.select(.{ .bytes = "preservation_comparisons" }).?;
     var fixture: Fixture = undefined;
     try fixture.initWithCompiledSchema(selected);
     defer fixture.deinit();
-    fixture.fake.invocation_plan.complete.content = "{\"kind\":\"unlocalized\",\"comparison\":null}";
+    fixture.fake.invocation_plan.complete.content = "{\"assessments\":[],\"culprit\":null}";
     var response = try fixture.response();
     defer response.deinit();
     var captured = try (observation.Action{}).execute(std.testing.allocator, fixture.call, &response);
@@ -140,28 +126,11 @@ test "loss protocol correction preserves the complete selected contract in both 
             try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("response_format"));
             if (mode == .native_schema) {
                 const shape = wire.value.object.get("response_format").?.object.get("json_schema").?.object.get("schema").?;
-                const choices = shape.object.get("anyOf").?.array.items;
-                try std.testing.expectEqual(@as(usize, 3), choices.len);
-                for (choices) |choice| {
-                    const properties = choice.object.get("properties").?.object;
-                    const tag = properties.get("kind").?.object.get("const").?.string;
-                    try std.testing.expect(!choice.object.get("additionalProperties").?.bool);
-                    if (std.mem.eql(u8, tag, "unlocalized") or std.mem.eql(u8, tag, "candidate")) {
-                        try std.testing.expectEqual(@as(usize, 1), properties.count());
-                        try std.testing.expectEqual(@as(usize, 1), choice.object.get("required").?.array.items.len);
-                    } else {
-                        try std.testing.expectEqualStrings("localized", tag);
-                        try std.testing.expectEqual(@as(usize, 3), properties.count());
-                        try std.testing.expectEqual(@as(usize, 3), choice.object.get("required").?.array.items.len);
-                        try std.testing.expectEqualStrings("object", properties.get("comparison").?.object.get("type").?.string);
-                        const locations = properties.get("location").?.object.get("anyOf").?.array.items;
-                        try std.testing.expectEqual(@as(usize, 5), locations.len);
-                        for (locations) |location| {
-                            const location_kind = location.object.get("properties").?.object.get("kind").?.object.get("const").?.string;
-                            try std.testing.expect(!std.mem.eql(u8, "unlocalized", location_kind) and !std.mem.eql(u8, "candidate", location_kind));
-                        }
-                    }
-                }
+                try std.testing.expect(!shape.object.get("additionalProperties").?.bool);
+                const assessment = shape.object.get("properties").?.object.get("assessments").?.object.get("items").?;
+                try std.testing.expect(!assessment.object.get("additionalProperties").?.bool);
+                try std.testing.expectEqual(@as(usize, 5), assessment.object.get("required").?.array.items.len);
+                try std.testing.expect(assessment.object.get("properties").?.object.get("location") == null);
             }
         }
     }

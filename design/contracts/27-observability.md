@@ -119,3 +119,12 @@ request debugger and single-request replay. `prompt-columns/v3` retains caller
 and YAML-entry attribution, exact request descriptions, body lengths and explicit
 retry/repair lineage. Debugger records remain diagnostic and never grant workflow
 authority; replay requires an explicit user-triggered request for one call.
+
+### Bound preservation comparison origins
+
+Retain the original review-finding origin and the separate comparison-call origin.
+A protocol-corrected comparison records the admitted attempt, while the finding
+origin remains unchanged. Native invalid-comparison diagnostics identify that
+comparison attempt; unresolved ownership and known unsupported repair remain
+distinct from invalid evidence. Origins are observations, never evidence authority
+or a requirement for log replay during readback.

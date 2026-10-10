@@ -1,0 +1,219 @@
+[
+  {
+    "id": "captured-description",
+    "cohort": "development",
+    "sources": [
+      "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n- Must also output date and time in UTC\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "The application must start successfully.",
+        "first": 5,
+        "last": 5
+      },
+      {
+        "source": 1,
+        "text": "When started, the application must display `Hello, World!`.",
+        "first": 6,
+        "last": 6
+      },
+      {
+        "source": 1,
+        "text": "The application must also output the current date and time in UTC.",
+        "first": 7,
+        "last": 7
+      }
+    ],
+    "description": "When started, the application displays { \"kind\":\"exact_copy\" } and outputs the current date and time in UTC.",
+    "missing": "The source requires the application to display \"Hello, World!\" when started, but the candidate description states it displays { \"kind\":\"exact_copy\" }. The required display text is missing or incorrectly specified.",
+    "mode": "candidate",
+    "verdicts": [
+      "preserved",
+      "preserved"
+    ],
+    "expected": "candidate"
+  },
+  {
+    "id": "loan-candidate",
+    "cohort": "development",
+    "sources": [
+      "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "On request, the service renews a loan for seven days.",
+    "missing": "The description omits eligibility and the absence of a reservation as necessary renewal conditions.",
+    "mode": "candidate",
+    "verdicts": [
+      "preserved"
+    ],
+    "expected": "candidate"
+  },
+  {
+    "id": "extraction-inherited",
+    "cohort": "development",
+    "sources": [
+      "When the reservoir falls below the minimum, the pump must stop until the level recovers.\nThe controller must display the measured level.\nThe controller must record each measurement.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "The controller must display the measured level.",
+        "first": 2,
+        "last": 2
+      },
+      {
+        "source": 1,
+        "text": "The controller must record each measurement.",
+        "first": 3,
+        "last": 3
+      }
+    ],
+    "description": "The controller records each measurement.",
+    "missing": "The description omits pump shutdown below the minimum and the requirement to remain stopped until recovery.",
+    "mode": "second_role",
+    "verdicts": [
+      "lost",
+      "lost"
+    ],
+    "expected": "extraction_claim"
+  },
+  {
+    "id": "fan-direct-signal",
+    "cohort": "development",
+    "sources": [
+      "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "When the door closes, the fan can restart.",
+    "missing": "The signal omits operator confirmation as a necessary condition for restarting the fan.",
+    "mode": "signal",
+    "verdicts": [
+      "preserved"
+    ],
+    "expected": "reconciliation_signal"
+  },
+  {
+    "id": "joint-two-sources",
+    "cohort": "unused",
+    "sources": [
+      "A parcel may be released only after the recipient identity is verified.\n",
+      "Parcel release also requires payment confirmation.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "A parcel may be released only after the recipient identity is verified.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 2,
+        "text": "Parcel release also requires payment confirmation.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "A parcel may be released when requested.",
+    "missing": "The description omits both recipient identity verification and payment confirmation as necessary release conditions.",
+    "mode": "candidate",
+    "verdicts": [
+      "preserved"
+    ],
+    "expected": "candidate"
+  },
+  {
+    "id": "wrong-role-assignment",
+    "cohort": "unused",
+    "sources": [
+      "After an appointment is cancelled, the service must notify the patient.\nThe service must display the clinic opening hours.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "After an appointment is cancelled, the service must notify the patient.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 1,
+        "text": "The service must display the clinic opening hours.",
+        "first": 2,
+        "last": 2
+      }
+    ],
+    "description": "The service displays the clinic opening hours.",
+    "missing": "The description omits notifying the patient after appointment cancellation.",
+    "mode": "second_role",
+    "verdicts": [
+      "preserved",
+      "lost"
+    ],
+    "expected": "unsupported_role"
+  },
+  {
+    "id": "unresolved-multiple-producers",
+    "cohort": "unused",
+    "sources": [
+      "During a power loss, the cabinet must keep the medicine cold for eight hours.\nThe cabinet must show its temperature.\n",
+      "An alarm must sound if backup cooling fails.\nThe cabinet must record each temperature measurement.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "The cabinet must show its temperature.",
+        "first": 2,
+        "last": 2
+      },
+      {
+        "source": 2,
+        "text": "The cabinet must record each temperature measurement.",
+        "first": 2,
+        "last": 2
+      }
+    ],
+    "description": "The cabinet shows and records temperature.",
+    "missing": "The description omits eight-hour backup cooling and the alarm on backup cooling failure, which are separate obligations in the two sources.",
+    "mode": "candidate",
+    "verdicts": [
+      "lost"
+    ],
+    "expected": "unlocalized"
+  },
+  {
+    "id": "parking-candidate",
+    "cohort": "unused",
+    "sources": [
+      "A driver may end a parking session only after payment settles; a failed payment must leave the session active.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "A driver may end a parking session only after payment settles; a failed payment must leave the session active.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "A driver ends a parking session by attempting payment.",
+    "missing": "The description omits successful payment settlement as a condition for ending the session and keeping the session active after failure.",
+    "mode": "candidate",
+    "verdicts": [
+      "preserved"
+    ],
+    "expected": "candidate"
+  }
+]

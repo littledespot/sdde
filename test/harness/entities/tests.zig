@@ -141,7 +141,7 @@ test "entity comparison freezes source facts schemas labels and repeats while ch
     }
 }
 
-test "entity comparison uses production authoring and source review schemas without requiring prose in every value" {
+test "entity comparison preserves authoring admission and records superseded review evidence requirements" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -159,8 +159,16 @@ test "entity comparison uses production authoring and source review schemas with
             break :block try schemas.restrict(a, authoring, choices.excludedVariants(), choices.integerChoices());
         } else try schemas.restrict(a, review, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .allowed = &.{1} }});
         defer restricted.release();
+        if (entry.phase == .review) {
+            // The frozen, unexecuted comparison predates the source-premise
+            // contract. Preserve its hashes, but do not present it as a current
+            // production comparison or silently update one arm.
+            const missing_source = "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"MOCK Missing meaning.\"}";
+            try @import("../../../src/model_payload_schema_test.zig").checkDocument(edit.schema, .{ .bytes = missing_source });
+            try @import("../../../src/model_payload_schema_test.zig").checkDocument(restricted.selected().modelBytes(), .{ .bytes = missing_source, .rejection = .array_length, .path = "/source_ids" });
+            continue;
+        }
         try std.testing.expectEqualStrings(restricted.selected().modelBytes(), edit.schema);
-        if (entry.phase == .review) continue;
         const literal = "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"basis\":{\"value\":[{\"kind\":\"exact_copy\"}]}}";
         try @import("../../../src/model_payload_schema_test.zig").checkDocument(edit.schema, .{ .bytes = literal, .rejection = if (entry.exact_claim_ids.len == 0) .type_mismatch else null });
         const unknown = "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"basis\":{\"value\":[\"MOCK explanation\"]},\"extra\":true}";

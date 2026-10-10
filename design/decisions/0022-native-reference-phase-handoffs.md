@@ -146,6 +146,14 @@ outcome-changing repair retires forced classifications and returns through the
 classification gate; positive token-only extraction remains distinct from
 no-feature extraction.
 
+The user-authorized FIX01-01 Phase 2 cutover uses current accepted claims,
+dispositions, groups and role assignments to bind preservation comparisons.
+Comparisons assess actual consumed collections; supporting signal prose does not
+replace original authoring claims. Upstream changes retire affected comparison
+evidence along with existing descendants. Native attribution is checked again
+against these facts before repair. This adds no semantic role/summary repair and
+changes no role-admission or mandatory-coverage rule.
+
 Principle citation granularity is unchanged: selecting a narrower policy passage
 remains semantic. No precision-losing citation catalogue is introduced.
 

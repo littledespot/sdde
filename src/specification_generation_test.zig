@@ -102,7 +102,7 @@ test "source preservation reviews the corpus before fields exist and reuses boun
             .detail = "Extraction lost the named feature and its conditions.",
             .loss = .{ .extraction_claim = fixture.extracted.ledger.chunks[0].scope.chunk_id },
         } };
-        finding.value.loss_comparison = try @import("test_fixtures/source_omission_evidence.zig").comparison(inputs, finding.value.loss);
+        finding.value.preservation = try @import("test_fixtures/source_omission_evidence.zig").proof(a, inputs, fixture.context.inputs, finding);
         const admitted = try support.validate(a, inputs, fixture.context.inputs, .{ .review = .{ .entries = &.{finding} }, .origin = null, .origins = &.{null} });
         try std.testing.expect(admitted == .accepted);
         const checked = try authority.build(a, admitted.accepted.inputs);
@@ -183,8 +183,8 @@ test "source preservation accounts for meaningful sources with empty extraction"
     defer @import("domain/model_input_packet.zig").release(packet);
     const foreign = try @import("domain/model_input_packet.zig").create(a, packet.body(), packet.unit(), .{ .semantic_review = .{ .bytes = "foreign-review" } }, packet.resultDefinition());
     defer @import("domain/model_input_packet.zig").release(foreign);
-    try std.testing.expectError(error.InvalidRequiredAuthority, support.collectLoss(a, inputs, fixture.context, omitted, foreign, "{}"));
-    const localized = try support.collectLoss(a, inputs, fixture.context, omitted, packet, try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, .{ .extraction_claim = fixture.extracted.ledger.chunks[0].scope.chunk_id }));
+    try std.testing.expectError(error.InvalidRequiredAuthority, support.collectLoss(a, inputs, fixture.context, omitted, foreign, "{}", null));
+    const localized = try support.collectLoss(a, inputs, fixture.context, omitted, packet, try @import("test_fixtures/source_omission_evidence.zig").encode(a, try support.comparisonAssignment(a, inputs, fixture.context, omitted.accepted.candidate), .{ .extraction_claim = fixture.extracted.ledger.chunks[0].scope.chunk_id }), null);
     try std.testing.expect(localized == .accepted);
     const ledger = try authority.build(a, localized.accepted.inputs);
     const result = try authority.reconcile(a, ledger, try authority.buildObservations(a, ledger));
@@ -3203,10 +3203,14 @@ fn omissionSupport(fixture: *const Fixture, location: @import("domain/source_omi
         finding.value.detail = "Preserve the source-required deadline.";
         finding.value.source_ids = try a.dupe(@import("domain/reference_identity.zig").SourceId, &.{fixture.context.inputs.corpus.sources[0].id});
     }
-    findings[0].value.loss = location;
-    findings[0].value.loss_comparison = try @import("test_fixtures/source_omission_evidence.zig").comparison(inputs, location);
-    const required = try @import("domain/specification_support_evidence.zig").requirements(a, inputs, fixture.context.inputs, ledger.requirements[0].seed.id);
-    findings[0].value.provenance.claim_ids = required.rule(.candidate_omission, location).fixedClaims() orelse &.{};
+    const selected_index = for (ledger.requirements, 0..) |requirement, index| {
+        if (location == .reconciliation_signal and requirement.seed.id.unit == .signal and std.meta.eql(requirement.seed.id.unit.signal, location.reconciliation_signal)) break index;
+        if (location != .reconciliation_signal) break 0;
+    } else return error.InvalidOmissionFixture;
+    findings[selected_index].value.loss = location;
+    findings[selected_index].value.preservation = try @import("test_fixtures/source_omission_evidence.zig").proof(a, inputs, fixture.context.inputs, findings[selected_index]);
+    const required = try @import("domain/specification_support_evidence.zig").requirements(a, inputs, fixture.context.inputs, ledger.requirements[selected_index].seed.id);
+    findings[selected_index].value.provenance.claim_ids = required.rule(.candidate_omission, location).fixedClaims() orelse &.{};
     const origins = try a.alloc(?@import("domain/model_candidate_origin.zig").Origin, findings.len);
     @memset(origins, .{ .request = .{ .value = 14 }, .attempt = .{ .value = 1 } });
     const candidate: support.Candidate = .{ .review = .{ .entries = findings }, .origin = origins[0], .origins = origins };
@@ -3216,14 +3220,14 @@ fn omissionSupport(fixture: *const Fixture, location: @import("domain/source_omi
     return .{ .review = admitted.accepted.candidate, .inputs = decision.inputs, .observations = decision.observations, .result = decision.result };
 }
 
-test "source omission repair preserves raw siblings and rebuilds canonical identities across chunks" {
+test "source omission repair preserves sibling claims and rebuilds canonical identities" {
     const repair = @import("domain/reference_extraction_repair.zig").Omission;
     const e = @import("domain/reference_extraction.zig");
     const packets = @import("domain/model_input_packet.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    for ([_][]const u8{ "Display the current UTC date and time.\n" ** 70, "Show the loan's new return deadline.\n" ** 70 }) |source| {
+    for ([_][]const u8{ "Display the current UTC date and time.\n", "Show the loan's new return deadline.\n" }) |source| {
         var fixture = try Fixture.initClassified(a, source, null);
         defer fixture.deinit();
         const inputs = fixture.context.inputs;
@@ -3244,7 +3248,7 @@ test "source omission repair preserves raw siblings and rebuilds canonical ident
         try std.testing.expectEqualDeep(fixture.extracted_text.entries[0].token_classifications, merged.entries[0].token_classifications);
         const rebuilt = try extraction.finishText(a, inputs, merged);
         try std.testing.expectEqual(fixture.extracted.ledger.claims.len + 1, rebuilt.ledger.claims.len);
-        try std.testing.expectEqual(fixture.extracted.ledger.chunks[1].outcome.claims[0].ordinal + 1, rebuilt.ledger.chunks[1].outcome.claims[0].ordinal);
+        try std.testing.expectEqual(@as(u32, 2), rebuilt.ledger.chunks[0].outcome.claims[1].ordinal);
         const renewed_context: references.Context = .{ .inputs = inputs, .registry = fixture.context.registry, .current = fixture.context.current };
         const renewed_global = try references.summaries(a, try references.initialize(a, inputs, rebuilt, 2), renewed_context);
         var rebuilt_context = fixture.context;
@@ -3427,10 +3431,11 @@ test "localized disposition evidence replaces positive field lineage in every so
             const narrowed = try schema.restrict(a, canonical.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
             defer narrowed.release();
             const selected: loss.Location = .{ .reconciliation_disposition = discarded };
-            const wire = try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, selected);
+            const assigned = try support.comparisonAssignment(a, inputs, fixture.context, pending);
+            const wire = try @import("test_fixtures/source_omission_evidence.zig").encode(a, assigned, selected);
             try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = wire });
-            try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, .{ .reconciliation_disposition = retained }), .rejection = .enum_mismatch, .path = "/location/ordinal" });
-            const collected = (try support.collectLoss(a, inputs, fixture.context, .{ .accepted = .{ .inputs = initial.inputs, .candidate = pending } }, packet, wire)).accepted;
+
+            const collected = (try support.collectLoss(a, inputs, fixture.context, .{ .accepted = .{ .inputs = initial.inputs, .candidate = pending } }, packet, wire, null)).accepted;
             const located = collected.candidate.review.entries[index].value;
             try std.testing.expectEqualDeep(&[_]r.ClaimId{discarded}, located.provenance.claim_ids);
             try std.testing.expectEqual(initial.candidate.review.entries[index].value.kind, located.kind);
@@ -3443,7 +3448,7 @@ test "localized disposition evidence replaces positive field lineage in every so
                 const rejected = try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, .{ .claim_ids = wrong, .clarification_response_ids = &.{} }, located.source_ids, located.detail, selected, null);
                 try std.testing.expect(rejected == .rejected);
             }
-            const invalid_location = try model.bindLoss(required, initial.candidate.review.entries[index].value, .{ .localized = .{ .location = .{ .reconciliation_disposition = retained }, .comparison = (try @import("test_fixtures/source_omission_evidence.zig").comparison(inputs, selected)).? } });
+            const invalid_location = try model.bindLoss(required, initial.candidate.review.entries[index].value, .{ .reconciliation_disposition = retained }, located.preservation.?);
             const rejected = try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, invalid_location.provenance, invalid_location.source_ids, invalid_location.detail, invalid_location.loss, null);
             try std.testing.expectEqual(.invalid_loss, rejected.rejected.issue);
             try std.testing.checkAllAllocationFailures(std.testing.allocator, lossPacketAllocationCase, .{ inputs, fixture.context, pending });
@@ -3454,106 +3459,6 @@ test "localized disposition evidence replaces positive field lineage in every so
 fn lossPacketAllocationCase(allocator: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, candidate: @import("domain/specification_support.zig").Source.Candidate) !void {
     const packet = try @import("domain/specification_support.zig").Source.packetForLoss(allocator, inputs, context, candidate);
     defer @import("domain/model_input_packet.zig").release(packet);
-}
-
-test "loss availability shares native admission for tokens groups and retained dispositions" {
-    const authority = @import("domain/required_authority.zig");
-    const support = @import("domain/specification_support.zig").Source;
-    const loss = @import("domain/source_omission.zig");
-    const json = @import("domain/model_candidate_json.zig");
-    const packets = @import("domain/model_input_packet.zig");
-    const schema = @import("domain/model_result_schema.zig");
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    const canonical = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
-    for ([_]bool{ false, true }) |preserved| {
-        var fixture = try Fixture.initContent(a, "MOCK Confirm the renewal with `MOCK renewed` and show its date.", if (preserved) .business_exact_string else null, true, "MOCK Preserve the action and date.", 3);
-        defer fixture.deinit();
-        _ = try introduceConflict(&fixture);
-        const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, null, null);
-        const evidence_value: authority.ReviewEvidence = .{ .detail = "MOCK Trace the lost condition.", .source_ids = &.{fixture.context.inputs.corpus.sources[0].id}, .provenance = .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} } };
-        const subject_id = (try authority.build(a, inputs)).requirements[0].seed.id;
-        var conflict_subjects: usize = 0;
-        for ((try authority.build(a, inputs)).requirements) |requirement| if (requirement.seed.id.unit == .conflict) {
-            const subject = try @import("domain/specification_review_subject.zig").projectLoss(a, inputs, fixture.context, requirement.seed.id);
-            try std.testing.expect(subject == .reference and subject.reference == .conflict);
-            try std.testing.expectEqualStrings("The compatible requirements were incorrectly grouped as conflicting.", subject.reference.conflict.value.summary);
-            try std.testing.expectEqualDeep(inputs.references.?.conflicts[0].value.claim_ids, subject.reference.conflict.value.claim_ids);
-            conflict_subjects += 1;
-        };
-        try std.testing.expectEqual(@as(usize, 1), conflict_subjects);
-        const locations = try loss.available(a, inputs, fixture.context.inputs, subject_id, evidence_value);
-        var counts = [_]usize{0} ** std.enums.values(std.meta.Tag(loss.Location)).len;
-        for (locations) |location| {
-            counts[@intFromEnum(std.meta.activeTag(location))] += 1;
-            var diagnostic = evidence_value;
-            diagnostic.provenance.claim_ids = loss.diagnosticClaims(inputs.references.?, location) orelse &.{};
-            diagnostic.loss_comparison = try @import("test_fixtures/source_omission_evidence.zig").comparison(inputs, location);
-            try loss.validate(a, inputs, fixture.context.inputs, subject_id, .candidate_omission, diagnostic, location);
-        }
-        try std.testing.expectEqual(@as(usize, 1), counts[@intFromEnum(std.meta.Tag(loss.Location).unlocalized)]);
-        try std.testing.expectEqual(@as(usize, 1), counts[@intFromEnum(std.meta.Tag(loss.Location).extraction_claim)]);
-        try std.testing.expectEqual(@as(usize, if (preserved) 0 else 1), counts[@intFromEnum(std.meta.Tag(loss.Location).token_classification)]);
-        try std.testing.expectEqual(inputs.references.?.signals.len, counts[@intFromEnum(std.meta.Tag(loss.Location).reconciliation_signal)]);
-        try std.testing.expectEqual(@as(usize, 1), counts[@intFromEnum(std.meta.Tag(loss.Location).reconciliation_conflict)]);
-        try std.testing.expectEqual(@as(usize, 0), counts[@intFromEnum(std.meta.Tag(loss.Location).reconciliation_disposition)]);
-        var no_sources = evidence_value;
-        no_sources.source_ids = &.{};
-        const unavailable = try loss.available(a, inputs, fixture.context.inputs, subject_id, no_sources);
-        try std.testing.expectEqual(@as(usize, 1), unavailable.len);
-        try std.testing.expect(unavailable[0] == .unlocalized);
-        const pending: support.Candidate = .{ .review = .{ .entries = &.{.{ .requirement_ordinal = 1, .value = .{ .kind = .candidate_omission, .detail = evidence_value.detail, .source_ids = evidence_value.source_ids, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} } } }} }, .pending_localization = 1, .working = true, .origin = null, .origins = &.{null} };
-        const packet = try support.packetForLoss(std.testing.allocator, inputs, fixture.context, pending);
-        defer packets.release(packet);
-        const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
-        const producers = body.value.object.get("producers").?.array.items;
-        var offered_locations: std.ArrayList(loss.Location) = .empty;
-        for (producers) |producer| {
-            try std.testing.expect(producer.object.contains("output"));
-            const offered = try json.decode(?loss.Location, a, try std.json.Stringify.valueAlloc(a, producer.object.get("location").?, .{}));
-            if (offered) |location| try offered_locations.append(a, location);
-        }
-        var producer_index: usize = 0;
-        for (locations) |location| if (loss.isUpstream(location)) {
-            try std.testing.expectEqualDeep(location, offered_locations.items[producer_index]);
-            producer_index += 1;
-        };
-        try std.testing.expectEqual(producer_index, offered_locations.items.len);
-        try std.testing.expect(producers.len > offered_locations.items.len);
-        try std.testing.expect(!body.value.object.contains("available_loss_locations"));
-        try std.testing.expect(!body.value.object.contains("sources"));
-        const numbered = body.value.object.get("loss_sources").?.array.items;
-        try std.testing.expectEqual(fixture.context.inputs.chunks.entries.len, numbered.len);
-        var without_source_ids = pending;
-        const pending_findings = try a.dupe(support.Finding, pending.review.entries);
-        pending_findings[0].value.source_ids = &.{};
-        without_source_ids.review.entries = pending_findings;
-        const source_only_packet = try support.packetForLoss(std.testing.allocator, inputs, fixture.context, without_source_ids);
-        defer packets.release(source_only_packet);
-        const source_only_body = try std.json.parseFromSlice(std.json.Value, a, source_only_packet.body(), .{});
-        try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, body.value.object.get("loss_sources").?, .{}), try std.json.Stringify.valueAlloc(a, source_only_body.value.object.get("loss_sources").?, .{}));
-        const source_only_producers = source_only_body.value.object.get("producers").?.array.items;
-        try std.testing.expectEqual(producers.len, source_only_producers.len);
-        for (producers, source_only_producers) |original, unselectable| {
-            try std.testing.expect(unselectable.object.get("location").? == .null);
-            try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, original.object.get("output").?, .{}), try std.json.Stringify.valueAlloc(a, unselectable.object.get("output").?, .{}));
-        }
-        const source_only_schema = try schema.restrict(a, canonical.select(source_only_packet.resultDefinition().?).?, source_only_packet.excludedVariants(), source_only_packet.integerChoices());
-        defer source_only_schema.release();
-        try @import("model_payload_schema_test.zig").checkCompiled(source_only_schema.selected(), .{ .bytes = "{\"kind\":\"unlocalized\"}" });
-        const extraction_wire = try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, .{ .extraction_claim = fixture.extracted.ledger.chunks[0].scope.chunk_id });
-        try @import("model_payload_schema_test.zig").checkCompiled(source_only_schema.selected(), .{ .bytes = extraction_wire, .rejection = .unknown_property, .path = "/location" });
-        const narrowed = try schema.restrict(a, canonical.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
-        defer narrowed.release();
-        for (locations) |location| try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, location) });
-        try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"reconciliation_disposition\",\"ordinal\":1},\"comparison\":null}", .rejection = .unknown_variant, .path = "/location/kind" });
-        try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"reconciliation_conflict\",\"ordinal\":999},\"comparison\":null}", .rejection = .enum_mismatch, .path = "/location/ordinal" });
-        const token = fixture.extracted_text.entries[0].token_classifications[0].id();
-        try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, .{ .token_classification = token }), .rejection = if (preserved) .unknown_variant else null, .path = if (preserved) "/location/kind" else null });
-        try std.testing.expectError(error.InvalidRequiredAuthority, loss.validate(a, inputs, fixture.context.inputs, subject_id, .candidate_omission, evidence_value, .{ .reconciliation_signal = .{ .ordinal = 999 } }));
-    }
 }
 
 test "loss comparison keeps multi-source producers visible without authorizing uncited sources" {
@@ -3581,20 +3486,18 @@ test "loss comparison keeps multi-source producers visible without authorizing u
         const subject_id = (try authority.build(a, inputs)).requirements[0].seed.id;
         const source_ids = [_]r.extraction.identity.SourceId{ fixture.inputs.corpus.sources[0].id, fixture.inputs.corpus.sources[1].id };
         const upstream: loss.Location = .{ .reconciliation_signal = inputs.references.?.signals[0].id };
-        var review: authority.ReviewEvidence = .{ .detail = "MOCK Compare the complete grouped obligation.", .source_ids = &source_ids, .provenance = .{ .claim_ids = &ids, .citation_ids = &.{}, .clarification_response_ids = &.{} }, .loss_comparison = try @import("test_fixtures/source_omission_evidence.zig").comparison(inputs, upstream) };
-        try loss.validate(a, inputs, fixture.inputs, subject_id, .candidate_omission, review, upstream);
-        const full = try projection.project(a, inputs.references.?, context, try loss.available(a, inputs, fixture.inputs, subject_id, review));
+        var review: authority.ReviewEvidence = .{ .detail = "MOCK Compare the complete grouped obligation.", .source_ids = &source_ids, .provenance = .{ .claim_ids = &ids, .citation_ids = &.{}, .clarification_response_ids = &.{} } };
+        try std.testing.expectError(error.InvalidRequiredAuthority, loss.validate(a, inputs, fixture.inputs, subject_id, .candidate_omission, review, upstream));
+        const full = try projection.project(a, inputs.references.?, context);
         review.source_ids = source_ids[0..1];
         try std.testing.expectError(error.InvalidRequiredAuthority, loss.validate(a, inputs, fixture.inputs, subject_id, .candidate_omission, review, upstream));
-        const limited = try projection.project(a, inputs.references.?, context, try loss.available(a, inputs, fixture.inputs, subject_id, review));
+        const limited = try projection.project(a, inputs.references.?, context);
         try std.testing.expectEqual(full.len, limited.len);
         var signal_count: usize = 0;
         for (full, limited) |eligible, supporting| {
             try std.testing.expectEqualDeep(eligible.output, supporting.output);
             if (supporting.output != .signal) continue;
             signal_count += 1;
-            try std.testing.expectEqualDeep(upstream, eligible.location.?);
-            try std.testing.expect(supporting.location == null);
             try std.testing.expectEqualDeep(&ids, supporting.output.signal.result.value.claim_ids);
             try std.testing.expectEqual(@as(usize, 2), supporting.output.signal.claims.claims.len);
             for (supporting.output.signal.claims.claims, source_ids) |claim, source_id| {
@@ -3607,71 +3510,8 @@ test "loss comparison keeps multi-source producers visible without authorizing u
     }
 }
 
-test "loss comparison must cite the selected producer and survive canonical readback" {
-    const loss = @import("domain/source_omission.zig");
-    const authority = @import("domain/required_authority.zig");
-    const support = @import("domain/specification_support.zig").Source;
-    const mock = @import("test_fixtures/source_omission_evidence.zig");
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    for ([_][]const u8{
-        "MOCK Start successfully and display the current UTC time.\n",
-        "MOCK Renew eligible loans and retain the deadline after refusal.\n",
-    }) |source| {
-        var fixture = try Fixture.init(a, source);
-        defer fixture.deinit();
-        const extraction_loss: loss.Location = .{ .extraction_claim = fixture.extracted.ledger.chunks[0].scope.chunk_id };
-        const negative = try omissionSupport(&fixture, extraction_loss);
-        const retained = negative.inputs.evidence[0].review.?;
-        try std.testing.expectEqualDeep(try mock.comparison(negative.inputs, extraction_loss), retained.loss_comparison);
-        try support.validateStored(a, negative.inputs, fixture.context.inputs);
-        const selected = try loss.select(a, fixture.context.inputs, negative);
-        try std.testing.expectEqualDeep(retained.loss_comparison, selected.finding.review.?.loss_comparison);
-        const facts = retained.loss_comparison.?;
-        for (0..6) |scenario| {
-            var bad = retained;
-            switch (scenario) {
-                0 => bad.loss_comparison = null,
-                1 => bad.loss_comparison.?.producer_loss = " \n ",
-                2 => bad.loss_comparison.?.source.lines.last.ordinal = 999,
-                3 => bad.loss_comparison.?.source.lines.first.ordinal = 2,
-                4 => bad.loss_comparison.?.source.chunk_id.bytes = "foreign-chunk",
-                5 => bad.source_ids = &.{},
-                else => unreachable,
-            }
-            var persisted = negative.inputs;
-            const proofs = try a.dupe(authority.Evidence, persisted.evidence);
-            proofs[0].review = bad;
-            persisted.evidence = proofs;
-            try std.testing.expectError(error.InvalidRequiredAuthority, support.validateStored(a, persisted, fixture.context.inputs));
-        }
-        // Even an existing chunk of the same cited source cannot stand in for
-        // the selected extraction producer, signal or conflict's member claims.
-        var foreign_sources = fixture.context.inputs;
-        const chunks = try a.alloc(@import("domain/reference_evidence.zig").Chunk, foreign_sources.chunks.entries.len + 1);
-        @memcpy(chunks[0..foreign_sources.chunks.entries.len], foreign_sources.chunks.entries);
-        chunks[chunks.len - 1] = chunks[0];
-        chunks[chunks.len - 1].id = .{ .bytes = "other-existing-chunk" };
-        foreign_sources.chunks.entries = chunks;
-        for ([_]loss.Location{ extraction_loss, .{ .reconciliation_signal = negative.inputs.references.?.signals[0].id } }) |location| {
-            var bad = retained;
-            bad.provenance.claim_ids = loss.diagnosticClaims(negative.inputs.references.?, location).?;
-            bad.loss_comparison = facts;
-            bad.loss_comparison.?.source.chunk_id = chunks[chunks.len - 1].id;
-            try std.testing.expectError(error.InvalidRequiredAuthority, loss.validate(a, negative.inputs, foreign_sources, negative.inputs.evidence[0].requirement, .candidate_omission, bad, location));
-        }
-        try std.testing.expectError(error.InvalidRequiredAuthority, loss.validate(a, negative.inputs, fixture.context.inputs, negative.inputs.evidence[0].requirement, .candidate_omission, retained, .{ .unlocalized = .{} }));
-        var downstream = retained;
-        downstream.loss_comparison = null;
-        downstream.provenance.claim_ids = &.{};
-        try loss.validate(a, negative.inputs, fixture.context.inputs, negative.inputs.evidence[0].requirement, .candidate_omission, downstream, .{ .unlocalized = .{} });
-    }
-}
-
 test "loss producer comparison resolves passive and source references while preserving exact evidence" {
     const r = references.r;
-    const loss = @import("domain/source_omission.zig");
     const projection = @import("domain/source_omission_context.zig");
     for ([_][]const u8{
         "MOCK Display status from src/status.zig with `MOCK Ready!`.\n",
@@ -3706,14 +3546,37 @@ test "loss producer comparison resolves passive and source references while pres
                 .preserved_token => |token| .{ .preserved_token = .{ .token_id = token.value.id } },
             };
         }
-        var locations: std.ArrayList(loss.Location) = .empty;
-        try locations.append(a, .{ .extraction_claim = scope.chunk_id });
-        for (signals) |signal| try locations.append(a, .{ .reconciliation_signal = signal.id });
-        const producers = try projection.project(a, records, fixture.context, locations.items);
+        const producers = try projection.project(a, records, fixture.context);
+        const supporting = try projection.comparisonSupport(a, records, fixture.context, &.{items[0].source_id}, &.{ items[0].claim.id, items[1].claim.id, items[2].claim.id });
+        try std.testing.expectEqual(producers.len, supporting.len);
         const business = try std.fmt.allocPrint(a, "MOCK Display {s} when requested.", .{literal.value});
         const technical = try std.fmt.allocPrint(a, "MOCK Context in {s}", .{fixture.context.inputs.corpus.sources[0].path.bytes});
         const exact = items[2].claim.content.preserved_token.value.raw_value.bytes;
         const original_evidence = try @import("domain/model_evidence.zig").project(a, items);
+        for (producers, supporting) |canonical, presented| switch (canonical.output) {
+            .extraction => |value| {
+                const projected = presented.output.extraction;
+                try std.testing.expectEqual(value.claims.claims.len, projected.outcome.claims.len);
+                for (value.claims.claims, projected.outcome.claims) |claim, copy| {
+                    try std.testing.expectEqualStrings(claim.meaning, copy.meaning);
+                    try std.testing.expectEqualDeep(claim.source_id, copy.source_id);
+                }
+                for (value.result.token_classifications, projected.token_classifications) |decision, copy| {
+                    try std.testing.expectEqualDeep(decision.decision, copy.decision);
+                    try std.testing.expectEqualStrings(decision.candidate.verbatim.?, copy.verbatim.?);
+                }
+            },
+            .signal => |value| {
+                try std.testing.expectEqualDeep(value.result.value.content, presented.output.signal.content);
+                try std.testing.expectEqualDeep(records.signals[value.result.id.ordinal - 1].value.generation_roles, presented.output.signal.roles);
+            },
+            .disposition => |value| {
+                try std.testing.expectEqual(value.result.disposition, presented.output.disposition.disposition);
+                try std.testing.expectEqualStrings(value.claims.claims[0].meaning, presented.output.disposition.input.meaning);
+            },
+            .token_classification => |value| try std.testing.expectEqualStrings(value.candidate.verbatim.?, presented.output.token_classification.verbatim.?),
+            else => return error.UnexpectedLossProducer,
+        };
         var inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, null, null);
         inputs.references = records;
         var signal_subjects: usize = 0;
@@ -3758,13 +3621,11 @@ test "loss producer comparison resolves passive and source references while pres
                 try std.testing.expectEqualDeep(output.result.value.claim_ids[0], output.claims.claims[0].id);
             },
             .disposition => |output| {
-                try std.testing.expect(producer.location == null);
                 try std.testing.expectEqualDeep(output.result.claim_id, output.claims.claims[0].id);
                 const expected = ([_][]const u8{ business, technical, exact })[output.result.claim_id.ordinal - 1];
                 try std.testing.expectEqualStrings(expected, output.claims.claims[0].meaning);
             },
             .token_classification => |classification| {
-                try std.testing.expect(producer.location == null);
                 try std.testing.expectEqualStrings(exact, classification.candidate.verbatim.?);
             },
             else => return error.UnexpectedLossProducer,
@@ -3772,7 +3633,7 @@ test "loss producer comparison resolves passive and source references while pres
     }
 }
 
-test "source omission repairs target the false empty outcome and individual irrelevant classification" {
+test "source omission repairs a false empty outcome and reclassifies its exact tokens" {
     const repair = @import("domain/reference_extraction_repair.zig").Omission;
     const Origin = @import("domain/model_candidate_origin.zig").Origin;
     const original: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
@@ -3780,8 +3641,8 @@ test "source omission repairs target the false empty outcome and individual irre
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    inline for (.{ false, true }) |has_claims| {
-        var fixture = try Fixture.initExtraction(a, "Display `MOCK Loan renewed!` and `Due today` with the new deadline.", null, has_claims);
+    {
+        var fixture = try Fixture.initExtraction(a, "Display `MOCK Loan renewed!` and `Due today` with the new deadline.", null, false);
         defer fixture.deinit();
         const inputs = fixture.context.inputs;
         const candidates = try tokens.candidates(a, inputs);
@@ -3793,14 +3654,14 @@ test "source omission repairs target the false empty outcome and individual irre
         entries[0].origin = original;
         fixture.extracted_text.entries = entries;
         const chunk = inputs.chunks.entries[0];
-        const facts: repair.Facts = .{ .extraction = .{ .inputs = inputs, .candidates = candidates, .candidate = fixture.extracted_text }, .support = try omissionSupport(&fixture, if (has_claims) .{ .token_classification = candidates.entries[0].id } else .{ .extraction_claim = chunk.id }) };
+        const facts: repair.Facts = .{ .extraction = .{ .inputs = inputs, .candidates = candidates, .candidate = fixture.extracted_text }, .support = try omissionSupport(&fixture, .{ .extraction_claim = chunk.id }) };
         const auth = try repair.authorize(a, facts);
         try std.testing.expect(auth.operation == .replace);
-        const replacement: repair.Replacement = if (has_claims) .{ .classification = .{ .preserve = .{ .token_candidate_id = candidates.entries[0].id, .kind = .business_exact_string } } } else .{ .outcome = .{ .claim = .{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display the new deadline." } }} } }, .citations = &.{extraction.wholeChunk(chunk)} } } };
+        const replacement: repair.Replacement = .{ .outcome = .{ .claim = .{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Display the new deadline." } }} } }, .citations = &.{extraction.wholeChunk(chunk)} } } };
         const merged = try repair.merge(a, text.validator, fixture.context.registry, fixture.context.current, facts, auth, replacement, corrected);
         try std.testing.expectEqualDeep(original, merged.entries[0].origin.?);
         var classified = merged;
-        if (!has_claims) {
+        {
             try std.testing.expectEqual(@as(usize, 0), merged.entries[0].token_classifications.len);
             try std.testing.expectEqual(@as(usize, 0), merged.entries[0].classification_origins.len);
             try std.testing.expect((try @import("domain/token_classification_validation.zig").validate(a, inputs, candidates, merged)) == .invalid);
@@ -3815,24 +3676,7 @@ test "source omission repairs target the false empty outcome and individual irre
         }
         const rebuilt = try extraction.finishText(a, inputs, classified);
         try std.testing.expectEqual(.complete, rebuilt.outcome);
-        if (has_claims) {
-            try std.testing.expectEqualDeep(fixture.extracted_text.entries[0].outcome, merged.entries[0].outcome);
-            try std.testing.expectEqualDeep(corrected, merged.entries[0].classification_origins[0].?);
-            try std.testing.expectEqualDeep(fixture.extracted_text.entries[0].classification_origins[1..], merged.entries[0].classification_origins[1..]);
-            try std.testing.expectEqualDeep(fixture.extracted_text.entries[0].token_classifications[1..], merged.entries[0].token_classifications[1..]);
-            const damaged_entries = try a.dupe(@import("domain/reference_extraction.zig").TextValidatedResult, merged.entries);
-            const damaged_values = try a.dupe(@import("domain/structured_tokens.zig").Classification, damaged_entries[0].token_classifications);
-            damaged_values[1].irrelevant.ordinal = 999;
-            damaged_entries[0].token_classifications = damaged_values;
-            var damaged = merged;
-            damaged.entries = damaged_entries;
-            const diagnostic = (try @import("domain/token_classification_validation.zig").validate(a, inputs, candidates, damaged)).invalid;
-            try std.testing.expectEqualDeep(original, diagnostic.origin.?);
-            try std.testing.expectEqual(@as(usize, 2), rebuilt.ledger.claims.len);
-            var foreign = replacement;
-            foreign.classification.preserve.token_candidate_id.ordinal += 1;
-            try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, text.validator, fixture.context.registry, fixture.context.current, facts, auth, foreign, null));
-        } else {
+        {
             try std.testing.expectEqual(@as(usize, 2), classified.entries[0].token_classifications.len);
             try std.testing.expectEqualDeep(corrected, merged.entries[0].outcome.claims[0].origin.?);
             try std.testing.expectEqualDeep(corrected, merged.entries[0].outcome.claims[0].citations_origin.?);
@@ -3957,16 +3801,15 @@ test "scalar source assessments resolve their assigned field and preserve comple
         const loss_packet = try support.packetForLoss(std.testing.allocator, inputs, fixture.context, verdict.pending);
         defer packets.release(loss_packet);
         const loss_body = (try std.json.parseFromSlice(std.json.Value, a, loss_packet.body(), .{})).value.object;
-        const subjects = @import("domain/specification_review_subject.zig");
-        const loss_subject = try json.decode(subjects.LossSubject, a, try std.json.Stringify.valueAlloc(a, loss_body.get("subject").?, .{}));
+        const loss_subject = try json.decode(@import("domain/source_omission_context.zig").FixedSubject, a, try std.json.Stringify.valueAlloc(a, loss_body.get("supporting_evidence").?.object.get("deficient_subject").?, .{}));
         try std.testing.expect(loss_subject == .business);
         try std.testing.expectEqualStrings(example[1], loss_subject.business.field.text);
         try std.testing.expectEqualDeep(try @import("domain/specification_projection.zig").project(a, fixture.context, content), loss_subject.business.field.context.candidate);
         for ([_][]const u8{ "extraction", "dispositions", "signals", "conflicts", "claims", "evidence_rules", "requirements" }) |key| try std.testing.expect(!loss_body.contains(key));
-        try std.testing.expect(loss_body.get("producers").?.array.items.len != 0);
-        try std.testing.expectEqualStrings("candidate_omission", loss_body.get("fixed_review").?.object.get("finding").?.object.get("kind").?.string);
-        try std.testing.expectEqualStrings("loss", loss_packet.resultDefinition().?.bytes);
-        const located = try support.collectLoss(a, inputs, fixture.context, verdict, loss_packet, try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, .{ .extraction_claim = fixture.extracted.ledger.chunks[0].scope.chunk_id }));
+        try std.testing.expect(loss_body.get("supporting_evidence").?.object.get("producers").?.array.items.len != 0);
+        try std.testing.expectEqualStrings(verdict.pending.review.entries[0].value.detail, loss_body.get("fixed_finding").?.object.get("detail").?.string);
+        try std.testing.expectEqualStrings("preservation_comparisons", loss_packet.resultDefinition().?.bytes);
+        const located = try support.collectLoss(a, inputs, fixture.context, verdict, loss_packet, try @import("test_fixtures/source_omission_evidence.zig").encode(a, try support.comparisonAssignment(a, inputs, fixture.context, verdict.pending), .{ .candidate = .{} }), null);
         try std.testing.expect(located == .pending);
         try std.testing.expectEqual(.candidate_omission, located.pending.review.entries[0].value.kind);
         try std.testing.expect(located.pending.pending_localization == null);
@@ -4032,12 +3875,12 @@ test "record and signal review assignments expose resolved targets and keep loca
             const locate = try support.packetForLoss(std.testing.allocator, inputs, fixture.context, finding.pending);
             defer packets.release(locate);
             const loss_body = (try std.json.parseFromSlice(std.json.Value, a, locate.body(), .{})).value.object;
-            const loss_subject = try json.decode(@import("domain/specification_review_subject.zig").LossSubject, a, try std.json.Stringify.valueAlloc(a, loss_body.get("subject").?, .{}));
+            const loss_subject = try json.decode(@import("domain/source_omission_context.zig").FixedSubject, a, try std.json.Stringify.valueAlloc(a, loss_body.get("supporting_evidence").?.object.get("deficient_subject").?, .{}));
             try std.testing.expect(loss_subject == .business);
             try std.testing.expectEqualStrings(wording, loss_subject.business.field.text);
-            for ([_][]const u8{ "loss_sources", "producers" }) |key| try std.testing.expect(loss_body.contains(key));
+            for ([_][]const u8{ "sources", "supporting_evidence" }) |key| try std.testing.expect(loss_body.contains(key));
             for ([_][]const u8{ "claims", "extraction", "dispositions", "signals", "conflicts", "evidence_rules", "requirements" }) |key| try std.testing.expect(!loss_body.contains(key));
-            const unlocalized = try support.collectLoss(a, inputs, fixture.context, finding, locate, "{\"kind\":\"unlocalized\"}");
+            const unlocalized = try support.collectLoss(a, inputs, fixture.context, finding, locate, try @import("test_fixtures/source_omission_evidence.zig").encode(a, try support.comparisonAssignment(a, inputs, fixture.context, finding.pending), .{ .unlocalized = .{} }), null);
             try std.testing.expectEqual(.candidate_omission, unlocalized.pending.review.entries[target_index].value.kind);
             try std.testing.expectEqual(.unlocalized, std.meta.activeTag(unlocalized.pending.review.entries[target_index].value.loss));
         }
@@ -4602,6 +4445,7 @@ test "reviewed source meaning lost to path references repairs one field while ge
             for (renewed_ledger.requirements, negative_findings) |requirement, *finding| if (std.meta.eql(requirement.seed.id, authorization.rule.omission.requirement)) {
                 finding.value.kind = .candidate_omission;
                 finding.value.detail = source;
+                finding.value.source_ids = &.{fixture.context.inputs.corpus.sources[0].id};
             };
             const still_missing = (try collectReview(support, a, renewed_inputs, fixture.context, try json.encode(support.Review, a, .{ .entries = negative_findings }), null)).accepted;
             try std.testing.expectEqual(.recurring, (try repair.admittedOmissionValidation(a, authorization.retry.?, still_missing)).?.validated.result);
@@ -4665,6 +4509,7 @@ test "reviewed copied-token narrative loss repairs the bound field without upstr
         findings[index].value.detail = "MOCK Repeated display text omits the source-backed narrative.";
         findings[index].value.source_ids = &.{fixture.context.inputs.corpus.sources[0].id};
         findings[index].value.loss = .{ .candidate = .{} };
+        findings[index].value.preservation = try @import("test_fixtures/source_omission_evidence.zig").proof(a, inputs, fixture.context.inputs, findings[index]);
         try bindReviewClaims(a, inputs, fixture.context, findings);
         const admitted = (try collectReview(support, a, inputs, fixture.context, try json.encode(support.Review, a, .{ .entries = findings }), null)).accepted;
         const decision = try supportDecision(a, admitted.inputs);
@@ -4688,170 +4533,6 @@ test "reviewed copied-token narrative loss repairs the bound field without upstr
         try std.testing.expectEqualDeep(current.units[2..], repaired.units[2..]);
         try std.testing.expectEqual(content.records.len, rebuilt.content.records.len);
         try std.testing.expectEqualDeep(current.units[1].?.response.content.primary_user_story.provenance, rebuilt.content.primary_user_story.provenance);
-    }
-}
-
-test "candidate loss attribution preserves the fixed finding and cannot authorize an upstream repair" {
-    const sessions = @import("domain/specification_session.zig");
-    const authority = @import("domain/required_authority.zig");
-    const support = @import("domain/specification_support.zig").Source;
-    const model = @import("domain/specification_support_model.zig");
-    const admission = @import("domain/specification_support_evidence.zig");
-    const repair = @import("domain/specification_coverage_repair.zig");
-    const loss = @import("domain/source_omission.zig");
-    const json = @import("domain/model_candidate_json.zig");
-    const packets = @import("domain/model_input_packet.zig");
-    for ([_][]const u8{
-        "MOCK Start successfully and display the current UTC date and time.",
-        "MOCK Renew eligible loans and keep the deadline unchanged after refusal.",
-    }) |source| {
-        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-        defer arena.deinit();
-        const a = arena.allocator();
-        var fixture = try Fixture.initContent(a, source, null, true, source, 1);
-        defer fixture.deinit();
-        const current = try completedFixture(&fixture, false);
-        const content = (try sessions.assemble(a, text.validator, fixture.context, current)).content;
-        var inputs = try @import("domain/specification_authority.zig").project(a, current.feature, fixture.context.references, content, current.units[0].?.response.content.brief);
-        inputs.revision = current.revision;
-        const ledger = try authority.build(a, inputs);
-        const index = for (ledger.requirements, 0..) |required, at| {
-            if (required.seed.id.unit == .feature and required.seed.id.slot == .primary_user_story) break at;
-        } else return error.MissingStoryRequirement;
-        const required = try admission.requirements(a, inputs, fixture.context.inputs, ledger.requirements[index].seed.id);
-        const findings = try a.dupe(support.Finding, (try reviewFor(a, inputs, fixture.context.inputs)).entries);
-        // The semantic premise is supplied by this mock; native admission does
-        // not decide whether the generated story preserves the source meaning.
-        findings[index].value = try model.decode(a, "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"MOCK The story omitted required behavior that survives upstream.\"}", required);
-        const initial = (try collectReview(support, a, inputs, fixture.context, try json.encode(support.Review, a, .{ .entries = findings }), null)).accepted;
-        var pending = initial.candidate;
-        pending.pending_localization = @intCast(index + 1);
-        const packet = try support.packetForLoss(a, inputs, fixture.context, pending);
-        defer packets.release(packet);
-        const packet_body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
-        const producers = try json.decode([]const @import("domain/source_omission_context.zig").Producer, a, try std.json.Stringify.valueAlloc(a, packet_body.get("producers").?, .{}));
-        var extraction_present = false;
-        var signal_present = false;
-        for (producers) |producer| switch (producer.output) {
-            .extraction => |output| {
-                extraction_present = true;
-                try std.testing.expectEqualStrings(source, output.claims.claims[0].meaning);
-                try std.testing.expectEqualDeep(output.result.outcome.claims[0], output.claims.claims[0].id);
-            },
-            .signal => |output| {
-                signal_present = true;
-                try std.testing.expectEqualStrings(source, output.claims.claims[0].meaning);
-                try std.testing.expectEqualDeep(output.result.value.claim_ids[0], output.claims.claims[0].id);
-            },
-            else => {},
-        };
-        try std.testing.expect(extraction_present and signal_present);
-        const prior: support.Collection = .{ .accepted = .{ .inputs = initial.inputs, .candidate = pending } };
-        const collected = (try support.collectLoss(a, inputs, fixture.context, prior, packet, "{\"kind\":\"candidate\"}")).accepted;
-        const located = collected.candidate.review.entries[index].value;
-        try std.testing.expectEqual(.candidate, located.loss);
-        try std.testing.expect(located.loss_comparison == null);
-        try std.testing.expectEqual(initial.candidate.review.entries[index].value.kind, located.kind);
-        try std.testing.expectEqualStrings(initial.candidate.review.entries[index].value.detail, located.detail);
-        try std.testing.expectEqualDeep(initial.candidate.review.entries[index].value.provenance, located.provenance);
-        try std.testing.expectEqualDeep(initial.candidate.review.entries[index].value.source_ids, located.source_ids);
-        try support.validateStored(a, collected.inputs, fixture.context.inputs);
-        const decision = try supportDecision(a, collected.inputs);
-        const source_support: loss.Support = .{ .review = collected.candidate, .inputs = decision.inputs, .observations = decision.observations, .result = decision.result };
-        try std.testing.expect(!try (@import("actions/reference/check_source_omission.zig").Action{}).execute(a, fixture.context.inputs, source_support));
-        try std.testing.expectError(error.UnlocalizedSourceOmission, loss.select(a, fixture.context.inputs, source_support));
-        const authorization = try repair.authorizeOmission(a, text.validator, current, fixture.context, content, decision);
-        try std.testing.expectEqual(.story, std.meta.activeTag(authorization.target.part.value.subject));
-
-        const unknown = (try support.collectLoss(a, inputs, fixture.context, prior, packet, "{\"kind\":\"unlocalized\"}")).accepted;
-        try std.testing.expectEqualDeep(initial.candidate.review.entries[index].value, unknown.candidate.review.entries[index].value);
-        try std.testing.expectError(error.InvalidJsonDocument, support.collectLoss(a, inputs, fixture.context, prior, packet, "{\"kind\":\"candidate\",\"comparison\":null}"));
-        const upstream: loss.Location = .{ .reconciliation_signal = inputs.references.?.signals[0].id };
-        const comparison = (try @import("test_fixtures/source_omission_evidence.zig").comparison(inputs, upstream)).?;
-        // Omitting source IDs narrows upstream repair eligibility, but cannot
-        // remove the producer evidence needed to recognize a local defect.
-        var no_sources_pending = pending;
-        const no_sources_findings = try a.dupe(support.Finding, pending.review.entries);
-        no_sources_findings[index].value.source_ids = &.{};
-        no_sources_pending.review.entries = no_sources_findings;
-        const no_sources_packet = try support.packetForLoss(a, inputs, fixture.context, no_sources_pending);
-        defer packets.release(no_sources_packet);
-        const no_sources_body = (try std.json.parseFromSlice(std.json.Value, a, no_sources_packet.body(), .{})).value.object;
-        const no_sources_producers = try json.decode([]const @import("domain/source_omission_context.zig").Producer, a, try std.json.Stringify.valueAlloc(a, no_sources_body.get("producers").?, .{}));
-        try std.testing.expectEqual(producers.len, no_sources_producers.len);
-        for (producers, no_sources_producers) |original, supporting| {
-            try std.testing.expect(supporting.location == null);
-            try std.testing.expectEqualDeep(original.output, supporting.output);
-        }
-        const no_sources_prior: support.Collection = .{ .accepted = .{ .inputs = initial.inputs, .candidate = no_sources_pending } };
-        const no_sources_candidate = (try support.collectLoss(a, inputs, fixture.context, no_sources_prior, no_sources_packet, "{\"kind\":\"candidate\"}")).accepted;
-        try std.testing.expectEqual(.candidate, no_sources_candidate.candidate.review.entries[index].value.loss);
-        try std.testing.expectEqualDeep(located.provenance, no_sources_candidate.candidate.review.entries[index].value.provenance);
-        try support.validateStored(a, no_sources_candidate.inputs, fixture.context.inputs);
-        const invalid_upstream = (try support.collectLoss(a, inputs, fixture.context, no_sources_prior, no_sources_packet, try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, upstream))).rejected;
-        try std.testing.expectEqual(.invalid_evidence, invalid_upstream.rejection.diagnostics[0].issue);
-        try std.testing.expectError(error.InvalidJsonDocument, model.bindLoss(required, findings[index].value, .{ .localized = .{ .location = .{ .candidate = .{} }, .comparison = comparison } }));
-        findings[index].value = try model.bindLoss(required, findings[index].value, .{ .localized = .{ .location = upstream, .comparison = comparison } });
-        const upstream_review = (try collectReview(support, a, inputs, fixture.context, try json.encode(support.Review, a, .{ .entries = findings }), null)).accepted;
-        try std.testing.expectError(error.UnsafeSpecificationOmissionRepair, repair.authorizeOmission(a, text.validator, current, fixture.context, content, try supportDecision(a, upstream_review.inputs)));
-
-        const proof = collected.inputs.evidence[index].review.?;
-        for (0..4) |scenario| {
-            var invalid = collected.inputs;
-            const proofs = try a.dupe(authority.Evidence, invalid.evidence);
-            switch (scenario) {
-                0 => proofs[index].review.?.loss_comparison = comparison,
-                1 => proofs[index].review.?.provenance.claim_ids = &.{},
-                2 => proofs[index].review.?.provenance.claim_ids = &.{.{ .ordinal = 999 }},
-                3 => proofs[index].review.?.source_ids = &.{.{ .ordinal = 999 }},
-                else => unreachable,
-            }
-            invalid.evidence = proofs;
-            try std.testing.expectError(error.InvalidRequiredAuthority, support.validateStored(a, invalid, fixture.context.inputs));
-        }
-        var no_candidate = inputs;
-        no_candidate.specification = null;
-        no_candidate.brief = null;
-        try std.testing.expectError(error.InvalidRequiredAuthority, loss.validate(a, no_candidate, fixture.context.inputs, ledger.requirements[index].seed.id, .candidate_omission, proof, .{ .candidate = .{} }));
-        for (ledger.requirements) |requirement| switch (requirement.seed.id.unit) {
-            .signal, .source, .token, .conflict => {
-                try std.testing.expectError(error.InvalidRequiredAuthority, loss.validate(a, inputs, fixture.context.inputs, requirement.seed.id, .candidate_omission, proof, .{ .candidate = .{} }));
-                const locations = try loss.available(a, inputs, fixture.context.inputs, requirement.seed.id, proof);
-                for (locations) |location| try std.testing.expect(location != .candidate);
-            },
-            else => {},
-        };
-        // A brief is not an authored story, collection or entity decision.
-        // Their source requirements may already be bound, but those candidate
-        // values cannot yet be named as the defective producer.
-        const brief_only = try @import("domain/specification_authority.zig").project(a, current.feature, fixture.context.references, null, current.units[0].?.response.content.brief);
-        const brief_ledger = try authority.build(a, brief_only);
-        const brief_findings = try a.dupe(support.Finding, (try reviewFor(a, brief_only, fixture.context.inputs)).entries);
-        var unavailable_subjects: usize = 0;
-        for (brief_ledger.requirements, 0..) |requirement, at| {
-            if (requirement.seed.id.unit != .feature) continue;
-            switch (requirement.seed.id.slot) {
-                .primary_user_story, .entities, .acceptance_criteria, .functional_requirements, .scenario_coverage => {},
-                else => continue,
-            }
-            unavailable_subjects += 1;
-            try std.testing.expectError(error.InvalidRequiredAuthority, loss.validate(a, brief_only, fixture.context.inputs, requirement.seed.id, .candidate_omission, proof, .{ .candidate = .{} }));
-            for (try loss.available(a, brief_only, fixture.context.inputs, requirement.seed.id, proof)) |location| try std.testing.expect(location != .candidate);
-            const brief_required = try admission.requirements(a, brief_only, fixture.context.inputs, requirement.seed.id);
-            brief_findings[at].value = try model.decode(a, "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"MOCK A required condition is missing from the reviewed source projection.\"}", brief_required);
-            const brief_pending: support.Candidate = .{ .review = .{ .entries = brief_findings }, .pending_localization = @intCast(at + 1), .origins = &.{}, .origin = null };
-            const brief_packet = try support.packetForLoss(a, brief_only, fixture.context, brief_pending);
-            defer packets.release(brief_packet);
-            const brief_body = (try std.json.parseFromSlice(std.json.Value, a, brief_packet.body(), .{})).value.object;
-            const subject = try json.decode(@import("domain/specification_review_subject.zig").LossSubject, a, try std.json.Stringify.valueAlloc(a, brief_body.get("subject").?, .{}));
-            try std.testing.expect(subject == .pending_subject);
-            try std.testing.expectEqual(requirement.seed.id.slot, subject.pending_subject.slot);
-            try std.testing.expectEqualDeep(try @import("domain/specification_projection.zig").brief(a, fixture.context, brief_only.brief.?), subject.pending_subject.brief.?);
-        }
-        try std.testing.expect(unavailable_subjects >= 3);
-        var stale = fixture.context.inputs;
-        stale.corpus.state_id = .{ .bytes = "MOCK stale source state" };
-        try std.testing.expectError(error.InvalidRequiredAuthority, support.validateStored(a, collected.inputs, stale));
     }
 }
 
@@ -6012,7 +5693,7 @@ test "incomplete specifications publish supported business evidence and bound qu
                 3 => bad.open_clarifications = &.{.{ .stage = .spec, .ordinal = 0 }},
                 4 => bad.feature = .{ .bytes = "foreign" },
                 5 => bad.clarification.revision = 0,
-                6 => bad.schema = "specification-state/v8",
+                6 => bad.schema = "specification-state/v9",
                 7 => bad.id_ledger.next[0] = 0,
                 else => unreachable,
             }
@@ -6230,7 +5911,7 @@ test "false conflicts repair a closed relation group with exact preconditions an
             finding.value.detail = "The original requirements are compatible; restore their separate supported meanings.";
             finding.value.source_ids = &.{fixture.context.inputs.corpus.sources[0].id};
             finding.value.loss = .{ .reconciliation_conflict = requirement.seed.id.unit.conflict };
-            finding.value.loss_comparison = try @import("test_fixtures/source_omission_evidence.zig").comparison(inputs, finding.value.loss);
+            finding.value.preservation = try @import("test_fixtures/source_omission_evidence.zig").proof(a, inputs, fixture.context.inputs, finding.*);
         };
         const admitted = (try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), null)).accepted;
         const decision = try supportDecision(a, admitted.inputs);
@@ -6276,7 +5957,7 @@ test "false conflicts repair a closed relation group with exact preconditions an
         // A genuine conflict remains a user decision, never repair permission.
         entries[conflict_index].value.kind = .conflicting;
         entries[conflict_index].value.loss = .{ .unlocalized = .{} };
-        entries[conflict_index].value.loss_comparison = null;
+        entries[conflict_index].value.preservation = null;
         entries[conflict_index].value.question = "Which requirement should take precedence? Identify the required behavior.";
         const negative = (try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), null)).accepted;
         const gap = try supportDecision(a, negative.inputs);
@@ -6479,117 +6160,6 @@ test "FIX002 false cross-kind conflict and nine question repairs cannot publish 
         try std.testing.expectEqual(.invalid, gate.result.continuation);
         try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(a, gate.inputs, gate.observations, gate.result));
         try std.testing.expectError(error.InvalidRequiredAuthority, @import("domain/source_omission.zig").select(a, fixture.context.inputs, .{ .review = collected.accepted.candidate, .inputs = gate.inputs, .observations = gate.observations, .result = gate.result }));
-    }
-}
-
-test "FIX002 diagnostic producer evidence survives insertion repair and readback without positive authority" {
-    const review = @import("domain/specification_support.zig").Source;
-    const repair = @import("domain/specification_support_repair.zig").Source;
-    const json = @import("domain/model_candidate_json.zig");
-    const authority = @import("domain/required_authority.zig");
-    const loss = @import("domain/source_omission.zig");
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    var fixture = try Fixture.initContent(a, "Renew the loan and show the return date with `MOCK Loan renewed!`.", .business_exact_string, true, "Preserve renewal and its date.", 2);
-    defer fixture.deinit();
-    const claims = try introduceConflict(&fixture);
-    const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, null, null);
-    const entries = try a.dupe(review.Finding, (try reviewFor(a, inputs, fixture.context.inputs)).entries);
-    const conflict = inputs.references.?.conflicts[0].id;
-    entries[0].value = .{ .kind = .candidate_omission, .loss = .{ .reconciliation_conflict = conflict }, .provenance = .{ .claim_ids = claims[0..2], .clarification_response_ids = &.{} }, .source_ids = &.{fixture.context.inputs.corpus.sources[0].id}, .detail = "Compatible original requirements were lost through conflicting dispositions." };
-    entries[0].value.loss_comparison = try @import("test_fixtures/source_omission_evidence.zig").comparison(inputs, entries[0].value.loss);
-    const model = @import("domain/specification_support_model.zig");
-    const rule = try @import("domain/specification_support_evidence.zig").requirements(a, inputs, fixture.context.inputs, (try authority.build(a, inputs)).requirements[0].seed.id);
-    const omission_wire = try model.encode(a, entries[0].value, rule);
-    const omission_object = (try std.json.parseFromSlice(std.json.Value, a, omission_wire, .{})).value.object;
-    try std.testing.expect(!omission_object.contains("provenance"));
-    const verdict = try model.decode(a, omission_wire, rule);
-    try std.testing.expectEqual(.unlocalized, verdict.loss);
-    try std.testing.expectEqualDeep(entries[0].value, try model.bindLoss(rule, verdict, .{ .localized = .{ .location = .{ .reconciliation_conflict = conflict }, .comparison = entries[0].value.loss_comparison.? } }));
-    try std.testing.expectError(error.InvalidJsonDocument, model.bindLoss(rule, verdict, .{ .localized = .{ .location = .{ .unlocalized = .{} }, .comparison = entries[0].value.loss_comparison.? } }));
-    try std.testing.expectEqualDeep(verdict, try model.bindLoss(rule, verdict, .{ .unlocalized = .{} }));
-    var echoed = omission_object;
-    try echoed.put(a, "provenance", .{ .object = (try std.json.parseFromSlice(std.json.Value, a, "{\"claim_ids\":[1,2]}", .{})).value.object });
-    try std.testing.expectError(error.InvalidJsonDocument, model.decode(a, try std.json.Stringify.valueAlloc(a, std.json.Value{ .object = echoed }, .{}), rule));
-    const original = (try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), null)).accepted;
-    try review.validateStored(a, original.inputs, fixture.context.inputs);
-    var awaiting_loss = original.candidate;
-    const unlocalized = try a.dupe(review.Finding, awaiting_loss.review.entries);
-    unlocalized[0].value.loss = .{ .unlocalized = .{} };
-    unlocalized[0].value.loss_comparison = null;
-    unlocalized[0].value.provenance.claim_ids = &.{};
-    awaiting_loss.review.entries = unlocalized;
-    awaiting_loss.pending_localization = 1;
-    const loss_packet = try review.packetForLoss(a, inputs, fixture.context, awaiting_loss);
-    defer @import("domain/model_input_packet.zig").release(loss_packet);
-    try std.testing.expectEqualStrings("loss", loss_packet.resultDefinition().?.bytes);
-    try std.testing.expectError(error.InvalidRequiredAuthority, review.nextSubject(a, inputs, .{ .pending = awaiting_loss }));
-    const located = try review.collectLoss(a, inputs, fixture.context, .{ .accepted = .{ .inputs = original.inputs, .candidate = awaiting_loss } }, loss_packet, try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, .{ .reconciliation_conflict = conflict }));
-    try std.testing.expect(located == .accepted);
-    try std.testing.expect(located.accepted.candidate.pending_localization == null);
-    try std.testing.expectEqualDeep(original.candidate.review.entries[0].value, located.accepted.candidate.review.entries[0].value);
-    const wrong_loss = try review.collectLoss(a, inputs, fixture.context, .{ .accepted = .{ .inputs = original.inputs, .candidate = awaiting_loss } }, loss_packet, try json.encode(loss.Assessment, a, .{ .localized = .{ .location = .{ .reconciliation_conflict = .{ .ordinal = 999 } }, .comparison = entries[0].value.loss_comparison.? } }));
-    try std.testing.expect(wrong_loss == .rejected);
-    try std.testing.expectEqual(.candidate_omission, wrong_loss.rejected.candidate.?.review.entries[0].value.kind);
-    try std.testing.expectEqual(.invalid_loss, wrong_loss.rejected.rejection.selected().?.evidence.?.issue);
-    const missing = (try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries[1..] }), null)).rejected;
-    const insert = try repair.authorize(a, inputs, fixture.context, missing);
-    const inserted = (try repair.merge(a, inputs, fixture.context, missing.candidate.?, insert, .{ .finding = entries[0].value }, null)).accepted;
-    try review.validateStored(a, inserted.inputs, fixture.context.inputs);
-    const good = entries[0];
-    entries[0].value.provenance.claim_ids = &.{};
-    const rejected = (try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), null)).rejected;
-    try std.testing.expectEqual(.missing_claims, rejected.rejection.selected().?.evidence.?.issue);
-    try std.testing.expectEqualDeep(claims[0..2], rejected.rejection.selected().?.evidence.?.rule.claims.exact);
-    const auth = try repair.authorize(a, inputs, fixture.context, rejected);
-    const packet = try repair.packet(a, inputs, fixture.context, rejected.candidate.?, auth);
-    defer @import("domain/model_input_packet.zig").release(packet);
-    try std.testing.expectEqualStrings("selection", packet.resultDefinition().?.bytes);
-    const fixed = (try repair.merge(a, inputs, fixture.context, rejected.candidate.?, auth, .{ .selection = .{ .provenance = good.value.provenance, .source_ids = good.value.source_ids } }, null)).accepted;
-    try std.testing.expectEqualDeep(original.candidate.review, fixed.candidate.review);
-    try review.validateStored(a, fixed.inputs, fixture.context.inputs);
-    for (0..4) |scenario| {
-        entries[0] = good;
-        switch (scenario) {
-            0 => {
-                entries[0].value.kind = .supported;
-                entries[0].value.loss = .{ .unlocalized = .{} };
-            },
-            1 => entries[0].value.loss = .{ .reconciliation_conflict = .{ .ordinal = 999 } },
-            2 => entries[0].value.source_ids = &.{.{ .ordinal = 999 }},
-            3 => entries[0].value.loss = .{ .unlocalized = .{} },
-            else => unreachable,
-        }
-        try std.testing.expect((try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), null)) == .rejected);
-        var corrupt = original.inputs;
-        const proofs = try a.dupe(authority.Evidence, corrupt.evidence);
-        if (scenario == 0) proofs[0].finding = .supported else proofs[0].review.?.loss = entries[0].value.loss;
-        if (scenario == 2) proofs[0].review.?.source_ids = entries[0].value.source_ids;
-        corrupt.evidence = proofs;
-        try std.testing.expectError(error.InvalidRequiredAuthority, review.validateStored(a, corrupt, fixture.context.inputs));
-    }
-    entries[0] = good;
-    // An earlier unlocalized diagnosis and a real gap cannot hide this target.
-    for ([_]usize{ 1, 3 }) |localized| {
-        const mixed = try a.dupe(review.Finding, entries);
-        mixed[0] = good;
-        mixed[0].value.loss = .{ .unlocalized = .{} };
-        mixed[0].value.loss_comparison = null;
-        mixed[0].value.provenance.claim_ids = &.{};
-        mixed[localized].value = good.value;
-        mixed[2].value.kind = .ambiguous;
-        mixed[2].value.question = "How long is renewal? Supply the duration and starting event.";
-        mixed[2].value.detail = "Renewal is specified, but its duration is absent.";
-        try bindReviewClaims(a, inputs, fixture.context, mixed);
-        const mixed_result = try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = mixed }), null);
-        const admitted = mixed_result.accepted;
-        const gate = try supportDecision(a, admitted.inputs);
-        try std.testing.expectEqual(.invalid, gate.result.continuation);
-        const selected = try loss.select(a, fixture.context.inputs, .{ .review = admitted.candidate, .inputs = gate.inputs, .observations = gate.observations, .result = gate.result });
-        try std.testing.expectEqual(@as(u32, @intCast(localized + 1)), selected.finding.id.ordinal);
-        try std.testing.expectEqualDeep(good.value.loss, selected.location);
-        try std.testing.expectError(error.InvalidRequiredAuthority, @import("domain/required_authority_clarifications.zig").build(a, gate.inputs, gate.observations, gate.result));
     }
 }
 
@@ -7150,4 +6720,491 @@ test "fixed Spec choices narrow the visible token catalogue with the selected sc
         try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, before.object.get("context_requirements").?, .{}), try std.json.Stringify.valueAlloc(a, after.object.get("context_requirements").?, .{}));
         for (narrowed.integerChoices()) |choice| try std.testing.expect(!std.mem.eql(u8, choice.target.tagged.kind, "exact_copy"));
     }
+}
+
+const preservation = @import("domain/source_omission.zig").comparisons;
+const PreservationTest = struct {
+    inputs: @import("domain/required_authority.zig").Inputs,
+    pending: @import("domain/specification_support.zig").Source.Candidate,
+};
+fn preservationTest(a: std.mem.Allocator, fixture: *const Fixture, candidate: bool) !PreservationTest {
+    const authority = @import("domain/required_authority.zig");
+    const support = @import("domain/specification_support.zig").Source;
+    const inputs = if (candidate) blk: {
+        const session = try completedFixture(fixture, false);
+        const content = (try @import("domain/specification_session.zig").assemble(a, text.validator, fixture.context, session)).content;
+        break :blk try @import("domain/specification_authority.zig").project(a, session.feature, fixture.context.references, content, session.units[0].?.response.content.brief);
+    } else try @import("domain/source_preservation.zig").project(a, fixture.context.inputs.corpus.feature_id, @import("domain/reference_support.zig").records(fixture.context.references), fixture.context.inputs);
+    const ledger = try authority.build(a, inputs);
+    const entries = try a.dupe(support.Finding, (try reviewFor(a, inputs, fixture.context.inputs)).entries);
+    var selected: u32 = 0;
+    for (ledger.requirements, entries, 1..) |requirement, *entry, index| {
+        const omitted = if (candidate) requirement.seed.id.slot == .description else index == 1;
+        entry.requirement_ordinal = @intCast(index);
+        if (omitted) {
+            entry.value.kind = .candidate_omission;
+            entry.value.detail = "MOCK Required behavior is missing.";
+            entry.value.source_ids = &.{.{ .ordinal = 1 }};
+        }
+        if (omitted) selected = @intCast(index);
+    }
+    const origins = try a.alloc(?@import("domain/model_candidate_origin.zig").Origin, entries.len);
+    @memset(origins, null);
+    return .{ .inputs = inputs, .pending = .{ .review = .{ .entries = entries }, .pending_localization = selected, .origin = null, .origins = origins } };
+}
+fn preservationResponse(a: std.mem.Allocator, assigned: preservation.Assignment, verdict: preservation.Verdict) !preservation.Response {
+    const entries = try a.alloc(preservation.Assessment, assigned.comparisons.len);
+    for (assigned.comparisons, entries) |view, *entry| {
+        const members = try a.alloc(preservation.MemberId, view.members.len);
+        for (view.members, members) |member, *id| id.* = member.id;
+        const spans = try a.dupe(preservation.Span, &.{.{ .chunk_id = assigned.sources[0].chunk_id, .lines = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 1 } } }});
+        entry.* = .{ .comparison_id = view.id, .result = verdict, .sources = spans, .members = members, .explanation = "MOCK Comparison evidence." };
+    }
+    return .{ .assessments = entries };
+}
+
+test "bound preservation uses original assigned meaning and admits candidate attribution on unrelated sources" {
+    const support = @import("domain/specification_support.zig").Source;
+    const json = @import("domain/model_candidate_json.zig");
+    for ([_][]const u8{ "MOCK Display the UTC date after startup.", "MOCK Refuse renewal when another member reserved the loan." }) |source| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, source, null, true, source, 1);
+        defer fixture.deinit();
+        const state = try preservationTest(a, &fixture, true);
+        const assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, state.pending);
+        try std.testing.expectEqual(@as(usize, 1), assigned.comparisons.len);
+        try std.testing.expectEqualDeep(state.inputs.references.?.items.entries[0].claim.id, assigned.comparisons[0].members[0].claim_id);
+        const response = try preservationResponse(a, assigned, .preserved);
+        const result = try support.admitComparisons(a, state.inputs, fixture.context, state.pending, assigned, try json.encode(preservation.Response, a, response));
+        try std.testing.expect(result == .established and result.established == .existing and result.established.existing == .candidate);
+        var stale = state.inputs;
+        stale.revision += 1;
+        try std.testing.expectError(error.InvalidPreservationComparison, support.admitComparisons(a, stale, fixture.context, state.pending, assigned, try json.encode(preservation.Response, a, response)));
+        var stale_review = state.pending;
+        stale_review.revision += 1;
+        try std.testing.expectError(error.InvalidPreservationComparison, support.admitComparisons(a, state.inputs, fixture.context, stale_review, assigned, try json.encode(preservation.Response, a, response)));
+        try std.testing.expectError(error.InvalidJsonDocument, support.admitComparisons(a, state.inputs, fixture.context, state.pending, assigned, "{\"kind\":\"candidate\"}"));
+    }
+}
+
+test "bound preservation rejects missing duplicate foreign evidence and empty preserved collections" {
+    const support = @import("domain/specification_support.zig").Source;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initContent(a, "MOCK Required behavior.", null, true, "MOCK Required behavior.", 2);
+    defer fixture.deinit();
+    const state = try preservationTest(a, &fixture, true);
+    const assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, state.pending);
+    const good = try preservationResponse(a, assigned, .preserved);
+    try std.testing.expectEqual(@as(usize, 2), assigned.comparisons[0].members.len);
+    try std.testing.expect(assigned.comparisons[0].members[0].claim_id.ordinal != assigned.comparisons[0].members[1].claim_id.ordinal);
+    try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, assigned, assigned, fixture.context.inputs, .{ .assessments = &.{} }));
+    for (0..8) |variant| {
+        var response = try preservationResponse(a, assigned, .preserved);
+        const entries = try a.dupe(preservation.Assessment, response.assessments);
+        response.assessments = entries;
+        switch (variant) {
+            0 => entries[0].comparison_id.ordinal = 999,
+            1 => entries[0].members = &.{.{ .ordinal = 999 }},
+            2 => entries[0].members = &.{ .{ .ordinal = 1 }, .{ .ordinal = 1 } },
+            3 => entries[0].sources = &.{},
+            4 => entries[0].sources = &.{.{ .chunk_id = assigned.sources[0].chunk_id, .lines = .{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } }},
+            5 => entries[0].explanation = " ",
+            6 => {
+                entries[0].result = .lost;
+                entries[0].members = &.{};
+            },
+            7 => response.assessments = try a.dupe(preservation.Assessment, &.{ entries[0], entries[0] }),
+            else => unreachable,
+        }
+        try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, assigned, assigned, fixture.context.inputs, response));
+    }
+    var empty = assigned;
+    empty.comparisons = &.{};
+    empty.boundaries = &.{};
+    try std.testing.expectEqual(preservation.Attribution.unresolved, try preservation.admit(a, empty, empty, fixture.context.inputs, .{ .assessments = &.{} }));
+    var malformed = assigned;
+    malformed.boundaries = &.{.{ .input = .deficient_subject, .output = .source_premise, .owner = null }};
+    try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, malformed, malformed, fixture.context.inputs, good));
+}
+
+test "bound preservation traces source-only loss without inventing a positive claim" {
+    const support = @import("domain/specification_support.zig").Source;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initExtraction(a, "MOCK Retain the required obligation.", null, false);
+    defer fixture.deinit();
+    const state = try preservationTest(a, &fixture, false);
+    const assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, state.pending);
+    try std.testing.expectEqual(@as(usize, 0), assigned.comparisons[0].members.len);
+    const absent = try preservationResponse(a, assigned, .lost);
+    const result = try preservation.admit(a, assigned, assigned, fixture.context.inputs, absent);
+    try std.testing.expect(result == .established and result.established.existing == .extraction_claim);
+    try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, assigned, assigned, fixture.context.inputs, try preservationResponse(a, assigned, .preserved)));
+    try std.testing.expectEqual(preservation.Attribution.unresolved, try preservation.admit(a, assigned, assigned, fixture.context.inputs, try preservationResponse(a, assigned, .uncertain)));
+}
+
+test "bound preservation packet owns evidence after preparation arena teardown" {
+    const support = @import("domain/specification_support.zig").Source;
+    const packets = @import("domain/model_input_packet.zig");
+    const packet = blk: {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, "MOCK Keep an audit record.", null, true, "MOCK Keep an audit record.", 1);
+        defer fixture.deinit();
+        const state = try preservationTest(a, &fixture, true);
+        break :blk try support.packetForLoss(std.testing.allocator, state.inputs, fixture.context, state.pending);
+    };
+    defer packets.release(packet);
+    try std.testing.expectEqualStrings("preservation_comparisons", packet.resultDefinition().?.bytes);
+    try std.testing.expect(std.mem.indexOf(u8, packet.body(), "MOCK Keep an audit record.") != null);
+    try std.testing.expect(std.mem.indexOf(u8, packet.body(), "\"comparisons\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, packet.body(), "\"boundaries\"") == null);
+}
+
+test "bound preservation decision table separates inherited loss role ownership and supporting uncertainty" {
+    const support = @import("domain/specification_support.zig").Source;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initContent(a, "MOCK Start only after approval.", null, true, "MOCK Start only after approval.", 1);
+    defer fixture.deinit();
+    const state = try preservationTest(a, &fixture, true);
+    var assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, state.pending);
+    const views = try a.alloc(preservation.View, 3);
+    for (views, 1..) |*view, id| {
+        view.* = assigned.comparisons[0];
+        view.id.ordinal = @intCast(id);
+    }
+    assigned.comparisons = views;
+    assigned.boundaries = &.{
+        .{ .input = .source_premise, .output = .{ .comparison = .{ .ordinal = 1 } }, .owner = .{ .existing = .{ .extraction_claim = assigned.sources[0].chunk_id } } },
+        .{ .input = .{ .comparison = .{ .ordinal = 1 } }, .output = .{ .comparison = .{ .ordinal = 2 } }, .owner = .{ .role_assignment = .description } },
+        .{ .input = .{ .comparison = .{ .ordinal = 2 } }, .output = .deficient_subject, .owner = .{ .existing = .{ .candidate = .{} } } },
+    };
+    // View 3 supplies context only. No relation to the deficient input is invented.
+    const entries = try a.dupe(preservation.Assessment, (try preservationResponse(a, assigned, .preserved)).assessments);
+    entries[2].result = .uncertain;
+    const response: preservation.Response = .{ .assessments = entries };
+    const cases = [_]struct { first: preservation.Verdict, second: preservation.Verdict, expected: enum { candidate, extraction, role, unresolved } }{
+        .{ .first = .preserved, .second = .preserved, .expected = .candidate },
+        .{ .first = .preserved, .second = .lost, .expected = .role },
+        .{ .first = .lost, .second = .lost, .expected = .extraction },
+        .{ .first = .lost, .second = .preserved, .expected = .candidate },
+        .{ .first = .uncertain, .second = .lost, .expected = .unresolved },
+        .{ .first = .preserved, .second = .uncertain, .expected = .unresolved },
+        .{ .first = .uncertain, .second = .preserved, .expected = .candidate },
+    };
+    for (cases) |case| {
+        entries[0].result = case.first;
+        entries[1].result = case.second;
+        const result = try preservation.admit(a, assigned, assigned, fixture.context.inputs, response);
+        switch (case.expected) {
+            .unresolved => try std.testing.expect(result == .unresolved),
+            .role => try std.testing.expect(result == .established and result.established == .role_assignment),
+            .candidate => try std.testing.expect(result == .established and result.established.existing == .candidate),
+            .extraction => try std.testing.expect(result == .established and result.established.existing == .extraction_claim),
+        }
+        const reordered = try a.dupe(preservation.Assessment, entries);
+        std.mem.reverse(preservation.Assessment, reordered);
+        try std.testing.expectEqualDeep(result, try preservation.admit(a, assigned, assigned, fixture.context.inputs, .{ .assessments = reordered }));
+    }
+    const duplicate = try a.dupe(preservation.Assessment, entries);
+    duplicate[1] = duplicate[0];
+    try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, assigned, assigned, fixture.context.inputs, .{ .assessments = duplicate }));
+    var stale = assigned;
+    stale.finding.detail = "MOCK Different omission.";
+    try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, assigned, stale, fixture.context.inputs, response));
+    const broken = try a.dupe(preservation.Boundary, assigned.boundaries);
+    broken[1].input = .{ .comparison = .{ .ordinal = 3 } };
+    var disconnected = assigned;
+    disconnected.boundaries = broken;
+    try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, disconnected, disconnected, fixture.context.inputs, response));
+}
+
+test "bound preservation shared schema and codec exclude culprit and verdict reassessment" {
+    const support = @import("domain/specification_support.zig").Source;
+    const json = @import("domain/model_candidate_json.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initContent(a, "MOCK Close the valve on alarm.", null, true, "MOCK Close the valve on alarm.", 1);
+    defer fixture.deinit();
+    const state = try preservationTest(a, &fixture, true);
+    const assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, state.pending);
+    const response = try preservationResponse(a, assigned, .preserved);
+    const bytes = try json.encode(preservation.Response, a, response);
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schemas = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
+    const packet = try support.packetForLoss(a, state.inputs, fixture.context, state.pending);
+    defer @import("domain/model_input_packet.zig").release(packet);
+    const selected = try @import("domain/model_result_schema.zig").restrict(a, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+    defer selected.release();
+    try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = bytes });
+    try std.testing.expectEqualDeep(response, try json.decode(preservation.Response, a, bytes));
+    const forbidden = "{\"assessments\":[],\"location\":{\"kind\":\"candidate\"}}";
+    try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = forbidden, .rejection = .unknown_property, .path = "/location" });
+    try std.testing.expectError(error.InvalidJsonDocument, json.decode(preservation.Response, a, forbidden));
+    try std.testing.expectError(error.InvalidJsonDocument, json.decode(preservation.Response, a, "{\"assessments\":[],\"finding\":\"supported\"}"));
+    const foreign = try a.dupe(preservation.Assessment, response.assessments);
+    foreign[0].comparison_id.ordinal = 999;
+    try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = try json.encode(preservation.Response, a, .{ .assessments = foreign }), .rejection = .enum_mismatch, .path = "/assessments/0/comparison_id" });
+}
+
+fn preservationAllocationCheck(a: std.mem.Allocator) !void {
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    var fixture = try Fixture.initContent(arena.allocator(), "MOCK Retain a receipt.", null, true, "MOCK Retain a receipt.", 1);
+    defer fixture.deinit();
+    const state = try preservationTest(arena.allocator(), &fixture, true);
+    const packet = try @import("domain/specification_support.zig").Source.packetForLoss(a, state.inputs, fixture.context, state.pending);
+    defer @import("domain/model_input_packet.zig").release(packet);
+}
+
+test "bound preservation preparation cleans up allocation failures" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, preservationAllocationCheck, .{});
+}
+
+test "bound preservation does not attribute composite classification loss to claim insertion" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initExtraction(a, "MOCK Display `MOCK Ready` after approval.", null, true);
+    defer fixture.deinit();
+    const state = try preservationTest(a, &fixture, false);
+    const assigned = try @import("domain/specification_support.zig").Source.comparisonAssignment(a, state.inputs, fixture.context, state.pending);
+    try std.testing.expect(assigned.boundaries[0].owner == null);
+    const response = try preservationResponse(a, assigned, .lost);
+    try std.testing.expectEqual(preservation.Attribution.unresolved, try preservation.admit(a, assigned, assigned, fixture.context.inputs, response));
+    const foreign = try a.dupe(preservation.Assessment, response.assessments);
+    foreign[0].sources = &.{.{ .chunk_id = .{ .bytes = "MOCK foreign chunk" }, .lines = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 1 } } }};
+    try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, assigned, assigned, fixture.context.inputs, .{ .assessments = foreign }));
+}
+
+fn collectedPreservation(a: std.mem.Allocator, fixture: *const Fixture, state: PreservationTest, location: @import("domain/source_omission.zig").Location, origin: ?@import("domain/model_candidate_origin.zig").Origin) !@import("domain/specification_support.zig").Source.Collection {
+    const support = @import("domain/specification_support.zig").Source;
+    var pending = state.pending;
+    const good = try reviewFor(a, state.inputs, fixture.context.inputs);
+    const entries = try a.dupe(support.Finding, good.entries);
+    const index = pending.pending_localization.? - 1;
+    entries[index].value.kind = .candidate_omission;
+    entries[index].value.detail = pending.review.entries[index].value.detail;
+    entries[index].value.source_ids = pending.review.entries[index].value.source_ids;
+    pending.review.entries = entries;
+    const origins = try a.alloc(?@import("domain/model_candidate_origin.zig").Origin, entries.len);
+    @memset(origins, .{ .request = .{ .value = 31 }, .attempt = .{ .value = 1 } });
+    pending.origins = origins;
+    pending.origin = origins[0];
+    const packet = try support.packetForLoss(a, state.inputs, fixture.context, pending);
+    defer @import("domain/model_input_packet.zig").release(packet);
+    const assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, pending);
+    return support.collectLoss(a, state.inputs, fixture.context, .{ .pending = pending }, packet, try @import("test_fixtures/source_omission_evidence.zig").encode(a, assigned, location), origin);
+}
+
+test "preservation lifecycle retains distinct origins and rederives attribution without request logs" {
+    const support = @import("domain/specification_support.zig").Source;
+    const authority = @import("domain/required_authority.zig");
+    const codec = @import("domain/strict_json.zig");
+    for ([_][]const u8{ "MOCK Display date after approval.", "MOCK Renew only an eligible loan." }) |source| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, source, null, true, source, 1);
+        defer fixture.deinit();
+        const state = try preservationTest(a, &fixture, true);
+        const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 32 }, .attempt = .{ .value = 2 } };
+        const accepted = (try collectedPreservation(a, &fixture, state, .{ .candidate = .{} }, origin)).accepted;
+        const index = state.pending.pending_localization.? - 1;
+        try std.testing.expectEqual(@as(u32, 31), accepted.candidate.origins[index].?.request.value);
+        const retained = accepted.inputs.evidence[index].review.?.preservation.?;
+        try std.testing.expectEqualDeep(origin, retained.origin.?);
+        const bytes = try std.json.Stringify.valueAlloc(a, accepted.inputs.evidence, .{});
+        var restored = accepted.inputs;
+        restored.evidence = try codec.decode([]const authority.Evidence, a, bytes, .{ .maximum_depth = 128 });
+        restored.review_origins = &.{};
+        restored.review_origin = null;
+        try support.validateStored(a, restored, fixture.context.inputs);
+        for (0..6) |variant| {
+            var changed = restored;
+            const proofs = try a.dupe(authority.Evidence, changed.evidence);
+            changed.evidence = proofs;
+            const proof = &proofs[index].review.?.preservation.?;
+            switch (variant) {
+                0 => proof.assignment.finding.detail = "MOCK A different omission.",
+                1 => proof.assignment.facts.revision += 1,
+                2 => proof.assignment.boundaries = &.{},
+                3 => proof.response.assessments = &.{},
+                4 => proofs[index].review.?.loss = .{ .extraction_claim = fixture.context.inputs.chunks.entries[0].id },
+                5 => proofs[index].review.?.preservation = null,
+                else => unreachable,
+            }
+            try std.testing.expectError(error.InvalidRequiredAuthority, support.validateStored(a, changed, fixture.context.inputs));
+        }
+        var stale = state.inputs;
+        stale.revision += 1;
+        const rejection = (try support.validate(a, stale, fixture.context.inputs, accepted.candidate)).rejected;
+        try std.testing.expectEqual(.invalid_loss, rejection.rejection.selected().?.evidence.?.issue);
+        try std.testing.expectEqualDeep(origin, rejection.rejection.selected().?.origin.?);
+        try std.testing.expectError(error.UnsafeSupportRepair, @import("domain/specification_support_repair.zig").Source.authorize(a, stale, fixture.context, rejection));
+    }
+}
+
+test "invalid preservation response reports comparison call and cannot enter semantic repair" {
+    const support = @import("domain/specification_support.zig").Source;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initContent(a, "MOCK Preserve receipt.", null, true, "MOCK Preserve receipt.", 1);
+    defer fixture.deinit();
+    const state = try preservationTest(a, &fixture, true);
+    const packet = try support.packetForLoss(a, state.inputs, fixture.context, state.pending);
+    defer @import("domain/model_input_packet.zig").release(packet);
+    const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 44 }, .attempt = .{ .value = 3 } };
+    const result = (try support.collectLoss(a, state.inputs, fixture.context, .{ .pending = state.pending }, packet, "{\"assessments\":[]}", origin)).rejected;
+    try std.testing.expectEqualDeep(origin, result.rejection.selected().?.origin.?);
+    try std.testing.expectEqual(state.pending.review.entries[state.pending.pending_localization.? - 1].value.kind, result.candidate.?.review.entries[state.pending.pending_localization.? - 1].value.kind);
+    try std.testing.expectEqual(.invalid_loss, result.rejection.selected().?.evidence.?.issue);
+    try std.testing.expectError(error.UnsafeSupportRepair, @import("domain/specification_support_repair.zig").Source.authorize(a, state.inputs, fixture.context, result));
+    try std.testing.expectError(error.InvalidJsonDocument, support.collectLoss(a, state.inputs, fixture.context, .{ .pending = state.pending }, packet, "{\"kind\":\"candidate\"}", origin));
+}
+
+test "preservation bindings reject changed sources producers assignments and candidate values" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initContent(a, "MOCK Preserve the condition.", null, true, "MOCK Preserve the condition.", 1);
+    defer fixture.deinit();
+    const state = try preservationTest(a, &fixture, true);
+    const collected = (try collectedPreservation(a, &fixture, state, .{ .candidate = .{} }, null)).accepted;
+    const index = state.pending.pending_localization.? - 1;
+    const value = collected.inputs.evidence[index];
+    const admission = @import("domain/specification_support_evidence.zig");
+    for (0..4) |variant| {
+        var inputs = collected.inputs;
+        var sources = fixture.context.inputs;
+        switch (variant) {
+            0 => sources.corpus.state_id.bytes = "MOCK stale source",
+            1 => {
+                const signals = try a.dupe(references.r.Signal, inputs.references.?.signals);
+                signals[0].value.generation_roles = &.{};
+                inputs.references.?.signals = signals;
+            },
+            2 => inputs.brief.?.description.value = .{ .segments = &.{.{ .literal = .{ .value = "MOCK changed brief." } }} },
+            3 => inputs.references.?.items.entries = &.{},
+            else => unreachable,
+        }
+        try std.testing.expectError(error.InvalidRequiredAuthority, admission.validate(a, inputs, sources, value));
+    }
+}
+
+test "known role loss stays unsupported and cannot fall back to upstream or candidate repair" {
+    const support = @import("domain/specification_support.zig").Source;
+    const loss = @import("domain/source_omission.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initContent(a, "MOCK A receipt is required.", null, true, "MOCK A receipt is required.", 1);
+    defer fixture.deinit();
+    var state = try preservationTest(a, &fixture, true);
+    const signals = try a.dupe(references.r.Signal, state.inputs.references.?.signals);
+    for (signals) |*signal| {
+        var roles: std.ArrayList(references.r.GenerationRole) = .empty;
+        for (signal.value.generation_roles) |role| if (role != .description) try roles.append(a, role);
+        signal.value.generation_roles = try roles.toOwnedSlice(a);
+    }
+    state.inputs.references.?.signals = signals;
+    const accepted = (try collectedPreservation(a, &fixture, state, .{ .unsupported_role = .description }, null)).accepted;
+    const index = state.pending.pending_localization.? - 1;
+    try std.testing.expectEqualDeep(loss.Location{ .unsupported_role = .description }, accepted.candidate.review.entries[index].value.loss);
+    try support.validateStored(a, accepted.inputs, fixture.context.inputs);
+    const decision = try supportDecision(a, accepted.inputs);
+    try std.testing.expectError(error.UnsupportedSourceOmission, loss.select(a, fixture.context.inputs, .{ .review = accepted.candidate, .inputs = decision.inputs, .observations = decision.observations, .result = decision.result }));
+    var proposed = accepted.candidate;
+    const entries = try a.dupe(support.Finding, proposed.review.entries);
+    entries[index].value.loss = .{ .candidate = .{} };
+    proposed.review.entries = entries;
+    const rejected = (try support.validate(a, state.inputs, fixture.context.inputs, proposed)).rejected;
+    try std.testing.expectEqual(.invalid_loss, rejected.rejection.selected().?.evidence.?.issue);
+}
+
+test "multi-chunk and separately classified loss cannot fabricate a unique upstream repair owner" {
+    for ([_][]const u8{ "MOCK Preserve all conditions.\n" ** 70, "MOCK Display `MOCK Approved` after confirmation." }) |source| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, source, null, true, "MOCK Partial meaning.", 1);
+        defer fixture.deinit();
+        const state = try preservationTest(a, &fixture, false);
+        const accepted = (try collectedPreservation(a, &fixture, state, .{ .unlocalized = .{} }, null)).accepted;
+        try @import("domain/specification_support.zig").Source.validateStored(a, accepted.inputs, fixture.context.inputs);
+        const assignment = accepted.inputs.evidence[0].review.?.preservation.?.assignment;
+        try std.testing.expect(assignment.boundaries[0].owner == null);
+        const response = try preservationResponse(a, assignment, .lost);
+        try std.testing.expectEqual(preservation.Attribution.unresolved, try preservation.admit(a, assignment, assignment, fixture.context.inputs, response));
+    }
+}
+
+test "collecting a second comparison preserves independent admitted evidence" {
+    const support = @import("domain/specification_support.zig").Source;
+    const authority = @import("domain/required_authority.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initContent(a, "MOCK Keep both receipt and deadline.", null, true, "MOCK Keep both receipt and deadline.", 1);
+    defer fixture.deinit();
+    const state = try preservationTest(a, &fixture, true);
+    const first = (try collectedPreservation(a, &fixture, state, .{ .candidate = .{} }, null)).accepted;
+    const ledger = try authority.build(a, state.inputs);
+    const index = for (ledger.requirements, 0..) |required, at| {
+        if (required.seed.id.unit == .feature and required.seed.id.slot == .primary_goal) break at;
+    } else return error.InvalidFixture;
+    var pending = first.candidate;
+    const entries = try a.dupe(support.Finding, pending.review.entries);
+    entries[index].value.kind = .candidate_omission;
+    entries[index].value.source_ids = &.{.{ .ordinal = 1 }};
+    entries[index].value.detail = "MOCK The goal loses the required purpose.";
+    pending.review.entries = entries;
+    pending.pending_localization = @intCast(index + 1);
+    const packet = try support.packetForLoss(a, state.inputs, fixture.context, pending);
+    defer @import("domain/model_input_packet.zig").release(packet);
+    const assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, pending);
+    const second = (try support.collectLoss(a, state.inputs, fixture.context, .{ .pending = pending }, packet, try @import("test_fixtures/source_omission_evidence.zig").encode(a, assigned, .{ .candidate = .{} }), null)).accepted;
+    const original = state.pending.pending_localization.? - 1;
+    try std.testing.expectEqualDeep(first.candidate.review.entries[original], second.candidate.review.entries[original]);
+    try support.validateStored(a, second.inputs, fixture.context.inputs);
+    const unsupported = second.candidate.review.entries[index];
+    const rules = try @import("domain/specification_support_evidence.zig").requirements(a, state.inputs, fixture.context.inputs, ledger.requirements[index].seed.id);
+    var forged = unsupported.value;
+    forged.kind = .supported;
+    try std.testing.expectError(error.InvalidJsonDocument, @import("domain/specification_support_model.zig").bindLoss(rules, forged, .{ .candidate = .{} }, unsupported.value.preservation.?));
+}
+
+test "omission admission requires its source premise before preparing comparisons" {
+    const support = @import("domain/specification_support.zig").Source;
+    const admission = @import("domain/specification_support_evidence.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture = try Fixture.initContent(a, "MOCK Retain the delivery deadline.", null, true, "MOCK Retain the delivery deadline.", 1);
+    defer fixture.deinit();
+    const state = try preservationTest(a, &fixture, true);
+    var missing = state.pending;
+    const entries = try a.dupe(support.Finding, missing.review.entries);
+    const index = missing.pending_localization.? - 1;
+    try std.testing.expect(entries[index].value.provenance.claim_ids.len != 0);
+    entries[index].value.source_ids = &.{};
+    missing.review.entries = entries;
+    const rejected = (try support.validate(a, state.inputs, fixture.context.inputs, missing)).rejected;
+    try std.testing.expectEqual(admission.Issue.missing_evidence, rejected.rejection.selected().?.evidence.?.issue);
+    try std.testing.expectEqual(.source_required, rejected.rejection.selected().?.evidence.?.rule.minimum);
+    try std.testing.expect((try support.validate(a, state.inputs, fixture.context.inputs, state.pending)) == .accepted);
+}
+
+test "bound preservation calibration uses production packet construction and native admission" {
+    try @import("test_fixtures/source_loss_calibration.zig").run();
 }

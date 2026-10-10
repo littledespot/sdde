@@ -32,7 +32,7 @@ pub const Decision = enum {
 };
 pub const Canonical = struct {
     loss: loss = .{ .unlocalized = .{} },
-    loss_comparison: ?@import("source_omission.zig").Comparison = null,
+    preservation: ?@import("source_omission.zig").comparisons.Evidence = null,
     kind: Decision,
     provenance: @import("specification.zig").Selection,
     source_ids: []const SourceId,
@@ -88,24 +88,11 @@ pub fn decode(a_alloc: std.mem.Allocator, bytes: []const u8, required: evidence.
     };
 }
 
-pub fn bindLoss(required: evidence.Requirements, value: Canonical, assessment: @import("source_omission.zig").Assessment) json.Error!Canonical {
+pub fn bindLoss(required: evidence.Requirements, value: Canonical, location: loss, proof: @import("source_omission.zig").comparisons.Evidence) json.Error!Canonical {
     if (value.kind != .candidate_omission) return error.InvalidJsonDocument;
     var bound = value;
-    switch (assessment) {
-        .unlocalized => {
-            bound.loss = .{ .unlocalized = .{} };
-            bound.loss_comparison = null;
-        },
-        .candidate => {
-            bound.loss = .{ .candidate = .{} };
-            bound.loss_comparison = null;
-        },
-        .localized => |selected| {
-            if (!@import("source_omission.zig").isUpstream(selected.location)) return error.InvalidJsonDocument;
-            bound.loss = selected.location;
-            bound.loss_comparison = selected.comparison;
-        },
-    }
+    bound.loss = location;
+    bound.preservation = proof;
     bound.provenance.claim_ids = try claimsFor(required, .candidate_omission, bound.loss);
     return bound;
 }

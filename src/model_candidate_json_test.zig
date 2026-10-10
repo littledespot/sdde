@@ -135,7 +135,7 @@ test "independent wire cases cover every selected specification result and neste
     try checkCandidate("support", "detail", "{\"detail\":\"Which deadline applies?\"}");
     try candidateCase("support", "detail", "{\"detail\":\"Which deadline applies?\",\"finding\":\"supported\"}", .unknown_property, "/finding");
     try checkCandidate("support", "selection", "{\"source_ids\":[]}");
-    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"Preserve the required confirmation.\"}");
+    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"Preserve the required confirmation.\"}");
     try checkCandidate("support", null, "{\"kind\":\"supported\",\"source_ids\":[],\"detail\":\"\"}");
 }
 
@@ -279,7 +279,7 @@ test "required text and citation presence follows native rules in initial and se
     try checkCandidate("support", "applicability_finding", review_prefix ++ "not_applicable" ++ review_tail);
     inline for (.{ "ambiguous", "conflicting", "unsupported", "candidate_omission", "inconclusive" }) |kind| {
         const question = if (comptime std.mem.eql(u8, kind, "ambiguous") or std.mem.eql(u8, kind, "conflicting") or std.mem.eql(u8, kind, "unsupported")) ",\"question\":\"Which rule applies?\"" else "";
-        const body = review_prefix ++ kind ++ "\",\"source_ids\":[],\"detail\":\"\"" ++ question ++ "}";
+        const body = review_prefix ++ kind ++ "\",\"source_ids\":[1],\"detail\":\"\"" ++ question ++ "}";
         try candidateSchemaCase("support", "finding", body, .string_length, "/detail");
     }
     try candidateSchemaCase("support", "gap_detail", "{\"detail\":\"\",\"question\":\"Which rule applies?\"}", .string_length, "/detail");
@@ -347,30 +347,12 @@ test "focused review evidence shapes follow native minima without excluding sour
     }
 }
 
-test "loss attribution wire variants stay closed across initial review insertion and replacement" {
-    const locations = .{
-        "{\"kind\":\"unlocalized\"}",
-        "{\"kind\":\"candidate\"}",
-        "{\"kind\":\"extraction_claim\",\"bytes\":\"chunk-7\"}",
-        "{\"kind\":\"token_classification\",\"source_id\":7,\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}",
-        "{\"kind\":\"reconciliation_signal\",\"ordinal\":7}",
-        "{\"kind\":\"reconciliation_disposition\",\"ordinal\":9}",
-        "{\"kind\":\"reconciliation_conflict\",\"ordinal\":9}",
-    };
-    try std.testing.expectEqual(@typeInfo(@import("domain/source_omission.zig").Location).@"union".fields.len, locations.len);
-    inline for (locations) |location| {
-        const comparison = "{\"kind\":\"source_producer_comparison\",\"source\":{\"chunk_id\":{\"bytes\":\"chunk-7\"},\"lines\":{\"first\":1,\"last\":1}},\"producer_loss\":\"MOCK The producer omitted this source obligation.\"}";
-        const wire = if (comptime std.mem.eql(u8, location, "{\"kind\":\"unlocalized\"}") or std.mem.eql(u8, location, "{\"kind\":\"candidate\"}")) location else "{\"kind\":\"localized\",\"location\":" ++ location ++ ",\"comparison\":" ++ comparison ++ "}";
-        try checkCandidate("support", "loss", wire);
-        const value = "{\"kind\":\"candidate_omission\",\"loss\":" ++ location ++ ",\"source_ids\":[" ++ response_wire.id ++ "],\"detail\":\"Preserve the deadline.\"}";
-        inline for (.{ "finding", "applicability_finding" }) |selection| try candidateCase("support", selection, value, .unknown_property, "/loss");
-    }
-    try candidateCase("support", "loss", "{\"kind\":\"unlocalized\",\"comparison\":null}", .unknown_property, "/comparison");
-    try candidateCase("support", "loss", "{\"kind\":\"candidate\",\"comparison\":null}", .unknown_property, "/comparison");
-    try candidateCase("support", "loss", "{\"kind\":\"candidate\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-chunk\"}}", .unknown_property, "/location");
-    try candidateCase("support", "loss", "{\"location\":{\"kind\":\"unlocalized\"},\"comparison\":null}", .missing_required_property, "/kind");
-    try candidateCase("support", "loss", "{\"kind\":\"localized\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"chunk-7\"}}", .missing_required_property, "/comparison");
-    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"Preserve the deadline.\"}");
+test "preservation wire is closed and rejects old attribution choices" {
+    try checkCandidate("support", "preservation_comparisons", "{\"assessments\":[]}");
+    try candidateCase("support", "preservation_comparisons", "{\"assessments\":[],\"kind\":\"candidate\"}", .unknown_property, "/kind");
+    try candidateCase("support", "preservation_comparisons", "{\"assessments\":[],\"location\":{}}", .unknown_property, "/location");
+    try candidateCase("support", "preservation_comparisons", "{}", .missing_required_property, "/assessments");
+    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"MOCK Preserve the deadline.\"}");
 }
 
 fn checkCandidate(comptime name: []const u8, comptime selection: ?[]const u8, bytes: []const u8) !void {
@@ -443,7 +425,7 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         return nativeWire(@import("domain/specification_generation.zig").ModelResponse, a, bytes);
     } else if (comptime selection != null) {
         const selected = selection.?;
-        if (comptime std.mem.eql(u8, selected, "loss")) return nativeWire(@import("domain/source_omission.zig").Assessment, a, bytes);
+        if (comptime std.mem.eql(u8, selected, "preservation_comparisons")) return nativeWire(@import("domain/source_omission.zig").comparisons.Response, a, bytes);
         const model = @import("domain/specification_support_model.zig");
         if (comptime std.mem.eql(u8, selected, "finding") or std.mem.eql(u8, selected, "applicability_finding")) return nativeWire(model.Value, a, bytes);
         if (comptime std.mem.eql(u8, selected, "selection")) return nativeWire(model.Selection, a, bytes);

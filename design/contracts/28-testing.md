@@ -521,3 +521,15 @@ answers each question and whether any necessary decision was suppressed. Report
 false questions, missed genuine gaps and terminal interpretation failures separately;
 a lower question count caused by more failures is not improved generation. Do not
 claim universal semantic correctness or successful E2E from fake-provider tests.
+
+### Bound preservation lifecycle verification
+
+Offline tests supply semantic labels to prove §22.1 assignment, admission, native
+attribution, correction, exact repair scope, origin retention, currentness and
+readback mechanics. Cover inherited absence, joint evidence, empty collections,
+role defects without repair permission, distinct occurrences and stale facts.
+Live calibration separately measures label accuracy, false upstream/candidate
+attribution, uncertainty and evidence adequacy. Historical culprit-selection
+comparisons retain their original requests/results; they do not validate the new
+contract. Freeze new production-generated comparison requests before approved
+live trials. Publication and rubric quality still require separately approved E2E.

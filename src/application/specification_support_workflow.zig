@@ -172,7 +172,7 @@ pub const CollectLoss = struct {
         const packet = values.read(&input.step.data, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch |operation_error| return operation_error;
         const handoff = try @import("model_candidate_handoff.zig").read(&input.step.data);
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
-        const result = self.action.execute(owner.arena.allocator(), try inputs(&input.step.data, current), try spec.readContext(&input.step.data), current.source, packet, handoff.body) catch |native_failure| {
+        const result = self.action.execute(owner.arena.allocator(), try inputs(&input.step.data, current), try spec.readContext(&input.step.data), current.source, packet, handoff.body, handoff.origin) catch |native_failure| {
             owned.destroy(owner);
             return native_failure;
         };

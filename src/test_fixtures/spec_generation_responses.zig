@@ -29,7 +29,7 @@ pub const Applicability = enum {
 pub const applicability_detail = "The source requires a displayed value. Its origin is undecided; the choice determines whether business records and their fields are required.";
 pub const applicability_question = "Should the displayed value be calculated on request or read from managed records? Answer calculate, or records with their required fields.";
 
-pub const SourceLoss = enum { empty, partial, classification, signal, post_generation, unchanged, false_conflict, unchanged_conflict, false_conflict_questions };
+pub const SourceLoss = enum { empty, partial, classification, signal, unchanged, false_conflict, unchanged_conflict, false_conflict_questions };
 fn falseConflict(mode: ?SourceLoss) bool {
     return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions;
 }
@@ -292,7 +292,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 if (options.attempt > 1) proposal.claim_dispositions = proposal.claim_dispositions[0..1];
                 return @import("reference_reconciliation.zig").modelWire(allocator, .{ .global = proposal });
             }
-            if (options.source_loss == .signal or options.source_loss == .post_generation or options.source_loss == .unchanged) {
+            if (options.source_loss == .signal or options.source_loss == .unchanged) {
                 const signals = try allocator.dupe(r.SignalProposal, proposal.signals);
                 signals[0].content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Incomplete signal." } }} } } };
                 proposal.signals = signals;
@@ -512,7 +512,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             const context = try @import("../application/specification_workflow.zig").readContext(&view);
             const packet = try values.read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet);
             if (options.evidence_fault == .empty_correction and options.attempt > 1) return "{}";
-            if (packet.resultDefinition()) |definition| if (std.mem.eql(u8, definition.bytes, "loss")) {
+            if (packet.resultDefinition()) |definition| if (std.mem.eql(u8, definition.bytes, "preservation_comparisons")) {
                 const prior = try workflow.prior(.source, progress);
                 const candidate = switch (prior.?) {
                     .pending => |value| value,
@@ -525,9 +525,11 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .{ .reconciliation_conflict = id.unit.conflict }
                 else if (options.source_loss) |mode|
                     try fixtureLoss(&view, inputs, context, mode)
+                else if (options.candidate_omissions != null)
+                    .{ .candidate = .{} }
                 else
                     .{ .unlocalized = .{} };
-                return @import("source_omission_evidence.zig").encode(allocator, inputs, location);
+                return @import("source_omission_evidence.zig").encode(allocator, try @import("../domain/specification_support.zig").Source.comparisonAssignment(allocator, inputs, context, candidate), location);
             };
             const selected_index = if (request.id().purpose == .atomic_repair) 0 else try reviewIndex(allocator, inputs, try @import("../domain/specification_support.zig").Source.nextSubject(allocator, inputs, try workflow.prior(.source, progress)));
             const all = try @import("../domain/specification_provenance.zig").items(context);
@@ -578,6 +580,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 };
                 const omission = if (omission_kind) |kind| omittedKind(options, kind) and inputs.specification != null and !g.spec.hasRecords(inputs.specification.?, kind) else false;
                 finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .question = if (conflict) "Should the loan be renewed or rejected? Choose the required outcome." else if (uncertain and !omission) "Which renewal deadline applies? Supply the duration and starting event." else null, .kind = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else if (unbound) .inconclusive else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The specification omits the source-supported requirement." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else if (unbound) "No validated source group binds this requirement." else "" } };
+                if (omission) finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
                 if (falseConflict(options.source_loss) and options.source_loss != .false_conflict_questions and requirement.seed.id.unit == .conflict) {
                     finding.value.kind = .candidate_omission;
                     finding.value.question = null;
@@ -611,7 +614,16 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         finding.value.detail = "Extraction lost source-required behavior.";
                         finding.value.source_ids = try allocator.dupe(r.extraction.identity.SourceId, &.{context.inputs.corpus.sources[0].id});
                     };
-                    findings[0].value = .{ .kind = .candidate_omission, .loss = location, .detail = "Preserve the source-required deadline.", .source_ids = try allocator.dupe(r.extraction.identity.SourceId, &.{context.inputs.corpus.sources[0].id}), .provenance = .{ .claim_ids = if (location == .reconciliation_signal) context.references.records.signals[location.reconciliation_signal.ordinal - 1].value.claim_ids else &.{}, .clarification_response_ids = &.{} } };
+                    const target_index = if (location == .reconciliation_signal) target: {
+                        for (ledger.requirements, 0..) |required, at| if (required.seed.id.unit == .signal and std.meta.eql(required.seed.id.unit.signal, location.reconciliation_signal)) break :target at;
+                        return error.InvalidFixture;
+                    } else if (location == .token_classification) target: {
+                        // Review the deficient reference collection, not an
+                        // authored field with independent local repair rights.
+                        for (ledger.requirements, 0..) |required, at| if (required.seed.id.unit == .signal) break :target at;
+                        return error.InvalidFixture;
+                    } else 0;
+                    findings[target_index].value = .{ .kind = .candidate_omission, .loss = location, .detail = "Preserve the source-required deadline.", .source_ids = try allocator.dupe(r.extraction.identity.SourceId, &.{context.inputs.corpus.sources[0].id}), .provenance = .{ .claim_ids = if (location == .reconciliation_signal) context.references.records.signals[location.reconciliation_signal.ordinal - 1].value.claim_ids else &.{}, .clarification_response_ids = &.{} } };
                 }
             }
             if (request.id().purpose == .atomic_repair) {
@@ -762,13 +774,13 @@ fn sourceRepairWire(allocator: std.mem.Allocator, inputs: a.Inputs, context: @im
         .selection => |value| codec.encode(model.Selection, allocator, .{ .source_ids = value.source_ids }),
     };
 }
-fn fixtureLoss(view: *const data.View, inputs: a.Inputs, context: @import("../domain/specification_provenance.zig").Context, mode: SourceLoss) !@import("../domain/source_omission.zig").Location {
+fn fixtureLoss(view: *const data.View, _: a.Inputs, context: @import("../domain/specification_provenance.zig").Context, mode: SourceLoss) !@import("../domain/source_omission.zig").Location {
     const candidate = (try native.read(view, native.text_schema, .text_validated)).payload().text_validated;
     const first = candidate.entries[0];
     if ((mode == .empty and first.outcome == .no_feature_claim) or (mode == .partial and first.outcome == .claims and first.outcome.claims.len == 1)) return .{ .extraction_claim = first.scope.chunk_id };
     if (mode == .empty or mode == .classification) {
         for (first.token_classifications) |classification| if (classification == .irrelevant) return .{ .token_classification = classification.id() };
-    } else if (mode != .post_generation or inputs.specification != null) {
+    } else {
         for (context.references.records.signals) |signal| if (signal.value.content == .model and signal.value.content.model == .business and signal.value.content.model.business.value.segments.len == 1 and signal.value.content.model.business.value.segments[0] == .literal and std.mem.eql(u8, signal.value.content.model.business.value.segments[0].literal.value, "Incomplete signal.")) return .{ .reconciliation_signal = signal.id };
     }
     return .{ .unlocalized = .{} };

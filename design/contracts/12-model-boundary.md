@@ -819,25 +819,23 @@ claim or source-only evidence. A `candidate` attribution means the fixed omissio
 belongs to the generated subject while its meaning survived upstream; it requires
 a current candidate and nonempty subject-bound claim evidence. `unlocalized`
 means no reliable attribution was established. Both retain ordinary eligibility.
-Native source-review evidence retains `loss` and its source-line/producer-loss
-comparison, so readback repeats the same source and producer joins. A localized
-answer without comparison evidence rejects; `candidate`, `unlocalized` and non-omission
-findings carry no comparison. Principle evidence has neither. `specification-state/v9` rejects earlier
-snapshot contracts rather than silently supplying a missing binding. ADR 0020
-governs the derived exact-reference lineage.
+Native source-review evidence retains the bound preservation assignment and complete
+assessment response under [§22.1](22-repair.md). The derived location must agree
+with re-admission against current canonical facts. Non-omission and principle
+findings carry no comparison. `specification-state/v10` rejects earlier snapshot
+contracts without supplying missing bindings. ADR 0020 governs exact lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
 **Source-review response contract (28 September 2026):** the model chooses a
 semantic finding, detail, and any genuinely selectable source. When the finding
-is candidate omission, a separate call attributes it to the candidate, an upstream
-producer, or leaves it unlocalized. Its dedicated input contains the fixed finding,
-resolved candidate business values, numbered source lines and producers
-paired with their actual outputs. Only eligible producers carry selectable locations;
-other outputs remain supporting evidence; support-assessment instructions are absent.
-An upstream selection supplies the required source-line/producer comparison;
+is candidate omission, the separate loss call assesses native-bound preservation
+views without revising that finding. It returns complete evidenced comparisons,
+not a location; the same schema and immutable assignment govern protocol correction.
+Resolved business values, numbered sources and producer context support those
+comparisons. Native code derives attribution under §22.1;
 every selected generation, source-review and repair schema rejects `provenance`.
 The engine constructs the canonical claim selection from the current bound
-source group, candidate evidence or selected diagnostic producer. A selected
+source group, candidate evidence or natively derived diagnostic producer. A selected
 extraction or token loss has an empty diagnostic claim set; signal or conflict
 loss uses the named producer's exact set. Source-only negative findings may
 carry empty canonical support where the rule permits it. An eligible catalogue,

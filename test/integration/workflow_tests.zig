@@ -1309,7 +1309,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         if (disposition_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - disposition_start) % 2 == 0) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
         // Keep the omitted claim and its exact token in the selected producer's
         // chunk so the empty -> claim -> classification recovery is exercised.
-        if (source_repair_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n" });
+        if (source_repair_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (source_repairs[scenario - source_repair_start] == .partial) "MOCK librarian renews an eligible loan and sees the new return deadline.\n" else "A librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n" });
         if (reconciliation_scenario) switch (reconciliation_faults[scenario - reconciliation_start]) {
             .occupied_summary, .occupied_signals, .misbound_summary => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Display `Loan renewed!`.\n" }),
             .unassigned_roles => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "MOCK borrower renews an eligible loan and sees its new deadline.\n" }),
@@ -1524,7 +1524,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             .no_entities, .entities => .ok,
             .unjustified, .missing_decision, .missing_text => .needs_user,
             .inconclusive => .invalid,
-        } else if (source_repair_scenario) (if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (review_scope_attack or driver.role_decision_fault == .exhaust or driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_correction or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
+        } else if (source_repair_scenario) (if (driver.source_loss == .classification) .invalid else if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (review_scope_attack or driver.role_decision_fault == .exhaust or driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_correction or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}; operation: {s}; candidate: {any}\n", .{ scenario, result, driver.rejected_operation orelse "none", try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (scenario == 0) {
@@ -1792,6 +1792,16 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             } else try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
         }
         if (source_repair_scenario) {
+            try std.testing.expectEqual(@as(usize, 0), driver.admitted_losses.get(.candidate));
+            try std.testing.expectEqual(@as(usize, 0), driver.omission_repair_calls);
+            const owner: std.meta.Tag(@import("../../src/domain/source_omission.zig").Location) = switch (driver.source_loss.?) {
+                .empty, .partial => .extraction_claim,
+                .classification => .unlocalized,
+                .signal, .unchanged => .reconciliation_signal,
+                .false_conflict, .unchanged_conflict => .reconciliation_conflict,
+                .false_conflict_questions => .unlocalized,
+            };
+            try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(owner));
             if (driver.source_loss == .false_conflict_questions) try std.testing.expectEqual(@as(usize, 0), driver.loss_calls) else try std.testing.expect(driver.loss_calls > 0);
             if (driver.source_loss == .false_conflict_questions) {
                 try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls);
@@ -1802,7 +1812,17 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
                 try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/clarifications.json", .{}));
             }
-            try std.testing.expectEqual(@as(usize, if (driver.source_loss == .false_conflict_questions) 0 else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) 2 else 1), driver.source_repair_calls);
+            try std.testing.expectEqual(@as(usize, if (driver.source_loss == .false_conflict_questions or driver.source_loss == .classification) 0 else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) 2 else 1), driver.source_repair_calls);
+            if (driver.source_loss == .classification) {
+                // The joint collection cannot distinguish claim loss from an
+                // irrelevant token classification. Phase 0 forbids choosing a
+                // repairable culprit without a uniquely bound comparison.
+                try std.testing.expectEqual(@as(usize, 0), driver.classification_repair_calls);
+                try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls);
+                const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+                try std.testing.expect(!view.contains(.published_workflow_output));
+                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+            }
             if (driver.source_loss == .empty) {
                 // Retiring the no-feature outcome clears its forced choices.
                 // The existing classification repair gate supplies fresh semantics.
@@ -1841,7 +1861,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                         else => {},
                     };
                     try std.testing.expectEqual(@as(usize, 2), requirements);
-                    try std.testing.expectEqual(@as(usize, 1), outcomes);
+                    try std.testing.expectEqual(@as(usize, 0), outcomes);
                 }
                 try std.testing.expectEqual(.all_resolved, state.review.result.continuation);
             }
@@ -2448,6 +2468,11 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         }
         if (driver.candidate_omissions) |omissions| {
             const count: usize = if (omissions == .functional) 1 else 2;
+            // Re-review after repairing one record can reassess another still
+            // missing obligation; every admitted loss must remain candidate-local.
+            try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(.candidate));
+            try std.testing.expect(driver.loss_calls >= count);
+            try std.testing.expectEqual(@as(usize, 0), driver.source_repair_calls);
             try std.testing.expectEqual(count, driver.omission_repair_calls);
             try std.testing.expectEqual(count, driver.omission_merges);
             try std.testing.expectEqual(count, driver.omission_resolutions);
@@ -2464,6 +2489,13 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             for (authority_result.entries) |entry| try std.testing.expect(entry.candidate_defect == null);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
+            var readback: std.heap.ArenaAllocator = .init(allocator);
+            defer readback.deinit();
+            const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
+            const persisted = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
+            try std.testing.expectEqual(.all_resolved, persisted.review.result.continuation);
+            try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(persisted.content, .functional_requirement));
+            try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(persisted.content, .acceptance_criterion));
             const corrected_initial_review = scenario == omission_scenario + 2;
             try std.testing.expectEqual(@as(usize, @intFromBool(corrected_initial_review)), driver.fault_calls);
             if (corrected_initial_review) {

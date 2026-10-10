@@ -64,17 +64,31 @@ This summarizes the existing contracts in
 - Authoring dependencies use resolved brief text and entity applicability/basis;
   canonical provenance and fragment bookkeeping stay native. Record purposes and
   selected schema alternatives derive from the same native eligibility decision.
-- Loss localization keeps its omission verdict fixed. The dedicated packet pairs
-  each producer with its actual output, alongside resolved candidate
-  business values and numbered source lines. Only eligible producers carry selectable
-  locations; other outputs remain supporting evidence. It omits support-assessment guidance.
-  `candidate` means the defect is downstream and meaning survived upstream;
-  `unlocalized` means ownership remains uncertain. Neither carries a comparison.
-  `localized` requires an eligible upstream `location` and source/producer `comparison`.
-  Shared admission checks current evidence association; it does not prove semantic
-  loss. Schema choices follow the same eligibility in initial and correction calls.
-  Candidate and unlocalized answers retain the existing safe candidate-local repair
-  or failure route; they grant no upstream target or broader repair authority.
+- Loss comparison keeps one omission fixed and assesses native-bound evidence
+  collections. `preserved`, `lost` and `uncertain` describe each assigned view;
+  no model-selected culprit or repair operation is accepted. Native attribution,
+  currentness and permission follow [§22.1](../contracts/22-repair.md).
+  Omission admission requires its supporting sources even when claim evidence is
+  fixed by the subject; this provides the comparison's original-source premise.
+  Original claims selected for authoring remain its meaning input; signal prose is
+  supporting evidence. Complete comparison responses retain source/member evidence
+  and their own call origin. Stored evidence is rederived without request logs.
+  The request exposes one comparison-local member ID, resolved claim meaning and
+  source identity. Canonical claim/citation IDs and half-open coordinates stay in
+  native evidence; source selections use only the inclusive line catalogue.
+  Target purpose belongs to the fixed finding, not an instruction to rewrite each
+  upstream collection as that field. The already deficient subject and resolved
+  producer outputs are separately labelled supporting evidence.
+  Claim meanings omit extraction-category labels: preservation depends on what the
+  collection expresses, not whether a value has a separate member. A bare value
+  alone does not establish behavior. Canonical categories, occurrence identities
+  and actual classification decisions remain intact; native code does not infer
+  semantic equivalence or change role membership.
+- `Source.comparisonAssignment` constructs the shared native binding;
+  `packetForLoss` resolves its model-facing values. Initial requests and protocol
+  corrections use `preservation_comparisons`. Collection, diagnostic admission and
+  repair authorization use the same native derivation. Native `invalid_loss` is
+  terminal; this change adds no semantic retry or expanded repair permission.
 
 Native operation causes and expected domain rejections survive into CLI, telemetry
 and harness evidence through the closed operation contract. The harness records
