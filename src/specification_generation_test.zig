@@ -7532,15 +7532,21 @@ test "source reviewer supplies one obligation and loss review carries it without
         const required = try admission.requirements(a, state.inputs, fixture.context.inputs, id);
         const initial = try support.packetFor(a, state.inputs, fixture.context, .{ .finding = id });
         defer packets.release(initial);
+        const review_origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 701 }, .attempt = .{ .value = 2 } };
+        const loss_origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 702 }, .attempt = .{ .value = 1 } };
+        const source_ids: []const @import("domain/reference_identity.zig").SourceId = &.{fixture.context.inputs.corpus.sources[0].id};
         const response = try json.encode(model.Value, a, .{ .candidate_omission = .{
-            .source_ids = &.{.{ .ordinal = 1 }},
+            .source_ids = source_ids,
             .detail = "MOCK The captured producer discarded this requirement.",
             .missing_obligation = obligation,
         } });
-        const collected = (try support.collectFocused(a, state.inputs, fixture.context, null, initial, response, null)).accepted;
+        const collected = (try support.collectFocused(a, state.inputs, fixture.context, null, initial, response, review_origin)).accepted;
         const finding = collected.candidate.review.entries[0].value;
         try std.testing.expectEqualStrings(obligation, finding.missing_obligation.?);
         try std.testing.expectEqualStrings(obligation, collected.inputs.evidence[0].review.?.missing_obligation.?);
+        try std.testing.expectEqualDeep(source_ids, finding.source_ids);
+        try std.testing.expectEqualDeep(source_ids, collected.inputs.evidence[0].review.?.source_ids);
+        try std.testing.expectEqualDeep(review_origin, collected.inputs.review_origins[0].?);
         const packet = try support.packetForLoss(a, state.inputs, fixture.context, collected.candidate);
         defer packets.release(packet);
         const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
@@ -7550,14 +7556,47 @@ test "source reviewer supplies one obligation and loss review carries it without
         try std.testing.expectEqualStrings(finding.detail, body.get("supporting_evidence").?.object.get("diagnostic_detail").?.string);
         const assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, collected.candidate);
         try std.testing.expectEqualStrings(obligation, assigned.finding.missing_obligation);
+        try std.testing.expectEqualDeep(source_ids, assigned.finding.source_ids);
+        try std.testing.expectEqual(@as(usize, assigned.sources.len), body.get("sources").?.array.items.len);
+        for (assigned.sources, body.get("sources").?.array.items) |source, visible| {
+            try std.testing.expectEqual(@as(i64, source.source_id.ordinal), visible.object.get("source_id").?.integer);
+            try std.testing.expectEqualStrings(source.chunk_id.bytes, visible.object.get("chunk_id").?.object.get("bytes").?.string);
+            try std.testing.expectEqual(source.lines.len, visible.object.get("lines").?.array.items.len);
+        }
         const assessed = try preservationResponse(a, assigned, .lost);
+        const assessed_bytes = try json.encode(preservation.Response, a, assessed);
         var stale = assigned;
         stale.finding.missing_obligation = "MOCK A different obligation must be satisfied.";
         try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, assigned, stale, fixture.context.inputs, assessed));
-        const localized = (try support.collectLoss(a, state.inputs, fixture.context, .{ .accepted = collected }, packet, try json.encode(preservation.Response, a, assessed), null)).accepted;
+        var changed = collected.candidate;
+        const changed_entries = try a.dupe(support.Finding, changed.review.entries);
+        changed_entries[0].value.missing_obligation = stale.finding.missing_obligation;
+        changed.review.entries = changed_entries;
+        try std.testing.expectError(error.InvalidPreservationComparison, support.admitComparisons(a, state.inputs, fixture.context, changed, assigned, assessed_bytes));
+        try std.testing.expectError(error.InvalidRequiredAuthority, support.collectLoss(a, state.inputs, fixture.context, .{ .pending = changed }, packet, assessed_bytes, loss_origin));
+        const localized = (try support.collectLoss(a, state.inputs, fixture.context, .{ .accepted = collected }, packet, assessed_bytes, loss_origin)).accepted;
         try std.testing.expectEqualStrings(obligation, localized.candidate.review.entries[0].value.missing_obligation.?);
-        try std.testing.expectEqualStrings(obligation, localized.inputs.evidence[0].review.?.preservation.?.assignment.finding.missing_obligation);
+        const retained = localized.inputs.evidence[0].review.?.preservation.?;
+        try std.testing.expectEqualDeep(assigned, retained.assignment);
+        try std.testing.expectEqualDeep(review_origin, localized.inputs.review_origins[0].?);
+        try std.testing.expectEqualDeep(loss_origin, retained.origin.?);
         try support.validateStored(a, localized.inputs, fixture.context.inputs);
+
+        const foreign_source = try json.encode(model.Value, a, .{ .candidate_omission = .{
+            .source_ids = &.{.{ .ordinal = 999 }},
+            .detail = finding.detail,
+            .missing_obligation = obligation,
+        } });
+        const rejected = (try support.collectFocused(a, state.inputs, fixture.context, null, initial, foreign_source, review_origin)).rejected;
+        try std.testing.expectEqual(.invalid_sources, rejected.rejection.selected().?.evidence.?.issue);
+        try std.testing.expectEqualDeep(review_origin, rejected.rejection.selected().?.origin.?);
+        var foreign_response = assessed;
+        const foreign_entries = try a.dupe(preservation.Assessment, assessed.assessments);
+        foreign_entries[0].sources = &.{.{ .chunk_id = .{ .bytes = "MOCK unassigned source" }, .lines = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 1 } } }};
+        foreign_response.assessments = foreign_entries;
+        const loss_rejected = (try support.collectLoss(a, state.inputs, fixture.context, .{ .accepted = collected }, packet, try json.encode(preservation.Response, a, foreign_response), loss_origin)).rejected;
+        try std.testing.expectEqual(.invalid_loss, loss_rejected.rejection.selected().?.evidence.?.issue);
+        try std.testing.expectEqualDeep(loss_origin, loss_rejected.rejection.selected().?.origin.?);
 
         // The obsolete overloaded wire shape cannot silently reconstruct a target.
         for ([_][]const u8{
@@ -7566,6 +7605,113 @@ test "source reviewer supplies one obligation and loss review carries it without
             "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"MOCK Missing.\",\"missing_obligation\":\"MOCK Notify the patient.\",\"fallback\":true}",
             "{\"kind\":\"supported\",\"source_ids\":[1],\"detail\":\"MOCK Supported.\",\"missing_obligation\":\"MOCK Notify the patient.\"}",
         }) |invalid| try std.testing.expectError(error.InvalidJsonDocument, model.decode(a, invalid, required));
+    }
+}
+
+test "loss request correction preserves canonical citation guidance and the complete native collection" {
+    const support = @import("domain/specification_support.zig").Source;
+    const packets = @import("domain/model_input_packet.zig");
+    const schemas = @import("domain/model_result_schema.zig");
+    const build_request = @import("actions/model/build_model_request.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const obligation = "MOCK After refusal do not change the deadline; retain the receipt for thirty days.";
+    var source_fixture = try Fixture.initContent(a, obligation, null, true, obligation, 2);
+    defer source_fixture.deinit();
+    const state = try preservationTest(a, &source_fixture, false, obligation);
+    const assigned = try support.comparisonAssignment(a, state.inputs, source_fixture.context, state.pending);
+    try std.testing.expectEqual(@as(usize, 2), assigned.comparisons[0].members.len);
+    const packet = try support.packetForLoss(a, state.inputs, source_fixture.context, state.pending);
+    defer packets.release(packet);
+    const prompt = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support-loss.prompt.md", a, .limited(1_048_576));
+    const correction_prompt = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/protocol.prompt.md", a, .limited(1_048_576));
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schema = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .limited(1_048_576)));
+    const selected = schema.select(packet.resultDefinition().?).?;
+    const restricted = try schemas.restrict(std.testing.allocator, selected, packet.excludedVariants(), packet.integerChoices());
+    defer restricted.release();
+    var provider_fixture: @import("provider_invocation_test_fixture.zig").Fixture = undefined;
+    try provider_fixture.initWithCompiledSchema(selected);
+    defer provider_fixture.deinit();
+    var request_source = try provider_fixture.requestSource();
+    request_source.restriction = restricted;
+    const prepared = try (build_request.Action{}).execute(std.testing.allocator, request_source, &.{ .{ .guidance = prompt }, .{ .user = packet.body() } });
+    provider_fixture.prepared.deinit();
+    provider_fixture.prepared = prepared;
+    provider_fixture.base.request = prepared.request.*;
+    provider_fixture.call.request = prepared.request;
+    request_source = try provider_fixture.requestSource();
+    request_source.restriction = restricted;
+    provider_fixture.fake.invocation_plan.complete.content = "{\"assessments\":[],\"members\":[]}";
+    var response = try provider_fixture.response();
+    defer response.deinit();
+    var captured = try (@import("actions/model/validate_provider_invocation_observation.zig").Action{}).execute(std.testing.allocator, provider_fixture.call, &response);
+    defer captured.deinit();
+    var decoded = try (@import("actions/model/decode_model_envelope.zig").Action{}).execute(std.testing.allocator, captured.evidence.result().complete, null);
+    defer decoded.deinit();
+    const validation = @import("domain/model_payload_schema.zig");
+    const diagnostic = validation.validate(decoded.candidate).invalid;
+    try std.testing.expectEqual(validation.Rejection.unknown_property, diagnostic.reason);
+    var retry = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, request_source, prepared.request.content, captured.evidence, .{ .schema = diagnostic }, .unconfirmed, correction_prompt);
+    defer retry.deinit();
+    try std.testing.expectEqualDeep(prepared.request.content, retry.request.content[0..prepared.request.content.len]);
+    try std.testing.expectEqualDeep(prepared.request.model_request_id, retry.request.model_request_id);
+    try std.testing.expect(retry.request.response_schema == restricted.selected());
+    for ([_]*const @import("domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest{ prepared.request, retry.request }) |request| {
+        var guidance_count: usize = 0;
+        var packet_count: usize = 0;
+        for (request.content) |part| switch (part) {
+            .guidance => |bytes| guidance_count += @intFromBool(std.mem.eql(u8, prompt, bytes)),
+            .user => |bytes| packet_count += @intFromBool(std.mem.eql(u8, packet.body(), bytes)),
+            .system, .evidence => {},
+        };
+        try std.testing.expectEqual(@as(usize, 1), guidance_count);
+        try std.testing.expectEqual(@as(usize, 1), packet_count);
+    }
+    // Protocol correction preserves inputs and scope; it supplies no semantic
+    // verdict and cannot replace or select the collection being assessed.
+    try std.testing.expectEqualDeep(assigned, try support.comparisonAssignment(a, state.inputs, source_fixture.context, state.pending));
+}
+
+test "supported and source-gap findings never create loss or upstream repair authority" {
+    const support = @import("domain/specification_support.zig").Source;
+    const model = @import("domain/specification_support_model.zig");
+    const json = @import("domain/model_candidate_json.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    for ([_]model.Value{
+        .{ .supported = .{ .source_ids = &.{.{ .ordinal = 1 }}, .detail = "MOCK The source requirement survives in the current collection." } },
+        .{ .ambiguous = .{ .source_ids = &.{.{ .ordinal = 1 }}, .detail = "MOCK The source does not select a delivery channel.", .question = "MOCK Which delivery channel is required?" } },
+    }) |response| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const requirement = "MOCK After approval notify the patient.";
+        var fixture = try Fixture.initContent(a, requirement, null, true, requirement, 1);
+        defer fixture.deinit();
+        const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, null, null);
+        const ledger = try @import("domain/required_authority.zig").build(a, inputs);
+        const good = try reviewFor(a, inputs, fixture.context.inputs);
+        var collection: ?support.Collection = null;
+        // These declared mock judgments exercise continuation mechanics, not
+        // whether the model correctly identifies a genuine business gap.
+        for (ledger.requirements, 0..) |required, index| {
+            const seed = required.seed;
+            const packet = try support.packetFor(a, inputs, fixture.context, .{ .finding = seed.id });
+            defer packets.release(packet);
+            const bytes = if (seed.id.slot == .description) try json.encode(model.Value, a, response) else try sourceReviewWire(a, inputs, fixture.context, seed.id, good.entries[index].value);
+            collection = try support.collectFocused(a, inputs, fixture.context, collection, packet, bytes, .{ .request = .{ .value = @intCast(703 + index) }, .attempt = .{ .value = 1 } });
+            try std.testing.expect(collection.? != .rejected);
+        }
+        try std.testing.expect(collection.? == .accepted);
+        const collected = collection.?.accepted;
+        try std.testing.expect(collected.candidate.pending_localization == null);
+        try std.testing.expect(collected.inputs.evidence[0].review.?.missing_obligation == null);
+        try std.testing.expect(collected.inputs.evidence[0].review.?.preservation == null);
+        try std.testing.expectError(error.InvalidRequiredAuthority, support.packetForLoss(a, inputs, fixture.context, collected.candidate));
+        const decision = try supportDecision(a, collected.inputs);
+        try std.testing.expectEqual(@as(@TypeOf(decision.result.continuation), if (response == .supported) .all_resolved else .needs_user), decision.result.continuation);
+        try std.testing.expectError(error.InvalidRequiredAuthority, @import("domain/source_omission.zig").select(a, fixture.context.inputs, .{ .review = collected.candidate, .inputs = decision.inputs, .observations = decision.observations, .result = decision.result }));
     }
 }
 

@@ -92,6 +92,10 @@ This summarizes the existing contracts in
   obligation or require upstream collections to resemble the final artifact or
   describe its defect. Equivalent wording and meaning expressed jointly by members
   count as preservation.
+  Original-source spans establish the supplied obligation; the explanation
+  assesses preservation in the assigned collection. [§22](../contracts/22-repair.md)
+  owns collective citation support, including completeness and relevance. These
+  are separate semantic quality measures, not source-count admission rules.
   Claim meanings omit extraction-category labels: preservation depends on what the
   collection expresses, not whether a value has a separate member. A bare value
   alone does not establish behavior. Canonical categories, occurrence identities

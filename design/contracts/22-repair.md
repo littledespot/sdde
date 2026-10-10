@@ -99,7 +99,11 @@ standalone literal, final-field form or a description of the downstream defect.
 The model returns exactly one
 `preserved`, `lost` or `uncertain` assessment per assigned comparison ID, with
 original-source spans and an explanation of where the obligation survives or what
-is missing. `comparison_id` binds the whole native-assigned collection; the model
+is missing. The spans must collectively support the entire supplied source
+obligation, including conditions, negation and obligation strength; multiple spans
+may be necessary, while unrelated spans are omitted. The explanation assesses
+preservation in the assigned collection; the source spans establish the original
+obligation. `comparison_id` binds the whole native-assigned collection; the model
 does not select a member subset. Complete member identities, evidence, obligations
 and dependencies remain in the retained assignment. Shared identical views are
 assessed once. Other producer outputs are supporting context, not selectable
@@ -116,7 +120,10 @@ ownership or unavailable facts leave attribution unresolved. Preserved original
 claims assigned to authoring cut off upstream blame; signal paraphrases are not
 substituted for those claims. Native checks do not prove the semantic labels or
 explanations, or prove that the model considered every assigned member. Explanation
-adequacy and judgment correctness require separate semantic assessment. A forced
+adequacy, citation completeness and relevance, and judgment correctness require
+separate semantic assessment. Native admission does not require every offered
+source to be cited or fill in missing citations: available source identity does
+not establish semantic support. A forced
 no-feature extraction owns its forced classifications;
 a separately classified claims collection does not identify a unique extraction
 or classification culprit merely because meaning is missing.

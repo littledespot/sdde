@@ -12,9 +12,10 @@ const comparison = @import("../domain/source_omission_comparison.zig");
 const codec = @import("../domain/model_candidate_json.zig");
 const packets = @import("../domain/model_input_packet.zig");
 const cases_root = "test/calibration/source-loss-attribution/bound-preservation/obligation";
-const root = "test/calibration/source-loss-attribution/bound-preservation/native-scope";
-const output = ".zig-cache/source-loss-native-scope";
-const isolation_root = "test/calibration/source-loss-attribution/bound-preservation/isolation";
+const root = "test/calibration/source-loss-attribution/bound-preservation/citation-completeness";
+const output = ".zig-cache/source-loss-citation-completeness";
+const prior_root = "test/calibration/source-loss-attribution/bound-preservation/native-scope";
+const Arm = enum { baseline, candidate };
 const Case = struct {
     id: []const u8,
     cohort: enum { development, unused },
@@ -36,10 +37,14 @@ pub fn run() !void {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const cases = try codec.decode([]const Case, a, try read(a, cases_root ++ "/cases.json"));
+    const retained = try codec.decode([]const Case, a, try read(a, cases_root ++ "/cases.json"));
+    const controls = try codec.decode([]const Case, a, try read(a, root ++ "/citation.controls.json"));
+    const cases = try a.alloc(Case, retained.len + controls.len);
+    @memcpy(cases[0..retained.len], retained);
+    @memcpy(cases[retained.len..], controls);
     var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schema = try parser.compiler().compile(a, try read(a, "design/workflows/spec/support.schema.json"));
-    try runNativeScope(a, schema, cases);
+    try runCitationCompleteness(a, schema, cases, retained.len);
 }
 
 fn read(a: std.mem.Allocator, path: []const u8) ![]const u8 {
@@ -64,13 +69,18 @@ fn exportBodyAt(a: std.mem.Allocator, directory: []const u8, schema: *const @imp
     try writeAt(a, directory, id, try std.fmt.allocPrint(a, "{s}.edit.json", .{arm}), bytes);
     try writeAt(a, directory, id, try std.fmt.allocPrint(a, "{s}.request.json", .{arm}), try encodeEdit(a, try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{})));
 }
-fn reviewHandoff(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, repetition: usize, prepared: Prepared, packet: *const packets.Packet, bytes: []const u8) !void {
+fn reviewHandoff(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, repetition: usize, prepared: Prepared, packet: *const packets.Packet, bytes: []const u8, origin: ?ReviewOrigin) !void {
     const ordinal = prepared.pending.pending_localization.?;
     var prior = prepared.pending;
     prior.pending_localization = null;
     prior.review.entries = prior.review.entries[0 .. ordinal - 1];
     prior.origins = prior.origins[0 .. ordinal - 1];
-    const result = try support.collectFocused(a, prepared.inputs, prepared.context, if (ordinal == 1) null else .{ .pending = prior }, packet, bytes, null);
+    const envelope = @import("../domain/model_envelope.zig");
+    var syntax_diagnostic: ?envelope.Diagnostic = null;
+    defer if (syntax_diagnostic) |diagnostic| diagnostic.deinit(a);
+    var document: ?envelope.Document = envelope.parseContent(a, bytes, &syntax_diagnostic) catch |err| if (err == error.OutOfMemory) return err else null;
+    defer if (document) |*value| value.deinit();
+    const result = try support.collectFocused(a, prepared.inputs, prepared.context, if (ordinal == 1) null else .{ .pending = prior }, packet, if (document) |value| value.content else bytes, null);
     const tag = @tagName(result);
     const suffix = try std.fmt.allocPrint(a, "review.native-{d}.json", .{repetition});
     const admitted: ?support.Candidate = switch (result) {
@@ -78,21 +88,80 @@ fn reviewHandoff(a: std.mem.Allocator, schema: *const @import("../domain/model_r
         .accepted => |accepted| accepted.candidate,
         .rejected => null,
     };
+    const rejection = switch (result) {
+        .rejected => |rejected| rejected.rejection,
+        else => null,
+    };
     if (admitted == null or admitted.?.pending_localization == null) {
         const finding = if (admitted) |candidate| if (candidate.review.entries.len >= ordinal) candidate.review.entries[ordinal - 1].value else null else null;
-        try write(a, id, suffix, try std.json.Stringify.valueAlloc(a, .{ .admitted_omission = false, .result = tag, .finding = finding }, .{}));
+        try write(a, id, suffix, try std.json.Stringify.valueAlloc(a, .{ .admitted_omission = false, .result = tag, .finding = finding, .rejection = rejection, .syntax_diagnostic = syntax_diagnostic, .normalization = if (document) |value| value.normalization else .none, .source_review_origin = origin, .native_origin_available = false }, .{}));
         return;
     }
     const pending = admitted.?;
-    try write(a, id, suffix, try std.json.Stringify.valueAlloc(a, .{ .admitted_omission = true, .finding = pending.review.entries[ordinal - 1].value }, .{}));
     const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, pending);
+    const finding = pending.review.entries[ordinal - 1].value;
+    try std.testing.expectEqualStrings(finding.missing_obligation.?, assigned.finding.missing_obligation);
+    try std.testing.expectEqualDeep(finding.source_ids, assigned.finding.source_ids);
     const loss_packet = try support.packetForLoss(a, prepared.inputs, prepared.context, pending);
     defer packets.release(loss_packet);
+    const loss_input = try std.json.parseFromSliceLeaky(std.json.Value, a, loss_packet.body(), .{});
+    try std.testing.expectEqualStrings(finding.missing_obligation.?, loss_input.object.get("fixed_finding").?.object.get("missing_obligation").?.string);
+    const offered_sources = loss_input.object.get("sources").?.array.items;
+    for (offered_sources) |source| {
+        const id_value = source.object.get("source_id").?.integer;
+        const authorized = for (finding.source_ids) |source_id| {
+            if (source_id.ordinal == id_value) break true;
+        } else false;
+        try std.testing.expect(authorized);
+    }
+    for (finding.source_ids) |source_id| {
+        const present = for (offered_sources) |source| {
+            if (source.object.get("source_id").?.integer == source_id.ordinal) break true;
+        } else false;
+        try std.testing.expect(present);
+    }
     const arm = try std.fmt.allocPrint(a, "handoff-{d}", .{repetition});
     try exportPacket(a, schema, id, arm, loss_packet, try read(a, "design/workflows/spec/support-loss.prompt.md"));
-    const live_prepared: Prepared = .{ .inputs = prepared.inputs, .context = prepared.context, .pending = pending, .passive = prepared.passive };
-    if (try optional(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.response.json", .{ output, id, arm }))) |response|
-        try write(a, id, try std.fmt.allocPrint(a, "{s}.native.json", .{arm}), try admissionReport(a, live_prepared, assigned, response));
+    try write(a, id, suffix, try std.json.Stringify.valueAlloc(a, .{ .admitted_omission = true, .finding = finding, .assignment = assigned, .normalization = document.?.normalization, .source_review_origin = origin, .native_origin_available = false }, .{}));
+}
+const ReviewOrigin = struct {
+    trial_id: []const u8,
+    parent_run: []const u8,
+    parent_call: []const u8,
+    replay_run: []const u8,
+    replay_id: []const u8,
+    request_sha256: []const u8,
+    response_sha256: []const u8,
+};
+const ReviewReceipt = struct { input: []const u8, origin: ReviewOrigin, response_bytes: []const u8 };
+const ReviewParent = struct { run: []const u8, call: []const u8 };
+const ReviewReceiptError = @import("../domain/strict_json.zig").Error || error{ InvalidCalibrationAssignment, InvalidCalibrationOrigin };
+fn admitReviewReceipt(a: std.mem.Allocator, id: []const u8, repetition: usize, packet: *const packets.Packet, parent: ReviewParent, expected_request_sha256: []const u8, bytes: []const u8) ReviewReceiptError!ReviewReceipt {
+    const receipt = try @import("../domain/strict_json.zig").decode(ReviewReceipt, a, bytes, .{ .maximum_depth = 128 });
+    if (!std.mem.eql(u8, packet.body(), receipt.input)) return error.InvalidCalibrationAssignment;
+    if (!std.mem.eql(u8, try std.fmt.allocPrint(a, "{s}-review-{d}", .{ id, repetition }), receipt.origin.trial_id) or !std.mem.eql(u8, expected_request_sha256, receipt.origin.request_sha256)) return error.InvalidCalibrationOrigin;
+    if (!std.mem.eql(u8, parent.run, receipt.origin.parent_run) or !std.mem.eql(u8, parent.call, receipt.origin.parent_call)) return error.InvalidCalibrationOrigin;
+    inline for (.{ "parent_run", "parent_call", "replay_run", "replay_id" }) |field| {
+        if (std.mem.trim(u8, @field(receipt.origin, field), " \r\n\t").len == 0) return error.InvalidCalibrationOrigin;
+    }
+    if (!std.mem.eql(u8, receipt.origin.response_sha256, try sha256(a, receipt.response_bytes))) return error.InvalidCalibrationOrigin;
+    return receipt;
+}
+fn consumeReviewReceipt(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, repetition: usize, prepared: Prepared, packet: *const packets.Packet) !void {
+    const bytes = (try optional(a, try std.fmt.allocPrint(a, "{s}/{s}.review.receipt-{d}.json", .{ output, id, repetition }))) orelse return;
+    const request_bytes = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.review.request.json", .{ output, id }));
+    const parent = try @import("../domain/strict_json.zig").decode(ReviewParent, a, try read(a, root ++ "/handoff.parent.json"), .{ .maximum_depth = 8 });
+    const receipt = admitReviewReceipt(a, id, repetition, packet, parent, try sha256(a, request_bytes), bytes) catch |err| {
+        if (err == error.OutOfMemory) return err;
+        try write(a, id, try std.fmt.allocPrint(a, "review.native-{d}.json", .{repetition}), try std.json.Stringify.valueAlloc(a, .{ .admitted_omission = false, .result = "rejected_receipt", .rejection = @errorName(err), .native_origin_available = false }, .{}));
+        return;
+    };
+    try reviewHandoff(a, schema, id, repetition, prepared, packet, receipt.response_bytes, receipt.origin);
+}
+fn sha256(a: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.Error![]const u8 {
+    var digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
+    return a.dupe(u8, &std.fmt.bytesToHex(digest, .lower));
 }
 const Prepared = struct {
     inputs: authority.Inputs,
@@ -195,13 +264,6 @@ fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
         .reasoning_effort = .low,
     }, .inference);
 }
-fn admissionReport(a: std.mem.Allocator, prepared: Prepared, assigned: comparison.Assignment, bytes: []const u8) ![]const u8 {
-    return if (support.admitComparisons(a, prepared.inputs, prepared.context, prepared.pending, assigned, bytes)) |accepted|
-        std.json.Stringify.valueAlloc(a, .{ .admitted = true, .attribution = accepted }, .{})
-    else |err|
-        std.json.Stringify.valueAlloc(a, .{ .admitted = false, .rejection = @errorName(err) }, .{});
-}
-
 fn write(a: std.mem.Allocator, id: []const u8, suffix: []const u8, bytes: []const u8) !void {
     return writeAt(a, output, id, suffix, bytes);
 }
@@ -213,7 +275,7 @@ fn writeAt(a: std.mem.Allocator, directory: []const u8, id: []const u8, suffix: 
 // implementation. The complete native assignment and admission stay unchanged.
 const IsolationOrigin = struct { trial_id: []const u8, response_id: []const u8, request_sha256: []const u8 };
 const IsolationRequest = struct { comparison_id: u32, request_sha256: []const u8 };
-const IsolationScope = struct { case_id: []const u8, repetition: usize, requests: []const IsolationRequest };
+const IsolationScope = struct { case_id: []const u8, arm: Arm, repetition: usize, requests: []const IsolationRequest };
 const IsolationPiece = struct { comparison_id: u32, origin: IsolationOrigin, response: std.json.Value };
 const IsolationReceipt = struct { assignment: comparison.Assignment, pieces: []const IsolationPiece };
 const IsolationResult = union(enum) { incomplete: []const u32, admitted: comparison.Attribution };
@@ -333,10 +395,10 @@ fn isolatedPacket(a: std.mem.Allocator, packet: *const packets.Packet, id: compa
     return packets.withRestrictions(a, packet, packet.excludedVariants(), choices);
 }
 
-fn runNativeScope(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, cases: []const Case) !void {
+fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, cases: []const Case, retained_count: usize) !void {
     try std.Io.Dir.cwd().createDirPath(std.testing.io, output);
     const prompt = try read(a, "design/workflows/spec/support-loss.prompt.md");
-    for (cases) |example| {
+    for (cases, 0..) |example, case_index| {
         const prepared = try prepare(a, example);
         defer prepared.passive.deinit();
         const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);
@@ -346,7 +408,7 @@ fn runNativeScope(a: std.mem.Allocator, schema: *const @import("../domain/model_
         try std.testing.expectEqualStrings(example.missing_obligation, assigned.finding.missing_obligation);
         try std.testing.expectEqual(example.verdicts.len, assigned.comparisons.len);
         try write(a, example.id, "packet.json", try std.json.Stringify.valueAlloc(a, .{ .assignment = assigned, .input = full }, .{}));
-        const requests = try a.alloc(IsolationRequest, assigned.comparisons.len);
+        const requests = try a.alloc([2]IsolationRequest, assigned.comparisons.len);
         for (assigned.comparisons, requests) |view, *request| {
             const isolated = try isolatedPacket(a, packet, view.id);
             defer packets.release(isolated);
@@ -361,25 +423,29 @@ fn runNativeScope(a: std.mem.Allocator, schema: *const @import("../domain/model_
             // All original business evidence survives isolation byte-for-byte.
             restored.object.getPtr("comparisons").?.* = full.object.get("comparisons").?;
             try std.testing.expectEqualStrings(packet.body(), try std.json.Stringify.valueAlloc(a, restored, .{}));
-            const arm = try std.fmt.allocPrint(a, "candidate-{d}", .{view.id.ordinal});
-            try exportBodyAt(a, output, schema, example.id, arm, isolated, body, prompt);
-            // Frozen old requests are historical experiment inputs, never a
-            // second reader or a production compatibility contract.
-            for ([_][]const u8{ "edit.json", "request.json" }) |kind| {
-                const baseline = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.candidate-{d}.{s}", .{ isolation_root, example.id, view.id.ordinal, kind }));
-                try write(a, example.id, try std.fmt.allocPrint(a, "baseline-{d}.{s}", .{ view.id.ordinal, kind }), baseline);
-                if (std.mem.eql(u8, kind, "edit.json")) {
-                    const edit = try std.json.parseFromSliceLeaky(std.json.Value, a, baseline, .{});
-                    const content = edit.object.get("content").?.array.items;
-                    try std.testing.expectEqualStrings(body, content[1].object.get("user").?.string);
+            for (std.enums.values(Arm), 0..) |arm, arm_index| {
+                const name = try std.fmt.allocPrint(a, "{s}-{d}", .{ @tagName(arm), view.id.ordinal });
+                try exportBodyAt(a, output, schema, example.id, name, isolated, body, if (arm == .baseline) try read(a, root ++ "/baseline.prompt.md") else prompt);
+                if (arm == .baseline and case_index < retained_count) {
+                    // Prior panels remain immutable; both arms now use the same
+                    // native-owned response contract and differ only in guidance.
+                    for ([_][]const u8{ "edit.json", "request.json" }) |kind| {
+                        const prior = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.candidate-{d}.{s}", .{ prior_root, example.id, view.id.ordinal, kind }));
+                        const current = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.{s}", .{ output, example.id, name, kind }));
+                        try std.testing.expectEqualStrings(prior, current);
+                    }
                 }
+                const request_bytes = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.request.json", .{ output, example.id, name }));
+                request[arm_index] = .{ .comparison_id = view.id.ordinal, .request_sha256 = try sha256(a, request_bytes) };
             }
-            const request_bytes = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.request.json", .{ output, example.id, arm }));
-            var digest: [32]u8 = undefined;
-            std.crypto.hash.sha2.Sha256.hash(request_bytes, &digest, .{});
-            request.* = .{ .comparison_id = view.id.ordinal, .request_sha256 = try a.dupe(u8, &std.fmt.bytesToHex(digest, .lower)) };
         }
-        try isolationChecks(a, prepared, assigned, example, requests);
+        const arms_requests = try a.alloc([]IsolationRequest, 2);
+        for (std.enums.values(Arm), 0..) |arm, arm_index| {
+            const selected = try a.alloc(IsolationRequest, requests.len);
+            for (requests, selected) |pair, *request| request.* = pair[arm_index];
+            arms_requests[arm_index] = selected;
+            try isolationChecks(a, prepared, assigned, example, selected, arm);
+        }
         const review_packet = try support.packetFor(a, prepared.inputs, prepared.context, .{ .finding = assigned.finding.subject });
         defer packets.release(review_packet);
         try exportPacket(a, schema, example.id, "review", review_packet, try read(a, "design/workflows/spec/support.prompt.md"));
@@ -387,17 +453,18 @@ fn runNativeScope(a: std.mem.Allocator, schema: *const @import("../domain/model_
         const selected = prepared.pending.review.entries[prepared.pending.pending_localization.? - 1].value;
         const requirements = try @import("../domain/specification_support_evidence.zig").requirements(a, prepared.inputs, prepared.context.inputs, assigned.finding.subject);
         const review_response = try @import("../domain/specification_support_model.zig").encode(a, selected, requirements);
-        try reviewHandoff(a, schema, probe_id, 1, prepared, review_packet, review_response);
+        try reviewHandoff(a, schema, probe_id, 1, prepared, review_packet, review_response, null);
         const probe = try std.json.parseFromSliceLeaky(std.json.Value, a, try read(a, try std.fmt.allocPrint(a, "{s}/{s}.review.native-1.json", .{ output, probe_id })), .{});
         try std.testing.expect(probe.object.get("admitted_omission").?.bool);
         try std.testing.expectEqualStrings(example.missing_obligation, probe.object.get("finding").?.object.get("missing_obligation").?.string);
+        try reviewReceiptChecks(a, example.id, prepared, review_packet, review_response);
         for (1..3) |repetition| {
-            if (try optional(a, try std.fmt.allocPrint(a, "{s}/{s}.candidate.receipt-{d}.json", .{ output, example.id, repetition }))) |bytes|
-                try write(a, example.id, try std.fmt.allocPrint(a, "candidate.native-{d}.json", .{repetition}), try isolationReport(a, prepared, .{ .case_id = example.id, .repetition = repetition, .requests = requests }, bytes));
-            // Actual review responses are admitted before loss input creation;
-            // the oracle missing_obligation is never substituted for live text.
-            if (try optional(a, try std.fmt.allocPrint(a, "{s}/{s}.review.response-{d}.json", .{ output, example.id, repetition }))) |bytes|
-                try reviewHandoff(a, schema, example.id, repetition, prepared, review_packet, bytes);
+            for (std.enums.values(Arm), 0..) |arm, arm_index| {
+                if (try optional(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.receipt-{d}.json", .{ output, example.id, @tagName(arm), repetition }))) |bytes|
+                    try write(a, example.id, try std.fmt.allocPrint(a, "{s}.native-{d}.json", .{ @tagName(arm), repetition }), try isolationReport(a, prepared, .{ .case_id = example.id, .arm = arm, .repetition = repetition, .requests = arms_requests[arm_index] }, bytes));
+            }
+            // Receipt lineage is diagnostic observation, not engine ledger authority.
+            try consumeReviewReceipt(a, schema, example.id, repetition, prepared, review_packet);
         }
     }
     try prepareHandoffControls(a, schema);
@@ -405,10 +472,10 @@ fn runNativeScope(a: std.mem.Allocator, schema: *const @import("../domain/model_
         const prepared = try prepare(a, example);
         defer prepared.passive.deinit();
         const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);
-        try frozenNativeScope(a, example.id, "packet.json");
-        for ([_][]const u8{ "review.edit.json", "review.request.json" }) |suffix| try frozenNativeScope(a, example.id, suffix);
+        try frozenCitationCompleteness(a, example.id, "packet.json");
+        for ([_][]const u8{ "review.edit.json", "review.request.json" }) |suffix| try frozenCitationCompleteness(a, example.id, suffix);
         for (assigned.comparisons) |view| for ([_][]const u8{ "baseline", "candidate" }) |arm| for ([_][]const u8{ "edit.json", "request.json" }) |kind| {
-            try frozenNativeScope(a, example.id, try std.fmt.allocPrint(a, "{s}-{d}.{s}", .{ arm, view.id.ordinal, kind }));
+            try frozenCitationCompleteness(a, example.id, try std.fmt.allocPrint(a, "{s}-{d}.{s}", .{ arm, view.id.ordinal, kind }));
         };
     }
 }
@@ -420,7 +487,7 @@ fn prepareHandoffControls(a: std.mem.Allocator, schema: *const @import("../domai
         question: ?[]const u8,
         fixture: Case,
     };
-    const controls = try codec.decode([]const Control, a, try read(a, root ++ "/handoff.controls.json"));
+    const controls = try codec.decode([]const Control, a, try read(a, prior_root ++ "/handoff.controls.json"));
     for (controls) |control| {
         const prepared = try prepare(a, control.fixture);
         defer prepared.passive.deinit();
@@ -436,34 +503,98 @@ fn prepareHandoffControls(a: std.mem.Allocator, schema: *const @import("../domai
         }), requirements);
         const response = try model.encode(a, finding, requirements);
         const probe_id = try std.fmt.allocPrint(a, "{s}.probe", .{control.fixture.id});
-        try reviewHandoff(a, schema, probe_id, 1, prepared, packet, response);
+        try reviewHandoff(a, schema, probe_id, 1, prepared, packet, response, null);
         const probe = try std.json.parseFromSliceLeaky(std.json.Value, a, try read(a, try std.fmt.allocPrint(a, "{s}/{s}.review.native-1.json", .{ output, probe_id })), .{});
         try std.testing.expect(!probe.object.get("admitted_omission").?.bool);
         try std.testing.expectEqualStrings(@tagName(control.expected), probe.object.get("finding").?.object.get("kind").?.string);
         for (1..3) |repetition| {
-            if (try optional(a, try std.fmt.allocPrint(a, "{s}/{s}.review.response-{d}.json", .{ output, control.fixture.id, repetition }))) |bytes|
-                try reviewHandoff(a, schema, control.fixture.id, repetition, prepared, packet, bytes);
+            try consumeReviewReceipt(a, schema, control.fixture.id, repetition, prepared, packet);
         }
-        for ([_][]const u8{ "review.edit.json", "review.request.json" }) |suffix| try frozenNativeScope(a, control.fixture.id, suffix);
+        for ([_][]const u8{ "review.edit.json", "review.request.json" }) |suffix| try frozenCitationCompleteness(a, control.fixture.id, suffix);
     }
 }
 
-fn frozenNativeScope(a: std.mem.Allocator, id: []const u8, suffix: []const u8) !void {
+fn frozenCitationCompleteness(a: std.mem.Allocator, id: []const u8, suffix: []const u8) !void {
     const exported = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, id, suffix }));
     const frozen = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ root, id, suffix }));
     try std.testing.expectEqualStrings(frozen, exported);
 }
 
-fn isolationTrial(a: std.mem.Allocator, scope: IsolationScope, id: u32) std.mem.Allocator.Error![]const u8 {
-    return std.fmt.allocPrint(a, "{s}-candidate-{d}-{d}", .{ scope.case_id, id, scope.repetition });
+fn reviewReceiptChecks(a: std.mem.Allocator, id: []const u8, prepared: Prepared, packet: *const packets.Packet, response: []const u8) !void {
+    const request_bytes = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.review.request.json", .{ output, id }));
+    const request_hash = try sha256(a, request_bytes);
+    const parent = try @import("../domain/strict_json.zig").decode(ReviewParent, a, try read(a, root ++ "/handoff.parent.json"), .{ .maximum_depth = 8 });
+    const receipt: ReviewReceipt = .{
+        .input = packet.body(),
+        .origin = .{
+            .trial_id = try std.fmt.allocPrint(a, "{s}-review-1", .{id}),
+            .parent_run = parent.run,
+            .parent_call = parent.call,
+            .replay_run = "MOCK replay run",
+            .replay_id = "MOCK replay response",
+            .request_sha256 = request_hash,
+            .response_sha256 = try sha256(a, response),
+        },
+        .response_bytes = response,
+    };
+    const accepted = try admitReviewReceipt(a, id, 1, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, receipt, .{}));
+    try std.testing.expectEqualStrings(response, accepted.response_bytes);
+    try std.testing.expectEqualDeep(receipt.origin, accepted.origin);
+    var prefixed = receipt;
+    prefixed.response_bytes = try std.fmt.allocPrint(a, "{{\"{s}", .{response});
+    prefixed.origin.response_sha256 = try sha256(a, prefixed.response_bytes);
+    const accepted_prefix = try admitReviewReceipt(a, id, 1, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, prefixed, .{}));
+    var changed = receipt;
+    changed.input = "MOCK changed canonical subject or source evidence";
+    try std.testing.expectError(error.InvalidCalibrationAssignment, admitReviewReceipt(a, id, 1, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, changed, .{})));
+    changed = receipt;
+    changed.origin.request_sha256 = "MOCK changed request";
+    try std.testing.expectError(error.InvalidCalibrationOrigin, admitReviewReceipt(a, id, 1, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, changed, .{})));
+    changed = receipt;
+    changed.origin.replay_id = " ";
+    try std.testing.expectError(error.InvalidCalibrationOrigin, admitReviewReceipt(a, id, 1, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, changed, .{})));
+    changed = receipt;
+    changed.origin.parent_call = "MOCK unrelated source review call";
+    try std.testing.expectError(error.InvalidCalibrationOrigin, admitReviewReceipt(a, id, 1, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, changed, .{})));
+    changed = receipt;
+    changed.origin.response_sha256 = "MOCK changed response";
+    try std.testing.expectError(error.InvalidCalibrationOrigin, admitReviewReceipt(a, id, 1, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, changed, .{})));
+    try std.testing.expectError(error.InvalidCalibrationOrigin, admitReviewReceipt(a, id, 2, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, receipt, .{})));
+    try std.testing.expectError(error.InvalidCalibrationOrigin, admitReviewReceipt(a, "MOCK other case", 1, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, receipt, .{})));
+    var raw = try std.json.parseFromSliceLeaky(std.json.Value, a, try std.json.Stringify.valueAlloc(a, receipt, .{}), .{});
+    try raw.object.put(a, "unknown", .{ .bool = true });
+    try std.testing.expectError(error.InvalidJsonDocument, admitReviewReceipt(a, id, 1, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, raw, .{})));
+    _ = raw.object.orderedRemove("unknown");
+    try raw.object.getPtr("origin").?.object.put(a, "unknown", .{ .bool = true });
+    try std.testing.expectError(error.InvalidJsonDocument, admitReviewReceipt(a, id, 1, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, raw, .{})));
+    // A real receipt's rejected model bytes remain an explicit admission result.
+    const probe_id = try std.fmt.allocPrint(a, "{s}.malformed-probe", .{id});
+    var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schema = try parser.compiler().compile(a, try read(a, "design/workflows/spec/support.schema.json"));
+    const prefix_probe_id = try std.fmt.allocPrint(a, "{s}.prefix-probe", .{id});
+    try reviewHandoff(a, schema, prefix_probe_id, 1, prepared, packet, accepted_prefix.response_bytes, accepted_prefix.origin);
+    const prefix_report = try std.json.parseFromSliceLeaky(std.json.Value, a, try read(a, try std.fmt.allocPrint(a, "{s}/{s}.review.native-1.json", .{ output, prefix_probe_id })), .{});
+    try std.testing.expect(prefix_report.object.get("admitted_omission").?.bool);
+    try std.testing.expectEqualStrings("removed_leading_brace_quote", prefix_report.object.get("normalization").?.string);
+    try std.testing.expectEqualStrings(prepared.pending.review.entries[prepared.pending.pending_localization.? - 1].value.missing_obligation.?, prefix_report.object.get("finding").?.object.get("missing_obligation").?.string);
+    try reviewHandoff(a, schema, probe_id, 1, prepared, packet, "MOCK not JSON", receipt.origin);
+    const report = try std.json.parseFromSliceLeaky(std.json.Value, a, try read(a, try std.fmt.allocPrint(a, "{s}/{s}.review.native-1.json", .{ output, probe_id })), .{});
+    try std.testing.expectEqualStrings("rejected", report.object.get("result").?.string);
+    try std.testing.expect(!report.object.get("admitted_omission").?.bool);
+    try std.testing.expect(report.object.get("rejection").?.object.get("diagnostics").?.array.items.len != 0);
+    try std.testing.expectEqualStrings(receipt.origin.replay_id, report.object.get("source_review_origin").?.object.get("replay_id").?.string);
 }
 
-fn isolationChecks(a: std.mem.Allocator, prepared: Prepared, assigned: comparison.Assignment, example: Case, requests: []const IsolationRequest) !void {
+fn isolationTrial(a: std.mem.Allocator, scope: IsolationScope, id: u32) std.mem.Allocator.Error![]const u8 {
+    return std.fmt.allocPrint(a, "{s}-{s}-{d}-{d}", .{ scope.case_id, @tagName(scope.arm), id, scope.repetition });
+}
+
+fn isolationChecks(a: std.mem.Allocator, prepared: Prepared, assigned: comparison.Assignment, example: Case, requests: []const IsolationRequest, arm: Arm) !void {
     var mock = try @import("source_omission_evidence.zig").response(a, assigned, .{ .unlocalized = .{} });
     const assessments = try a.dupe(comparison.Assessment, mock.assessments);
     for (assessments, example.verdicts) |*assessment, verdict| assessment.result = verdict;
     mock.assessments = assessments;
-    const scope: IsolationScope = .{ .case_id = example.id, .repetition = 1, .requests = requests };
+    const scope: IsolationScope = .{ .case_id = example.id, .arm = arm, .repetition = 1, .requests = requests };
     const pieces = try a.alloc(IsolationPiece, assessments.len);
     for (pieces, assessments, requests) |*piece, assessment, request| piece.* = .{
         .comparison_id = assessment.comparison_id.ordinal,
@@ -475,7 +606,7 @@ fn isolationChecks(a: std.mem.Allocator, prepared: Prepared, assigned: compariso
     try std.testing.expectEqualStrings(example.expected, @tagName(comparison.location(accepted.admitted)));
     const encoded = try std.json.Stringify.valueAlloc(a, receipt, .{});
     const report = try isolationReport(a, prepared, scope, encoded);
-    try write(a, example.id, "candidate.probe-native.json", report);
+    try write(a, example.id, try std.fmt.allocPrint(a, "{s}.probe-native.json", .{@tagName(arm)}), report);
     const decoded = try std.json.parseFromSliceLeaky(std.json.Value, a, report, .{});
     try std.testing.expectEqualStrings("admitted", decoded.object.get("status").?.string);
     try std.testing.expectEqual(pieces.len, decoded.object.get("origins").?.array.items.len);
@@ -528,9 +659,9 @@ fn isolationChecks(a: std.mem.Allocator, prepared: Prepared, assigned: compariso
     bad[0].origin.request_sha256 = "MOCK changed request";
     try std.testing.expectError(error.InvalidCalibrationOrigin, aggregateIsolation(a, prepared, scope, changed));
     bad[0] = pieces[0];
-    bad[0].origin.trial_id = try isolationTrial(a, .{ .case_id = "MOCK-other-case", .repetition = 1, .requests = requests }, bad[0].comparison_id);
+    bad[0].origin.trial_id = try isolationTrial(a, .{ .case_id = "MOCK-other-case", .arm = arm, .repetition = 1, .requests = requests }, bad[0].comparison_id);
     try std.testing.expectError(error.InvalidCalibrationOrigin, aggregateIsolation(a, prepared, scope, changed));
-    bad[0].origin.trial_id = try isolationTrial(a, .{ .case_id = example.id, .repetition = 2, .requests = requests }, bad[0].comparison_id);
+    bad[0].origin.trial_id = try isolationTrial(a, .{ .case_id = example.id, .arm = arm, .repetition = 2, .requests = requests }, bad[0].comparison_id);
     try std.testing.expectError(error.InvalidCalibrationOrigin, aggregateIsolation(a, prepared, scope, changed));
     bad[0] = pieces[0];
     bad[0].response = try std.json.parseFromSliceLeaky(std.json.Value, a, "{\"assessments\":[]}", .{});

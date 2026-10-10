@@ -13,11 +13,9 @@ meaning, allowing equivalent wording and joint support, regardless of how it is
 divided or categorized: a value already expressed in a requirement needs no
 separate member. A value alone does not express its required
 behavior. Preserve conditions, negation and obligation strength. Cite original-source
-spans that collectively support the entire supplied obligation, including its
-conditions, negation and obligation strength. Use multiple spans when necessary;
-omit unrelated spans. Briefly explain where that meaning survives or what is missing
-from the complete assigned collection. Empty collections cannot be preserved.
-Do not select a culprit or repair operation.
+spans and briefly explain where the obligation survives or what is missing from
+the complete assigned collection. Empty collections cannot be preserved. Do not select
+a culprit or repair operation.
 
 comparison_id identifies the complete native-assigned collection in comparisons[].id;
 the response does not select its members. Source spans select sources[].chunk_id and inclusive

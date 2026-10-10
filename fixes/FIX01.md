@@ -21,8 +21,11 @@ controlled 72-call comparison completed on 11 October and passed the inherited
 diagnostic gates: native admission/correct attribution **22/24 → 24/24**, with
 correct preservation judgments **24/24 in both arms**. One candidate answer still
 omits a required source citation. This qualifies the contract on known isolated
-inputs; source-review handoff, production batching/isolation and E2E publication
-remain unqualified.
+inputs. The subsequent **76-call** citation comparison passed, improving complete
+citations **36/38 → 38/38**. The **30-call** actual source-review panel then failed:
+only **15/26** faithful omission handoffs, **2/2** supported controls and **0/2**
+genuine-gap controls. Source-review fidelity is now a demonstrated blocker;
+production batching/isolation and E2E publication remain unqualified.
 [Z_FIX01](Z_FIX01.md) now holds completed implementation, executed experiments,
 their approvals and supporting historical reviews. Dated open/proposed statements
 there are historical; the outstanding scope and priorities below govern tracking.
@@ -291,6 +294,46 @@ gate measures attribution accuracy, separately from its evidence minimum; no
 threshold changed. Do not describe the result as zero semantic regressions.
 Production isolation remains conditional; live source-review fidelity, the actual
 review-to-loss handoff and Phase 4 publication/rubric acceptance remain unqualified.
+
+**Citation-completeness follow-up — 11 October 2026:** the user requested the
+shared evidence clarification and qualification recommendations. The existing
+loss prompt and §22 now distinguish citations establishing the entire original
+obligation from explanations assessing preservation in the assigned collection.
+The schema, native attribution and repair permissions are unchanged. The approved
+76-call comparison passed its frozen gates: complete/relevant citations improved
+**36/38 → 38/38**, with **38/38** correct verdicts and **26/26** correct admitted
+attributions in both arms. Both previously missing alarm citations were complete
+in the candidate. This demonstrates improvement on the supplied-obligation panel;
+the separately approved actual source-review panel then completed and failed its
+frozen gates. Only **15/26** actual omission handoffs were faithful: seven omissions
+were missed and four returned an inadequate or wrong target. Both genuine-gap
+controls invented source obligations; supported controls passed **2/2**. All thirty
+responses passed native mechanical admission, with unchanged actual obligations,
+source IDs and replay lineage. That verifies conversion, not semantics. No
+downstream loss call, repair or E2E ran. See the
+[implementation and qualification record](FIX01-02.md#citation-completeness-and-actual-handoff-follow-up--11-october-2026)
+for the offline mechanics, [citation results](../test/calibration/source-loss-attribution/bound-preservation/citation-completeness/results.md)
+and [actual source-review failures](../test/calibration/source-loss-attribution/bound-preservation/citation-completeness/handoff-results.md).
+The historical native-scope results and acceptance thresholds remain unchanged.
+
+**Next bounded work: review shared source-review direction and semantic coverage.**
+The unchanged reviewer sometimes checks only candidate clauses that match sources,
+missing assigned absent behavior, and sometimes promotes candidate additions into
+original-source requirements. Clarify original-source authority, candidate target
+and completeness for the assigned field purpose through the existing shared
+purpose/evidence owner. Current claim associations and `eligible_subset` permission
+must not silently define original-source coverage. Coverage ownership is plausibly
+under-specified, especially for inherited/source-only losses; model-internal cause
+is unproven. Startup-trigger loss and invented display/unlock duties are definite
+semantic defects independent of that ambiguity.
+
+Do not make every field cover every source, infer relevance in the generic engine,
+force modal words/source counts, fill oracle obligations or expand repair authority.
+Prepare a controlled actual-review comparison using these failures and unrelated
+controls, measuring missed defects, false omissions, conditions/strength and
+source-premise faithfulness. Further calls need separate bounded approval. Retain
+the qualified loss-citation guidance; its later-stage change was not used by the
+unchanged source reviewer and this panel cannot establish reviewer regression.
 
 1. **Replace broad culprit selection with bound preservation comparisons.** R6
    already supplies actual producer outputs. The proposed change is to the task and

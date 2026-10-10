@@ -1,0 +1,2627 @@
+{
+  "status": "offline_prepared_awaiting_explicit_bounded_live_approval",
+  "parent": {
+    "run": "RUN-a8204eab393239c09cb75264943ca0d0",
+    "artifact_root": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016",
+    "call": "request-16-inference-1",
+    "context": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/context.json",
+      "sha256": "38ace18123819b29821208654e4a0157659257caa908fdcc1c38bfb22e5319e7",
+      "bytes": 9570
+    },
+    "request": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/request.json",
+      "sha256": "a34f5df19cad6b687c3210d2934b663900e2dde39845e9b3f1b5eaf389c60ddc",
+      "bytes": 10299
+    },
+    "response": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/response.json",
+      "sha256": "6a738b0a01c33357f6753db77893850ac82592dbc6a8ff2a2c3951595c44b00e",
+      "bytes": 1655
+    },
+    "captured_input_canonical_sha256": "14b9d8041a500ff31fd8749cbc2553ebf69248dc15ade54ba5aedf1da194ccc1",
+    "execution_id": "2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e"
+  },
+  "settings": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "controls": {
+      "reasoning_effort": {
+        "present": true,
+        "value": "low"
+      },
+      "temperature": {
+        "present": true,
+        "value": 0
+      },
+      "max_completion_tokens": {
+        "present": true,
+        "value": 16384
+      },
+      "top_p": {
+        "present": false
+      },
+      "seed": {
+        "present": false
+      }
+    },
+    "response_mode": "native_schema"
+  },
+  "authority": "Preparation only; all prior allowances are consumed. Sending these payloads to AWS requires a new explicit 76-call approval.",
+  "factor": "Same complete isolated business input, response contract, schema, model and settings. Only shared citation-purpose guidance differs. Retained baseline edit/request files exactly match native-scope candidate files; new control uses the frozen pre-edit prompt through the same current builder.",
+  "limits": {
+    "maximum_physical_sends": 76,
+    "repetitions_per_case_arm": 2,
+    "retries_corrections_repairs_model_judges_e2e": 0,
+    "stop_at_accounted_input_plus_output_tokens": 300000,
+    "usage_stop_semantics": "Check actual cumulative usage after every completed exchange; at or above threshold send no further trial. A single in-flight completion may cross the threshold. This is an experiment spending stop, not a runtime reservation or provider token ceiling. No dollar cap is asserted.",
+    "stop_on": [
+      "unknown usage",
+      "uncertain dispatch or transport outcome",
+      "request/config/hash drift",
+      "exhausted approved sends"
+    ],
+    "restart_renews_allowance": false,
+    "resend_uncertain_trial": false
+  },
+  "quality_gate": {
+    "scope": "New same-contract prompt-only study. Historical native-scope gates and scores are untouched; old two-attribution-gain threshold concerned removal of returned members and is not the hypothesis here.",
+    "candidate_completed_schema_native_decisions_required": 26,
+    "candidate_correct_physical_verdicts_required": 38,
+    "candidate_complete_relevant_citations_required_per_physical_assessment": 38,
+    "candidate_adequate_explanations_required_per_physical_assessment": 38,
+    "candidate_correct_admitted_attributions_required": 26,
+    "candidate_false_upstream_or_candidate_attributions_allowed": 0,
+    "required_uncertainty_or_unresolved_ownership_respected": true,
+    "captured_alarm_citation_complete_in_both_candidate_repetitions": true,
+    "case_level_regressions_allowed": 0,
+    "citation_benefit": "Claim observed citation improvement only if candidate has more complete AND relevant physical assessments than concurrent baseline, with all safety gates passing. Perfect arms establish nonregression, not superiority.",
+    "cost_gate": "Known actual input/output usage for every completed call; stop at frozen 300000-token spending limit, unknown usage or uncertainty. Report call count, token/latency per physical assessment and complete decision and paired ratios. No fabricated dollar cap or model token ceiling.",
+    "failures_remain_in_denominator": true,
+    "gate_failure": "No handoff or E2E qualification claim, no automatic retries or extra calls. Retain defects and unresolved comparison outcome."
+  },
+  "cases_file": {
+    "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.json",
+    "sha256": "f7180fce39fcfcb9e242b520f4249da67a2dc0b71216136c1e2eaf7f07b306a9",
+    "bytes": 12676
+  },
+  "citation_controls": {
+    "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/citation.controls.json",
+    "sha256": "e634b3c66b03a0a92730f130bb6eaad1442d3aa5a69cde8ae7b22b10f9eaa655",
+    "bytes": 1215
+  },
+  "baseline_prompt": {
+    "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/baseline.prompt.md",
+    "sha256": "79348d80c19922afe03ef3c9333a2d323410aabfe15db3b2e759f5a400061859",
+    "bytes": 1520
+  },
+  "historical_reference": {
+    "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/comparison.json",
+    "sha256": "d5a8237b791aaee66e1c416d00b5099327ee0b0d084f0e7b5255c9ee09666eb0",
+    "bytes": 103744
+  },
+  "cases": [
+    {
+      "id": "captured-description",
+      "expected": "candidate",
+      "missing_obligation": "When started, the application must display Hello, World!.",
+      "verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "cohort": "known_regression",
+      "comparison_count": 2,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.packet.json",
+        "sha256": "22cd84b8310d573408fa9a905f25d972211a698f3eae97db5d681672bc63fff8",
+        "bytes": 11976
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.baseline-1.edit.json",
+            "sha256": "bcccdd840d770f9bc30fb504d6c633a93924a798b89b88223ec3b899205a2ff4",
+            "bytes": 7009
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.baseline-1.request.json",
+            "sha256": "ac7967feca3b23bf9275cc99cc4855444b50731cda236730c09bbbc3cf2b9a9f",
+            "bytes": 8181
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 3878,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.candidate-1.edit.json",
+            "sha256": "552b19bd3ab53adc75b28b9ff425c2c1d360c8ad97ff0c64642d91e5a01ccaa1",
+            "bytes": 7180
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.candidate-1.request.json",
+            "sha256": "3698e84d1dbcf8a3c429ff46a590ca2dbdd927c496208269bfda03a823eb5cc4",
+            "bytes": 8352
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 3878,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "baseline-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.baseline-2.edit.json",
+            "sha256": "02fd9e1ab2eedc4354c676ae6cb06c845d27e793e25f778f979b8110583774d7",
+            "bytes": 6934
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.baseline-2.request.json",
+            "sha256": "67652b37d408a868a07af1393a5c1c2cf512263f49212622e3e7c1b769a18ab6",
+            "bytes": 8106
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 3813,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        },
+        "candidate-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.candidate-2.edit.json",
+            "sha256": "5d6e9385063053a77ccd539f9e112678dda522e5c8636783719cee693281cfba",
+            "bytes": 7105
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.candidate-2.request.json",
+            "sha256": "440cda1681979671f3c392dea8c94a6647e6f3ec51687f38f2fcd1baa30f677b",
+            "bytes": 8277
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 3813,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        }
+      }
+    },
+    {
+      "id": "loan-candidate",
+      "expected": "candidate",
+      "missing_obligation": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.",
+      "verdicts": [
+        "preserved"
+      ],
+      "cohort": "known_regression",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/loan-candidate.packet.json",
+        "sha256": "3b022106eeef51c040973f682aed78275097ebcde759ac4075a1a46fe6cae18b",
+        "bytes": 6498
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/loan-candidate.baseline-1.edit.json",
+            "sha256": "59063df21f0e27917619a9b834908877df8f885949ea9d10782d6acb21d0ef09",
+            "bytes": 5010
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/loan-candidate.baseline-1.request.json",
+            "sha256": "2dbcd1e06084d593b249bde66ad44b913f8ce8006d8c211bda71161de8351f19",
+            "bytes": 6182
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2149,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/loan-candidate.candidate-1.edit.json",
+            "sha256": "3e6d47fc5e2d8881432ab6175e5e5fd056895828749397e81643174019f37637",
+            "bytes": 5181
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/loan-candidate.candidate-1.request.json",
+            "sha256": "99ac354a987da83d33366e80c0e77959f4f299eab546a8c8adba471098d7aab7",
+            "bytes": 6353
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 2149,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    },
+    {
+      "id": "extraction-inherited",
+      "expected": "extraction_claim",
+      "missing_obligation": "When the reservoir falls below the minimum, the pump must stop and remain stopped until the level recovers.",
+      "verdicts": [
+        "lost",
+        "lost"
+      ],
+      "cohort": "known_regression",
+      "comparison_count": 2,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.packet.json",
+        "sha256": "7bac0000c53cf254d67d7b6ef28582386f10e58491972691ecc11cd0a8db5470",
+        "bytes": 7807
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.baseline-1.edit.json",
+            "sha256": "506504ab45d0439579e4c91656da0c7838921d2a837dff460b190b6e269a923e",
+            "bytes": 5248
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.baseline-1.request.json",
+            "sha256": "7bebd49396c96ba00f2adc73e10526832c8d8e74a74a10607fe681b5eb16d377",
+            "bytes": 6420
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2309,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.candidate-1.edit.json",
+            "sha256": "4fcb0a84fbce626beda8e1449b69d44d4d85593851989b9931374dcf6f3212f4",
+            "bytes": 5419
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.candidate-1.request.json",
+            "sha256": "38241eefbd57b72dbd210d95348e8c308a68cdba4fbaa639fd10b24cee152da0",
+            "bytes": 6591
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 2309,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "baseline-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.baseline-2.edit.json",
+            "sha256": "fab1267ec70d995af85d4046de00d3e1e0e3211d62bcbc643447d93394e210db",
+            "bytes": 5139
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.baseline-2.request.json",
+            "sha256": "e846e18943bab0accd6585929d39d256d1f2a409d576b9949e775b844e838147",
+            "bytes": 6311
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2210,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        },
+        "candidate-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.candidate-2.edit.json",
+            "sha256": "dedb95a704b436683cd3bdc7ef8a6ad67105d7a6df9a2119b60beb7b57c29e0d",
+            "bytes": 5310
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.candidate-2.request.json",
+            "sha256": "2ab6e5e4addfedaa471e3e0866df3e77fbb2008bb3030e694e9da786df2832e5",
+            "bytes": 6482
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 2210,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        }
+      }
+    },
+    {
+      "id": "fan-direct-signal",
+      "expected": "reconciliation_signal",
+      "missing_obligation": "After the chamber door closes, the fan may restart only when the operator confirms readiness.",
+      "verdicts": [
+        "preserved"
+      ],
+      "cohort": "known_regression",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/fan-direct-signal.packet.json",
+        "sha256": "b5bc91ca8f3c48237271afebae3ba137a1fbb993b6c83aa876491edc1d66a7f4",
+        "bytes": 5457
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/fan-direct-signal.baseline-1.edit.json",
+            "sha256": "fc752e3105d4a40765c192e55ac11f6cc86b5c83e1de1c42b7496764a79fbd15",
+            "bytes": 4713
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/fan-direct-signal.baseline-1.request.json",
+            "sha256": "6cf3a28441282f95feec1489ca8bdad45908ad47eb76ce322ba77d07ca65836c",
+            "bytes": 5885
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 1858,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/fan-direct-signal.candidate-1.edit.json",
+            "sha256": "d1b3f137b296965ef00e9d782990972443bfa338f08da0be7d22fbaaa658df5e",
+            "bytes": 4884
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/fan-direct-signal.candidate-1.request.json",
+            "sha256": "2a8e78fa73ed8c258bdc86caae0fcf8235b47c9e09f436a64a91d4d7aaa9cddc",
+            "bytes": 6056
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 1858,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    },
+    {
+      "id": "joint-two-sources",
+      "expected": "candidate",
+      "missing_obligation": "Parcel release requires both recipient identity verification and payment confirmation.",
+      "verdicts": [
+        "preserved"
+      ],
+      "cohort": "known_regression",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/joint-two-sources.packet.json",
+        "sha256": "975b7eeb17907f10cbbe815e7c2272ae1939a31c54b38893b04cc3db631ec450",
+        "bytes": 8116
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/joint-two-sources.baseline-1.edit.json",
+            "sha256": "3b3bb8ea5f899eeb3ea343316d79f4ab41a70f8971d2e948e951c3e15edf7465",
+            "bytes": 5375
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/joint-two-sources.baseline-1.request.json",
+            "sha256": "528d141ca01ecc6596b3e9e156e83aa7602e1dee53dac19bff5fd60e564d6be8",
+            "bytes": 6547
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2437,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/joint-two-sources.candidate-1.edit.json",
+            "sha256": "289d99319a0a626998069657d709563f460fc7046211ab2ee2dc4642a1aa2d65",
+            "bytes": 5546
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/joint-two-sources.candidate-1.request.json",
+            "sha256": "eb020512a2028ecacefb671b1f82b50fa13996a6d31fe457aea144c9689faa3a",
+            "bytes": 6718
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 2437,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    },
+    {
+      "id": "wrong-role-assignment",
+      "expected": "unsupported_role",
+      "missing_obligation": "After an appointment is cancelled, the service must notify the patient.",
+      "verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "cohort": "known_regression",
+      "comparison_count": 2,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.packet.json",
+        "sha256": "feab5c7cf7c41851a366082c10d7ca48bb1821169470cc07d9be64d84ee6db3d",
+        "bytes": 7726
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.baseline-1.edit.json",
+            "sha256": "2a0003d8611e75f860b8cd5054478c36cd5305cfad88d7b36b24bbb0a8fe61fa",
+            "bytes": 5268
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.baseline-1.request.json",
+            "sha256": "a76379a91676469df1a7c55d475910f4bb14ba746f5b10e1cd975d7a9ae9a561",
+            "bytes": 6440
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2336,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.candidate-1.edit.json",
+            "sha256": "900bf394526e03cb5ca94ede62f863d8ffdd82b4a70b2c3ed2d731b0ffe4432b",
+            "bytes": 5439
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.candidate-1.request.json",
+            "sha256": "24952195d80600c1a546c627f0411e41d7fa67835790d9d619b3c6a272ce0276",
+            "bytes": 6611
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 2336,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "baseline-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.baseline-2.edit.json",
+            "sha256": "dc05dc80a3e8154696ce264b7dc2cde07b49f65757c983ad153c8ce71fd333d9",
+            "bytes": 5135
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.baseline-2.request.json",
+            "sha256": "4b90aa77689a6fd9f12719dd9a608445cb076baef0010ca9a7b57ffbb010488f",
+            "bytes": 6307
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2213,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        },
+        "candidate-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.candidate-2.edit.json",
+            "sha256": "cd0cf84312ed752ae59ae9daafac746b4a00f4e3948a9c9a633a66f5bd3e7244",
+            "bytes": 5306
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.candidate-2.request.json",
+            "sha256": "d84f5f5120da720b5d8913fe044f2dbd2fef6a855ab34485ec2261225bf3db3f",
+            "bytes": 6478
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 2213,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        }
+      }
+    },
+    {
+      "id": "unresolved-multiple-producers",
+      "expected": "unlocalized",
+      "missing_obligation": "During power loss, the cabinet must keep medicine cold for eight hours, and an alarm must sound if backup cooling fails.",
+      "verdicts": [
+        "lost"
+      ],
+      "cohort": "known_regression",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/unresolved-multiple-producers.packet.json",
+        "sha256": "81cea5f2fb231d10ea5fb4b303f58ecd2c695e675451209ca9cee7a308b76df4",
+        "bytes": 8394
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/unresolved-multiple-producers.baseline-1.edit.json",
+            "sha256": "3a6975b07ee1611fd8a92f53b7eab6c63a41dd86f566669075ccf4a38ba0d86a",
+            "bytes": 5437
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/unresolved-multiple-producers.baseline-1.request.json",
+            "sha256": "cb0bade29247195754728c65aecdef2632420c62783c3e1a66501ac5d706503c",
+            "bytes": 6609
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2485,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/unresolved-multiple-producers.candidate-1.edit.json",
+            "sha256": "ebb43546a963c8b63ac78ee7fc55cef2ac5c3305803603ad4dc56105ecb8233d",
+            "bytes": 5608
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/unresolved-multiple-producers.candidate-1.request.json",
+            "sha256": "0921bd1ab00f76fdd97ff2bdafaa8615fc60cf22fbb5da22ae57b6b58412732e",
+            "bytes": 6780
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 2485,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    },
+    {
+      "id": "parking-candidate",
+      "expected": "candidate",
+      "missing_obligation": "Ending a parking session requires settled payment; failed payment must leave the session active.",
+      "verdicts": [
+        "preserved"
+      ],
+      "cohort": "known_regression",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/parking-candidate.packet.json",
+        "sha256": "72b132be86c09881278660074690f46b60d92ff71ebdcde3b5d448bf9bf2e2cc",
+        "bytes": 6304
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/parking-candidate.baseline-1.edit.json",
+            "sha256": "8495805111320fd8360869a2d952cf806c1f5cc0d6193a12cf6c9882485351d6",
+            "bytes": 4906
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/parking-candidate.baseline-1.request.json",
+            "sha256": "c239d5fa44e91aba753147957c7afec573c31dd577a45d8e501672cba2f38bbe",
+            "bytes": 6078
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2045,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/parking-candidate.candidate-1.edit.json",
+            "sha256": "0d2e27a132aac7895313c477e7bcf42d91afc4ebc7a09c6073181e24a11f1429",
+            "bytes": 5077
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/parking-candidate.candidate-1.request.json",
+            "sha256": "2fa6dee272e37e5e01f7c63732c52c4c9a29fadb02ed9b7da535be1223534b9d",
+            "bytes": 6249
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 2045,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    },
+    {
+      "id": "captured-story",
+      "expected": "candidate",
+      "missing_obligation": "When started, the application must display Hello, World!.",
+      "verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "cohort": "known_regression",
+      "comparison_count": 2,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.packet.json",
+        "sha256": "4ba6378061be23e904263e4a1274baed780b58ffacacc1cf60c2dadf6ed95579",
+        "bytes": 16388
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.baseline-1.edit.json",
+            "sha256": "92e43e0f983733de7e46a8bc225be18b04e29ebe2ac1e9fc86e9d7d26b8be75b",
+            "bytes": 8821
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.baseline-1.request.json",
+            "sha256": "bc3a48d610475e71f2eeaeb15583cc376428849f04f599988fd7a037053e28e3",
+            "bytes": 9993
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 5594,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.candidate-1.edit.json",
+            "sha256": "b6451d1dde1a638dbfe2857f320132200e117b88134c3da70d80916b71e3bc47",
+            "bytes": 8992
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.candidate-1.request.json",
+            "sha256": "705e0339bab86f7fe3cf9a944cb62bbc82c4af61e4835b1083f86f2b227e6b04",
+            "bytes": 10164
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 5594,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "baseline-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.baseline-2.edit.json",
+            "sha256": "5937792cacfea653f696f8883bcca3a6ab6a55ced0043b86a51a9bc1a0c94ef9",
+            "bytes": 8746
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.baseline-2.request.json",
+            "sha256": "25fc131866419836d3a3ade6c60ad74915961198b91dd337f82f1c5009d91c12",
+            "bytes": 9918
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 5529,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        },
+        "candidate-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.candidate-2.edit.json",
+            "sha256": "9e6fb5e680d8328b080a209113da097ad56d21301c3c1a796284be8e6ccd397b",
+            "bytes": 8917
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.candidate-2.request.json",
+            "sha256": "5427ba7317d78240e6991a840db39eaef491fb4d3446a4d56a4584804ab8aa03",
+            "bytes": 10089
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 5529,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        }
+      }
+    },
+    {
+      "id": "sterile-door",
+      "expected": "candidate",
+      "missing_obligation": "MOCK The access door must not unlock while the sterilizer is pressurized.",
+      "verdicts": [
+        "preserved"
+      ],
+      "cohort": "known_regression",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/sterile-door.packet.json",
+        "sha256": "bc8184b0903b20d427f56ebb3e602b65c29719a66db6bbb4fed50965a8fd6e99",
+        "bytes": 5721
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/sterile-door.baseline-1.edit.json",
+            "sha256": "0473a6458ae442a5398e400e55443f895812dde746c4850def7900c9462649b2",
+            "bytes": 4602
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/sterile-door.baseline-1.request.json",
+            "sha256": "d337ff0c420889adc289d14161f47be02a38a422fcc2f949e1728a48bf8ab388",
+            "bytes": 5774
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 1741,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/sterile-door.candidate-1.edit.json",
+            "sha256": "f9c876ef24f0f42a76eeb52faa655f71d282dbb62068361d13558ed30730235c",
+            "bytes": 4773
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/sterile-door.candidate-1.request.json",
+            "sha256": "a65b8ded63ad1f392cdb896779a4bb2c3df1e8e11e91fe85618eff97b8ec3bbf",
+            "bytes": 5945
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 1741,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    },
+    {
+      "id": "voucher-release",
+      "expected": "unsupported_role",
+      "missing_obligation": "MOCK Voucher release requires manager approval as well as cleared payment.",
+      "verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "cohort": "known_regression",
+      "comparison_count": 2,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.packet.json",
+        "sha256": "59aed9d31fd1a59a3b561e44937ebea4a4ea83da9de105204214f49edab87a8e",
+        "bytes": 8405
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.baseline-1.edit.json",
+            "sha256": "6c48e15322bb26f47f7a4f72a4557b8fd1d6ec8fc3a6b0cc5b73ff38b1be04b3",
+            "bytes": 5346
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.baseline-1.request.json",
+            "sha256": "a1de65bcc6f445b4fb8d18bddf43397c779e3936704656319afdad25353ea871",
+            "bytes": 6518
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2386,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.candidate-1.edit.json",
+            "sha256": "c530559a5c009e7bff8f7447bf7b99584807d2d386c97fb28c3591f4d95d9e9b",
+            "bytes": 5517
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.candidate-1.request.json",
+            "sha256": "fc62869bd14839d6499deb5bd65912b57f9c61bc48ca89f95be59d08e7b473f7",
+            "bytes": 6689
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 2386,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "baseline-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.baseline-2.edit.json",
+            "sha256": "01c59f96d594f01085c52324f7353da70554dfd3112baa52fcb58b274d41e251",
+            "bytes": 5240
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.baseline-2.request.json",
+            "sha256": "4e2271df16549cb15494a35b96270b18033443f8935f9a817139315d375c86dc",
+            "bytes": 6412
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2290,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        },
+        "candidate-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.candidate-2.edit.json",
+            "sha256": "7fe552fdc491e174792e358e4d2985d49c24a48aad74aeedf3a2207320b4120d",
+            "bytes": 5411
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.candidate-2.request.json",
+            "sha256": "3748f9f2870e7ad5471082b30592c33b1e598eb5533bd6e34296207fbadb2aea",
+            "bytes": 6583
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 2290,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        }
+      }
+    },
+    {
+      "id": "dual-ready",
+      "expected": "candidate",
+      "missing_obligation": "MOCK After inspection is approved, show MOCK Ready to the inspector.",
+      "verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "cohort": "known_regression",
+      "comparison_count": 2,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.packet.json",
+        "sha256": "d190a60cef7e480648ad72383b2fb27fd0931df9f070671e3d447458723c4f6b",
+        "bytes": 12303
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.baseline-1.edit.json",
+            "sha256": "09bf32e76981722e4bc0552e163949bc511789b80ae9797e7bacb53bd6284885",
+            "bytes": 6912
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.baseline-1.request.json",
+            "sha256": "2a45370e1c5c39ef1832272ef94804ab65ac4eeba7ca19014d52c12e31946326",
+            "bytes": 8084
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 3774,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.candidate-1.edit.json",
+            "sha256": "19f8b183ee26f4c5c81a4804316a528c2ac67bc0f7085ce356e04f8375189116",
+            "bytes": 7083
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.candidate-1.request.json",
+            "sha256": "f9d8ece8a9614c213253b22dc1fad2a0db81a8d51cc544b1cb1275447fb439fa",
+            "bytes": 8255
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 3774,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "baseline-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.baseline-2.edit.json",
+            "sha256": "9ccd84a77c1e3c1cfde2cddf10ab5747dbcc6ec8c3f1ac47ad88bb3692fe1098",
+            "bytes": 6768
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.baseline-2.request.json",
+            "sha256": "c1fddc24917f39d4a8e83d3fc68f4d556b72db9d327334cf44588f69e437cbda",
+            "bytes": 7940
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 3650,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        },
+        "candidate-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.candidate-2.edit.json",
+            "sha256": "50a54c822ba609bea413ede8a8156404910fddb7325bf4997e2f5df21c6468a5",
+            "bytes": 6939
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.candidate-2.request.json",
+            "sha256": "f416dd06c89b2953fe39b9ee9f702f340f32f1346e98640703272fcec5ef7da9",
+            "bytes": 8111
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 3650,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        }
+      }
+    },
+    {
+      "id": "smoke-exit-compound",
+      "expected": "candidate",
+      "missing_obligation": "When smoke is detected, the controller must sound the alarm and must keep the exit door unlocked while smoke persists.",
+      "verdicts": [
+        "preserved"
+      ],
+      "cohort": "fresh_compound_irrelevant_source_control",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/smoke-exit-compound.packet.json",
+        "sha256": "c3aaabb3527586a7beeef2fc971c6ebbf16c93ba8338aeca2abf2e6efd070a9d",
+        "bytes": 9836
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/smoke-exit-compound.baseline-1.edit.json",
+            "sha256": "64f1b5a5ad640aac0c2e1c7933bdd2dfffdc76bc310bc9928f86b0c3c66e1f69",
+            "bytes": 6082
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/smoke-exit-compound.baseline-1.request.json",
+            "sha256": "11c17ba3fdbb889436392bbe986f89cac643bbbfc8de1a6f753f63eb8828073f",
+            "bytes": 7254
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 3095,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/smoke-exit-compound.candidate-1.edit.json",
+            "sha256": "5f70c504fafd319da5a945663e699613d1d986b1fb3744c7b6a16f28f88179b8",
+            "bytes": 6253
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/smoke-exit-compound.candidate-1.request.json",
+            "sha256": "d30325e112cd195861534fff1d77b12e5507bb80d5a70096a12186705aa325c5",
+            "bytes": 7425
+          },
+          "prompt_bytes": 1689,
+          "evidence_bytes": 3095,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-description-baseline-2-1",
+      "decision_id": "captured-description-baseline-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-description.baseline-2.response-1.json"
+    },
+    {
+      "id": "captured-description-baseline-1-1",
+      "decision_id": "captured-description-baseline-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-description.baseline-1.response-1.json"
+    },
+    {
+      "id": "captured-description-candidate-2-1",
+      "decision_id": "captured-description-candidate-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-description.candidate-2.response-1.json"
+    },
+    {
+      "id": "captured-description-candidate-1-1",
+      "decision_id": "captured-description-candidate-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-description.candidate-1.response-1.json"
+    },
+    {
+      "id": "loan-candidate-candidate-1-1",
+      "decision_id": "loan-candidate-candidate-1",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/loan-candidate.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/loan-candidate.candidate-1.response-1.json"
+    },
+    {
+      "id": "loan-candidate-baseline-1-1",
+      "decision_id": "loan-candidate-baseline-1",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/loan-candidate.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/loan-candidate.baseline-1.response-1.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-2-1",
+      "decision_id": "extraction-inherited-baseline-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/extraction-inherited.baseline-2.response-1.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-1-1",
+      "decision_id": "extraction-inherited-baseline-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/extraction-inherited.baseline-1.response-1.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-2-1",
+      "decision_id": "extraction-inherited-candidate-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/extraction-inherited.candidate-2.response-1.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-1-1",
+      "decision_id": "extraction-inherited-candidate-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/extraction-inherited.candidate-1.response-1.json"
+    },
+    {
+      "id": "fan-direct-signal-candidate-1-1",
+      "decision_id": "fan-direct-signal-candidate-1",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/fan-direct-signal.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/fan-direct-signal.candidate-1.response-1.json"
+    },
+    {
+      "id": "fan-direct-signal-baseline-1-1",
+      "decision_id": "fan-direct-signal-baseline-1",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/fan-direct-signal.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/fan-direct-signal.baseline-1.response-1.json"
+    },
+    {
+      "id": "joint-two-sources-baseline-1-1",
+      "decision_id": "joint-two-sources-baseline-1",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/joint-two-sources.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/joint-two-sources.baseline-1.response-1.json"
+    },
+    {
+      "id": "joint-two-sources-candidate-1-1",
+      "decision_id": "joint-two-sources-candidate-1",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/joint-two-sources.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/joint-two-sources.candidate-1.response-1.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-1-1",
+      "decision_id": "wrong-role-assignment-candidate-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.candidate-1.response-1.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-2-1",
+      "decision_id": "wrong-role-assignment-candidate-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.candidate-2.response-1.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-1-1",
+      "decision_id": "wrong-role-assignment-baseline-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.baseline-1.response-1.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-2-1",
+      "decision_id": "wrong-role-assignment-baseline-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.baseline-2.response-1.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-1-1",
+      "decision_id": "unresolved-multiple-producers-baseline-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/unresolved-multiple-producers.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/unresolved-multiple-producers.baseline-1.response-1.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-1-1",
+      "decision_id": "unresolved-multiple-producers-candidate-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/unresolved-multiple-producers.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/unresolved-multiple-producers.candidate-1.response-1.json"
+    },
+    {
+      "id": "parking-candidate-candidate-1-1",
+      "decision_id": "parking-candidate-candidate-1",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/parking-candidate.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/parking-candidate.candidate-1.response-1.json"
+    },
+    {
+      "id": "parking-candidate-baseline-1-1",
+      "decision_id": "parking-candidate-baseline-1",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/parking-candidate.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/parking-candidate.baseline-1.response-1.json"
+    },
+    {
+      "id": "captured-story-baseline-2-1",
+      "decision_id": "captured-story-baseline-1",
+      "case": "captured-story",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-story.baseline-2.response-1.json"
+    },
+    {
+      "id": "captured-story-baseline-1-1",
+      "decision_id": "captured-story-baseline-1",
+      "case": "captured-story",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-story.baseline-1.response-1.json"
+    },
+    {
+      "id": "captured-story-candidate-2-1",
+      "decision_id": "captured-story-candidate-1",
+      "case": "captured-story",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-story.candidate-2.response-1.json"
+    },
+    {
+      "id": "captured-story-candidate-1-1",
+      "decision_id": "captured-story-candidate-1",
+      "case": "captured-story",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-story.candidate-1.response-1.json"
+    },
+    {
+      "id": "sterile-door-candidate-1-1",
+      "decision_id": "sterile-door-candidate-1",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/sterile-door.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/sterile-door.candidate-1.response-1.json"
+    },
+    {
+      "id": "sterile-door-baseline-1-1",
+      "decision_id": "sterile-door-baseline-1",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/sterile-door.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/sterile-door.baseline-1.response-1.json"
+    },
+    {
+      "id": "voucher-release-baseline-2-1",
+      "decision_id": "voucher-release-baseline-1",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/voucher-release.baseline-2.response-1.json"
+    },
+    {
+      "id": "voucher-release-baseline-1-1",
+      "decision_id": "voucher-release-baseline-1",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/voucher-release.baseline-1.response-1.json"
+    },
+    {
+      "id": "voucher-release-candidate-2-1",
+      "decision_id": "voucher-release-candidate-1",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/voucher-release.candidate-2.response-1.json"
+    },
+    {
+      "id": "voucher-release-candidate-1-1",
+      "decision_id": "voucher-release-candidate-1",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/voucher-release.candidate-1.response-1.json"
+    },
+    {
+      "id": "dual-ready-candidate-1-1",
+      "decision_id": "dual-ready-candidate-1",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/dual-ready.candidate-1.response-1.json"
+    },
+    {
+      "id": "dual-ready-candidate-2-1",
+      "decision_id": "dual-ready-candidate-1",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/dual-ready.candidate-2.response-1.json"
+    },
+    {
+      "id": "dual-ready-baseline-1-1",
+      "decision_id": "dual-ready-baseline-1",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/dual-ready.baseline-1.response-1.json"
+    },
+    {
+      "id": "dual-ready-baseline-2-1",
+      "decision_id": "dual-ready-baseline-1",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/dual-ready.baseline-2.response-1.json"
+    },
+    {
+      "id": "smoke-exit-compound-baseline-1-1",
+      "decision_id": "smoke-exit-compound-baseline-1",
+      "case": "smoke-exit-compound",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/smoke-exit-compound.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/smoke-exit-compound.baseline-1.response-1.json"
+    },
+    {
+      "id": "smoke-exit-compound-candidate-1-1",
+      "decision_id": "smoke-exit-compound-candidate-1",
+      "case": "smoke-exit-compound",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/smoke-exit-compound.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/smoke-exit-compound.candidate-1.response-1.json"
+    },
+    {
+      "id": "captured-description-candidate-1-2",
+      "decision_id": "captured-description-candidate-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-description.candidate-1.response-2.json"
+    },
+    {
+      "id": "captured-description-candidate-2-2",
+      "decision_id": "captured-description-candidate-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-description.candidate-2.response-2.json"
+    },
+    {
+      "id": "captured-description-baseline-1-2",
+      "decision_id": "captured-description-baseline-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-description.baseline-1.response-2.json"
+    },
+    {
+      "id": "captured-description-baseline-2-2",
+      "decision_id": "captured-description-baseline-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-description.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-description.baseline-2.response-2.json"
+    },
+    {
+      "id": "loan-candidate-baseline-1-2",
+      "decision_id": "loan-candidate-baseline-2",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/loan-candidate.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/loan-candidate.baseline-1.response-2.json"
+    },
+    {
+      "id": "loan-candidate-candidate-1-2",
+      "decision_id": "loan-candidate-candidate-2",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/loan-candidate.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/loan-candidate.candidate-1.response-2.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-1-2",
+      "decision_id": "extraction-inherited-candidate-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/extraction-inherited.candidate-1.response-2.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-2-2",
+      "decision_id": "extraction-inherited-candidate-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/extraction-inherited.candidate-2.response-2.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-1-2",
+      "decision_id": "extraction-inherited-baseline-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/extraction-inherited.baseline-1.response-2.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-2-2",
+      "decision_id": "extraction-inherited-baseline-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/extraction-inherited.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/extraction-inherited.baseline-2.response-2.json"
+    },
+    {
+      "id": "fan-direct-signal-baseline-1-2",
+      "decision_id": "fan-direct-signal-baseline-2",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/fan-direct-signal.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/fan-direct-signal.baseline-1.response-2.json"
+    },
+    {
+      "id": "fan-direct-signal-candidate-1-2",
+      "decision_id": "fan-direct-signal-candidate-2",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/fan-direct-signal.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/fan-direct-signal.candidate-1.response-2.json"
+    },
+    {
+      "id": "joint-two-sources-candidate-1-2",
+      "decision_id": "joint-two-sources-candidate-2",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/joint-two-sources.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/joint-two-sources.candidate-1.response-2.json"
+    },
+    {
+      "id": "joint-two-sources-baseline-1-2",
+      "decision_id": "joint-two-sources-baseline-2",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/joint-two-sources.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/joint-two-sources.baseline-1.response-2.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-2-2",
+      "decision_id": "wrong-role-assignment-baseline-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.baseline-2.response-2.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-1-2",
+      "decision_id": "wrong-role-assignment-baseline-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.baseline-1.response-2.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-2-2",
+      "decision_id": "wrong-role-assignment-candidate-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.candidate-2.response-2.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-1-2",
+      "decision_id": "wrong-role-assignment-candidate-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/wrong-role-assignment.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.candidate-1.response-2.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-1-2",
+      "decision_id": "unresolved-multiple-producers-candidate-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/unresolved-multiple-producers.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/unresolved-multiple-producers.candidate-1.response-2.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-1-2",
+      "decision_id": "unresolved-multiple-producers-baseline-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/unresolved-multiple-producers.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/unresolved-multiple-producers.baseline-1.response-2.json"
+    },
+    {
+      "id": "parking-candidate-baseline-1-2",
+      "decision_id": "parking-candidate-baseline-2",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/parking-candidate.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/parking-candidate.baseline-1.response-2.json"
+    },
+    {
+      "id": "parking-candidate-candidate-1-2",
+      "decision_id": "parking-candidate-candidate-2",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/parking-candidate.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/parking-candidate.candidate-1.response-2.json"
+    },
+    {
+      "id": "captured-story-candidate-1-2",
+      "decision_id": "captured-story-candidate-2",
+      "case": "captured-story",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-story.candidate-1.response-2.json"
+    },
+    {
+      "id": "captured-story-candidate-2-2",
+      "decision_id": "captured-story-candidate-2",
+      "case": "captured-story",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-story.candidate-2.response-2.json"
+    },
+    {
+      "id": "captured-story-baseline-1-2",
+      "decision_id": "captured-story-baseline-2",
+      "case": "captured-story",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-story.baseline-1.response-2.json"
+    },
+    {
+      "id": "captured-story-baseline-2-2",
+      "decision_id": "captured-story-baseline-2",
+      "case": "captured-story",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/captured-story.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/captured-story.baseline-2.response-2.json"
+    },
+    {
+      "id": "sterile-door-baseline-1-2",
+      "decision_id": "sterile-door-baseline-2",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/sterile-door.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/sterile-door.baseline-1.response-2.json"
+    },
+    {
+      "id": "sterile-door-candidate-1-2",
+      "decision_id": "sterile-door-candidate-2",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/sterile-door.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/sterile-door.candidate-1.response-2.json"
+    },
+    {
+      "id": "voucher-release-candidate-1-2",
+      "decision_id": "voucher-release-candidate-2",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/voucher-release.candidate-1.response-2.json"
+    },
+    {
+      "id": "voucher-release-candidate-2-2",
+      "decision_id": "voucher-release-candidate-2",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/voucher-release.candidate-2.response-2.json"
+    },
+    {
+      "id": "voucher-release-baseline-1-2",
+      "decision_id": "voucher-release-baseline-2",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/voucher-release.baseline-1.response-2.json"
+    },
+    {
+      "id": "voucher-release-baseline-2-2",
+      "decision_id": "voucher-release-baseline-2",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/voucher-release.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/voucher-release.baseline-2.response-2.json"
+    },
+    {
+      "id": "dual-ready-baseline-2-2",
+      "decision_id": "dual-ready-baseline-2",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/dual-ready.baseline-2.response-2.json"
+    },
+    {
+      "id": "dual-ready-baseline-1-2",
+      "decision_id": "dual-ready-baseline-2",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/dual-ready.baseline-1.response-2.json"
+    },
+    {
+      "id": "dual-ready-candidate-2-2",
+      "decision_id": "dual-ready-candidate-2",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/dual-ready.candidate-2.response-2.json"
+    },
+    {
+      "id": "dual-ready-candidate-1-2",
+      "decision_id": "dual-ready-candidate-2",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/dual-ready.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/dual-ready.candidate-1.response-2.json"
+    },
+    {
+      "id": "smoke-exit-compound-candidate-1-2",
+      "decision_id": "smoke-exit-compound-candidate-2",
+      "case": "smoke-exit-compound",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/smoke-exit-compound.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/smoke-exit-compound.candidate-1.response-2.json"
+    },
+    {
+      "id": "smoke-exit-compound-baseline-1-2",
+      "decision_id": "smoke-exit-compound-baseline-2",
+      "case": "smoke-exit-compound",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/smoke-exit-compound.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-citation-completeness/smoke-exit-compound.baseline-1.response-2.json"
+    }
+  ],
+  "decision_trials": [
+    {
+      "id": "captured-description-baseline-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "captured-description-baseline-2-1",
+        "captured-description-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/captured-description.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/captured-description.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "captured-description-candidate-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "captured-description-candidate-2-1",
+        "captured-description-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/captured-description.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/captured-description.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "loan-candidate-candidate-1",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "loan-candidate-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/loan-candidate.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/loan-candidate.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "loan-candidate-baseline-1",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "loan-candidate-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/loan-candidate.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/loan-candidate.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "extraction-inherited-baseline-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "extraction-inherited-baseline-2-1",
+        "extraction-inherited-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/extraction-inherited.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/extraction-inherited.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "extraction-inherited-candidate-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "extraction-inherited-candidate-2-1",
+        "extraction-inherited-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/extraction-inherited.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/extraction-inherited.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "fan-direct-signal-candidate-1",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "fan-direct-signal-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/fan-direct-signal.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/fan-direct-signal.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "fan-direct-signal-baseline-1",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "fan-direct-signal-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/fan-direct-signal.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/fan-direct-signal.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "joint-two-sources-baseline-1",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "joint-two-sources-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/joint-two-sources.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/joint-two-sources.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "joint-two-sources-candidate-1",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "joint-two-sources-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/joint-two-sources.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/joint-two-sources.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "wrong-role-assignment-candidate-1-1",
+        "wrong-role-assignment-candidate-2-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "wrong-role-assignment-baseline-1-1",
+        "wrong-role-assignment-baseline-2-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "unresolved-multiple-producers-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/unresolved-multiple-producers.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/unresolved-multiple-producers.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "unresolved-multiple-producers-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/unresolved-multiple-producers.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/unresolved-multiple-producers.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "parking-candidate-candidate-1",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "parking-candidate-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/parking-candidate.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/parking-candidate.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "parking-candidate-baseline-1",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "parking-candidate-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/parking-candidate.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/parking-candidate.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "captured-story-baseline-1",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "captured-story-baseline-2-1",
+        "captured-story-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/captured-story.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/captured-story.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "captured-story-candidate-1",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "captured-story-candidate-2-1",
+        "captured-story-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/captured-story.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/captured-story.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "sterile-door-candidate-1",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "sterile-door-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/sterile-door.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/sterile-door.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "sterile-door-baseline-1",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "sterile-door-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/sterile-door.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/sterile-door.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "voucher-release-baseline-1",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "voucher-release-baseline-2-1",
+        "voucher-release-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/voucher-release.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/voucher-release.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "voucher-release-candidate-1",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "voucher-release-candidate-2-1",
+        "voucher-release-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/voucher-release.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/voucher-release.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "dual-ready-candidate-1",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "dual-ready-candidate-1-1",
+        "dual-ready-candidate-2-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/dual-ready.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/dual-ready.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "dual-ready-baseline-1",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "dual-ready-baseline-1-1",
+        "dual-ready-baseline-2-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/dual-ready.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/dual-ready.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "smoke-exit-compound-baseline-1",
+      "case": "smoke-exit-compound",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "smoke-exit-compound-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/smoke-exit-compound.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/smoke-exit-compound.baseline.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "smoke-exit-compound-candidate-1",
+      "case": "smoke-exit-compound",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "smoke-exit-compound-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/smoke-exit-compound.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/smoke-exit-compound.candidate.receipt-1.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "captured-description-candidate-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "captured-description-candidate-1-2",
+        "captured-description-candidate-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/captured-description.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/captured-description.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "captured-description-baseline-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "captured-description-baseline-1-2",
+        "captured-description-baseline-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/captured-description.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/captured-description.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "loan-candidate-baseline-2",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "loan-candidate-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/loan-candidate.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/loan-candidate.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "loan-candidate-candidate-2",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "loan-candidate-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/loan-candidate.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/loan-candidate.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "extraction-inherited-candidate-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "extraction-inherited-candidate-1-2",
+        "extraction-inherited-candidate-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/extraction-inherited.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/extraction-inherited.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "extraction-inherited-baseline-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "extraction-inherited-baseline-1-2",
+        "extraction-inherited-baseline-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/extraction-inherited.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/extraction-inherited.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "fan-direct-signal-baseline-2",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "fan-direct-signal-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/fan-direct-signal.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/fan-direct-signal.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "fan-direct-signal-candidate-2",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "fan-direct-signal-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/fan-direct-signal.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/fan-direct-signal.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "joint-two-sources-candidate-2",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "joint-two-sources-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/joint-two-sources.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/joint-two-sources.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "joint-two-sources-baseline-2",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "joint-two-sources-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/joint-two-sources.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/joint-two-sources.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "wrong-role-assignment-baseline-2-2",
+        "wrong-role-assignment-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "wrong-role-assignment-candidate-2-2",
+        "wrong-role-assignment-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/wrong-role-assignment.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "unresolved-multiple-producers-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/unresolved-multiple-producers.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/unresolved-multiple-producers.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "unresolved-multiple-producers-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/unresolved-multiple-producers.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/unresolved-multiple-producers.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "parking-candidate-baseline-2",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "parking-candidate-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/parking-candidate.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/parking-candidate.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "parking-candidate-candidate-2",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "parking-candidate-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/parking-candidate.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/parking-candidate.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "captured-story-candidate-2",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "captured-story-candidate-1-2",
+        "captured-story-candidate-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/captured-story.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/captured-story.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "captured-story-baseline-2",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "captured-story-baseline-1-2",
+        "captured-story-baseline-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/captured-story.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/captured-story.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "sterile-door-baseline-2",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "sterile-door-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/sterile-door.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/sterile-door.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "sterile-door-candidate-2",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "sterile-door-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/sterile-door.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/sterile-door.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "voucher-release-candidate-2",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "voucher-release-candidate-1-2",
+        "voucher-release-candidate-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/voucher-release.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/voucher-release.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "voucher-release-baseline-2",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "voucher-release-baseline-1-2",
+        "voucher-release-baseline-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/voucher-release.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/voucher-release.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "dual-ready-baseline-2",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "dual-ready-baseline-2-2",
+        "dual-ready-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/dual-ready.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/dual-ready.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "dual-ready-candidate-2",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "dual-ready-candidate-2-2",
+        "dual-ready-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/dual-ready.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/dual-ready.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "smoke-exit-compound-candidate-2",
+      "case": "smoke-exit-compound",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "smoke-exit-compound-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/smoke-exit-compound.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/smoke-exit-compound.candidate.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    },
+    {
+      "id": "smoke-exit-compound-baseline-2",
+      "case": "smoke-exit-compound",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "smoke-exit-compound-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-citation-completeness/smoke-exit-compound.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-citation-completeness/smoke-exit-compound.baseline.receipt-2.json",
+      "native_owner": "same_current_native_owned_scope_for_both_arms"
+    }
+  ],
+  "semantic_citation_expectations": {
+    "captured-description": {
+      "necessary_spans": [
+        {
+          "source": 1,
+          "first": 6,
+          "last": 6
+        }
+      ],
+      "notes": "Startup greeting; title/headings/date-time lines do not establish it. Span 5\u20136 is acceptable if explanation uses the startup context; unrelated padding is scored separately."
+    },
+    "loan-candidate": {
+      "necessary_spans": [
+        {
+          "source": 1,
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "notes": "Eligibility, no reservation, seven-day extension on request; conditional duty is not an invented only-if prohibition."
+    },
+    "extraction-inherited": {
+      "necessary_spans": [
+        {
+          "source": 1,
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "notes": "Pump stop below minimum and until recovery; display/measurement lines cannot replace it."
+    },
+    "fan-direct-signal": {
+      "necessary_spans": [
+        {
+          "source": 1,
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "notes": "Door closes and operator readiness confirmation; explain preservation in assigned original claims rather than deficient signal context."
+    },
+    "joint-two-sources": {
+      "necessary_spans": [
+        {
+          "source": 1,
+          "first": 1,
+          "last": 1
+        },
+        {
+          "source": 2,
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "notes": "Both identity verification and payment are necessary to the complete obligation."
+    },
+    "wrong-role-assignment": {
+      "necessary_spans": [
+        {
+          "source": 1,
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "notes": "Cancellation must trigger patient notification; clinic hours are unrelated."
+    },
+    "unresolved-multiple-producers": {
+      "necessary_spans": [
+        {
+          "source": 1,
+          "first": 1,
+          "last": 1
+        },
+        {
+          "source": 2,
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "notes": "Captured alarm citation failure: cite cooling duration/power-loss and alarm/backup-failure parts even for lost verdict. Ownership remains unresolved."
+    },
+    "parking-candidate": {
+      "necessary_spans": [
+        {
+          "source": 1,
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "notes": "Settled payment required to end; failed payment leaves active. Both clauses and obligation strength matter."
+    },
+    "captured-story": {
+      "necessary_spans": [
+        {
+          "source": 1,
+          "first": 6,
+          "last": 6
+        }
+      ],
+      "notes": "Startup greeting; complete behavior survives both collections."
+    },
+    "sterile-door": {
+      "necessary_spans": [
+        {
+          "source": 1,
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "notes": "No unlocking under pressure; equivalent staying-locked wording allowed."
+    },
+    "voucher-release": {
+      "necessary_spans": [
+        {
+          "source": 1,
+          "first": 1,
+          "last": 1
+        },
+        {
+          "source": 2,
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "notes": "Each assessment must support manager approval plus cleared payment. Historical assembled evidence rules remain unchanged in historical panels; this new guidance study explicitly scores each isolated assessment."
+    },
+    "dual-ready": {
+      "necessary_spans": [
+        {
+          "source": 2,
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "notes": "Inspection-triggered display to inspector uses source2 occurrence; same text for payer/payment in source1 is unrelated and must not be cited as support."
+    },
+    "smoke-exit-compound": {
+      "necessary_spans": [
+        {
+          "source": 1,
+          "first": 1,
+          "last": 2
+        }
+      ],
+      "notes": "One span 1\u20132 or two spans 1,2 support alarm-on-detection and unlocked exit while smoke persists. Calibration version in offered source2 must not be cited."
+    }
+  },
+  "sources": [
+    {
+      "path": "src/test_fixtures/source_loss_calibration.zig",
+      "sha256": "ba3b4a721971ac6ffcfdc3e171d99532203f1beead9e21a4c1dad639a90a4504",
+      "bytes": 54197
+    },
+    {
+      "path": "src/domain/source_omission_comparison.zig",
+      "sha256": "43f585a1ad4623acba78a49d666bf6f15708cb5b9754dc26fb2bfc0f204ae07e",
+      "bytes": 9774
+    },
+    {
+      "path": "src/domain/specification_support.zig",
+      "sha256": "a92112effd3a46a85508bdb27212d97b50998cbb1d80a58fc45feca7340a7ee5",
+      "bytes": 38140
+    },
+    {
+      "path": "src/domain/specification_support_model.zig",
+      "sha256": "b2e8154846b6704a5a4841beda12cf2413f00749549094d14edede7ad5e5a706",
+      "bytes": 7783
+    },
+    {
+      "path": "src/domain/specification_support_evidence.zig",
+      "sha256": "aba742688e461df6d6d8f8a45d563d33524ca5786593cc3e323eb3b00ef0780c",
+      "bytes": 20694
+    },
+    {
+      "path": "src/domain/source_omission_context.zig",
+      "sha256": "49b333e3803bc6b5fc40a8f3ace7dcaff0787ef045606eb6715d6f3b1629fd87",
+      "bytes": 14799
+    },
+    {
+      "path": "src/domain/model_candidate_json.zig",
+      "sha256": "4ccb44d77212aeb846d741cf3801a601349127b440ebf7fecfeeb6fd300a37c7",
+      "bytes": 13384
+    },
+    {
+      "path": "src/domain/model_result_schema.zig",
+      "sha256": "c357589aecc82a7769d556812a1abf83279db425d512dac1851e36e61321b447",
+      "bytes": 36324
+    },
+    {
+      "path": "src/adapters/provider/bedrock_request.zig",
+      "sha256": "c7cb3ef2e2a98315caf321030c6dc3f02d6799ca475478d4964c8a24e97fd316",
+      "bytes": 5577
+    },
+    {
+      "path": "src/adapters/provider/bedrock_response.zig",
+      "sha256": "4fd46fd07a4dbc8b71a35e2bafee2fa0de5e4d6e424852e5ed44850d04656eec",
+      "bytes": 14632
+    },
+    {
+      "path": "src/adapters/provider/request_replay.zig",
+      "sha256": "0cf22758d43317b8ba8914e9d734628b7b6065ca83a7e37ecaf57d8e4a14dbcc",
+      "bytes": 9644
+    },
+    {
+      "path": "src/domain/model_envelope.zig",
+      "sha256": "106834112c83161e7493a045fbb7ad7d3d263926db9f3370cc71e96d0bf48ba7",
+      "bytes": 8130
+    },
+    {
+      "path": "src/domain/strict_json.zig",
+      "sha256": "c3fb991252cb1ac681f4ac21cbb830dcac4f1a78cf0f7d9ed35c585dd9a60723",
+      "bytes": 17544
+    },
+    {
+      "path": "design/workflows/spec/support-loss.prompt.md",
+      "sha256": "6bf5d8e3e5c9b0cbc5de0757a0cc67b44b3cf1b96b4650cec24afe2f5153671d",
+      "bytes": 1689
+    },
+    {
+      "path": "design/workflows/spec/support.prompt.md",
+      "sha256": "65a2ae84e1b723c93fc433e48a2f0178f407b9b38a1d8cb716ccbc28dd763951",
+      "bytes": 1746
+    },
+    {
+      "path": "design/workflows/spec/support.schema.json",
+      "sha256": "e7d723fc00b4aa99b102654b384a4e5cd5548b2787181300aff77d1ebb89af5c",
+      "bytes": 10617
+    }
+  ],
+  "assessment": {
+    "manual": "Manual semantic assessment, unblinded, preferably two independent reviewers. Source/line IDs and nonblank explanation are mechanical checks, not semantic proof.",
+    "native": "Both arms use the same current closed native-scope codec and original complete assignment; every child retains case/repetition/comparison/request hash and authentic replay response identity. No old-wire reader or ID fill.",
+    "citation_scoring": "Assess union of returned spans for this one complete obligation in each assessment, separately from collection verdict and explanation. Relevant extra context is permitted when it explains a necessary condition; unrelated source or line padding fails relevance.",
+    "generalization": "Twelve known regressions plus one newly prepared control; one model/settings pair and two repetitions do not demonstrate broad reliability.",
+    "handoff": "Separate 30-review-call preparation; dynamic loss packets use only actual admitted source-review output, retained unchanged, and require later freezing/approval."
+  }
+}
