@@ -4,9 +4,13 @@
 
 **Status:** sole active fix record. §9.20 recommendations 1 and 2 mechanics and R6's
 bounded attribution change are implemented. R6's approved live comparison failed
-its quality gate; semantic acceptance remains open. The proposed R6 recovery
-follow-up below is the next implementation priority; it is not implemented or
-an amendment to accepted repair authority.
+its quality gate; semantic acceptance remains open. The subsequent explicit
+source-obligation handoff is implemented and fully verified offline under the
+user's separate request. Its approved 48-call Phase 3 comparison completed but
+failed the semantic gate (baseline 18/24 correct, candidate 20/24 with
+captured-story regression). Semantic acceptance and Phase 4 remain pending.
+Other proposed R6 repair-permission extensions remain unimplemented and
+unapproved by this handoff change.
 [Z_FIX01](Z_FIX01.md) now holds completed implementation, executed experiments,
 their approvals and supporting historical reviews. Dated open/proposed statements
 there are historical; the outstanding scope and priorities below govern tracking.
@@ -177,11 +181,46 @@ that the originating defect or the complete recovery path improved.
 **Status:** item 1's implementation and lifecycle cutover are complete under
 [FIX01-01 Phase 2](FIX01-01.md#phase-2--complete-the-lifecycle-and-offline-verification):
 395/395 focused tests and 1,454/1,454 full offline tests pass. Semantic comparison
-and live recovery/publication remain Phases 3 and 4. The remaining recommendations
-are not implemented. This status does not authorize
+and live recovery/publication remain Phases 3 and 4. The explicit-obligation
+follow-up below is subsequently implemented; the remaining repair-permission
+recommendations are not implemented. This status does not authorize
 new repair permissions, verdict reassessment or live calls.
 Reuse the current owners; do not introduce a second recovery framework or hardcode
 this source, model, call number or extraction-to-spec sequence in the generic engine.
+
+**Explicit-obligation follow-up — 10 October 2026:** after the context-removal
+pilot failed (baseline 1/6 correct, candidate 2/6 with captured-case regression),
+the user approved implementing a distinct `missing_obligation` handoff and the
+Phase 3 rerun. The existing source reviewer now states the omitted requirement
+separately from the diagnostic explanation. Schema admission, review evidence,
+loss projection, correction, revision binding, repair consumers and persisted
+v11 readback carry that statement unchanged. The loss call assesses complete
+collections against it, retaining surrounding evidence as context. No new verdict,
+repair permission, semantic retry or reviewer was added.
+See [FIX01-02's implementation record](FIX01-02.md#explicit-obligation-follow-up--10-october-2026)
+and the [new calibration package](../test/calibration/source-loss-attribution/bound-preservation/obligation/README.md).
+`zig build verify --summary all -j2` passed **1,461/1,461 tests and 142/142 steps**.
+All approved **48 loss calls** (12 cases × two arms × two repetitions) completed
+on 10 October, 09:59:39Z–10:01:15Z. The
+[results](../test/calibration/source-loss-attribution/bound-preservation/obligation/results.md)
+record baseline **18/24** versus candidate **20/24** correct attribution, native
+admission **24/24 versus 23/24**, and adequate evidence **17/24 versus 19/24**.
+Both arms score 14/16 on the original eight cases and 13/16 on evidence; the
+candidate misses the required improvement, retains two false upstream diagnoses
+and scores only 6/8 candidate-loss cases against the 7/8 minimum. The captured
+story regresses from 2/2 to 0/2, despite improvement from 2/6 to 6/6 on fresh cases.
+The declared semantic gate therefore **failed**. The captured description also
+remains incorrect in both arms and repetitions.
+
+Usage was **60,910 input + 12,670 output = 73,580 tokens**. The 48-call allowance
+is consumed, separately from the preceding 12-call pilot: 60 diagnostic calls in
+this rollout. No additional live calls or Phase 4 E2E ran; its conditional gate
+remains unmet. The failed pilot is not promoted, and the explicit-obligation
+mechanism is not an accepted semantic fix. Production source-review obligation
+fidelity has only offline mechanical coverage; it needs separate live qualification.
+Fixed supplied obligations cannot establish the full handoff's semantic quality
+or E2E publication acceptance. Review the retained failure before selecting any
+further change; no automatic experiment allowance follows.
 
 1. **Replace broad culprit selection with bound preservation comparisons.** R6
    already supplies actual producer outputs. The proposed change is to the task and

@@ -37,6 +37,7 @@ pub const Canonical = struct {
     provenance: @import("specification.zig").Selection,
     source_ids: []const SourceId,
     detail: []const u8,
+    missing_obligation: ?[]const u8 = null,
     question: ?[]const u8 = null,
 };
 
@@ -47,7 +48,23 @@ pub fn fixedClaims(required: evidence.Requirements) ?[]const r.ClaimId {
 const Positive = struct { source_ids: []const SourceId, detail: []const u8 };
 const Question = struct { source_ids: []const SourceId, detail: []const u8, question: []const u8 };
 const Explanation = struct { source_ids: []const SourceId, detail: []const u8 };
-const Omission = struct { source_ids: []const SourceId, detail: []const u8 };
+const Omission = struct { source_ids: []const SourceId, detail: []const u8, missing_obligation: []const u8 };
+pub const Detail = struct { detail: []const u8, missing_obligation: ?[]const u8 = null, question: ?[]const u8 = null };
+
+/// Decode the selected correction shape without permitting a missing obligation
+/// or admitting omission-only fields into another retained finding.
+pub fn decodeDetail(a_alloc: std.mem.Allocator, bytes: []const u8, decision: Decision) json.Error!Detail {
+    if (decision == .candidate_omission) {
+        const value = try codec.decode(struct { detail: []const u8, missing_obligation: []const u8 }, a_alloc, bytes);
+        return .{ .detail = value.detail, .missing_obligation = value.missing_obligation };
+    }
+    if (evidence.questionRequired(decision.finding())) {
+        const value = try codec.decode(struct { detail: []const u8, question: []const u8 }, a_alloc, bytes);
+        return .{ .detail = value.detail, .question = value.question };
+    }
+    const value = try codec.decode(struct { detail: []const u8 }, a_alloc, bytes);
+    return .{ .detail = value.detail };
+}
 
 pub const Value = union(enum) {
     supported: Positive,
@@ -83,13 +100,13 @@ pub fn decode(a_alloc: std.mem.Allocator, bytes: []const u8, required: evidence.
     return switch (value) {
         .supported, .not_applicable => |positive| .{ .kind = kind, .provenance = selected, .source_ids = positive.source_ids, .detail = positive.detail },
         .ambiguous, .conflicting, .unsupported => |negative| .{ .kind = kind, .provenance = selected, .source_ids = negative.source_ids, .detail = negative.detail, .question = negative.question },
-        .candidate_omission => |negative| .{ .kind = kind, .provenance = selected, .source_ids = negative.source_ids, .detail = negative.detail, .loss = location },
+        .candidate_omission => |negative| .{ .kind = kind, .provenance = selected, .source_ids = negative.source_ids, .detail = negative.detail, .missing_obligation = negative.missing_obligation, .loss = location },
         .inconclusive => |negative| .{ .kind = kind, .provenance = selected, .source_ids = negative.source_ids, .detail = negative.detail },
     };
 }
 
 pub fn bindLoss(required: evidence.Requirements, value: Canonical, location: loss, proof: @import("source_omission.zig").comparisons.Evidence) json.Error!Canonical {
-    if (value.kind != .candidate_omission) return error.InvalidJsonDocument;
+    if (value.kind != .candidate_omission or !evidence.validObligation(value.kind.finding(), value.missing_obligation)) return error.InvalidJsonDocument;
     var bound = value;
     bound.loss = location;
     bound.preservation = proof;
@@ -101,6 +118,7 @@ pub fn bindLoss(required: evidence.Requirements, value: Canonical, location: los
 /// Production admission always decodes and validates the response again.
 pub fn encode(a_alloc: std.mem.Allocator, value: Canonical, required: evidence.Requirements) json.Error![]const u8 {
     _ = required;
+    if (!evidence.validObligation(value.kind.finding(), value.missing_obligation)) return error.InvalidJsonDocument;
     const positive: Positive = .{ .source_ids = value.source_ids, .detail = value.detail };
     const selected: Value = switch (value.kind) {
         .supported => .{ .supported = positive },
@@ -108,7 +126,7 @@ pub fn encode(a_alloc: std.mem.Allocator, value: Canonical, required: evidence.R
         .ambiguous => .{ .ambiguous = .{ .source_ids = value.source_ids, .detail = value.detail, .question = value.question orelse "" } },
         .conflicting => .{ .conflicting = .{ .source_ids = value.source_ids, .detail = value.detail, .question = value.question orelse "" } },
         .unsupported => .{ .unsupported = .{ .source_ids = value.source_ids, .detail = value.detail, .question = value.question orelse "" } },
-        .candidate_omission => .{ .candidate_omission = .{ .source_ids = value.source_ids, .detail = value.detail } },
+        .candidate_omission => .{ .candidate_omission = .{ .source_ids = value.source_ids, .detail = value.detail, .missing_obligation = value.missing_obligation.? } },
         .inconclusive => .{ .inconclusive = .{ .source_ids = value.source_ids, .detail = value.detail } },
     };
     return codec.encode(Value, a_alloc, selected);

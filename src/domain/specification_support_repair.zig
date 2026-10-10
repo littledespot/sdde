@@ -21,14 +21,14 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             }
         };
         const Selection = if (purpose == .principles) struct { citations: []const @import("principle_registry.zig").Citation } else struct { provenance: @import("specification.zig").Selection, source_ids: []const @import("reference_identity.zig").SourceId };
-        const Detail = if (purpose == .source) struct { detail: []const u8, question: ?[]const u8 = null } else struct { detail: []const u8 };
+        const Detail = if (purpose == .source) source_model.Detail else struct { detail: []const u8 };
         pub const Replacement = union(enum) { finding: review.Value, selection: Selection, detail: Detail };
         const Facts = struct { inputs: authority.Inputs, sources: evidence.Inputs, candidate: review.Candidate };
         const Rule = struct {
             rejection: review.Diagnostic,
             finding: ?review.Value,
-            pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, citation: ?@import("principle_assessment.zig").CitationRejection, detail_rule: ?@import("specification_support_evidence.zig").DetailRule.Guidance, finding: ?review.Value = null, decision: ?review.Decision = null, question_rule: ?[]const u8 } {
-                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .citation = if (purpose == .principles and self.rejection.evidence != null) self.rejection.evidence.?.citation else null, .detail_rule = if (self.rejection.issue.isText() and self.finding != null) @import("specification_support_evidence.zig").detailRule(review.decisionOf(self.finding.?).finding()).guidance() else null, .finding = if (self.rejection.issue.isText()) null else self.finding, .decision = if (self.rejection.issue.isText() and self.finding != null) review.decisionOf(self.finding.?) else null, .question_rule = if (purpose == .source and self.rejection.issue.isText() and self.finding != null) admission.questionGuidance(review.decisionOf(self.finding.?).finding()) else null };
+            pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, citation: ?@import("principle_assessment.zig").CitationRejection, detail_rule: ?@import("specification_support_evidence.zig").DetailRule.Guidance, finding: ?review.Value = null, decision: ?review.Decision = null, question_rule: ?[]const u8, obligation_rule: ?[]const u8, missing_obligation: ?[]const u8 } {
+                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .citation = if (purpose == .principles and self.rejection.evidence != null) self.rejection.evidence.?.citation else null, .detail_rule = if (self.rejection.issue.isText() and self.finding != null) @import("specification_support_evidence.zig").detailRule(review.decisionOf(self.finding.?).finding()).guidance() else null, .finding = if (self.rejection.issue.isText()) null else self.finding, .decision = if (self.rejection.issue.isText() and self.finding != null) review.decisionOf(self.finding.?) else null, .question_rule = if (purpose == .source and self.rejection.issue.isText() and self.finding != null) admission.questionGuidance(review.decisionOf(self.finding.?).finding()) else null, .obligation_rule = if (purpose == .source and self.rejection.issue.isText()) admission.obligation_instruction else null, .missing_obligation = if (purpose == .source and self.finding != null) self.finding.?.missing_obligation else null };
             }
         };
         const atomic = shared.Contract(Target, Replacement, Facts, Rule);
@@ -114,7 +114,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 return error.InvalidAtomicRepair;
             }
             const expected: Replacement = switch (rejection.issue) {
-                .invalid_detail, .missing_question, .invalid_question, .forbidden_question => .{ .detail = detail(value) },
+                .invalid_detail, .invalid_obligation, .missing_question, .invalid_question, .forbidden_question => .{ .detail = detail(value) },
                 .invalid_evidence => .{ .selection = selection(value) },
                 .invalid_json, .unknown_requirement, .duplicate_requirement, .missing_finding, .invalid_decision => return error.UnsafeSupportRepair,
             };
@@ -131,7 +131,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             defer packets.release(base);
             const definition = switch (kind) {
                 .finding => base.resultDefinition().?.bytes,
-                .detail => if (purpose == .source and @import("specification_support_evidence.zig").questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
+                .detail => if (purpose == .source and review.decisionOf(authorization.rule.finding.?) == .candidate_omission) "omission_detail" else if (purpose == .source and @import("specification_support_evidence.zig").questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
                 .selection => if (purpose == .principles) "principle_selection" else "selection",
             };
             const prepared_input = try atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index]);
@@ -156,7 +156,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                     const selected = try source_model.decodeSelection(a, bytes, retained.provenance.claim_ids);
                     break :blk .{ .selection = .{ .provenance = selected.provenance, .source_ids = selected.source_ids } };
                 },
-                .detail => try atomic.parse(a, authorization, input, bytes),
+                .detail => .{ .detail = try source_model.decodeDetail(a, bytes, review.decisionOf(authorization.rule.finding orelse return error.InvalidAtomicRepair)) },
             };
         }
         pub fn merge(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, candidate: review.Candidate, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!review.Collection {
@@ -174,7 +174,10 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 if (authorization.operation == .replace and index == target.index) switch (try atomic.copyReplacement(a, replacement.?)) {
                     .detail => |value| {
                         next.value.detail = value.detail;
-                        if (purpose == .source) next.value.question = value.question;
+                        if (purpose == .source) {
+                            next.value.missing_obligation = value.missing_obligation;
+                            next.value.question = value.question;
+                        }
                     },
                     .selection => |value| {
                         if (purpose == .principles) next.value.citations = value.citations else {
@@ -211,7 +214,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
         }
 
         fn detail(value: review.Value) Detail {
-            return if (purpose == .source) .{ .detail = value.detail, .question = value.question } else .{ .detail = value.detail };
+            return if (purpose == .source) .{ .detail = value.detail, .missing_obligation = value.missing_obligation, .question = value.question } else .{ .detail = value.detail };
         }
 
         fn selection(value: review.Value) Selection {

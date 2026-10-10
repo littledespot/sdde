@@ -39,6 +39,7 @@ This catalogue is normative for the first engine version. A project may add vali
 | Exact-copy propagation | Byte-for-byte value from source ledger | Whether source copy is actually required |
 | Visual-token propagation | Every required token ID/value rendered in sidecar | Semantic classification of required token |
 | Reference conflict gate | Every candidate conflict has current subject-bound assessment; only admitted source conflicts reach questions | Whether the source meanings are incompatible; discovery of all semantic conflicts |
+| Source omission handoff | Source `candidate_omission` requires a nonblank explicit obligation and authorized source evidence; comparison, correction, repair and readback bind it unchanged under §22.1; other findings forbid it | Whether the stated obligation is faithful to its sources and each complete comparison collection preserves it |
 
 ### 21.3 Plan validators
 

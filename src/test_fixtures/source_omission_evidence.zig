@@ -33,7 +33,7 @@ pub fn response(a: std.mem.Allocator, assigned: c.Assignment, location: loss.Loc
 pub fn proof(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evidence.Inputs, finding: support.Finding) !c.Evidence {
     const ledger = try authority.build(a, inputs);
     const fixed = finding.value;
-    const assigned = try @import("../domain/source_omission_binding.zig").build(a, inputs, sources, ledger.requirements[finding.requirement_ordinal - 1].seed.id, finding.requirement_ordinal, 1, .{ .detail = fixed.detail, .source_ids = fixed.source_ids, .provenance = .{ .claim_ids = fixed.provenance.claim_ids, .citation_ids = &.{}, .clarification_response_ids = &.{} } });
+    const assigned = try @import("../domain/source_omission_binding.zig").build(a, inputs, sources, ledger.requirements[finding.requirement_ordinal - 1].seed.id, finding.requirement_ordinal, 1, .{ .detail = fixed.detail, .missing_obligation = fixed.missing_obligation, .source_ids = fixed.source_ids, .provenance = .{ .claim_ids = fixed.provenance.claim_ids, .citation_ids = &.{}, .clarification_response_ids = &.{} } });
     return .{ .assignment = assigned, .response = try response(a, assigned, fixed.loss) };
 }
 

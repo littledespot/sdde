@@ -68,17 +68,44 @@ or a cross-group insertion; it remains an unsafe candidate repair.
 
 An omission must identify nonempty authorized sources at review admission, even
 when its subject also fixes claim evidence. Loss comparison retains that admitted
-omission, its subject, detail, selected sources and revision. Native code binds complete evidence collections on the
-actual dataflow path to that subject. Original source support and the deficient
-subject are fixed premises; neither is reassessed. The model returns exactly one
+omission, its subject, detail, selected sources and revision.
+
+**Explicit source-obligation handoff (approved 10 October 2026):** the existing
+source reviewer supplies a required nonblank `missing_obligation` for
+`candidate_omission`. This is a direct statement of the omitted source requirement,
+including its conditions, negation and obligation strength; `detail` explains the
+candidate defect separately. The selected original sources support the obligation.
+Native code carries the statement unchanged through admission, comparison,
+correction, repair and persisted evidence; it cannot extract, infer or rewrite an
+obligation from diagnostic prose. Non-omission and principle findings forbid it.
+The comparison assignment binds the exact obligation together with the existing
+subject, detail, source selections, revision and canonical evidence. Changed
+obligation or evidence invalidates the old comparison. A selected source-omission
+detail correction returns both explanation and obligation, retaining the verdict
+and existing source/subject authorization. Correction precedes loss localization
+and revalidates the current binding; it does not reassess an admitted verdict or
+refresh a stale comparison through a semantic retry. A changed binding cannot
+retain valid comparison evidence.
+
+Native code binds complete evidence collections on the actual dataflow path to
+that subject. Original source support and the deficient
+subject are fixed premises; neither is reassessed. The loss packet's
+`fixed_finding.missing_obligation` is its single semantic comparison target.
+Diagnostic detail, final-field purpose and deficient-subject/producer outputs
+remain separately labelled supporting evidence. The loss reviewer judges whether
+each complete collection preserves the supplied obligation, allowing equivalent
+wording and support jointly expressed by its members. It must not require a
+standalone literal, final-field form or a description of the downstream defect.
+The model returns exactly one
 `preserved`, `lost` or `uncertain` assessment per assigned comparison ID, with
 source spans, assessed member IDs and an explanation. Shared identical views are
 assessed once. Other producer outputs are supporting context, not selectable
 culprits or permission to expand the finding.
 
 Native admission rejects missing, duplicate, foreign or stale comparisons and
-invalid source/member joins. It derives attribution backwards through the bound
-path: preserved input and lost output establish the boundary's owner; lost input
+invalid source/member joins, including a changed obligation binding. It derives
+attribution backwards through the bound path: preserved input and lost output
+establish the boundary's owner; lost input
 and lost output establish only inherited absence. Required uncertainty, composite
 ownership or unavailable facts leave attribution unresolved. Preserved original
 claims assigned to authoring cut off upstream blame; signal paraphrases are not
@@ -247,7 +274,8 @@ including record insertion and coupled record repair. The engine reconstructs
 canonical `provenance.claim_ids` from the bound source group or selected
 diagnostic producer before old-value/revision and full-candidate checks.
 Source-ID or detail corrections remain in their existing selected repair
-families; detail repair cannot change the verdict. The original source-bound
+families; source-omission detail correction uses the coupled explanation and
+obligation shape in §22.1, and cannot change the verdict. The original source-bound
 assignment, explicit `S`, effective evidence bound and siblings stay pinned by
 the existing atomic authorization. A value-only replacement cannot expand them;
 changing the source obligation requires upstream reconciliation and

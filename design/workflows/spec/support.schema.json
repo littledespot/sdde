@@ -175,6 +175,22 @@
       ],
       "additionalProperties": false
     },
+    "omission_detail": {
+      "type": "object",
+      "properties": {
+        "detail": {
+          "$ref": "#/$defs/required_detail_value"
+        },
+        "missing_obligation": {
+          "$ref": "#/$defs/required_detail_value"
+        }
+      },
+      "required": [
+        "detail",
+        "missing_obligation"
+      ],
+      "additionalProperties": false
+    },
     "selection": {
       "type": "object",
       "properties": {
@@ -418,12 +434,16 @@
         },
         "detail": {
           "$ref": "#/$defs/required_detail_value"
+        },
+        "missing_obligation": {
+          "$ref": "#/$defs/required_detail_value"
         }
       },
       "required": [
         "kind",
         "source_ids",
-        "detail"
+        "detail",
+        "missing_obligation"
       ],
       "additionalProperties": false
     },

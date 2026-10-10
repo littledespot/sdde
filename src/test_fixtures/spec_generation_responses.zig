@@ -592,10 +592,11 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const story_omitted = options.story_omission != null and inputs.specification != null and requirement.seed.id.slot == .primary_user_story and
                     (options.story_omission != .recover or options.omission_merges == 0);
                 const omission = story_omitted or (if (omission_kind) |kind| omittedKind(options, kind) and inputs.specification != null and !g.spec.hasRecords(inputs.specification.?, kind) else false);
-                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .question = if (conflict) "Should the loan be renewed or rejected? Choose the required outcome." else if (uncertain and !omission) "Which renewal deadline applies? Supply the duration and starting event." else null, .kind = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else if (unbound) .inconclusive else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The specification omits the source-supported requirement." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else if (unbound) "No validated source group binds this requirement." else "" } };
+                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .question = if (conflict) "Should the loan be renewed or rejected? Choose the required outcome." else if (uncertain and !omission) "Which renewal deadline applies? Supply the duration and starting event." else null, .kind = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else if (unbound) .inconclusive else .supported, .provenance = selected, .missing_obligation = if (omission and !conflict) context.inputs.corpus.sources[0].bytes else null, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The specification omits the source-supported requirement." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else if (unbound) "No validated source group binds this requirement." else "" } };
                 if (omission) finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
                 if (falseConflict(options.source_loss) and options.source_loss != .false_conflict_questions and requirement.seed.id.unit == .conflict) {
                     finding.value.kind = .candidate_omission;
+                    finding.value.missing_obligation = context.inputs.corpus.sources[0].bytes;
                     finding.value.question = null;
                     finding.value.detail = "The source meanings are compatible; the false conflict discarded their supported behavior.";
                     finding.value.loss = .{ .reconciliation_conflict = requirement.seed.id.unit.conflict };
@@ -611,7 +612,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .scenario_coverage => "What should happen when renewal is refused? Describe that scenario outcome.",
                     else => return error.UnexpectedSourceGap,
                 }, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{}, .detail = "The source leaves this decision unspecified." };
-                if (options.extraction_omission) finding.value = .{ .kind = .candidate_omission, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{context.inputs.corpus.sources[0].id}, .detail = "Extraction discarded the source-required behavior and exact message." };
+                if (options.extraction_omission) finding.value = .{ .kind = .candidate_omission, .missing_obligation = context.inputs.corpus.sources[0].bytes, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{context.inputs.corpus.sources[0].id}, .detail = "Extraction discarded the source-required behavior and exact message." };
             }
             if (options.source_loss == .false_conflict_questions) for (ledger.requirements, findings) |required, *finding| {
                 if (required.seed.id.unit == .signal or required.seed.id.unit == .token) continue;
@@ -624,6 +625,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 if (@import("../domain/source_omission.zig").isUpstream(location)) {
                     if (all.entries.len == 0) for (findings) |*finding| {
                         finding.value.kind = .candidate_omission;
+                        finding.value.missing_obligation = context.inputs.corpus.sources[0].bytes;
                         finding.value.detail = "Extraction lost source-required behavior.";
                         finding.value.source_ids = try allocator.dupe(r.extraction.identity.SourceId, &.{context.inputs.corpus.sources[0].id});
                     };
@@ -636,7 +638,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         for (ledger.requirements, 0..) |required, at| if (required.seed.id.unit == .signal) break :target at;
                         return error.InvalidFixture;
                     } else 0;
-                    findings[target_index].value = .{ .kind = .candidate_omission, .loss = location, .detail = "Preserve the source-required deadline.", .source_ids = try allocator.dupe(r.extraction.identity.SourceId, &.{context.inputs.corpus.sources[0].id}), .provenance = .{ .claim_ids = if (location == .reconciliation_signal) context.references.records.signals[location.reconciliation_signal.ordinal - 1].value.claim_ids else &.{}, .clarification_response_ids = &.{} } };
+                    findings[target_index].value = .{ .kind = .candidate_omission, .missing_obligation = context.inputs.corpus.sources[0].bytes, .loss = location, .detail = "Preserve the source-required deadline.", .source_ids = try allocator.dupe(r.extraction.identity.SourceId, &.{context.inputs.corpus.sources[0].id}), .provenance = .{ .claim_ids = if (location == .reconciliation_signal) context.references.records.signals[location.reconciliation_signal.ordinal - 1].value.claim_ids else &.{}, .clarification_response_ids = &.{} } };
                 }
             }
             if (request.id().purpose == .atomic_repair) {

@@ -53,6 +53,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             duplicate_requirement,
             missing_finding,
             invalid_detail,
+            invalid_obligation,
             missing_question,
             invalid_question,
             forbidden_question,
@@ -61,7 +62,7 @@ pub fn Contract(comptime purpose: Purpose) type {
 
             pub fn isText(self: Issue) bool {
                 return switch (self) {
-                    .invalid_detail, .missing_question, .invalid_question, .forbidden_question => true,
+                    .invalid_detail, .invalid_obligation, .missing_question, .invalid_question, .forbidden_question => true,
                     else => false,
                 };
             }
@@ -185,6 +186,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             const fixed = try lossFinding(allocator, inputs, context, candidate);
             return @import("source_omission_binding.zig").build(allocator, inputs, context.inputs, fixed.target, fixed.finding.requirement_ordinal, candidate.revision, .{
                 .detail = fixed.finding.value.detail,
+                .missing_obligation = fixed.finding.value.missing_obligation,
                 .source_ids = fixed.finding.value.source_ids,
                 .provenance = .{ .claim_ids = fixed.finding.value.provenance.claim_ids, .citation_ids = &.{}, .clarification_response_ids = fixed.finding.value.provenance.clarification_response_ids },
             });
@@ -209,10 +211,12 @@ pub fn Contract(comptime purpose: Purpose) type {
                 projected.* = .{ .id = view.id, .members = members };
             }
             const payload = .{
-                .fixed_finding = .{ .detail = assigned.finding.detail, .target_purpose = try @import("required_authority_description.zig").task(scratch, assigned.finding.subject) },
+                .fixed_finding = .{ .missing_obligation = assigned.finding.missing_obligation },
                 .sources = assigned.sources,
                 .comparisons = views,
                 .supporting_evidence = .{
+                    .diagnostic_detail = assigned.finding.detail,
+                    .target_purpose = try @import("required_authority_description.zig").task(scratch, assigned.finding.subject),
                     .deficient_subject = presentation.fixedSubject(try subjects.projectLoss(scratch, inputs, context, assigned.finding.subject)),
                     .producers = try presentation.comparisonSupport(scratch, assigned.facts.records, context, assigned.finding.source_ids, claim_ids.items),
                 },
@@ -381,11 +385,14 @@ pub fn Contract(comptime purpose: Purpose) type {
                     const before = diagnostics.items.len;
                     if (purpose == .source) if (decisionOf(finding.value) == .not_applicable and required != .review) try diagnostics.append(allocator, diagnostic(proposed, .invalid_decision, requirement.seed.id, ordinal, position));
                     const semantic = decisionOf(finding.value).finding();
-                    var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail, finding.value.loss, finding.value.preservation);
+                    var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail, finding.value.missing_obligation, finding.value.loss, finding.value.preservation);
                     const rejection: ?Diagnostic = if (reviewed == .rejected) rejected: {
                         var invalid = diagnostic(proposed, .invalid_evidence, requirement.seed.id, ordinal, position);
                         if (purpose == .source) if (reviewed.rejected.issue == .invalid_finding) {
                             invalid.issue = .invalid_decision;
+                        };
+                        if (purpose == .source) if (reviewed.rejected.issue == .invalid_obligation) {
+                            invalid.issue = .invalid_obligation;
                         };
                         if (purpose == .source) if (reviewed.rejected.issue == .invalid_loss) {
                             if (finding.value.preservation) |proof| invalid.origin = proof.origin;
@@ -455,7 +462,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (evidence.finding != .supported) return error.InvalidRequiredAuthority;
                     break :blk Decision.not_applicable;
                 } else try Decision.fromFinding(evidence.finding);
-                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .kind = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .question = review.question, .loss = review.loss orelse return error.InvalidRequiredAuthority, .preservation = review.preservation } };
+                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .kind = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .missing_obligation = review.missing_obligation, .question = review.question, .loss = review.loss orelse return error.InvalidRequiredAuthority, .preservation = review.preservation } };
             }
             var empty = inputs;
             empty.evidence = &.{};

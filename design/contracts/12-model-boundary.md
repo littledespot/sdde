@@ -822,14 +822,18 @@ means no reliable attribution was established. Both retain ordinary eligibility.
 Native source-review evidence retains the bound preservation assignment and complete
 assessment response under [§22.1](22-repair.md). The derived location must agree
 with re-admission against current canonical facts. Non-omission and principle
-findings carry no comparison. `specification-state/v10` rejects earlier snapshot
+findings carry no comparison. `specification-state/v11` rejects earlier snapshot
 contracts without supplying missing bindings. ADR 0020 governs exact lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
 **Source-review response contract (28 September 2026):** the model chooses a
-semantic finding, detail, and any genuinely selectable source. When the finding
-is candidate omission, the separate loss call assesses native-bound preservation
-views without revising that finding. It returns complete evidenced comparisons,
+semantic finding, detail, and any genuinely selectable source. The approved
+10 October explicit-obligation amendment in [§22.1](22-repair.md) also requires
+`missing_obligation` for a source candidate omission, distinct from its diagnostic
+detail and bound to its selected sources. No other finding or principle review
+may supply it. The separate loss call assesses native-bound preservation
+views against that unchanged obligation without revising the finding or inferring
+its requirement from diagnostic prose. It returns complete evidenced comparisons,
 not a location; the same schema and immutable assignment govern protocol correction.
 Resolved business values, numbered sources and producer context support those
 comparisons. Native code derives attribution under §22.1;

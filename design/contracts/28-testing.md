@@ -528,8 +528,17 @@ Offline tests supply semantic labels to prove §22.1 assignment, admission, nati
 attribution, correction, exact repair scope, origin retention, currentness and
 readback mechanics. Cover inherited absence, joint evidence, empty collections,
 role defects without repair permission, distinct occurrences and stale facts.
-Live calibration separately measures label accuracy, false upstream/candidate
-attribution, uncertainty and evidence adequacy. Historical culprit-selection
+Require `missing_obligation` only for source candidate omissions; reject missing,
+blank, foreign, changed and stale obligation bindings at their owning boundaries.
+Cover initial collection, protocol correction, selected detail correction,
+insertion, repair authorization and persisted readback. Native projection must
+carry the source review's exact statement independently of its defect explanation.
+Live calibration measures both the existing source review's obligation fidelity
+and the following comparison's attribution, uncertainty and evidence adequacy.
+Include embedded literals, equivalent wording, genuine extraction loss, wrong-role
+selection, negation, conditions, obligation strength and joint claim support in
+unrelated domains. Hand-written obligations test only comparison, not the complete
+handoff. Historical culprit-selection
 comparisons retain their original requests/results; they do not validate the new
 contract. Freeze new production-generated comparison requests before approved
 live trials. Publication and rubric quality still require separately approved E2E.

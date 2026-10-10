@@ -1,0 +1,352 @@
+[
+  {
+    "id": "captured-description",
+    "cohort": "development",
+    "sources": [
+      "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n- Must also output date and time in UTC\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "The application must start successfully.",
+        "first": 5,
+        "last": 5
+      },
+      {
+        "source": 1,
+        "text": "When started, the application must display `Hello, World!`.",
+        "first": 6,
+        "last": 6
+      },
+      {
+        "source": 1,
+        "text": "The application must also output the current date and time in UTC.",
+        "first": 7,
+        "last": 7
+      }
+    ],
+    "description": "When started, the application displays { \"kind\":\"exact_copy\" } and outputs the current date and time in UTC.",
+    "missing": "The source requires the application to display \"Hello, World!\" when started, but the candidate description states it displays { \"kind\":\"exact_copy\" }. The required display text is missing or incorrectly specified.",
+    "mode": "candidate",
+    "verdicts": [
+      "preserved",
+      "preserved"
+    ],
+    "expected": "candidate",
+    "missing_obligation": "When started, the application must display Hello, World!."
+  },
+  {
+    "id": "loan-candidate",
+    "cohort": "development",
+    "sources": [
+      "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "On request, the service renews a loan for seven days.",
+    "missing": "The description omits the source-stated borrower eligibility and reservation conditions on the seven-day renewal obligation.",
+    "mode": "candidate",
+    "verdicts": [
+      "preserved"
+    ],
+    "expected": "candidate",
+    "missing_obligation": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days."
+  },
+  {
+    "id": "extraction-inherited",
+    "cohort": "development",
+    "sources": [
+      "When the reservoir falls below the minimum, the pump must stop until the level recovers.\nThe controller must display the measured level.\nThe controller must record each measurement.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "The controller must display the measured level.",
+        "first": 2,
+        "last": 2
+      },
+      {
+        "source": 1,
+        "text": "The controller must record each measurement.",
+        "first": 3,
+        "last": 3
+      }
+    ],
+    "description": "The controller records each measurement.",
+    "missing": "The description omits pump shutdown below the minimum and the requirement to remain stopped until recovery.",
+    "mode": "second_role",
+    "verdicts": [
+      "lost",
+      "lost"
+    ],
+    "expected": "extraction_claim",
+    "missing_obligation": "When the reservoir falls below the minimum, the pump must stop and remain stopped until the level recovers."
+  },
+  {
+    "id": "fan-direct-signal",
+    "cohort": "development",
+    "sources": [
+      "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "While the chamber door is open, the fan must remain off; after the door closes, it may restart only when the operator confirms readiness.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "When the door closes, the fan can restart.",
+    "missing": "The signal omits operator confirmation as a necessary condition for restarting the fan.",
+    "mode": "signal",
+    "verdicts": [
+      "preserved"
+    ],
+    "expected": "reconciliation_signal",
+    "missing_obligation": "After the chamber door closes, the fan may restart only when the operator confirms readiness."
+  },
+  {
+    "id": "joint-two-sources",
+    "cohort": "development",
+    "sources": [
+      "A parcel may be released only after the recipient identity is verified.\n",
+      "Parcel release also requires payment confirmation.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "A parcel may be released only after the recipient identity is verified.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 2,
+        "text": "Parcel release also requires payment confirmation.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "A parcel may be released when requested.",
+    "missing": "The description omits both recipient identity verification and payment confirmation as necessary release conditions.",
+    "mode": "candidate",
+    "verdicts": [
+      "preserved"
+    ],
+    "expected": "candidate",
+    "missing_obligation": "Parcel release requires both recipient identity verification and payment confirmation."
+  },
+  {
+    "id": "wrong-role-assignment",
+    "cohort": "development",
+    "sources": [
+      "After an appointment is cancelled, the service must notify the patient.\nThe service must display the clinic opening hours.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "After an appointment is cancelled, the service must notify the patient.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 1,
+        "text": "The service must display the clinic opening hours.",
+        "first": 2,
+        "last": 2
+      }
+    ],
+    "description": "The service displays the clinic opening hours.",
+    "missing": "The description omits notifying the patient after appointment cancellation.",
+    "mode": "second_role",
+    "verdicts": [
+      "preserved",
+      "lost"
+    ],
+    "expected": "unsupported_role",
+    "missing_obligation": "After an appointment is cancelled, the service must notify the patient."
+  },
+  {
+    "id": "unresolved-multiple-producers",
+    "cohort": "development",
+    "sources": [
+      "During a power loss, the cabinet must keep the medicine cold for eight hours.\nThe cabinet must show its temperature.\n",
+      "An alarm must sound if backup cooling fails.\nThe cabinet must record each temperature measurement.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "The cabinet must show its temperature.",
+        "first": 2,
+        "last": 2
+      },
+      {
+        "source": 2,
+        "text": "The cabinet must record each temperature measurement.",
+        "first": 2,
+        "last": 2
+      }
+    ],
+    "description": "The cabinet shows and records temperature.",
+    "missing": "The description omits eight-hour backup cooling and the alarm on backup cooling failure, which are separate obligations in the two sources.",
+    "mode": "candidate",
+    "verdicts": [
+      "lost"
+    ],
+    "expected": "unlocalized",
+    "missing_obligation": "During power loss, the cabinet must keep medicine cold for eight hours, and an alarm must sound if backup cooling fails."
+  },
+  {
+    "id": "parking-candidate",
+    "cohort": "development",
+    "sources": [
+      "A driver may end a parking session only after payment settles; a failed payment must leave the session active.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "A driver may end a parking session only after payment settles; a failed payment must leave the session active.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "A driver ends a parking session by attempting payment.",
+    "missing": "The description omits successful payment settlement as a condition for ending the session and keeping the session active after failure.",
+    "mode": "candidate",
+    "verdicts": [
+      "preserved"
+    ],
+    "expected": "candidate",
+    "missing_obligation": "Ending a parking session requires settled payment; failed payment must leave the session active."
+  },
+  {
+    "id": "captured-story",
+    "cohort": "development",
+    "sources": [
+      "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n- Must also output date and time in UTC\n"
+    ],
+    "source_path": "stories.md",
+    "claims": [
+      {
+        "source": 1,
+        "text": "The application must start successfully.",
+        "first": 5,
+        "last": 5
+      },
+      {
+        "source": 1,
+        "text": "When started, the application must display `Hello, World!`.",
+        "first": 6,
+        "last": 6
+      },
+      {
+        "source": 1,
+        "text": "The application must also output the date and time in UTC.",
+        "first": 7,
+        "last": 7
+      }
+    ],
+    "description": "When started, the application displays \"Hello, World!\" and outputs the current date and time in UTC.",
+    "missing": "The supplied subject omits the requirement that the application display the string \"Hello, World!\" as specified in the source. The source explicitly states that upon startup the application must display \"Hello, World!\" and output the current UTC date and time. The subject instead references an undefined token \"kindexact_copy\", thereby leaving the intended display text unrepresented.",
+    "mode": "candidate",
+    "target": "primary_user_story",
+    "candidate_file": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.canonical.json",
+    "signal_text": "The application must start successfully.When started, the application must display `Hello, World!`.The application must also output the date and time in UTC.",
+    "verdicts": [
+      "preserved",
+      "preserved"
+    ],
+    "expected": "candidate",
+    "missing_obligation": "When started, the application must display Hello, World!."
+  },
+  {
+    "id": "sterile-door",
+    "cohort": "unused",
+    "sources": [
+      "MOCK While the sterilizer is pressurized, its access door must not unlock.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "MOCK The access door must stay locked whenever the sterilizer is under pressure.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "MOCK The access door may unlock at any time.",
+    "missing": "MOCK The description permits unlocking even while the sterilizer is pressurized.",
+    "missing_obligation": "MOCK The access door must not unlock while the sterilizer is pressurized.",
+    "mode": "candidate",
+    "verdicts": [
+      "preserved"
+    ],
+    "expected": "candidate"
+  },
+  {
+    "id": "voucher-release",
+    "cohort": "unused",
+    "sources": [
+      "MOCK Voucher release requires manager approval.\n",
+      "MOCK Voucher release also requires cleared payment.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "MOCK A manager must approve voucher release.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 2,
+        "text": "MOCK Payment must clear before the voucher is released.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "MOCK Release the voucher when payment clears.",
+    "missing": "MOCK The description omits manager approval as an additional necessary release condition.",
+    "missing_obligation": "MOCK Voucher release requires manager approval as well as cleared payment.",
+    "mode": "second_role",
+    "verdicts": [
+      "preserved",
+      "lost"
+    ],
+    "expected": "unsupported_role"
+  },
+  {
+    "id": "dual-ready",
+    "cohort": "unused",
+    "sources": [
+      "MOCK After payment succeeds, show `MOCK Ready` to the payer.\n",
+      "MOCK After inspection is approved, show `MOCK Ready` to the inspector.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "MOCK After payment succeeds, show `MOCK Ready` to the payer.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 2,
+        "text": "MOCK After inspection is approved, show `MOCK Ready` to the inspector.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "MOCK After successful payment, show MOCK Ready to the payer.",
+    "missing": "MOCK The description omits showing the same label to the inspector after inspection approval.",
+    "missing_obligation": "MOCK After inspection is approved, show MOCK Ready to the inspector.",
+    "mode": "candidate",
+    "verdicts": [
+      "preserved",
+      "preserved"
+    ],
+    "expected": "candidate"
+  }
+]

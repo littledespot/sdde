@@ -77,8 +77,11 @@ test "preservation responses require closed assessments and reject culprit selec
     const compiled = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .limited(1_048_576)));
     try std.testing.expect(compiled.select(.{ .bytes = "loss" }) == null);
     const finding = compiled.select(.{ .bytes = "finding" }).?;
-    try checkDocument(finding.modelBytes(), .{ .bytes = "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"MOCK Missing deadline.\"}" });
-    try checkDocument(finding.modelBytes(), .{ .bytes = "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"MOCK Missing deadline.\"}", .rejection = .array_length, .path = "/source_ids" });
+    try checkDocument(finding.modelBytes(), .{ .bytes = "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"MOCK Missing deadline.\",\"missing_obligation\":\"MOCK After renewal display the new deadline.\"}" });
+    try checkDocument(finding.modelBytes(), .{ .bytes = "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"MOCK Missing deadline.\",\"missing_obligation\":\"MOCK After renewal display the new deadline.\"}", .rejection = .array_length, .path = "/source_ids" });
+    try checkDocument(finding.modelBytes(), .{ .bytes = "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"MOCK Missing deadline.\"}", .rejection = .missing_required_property, .path = "/missing_obligation" });
+    try checkDocument(finding.modelBytes(), .{ .bytes = "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"MOCK Missing deadline.\",\"missing_obligation\":\"\"}", .rejection = .string_length, .path = "/missing_obligation" });
+    try checkDocument(finding.modelBytes(), .{ .bytes = "{\"kind\":\"supported\",\"source_ids\":[1],\"detail\":\"MOCK Supported.\",\"missing_obligation\":\"MOCK Notify the patient.\"}", .rejection = .unknown_property, .path = "/missing_obligation" });
     const selected = compiled.select(.{ .bytes = "preservation_comparisons" }).?;
     for ([_]Case{
         .{ .bytes = "{\"assessments\":[]}" },

@@ -1,0 +1,1171 @@
+{
+  "parent": {
+    "run": "RUN-a8204eab393239c09cb75264943ca0d0",
+    "artifact_root": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016",
+    "call": "request-16-inference-1",
+    "context": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/context.json",
+      "sha256": "38ace18123819b29821208654e4a0157659257caa908fdcc1c38bfb22e5319e7",
+      "bytes": 9570
+    },
+    "request": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/request.json",
+      "sha256": "a34f5df19cad6b687c3210d2934b663900e2dde39845e9b3f1b5eaf389c60ddc",
+      "bytes": 10299
+    },
+    "response": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/response.json",
+      "sha256": "6a738b0a01c33357f6753db77893850ac82592dbc6a8ff2a2c3951595c44b00e",
+      "bytes": 1655
+    },
+    "captured_input_canonical_sha256": "14b9d8041a500ff31fd8749cbc2553ebf69248dc15ade54ba5aedf1da194ccc1",
+    "execution_id": "2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e"
+  },
+  "settings": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "controls": {
+      "reasoning_effort": {
+        "present": true,
+        "value": "low"
+      },
+      "temperature": {
+        "present": true,
+        "value": 0
+      },
+      "max_completion_tokens": {
+        "present": true,
+        "value": 16384
+      },
+      "top_p": {
+        "present": false
+      },
+      "seed": {
+        "present": false
+      }
+    },
+    "response_mode": "native_schema"
+  },
+  "status": "frozen_before_dispatch",
+  "authority": "User approved Phase 3 on 2026-10-10: 48 new loss-comparison sends only.",
+  "factor": "Explicit source-grounded missing_obligation replaces diagnostic detail as the loss target; diagnostic detail and target purpose remain supporting evidence. Context, member collections, schema and controls unchanged. This tests the combined shared contract/guidance; not independent effects of each wording change.",
+  "limits": {
+    "maximum_physical_sends": 48,
+    "repetitions_per_case_arm": 2,
+    "retries_corrections_repairs_model_judges_e2e": 0,
+    "stop_at_accounted_input_plus_output_tokens": 300000,
+    "usage_stop_semantics": "Check actual cumulative usage after every completed exchange; at or above threshold send no further trial. A single in-flight completion may cross the threshold. This is an experiment spending stop, not a runtime reservation or provider token ceiling. No dollar cap is asserted.",
+    "stop_on": [
+      "unknown usage",
+      "uncertain dispatch or transport outcome",
+      "request/config/hash drift",
+      "exhausted approved sends"
+    ],
+    "restart_renews_allowance": false,
+    "resend_uncertain_trial": false
+  },
+  "quality_gate": {
+    "original_eight": {
+      "candidate_completed_schema_native_minimum": 15,
+      "candidate_false_upstream_or_candidate": 0,
+      "correct_extraction_signal_role_each": 2,
+      "correct_unresolved": 2,
+      "correct_candidate_defects_minimum": 7,
+      "unnecessary_uncertain_maximum": 1,
+      "adequate_evidence_minimum": 14,
+      "correct_attribution_improvement_over_baseline_minimum": 2,
+      "case_level_regression": 0
+    },
+    "captured_story": {
+      "completed_schema_native_correct_adequate": 2
+    },
+    "three_fresh_cases": {
+      "completed_schema_native_correct_adequate": 6
+    },
+    "failures_remain_in_denominator": true,
+    "gate_failure": "No semantic promotion or Phase 4 invocation. Preserve findings; no automatic retries or additional calls."
+  },
+  "cases_file": {
+    "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.json",
+    "sha256": "f7180fce39fcfcb9e242b520f4249da67a2dc0b71216136c1e2eaf7f07b306a9",
+    "bytes": 12676
+  },
+  "baseline_prompt": {
+    "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/baseline.prompt.md",
+    "sha256": "ead02788de3c01572c2b1d85c4f74e6332f657cb6f73ac0e87b0cf7490cac9b9",
+    "bytes": 1350
+  },
+  "cases": [
+    {
+      "id": "captured-description",
+      "cohort": "development",
+      "expected": "candidate",
+      "missing_obligation": "When started, the application must display Hello, World!.",
+      "verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-description.packet.json",
+        "sha256": "22cd84b8310d573408fa9a905f25d972211a698f3eae97db5d681672bc63fff8",
+        "bytes": 11976
+      },
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-description.baseline.edit.json",
+            "sha256": "5fecd3cbd89612de298731878db4072c95df05ec6d59b8d2e5205676029d3d49",
+            "bytes": 7257
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-description.baseline.request.json",
+            "sha256": "5307124bc62ac421f22e048c9061d60e8da9953b3c74d3c821adbdeefad5f0ec",
+            "bytes": 8495
+          },
+          "prompt_bytes": 1350,
+          "evidence_bytes": 4128,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c"
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-description.candidate.edit.json",
+            "sha256": "5a761e4ccfa07050675e5d2bf2d3f215582303de4fcb3b23aa3b45287f121403",
+            "bytes": 7563
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-description.candidate.request.json",
+            "sha256": "5da858be5ed1328440afa5cbf6200b24b286b603f0ee9d7af084da759950d9b9",
+            "bytes": 8801
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 4220,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c"
+        }
+      }
+    },
+    {
+      "id": "loan-candidate",
+      "cohort": "development",
+      "expected": "candidate",
+      "missing_obligation": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.",
+      "verdicts": [
+        "preserved"
+      ],
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/loan-candidate.packet.json",
+        "sha256": "3b022106eeef51c040973f682aed78275097ebcde759ac4075a1a46fe6cae18b",
+        "bytes": 6498
+      },
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/loan-candidate.baseline.edit.json",
+            "sha256": "827c48009a15aed88bae985173ed009d089d2762467e1e1cac734bc65901dea4",
+            "bytes": 4812
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/loan-candidate.baseline.request.json",
+            "sha256": "39fb4c698aad2776ccdf055c5665b99c96a7231c4ae258491d1e3a99999e4e3e",
+            "bytes": 6048
+          },
+          "prompt_bytes": 1350,
+          "evidence_bytes": 1989,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/loan-candidate.candidate.edit.json",
+            "sha256": "13450413c2fbb6b7d95369287a7a4498b858963c2961e3ffd3425d8243e996a5",
+            "bytes": 5186
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/loan-candidate.candidate.request.json",
+            "sha256": "5d23357bb75eeaf527cc17c022ff6838e987f0b2b659db66bed7ab2a03db4d77",
+            "bytes": 6422
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2149,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        }
+      }
+    },
+    {
+      "id": "extraction-inherited",
+      "cohort": "development",
+      "expected": "extraction_claim",
+      "missing_obligation": "When the reservoir falls below the minimum, the pump must stop and remain stopped until the level recovers.",
+      "verdicts": [
+        "lost",
+        "lost"
+      ],
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/extraction-inherited.packet.json",
+        "sha256": "7bac0000c53cf254d67d7b6ef28582386f10e58491972691ecc11cd0a8db5470",
+        "bytes": 7807
+      },
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/extraction-inherited.baseline.edit.json",
+            "sha256": "25e2cf3430de64504079d2cf1e414b3189ae7db65aec7f6ab77c630ec5f93e3d",
+            "bytes": 5201
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/extraction-inherited.baseline.request.json",
+            "sha256": "95c29efb2fd371dbc00115408a11008b34a540931a34180491a3182a08741bff",
+            "bytes": 6439
+          },
+          "prompt_bytes": 1350,
+          "evidence_bytes": 2284,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c"
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/extraction-inherited.candidate.edit.json",
+            "sha256": "cdda9c0545c556b5ae0e003c04000b440b364c34b98558c1db6b5f35e2e0dd6b",
+            "bytes": 5557
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/extraction-inherited.candidate.request.json",
+            "sha256": "f33c47b69a302d8332badae2b940ee920e08665be98a52bf42cde18cea9b777b",
+            "bytes": 6795
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2426,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c"
+        }
+      }
+    },
+    {
+      "id": "fan-direct-signal",
+      "cohort": "development",
+      "expected": "reconciliation_signal",
+      "missing_obligation": "After the chamber door closes, the fan may restart only when the operator confirms readiness.",
+      "verdicts": [
+        "preserved"
+      ],
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/fan-direct-signal.packet.json",
+        "sha256": "b5bc91ca8f3c48237271afebae3ba137a1fbb993b6c83aa876491edc1d66a7f4",
+        "bytes": 5457
+      },
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/fan-direct-signal.baseline.edit.json",
+            "sha256": "e1cec9aad5321bb5159ef1f1929ca410a3b7ec38730e69a510995e14bfd9d74c",
+            "bytes": 4547
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/fan-direct-signal.baseline.request.json",
+            "sha256": "3a47b9619380e0d119714687363f82813ca42a3e4a9cc3c3271ffce9d43039aa",
+            "bytes": 5783
+          },
+          "prompt_bytes": 1350,
+          "evidence_bytes": 1730,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/fan-direct-signal.candidate.edit.json",
+            "sha256": "e5b76c6a18376a0b6cd2968dc634dad05ceec6bdf23cdf71ace72d7c17f57b4e",
+            "bytes": 4889
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/fan-direct-signal.candidate.request.json",
+            "sha256": "d38ec2dec150f3c1c7bca66fc5601e4a3568c3f3f5137b48115e3decd0837e76",
+            "bytes": 6125
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 1858,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        }
+      }
+    },
+    {
+      "id": "joint-two-sources",
+      "cohort": "development",
+      "expected": "candidate",
+      "missing_obligation": "Parcel release requires both recipient identity verification and payment confirmation.",
+      "verdicts": [
+        "preserved"
+      ],
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/joint-two-sources.packet.json",
+        "sha256": "975b7eeb17907f10cbbe815e7c2272ae1939a31c54b38893b04cc3db631ec450",
+        "bytes": 8116
+      },
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/joint-two-sources.baseline.edit.json",
+            "sha256": "d1a38b96bd6ca68e8c6cb913dd804acc11aa298578a636c100023cdca65b609c",
+            "bytes": 5216
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/joint-two-sources.baseline.request.json",
+            "sha256": "55a1af9cf284067189deb8c84dbe0eb9722860ad707c4ed19030fb4ae3081bb5",
+            "bytes": 6452
+          },
+          "prompt_bytes": 1350,
+          "evidence_bytes": 2316,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/joint-two-sources.candidate.edit.json",
+            "sha256": "900a585a7008f723aef54a2eca553b2efc789658d11fce83592bd6439e118c65",
+            "bytes": 5551
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/joint-two-sources.candidate.request.json",
+            "sha256": "e81d83b2c129f578f24bebf0de9f30a09e23eb72219ddc50ae28f89ba3a81e97",
+            "bytes": 6787
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2437,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        }
+      }
+    },
+    {
+      "id": "wrong-role-assignment",
+      "cohort": "development",
+      "expected": "unsupported_role",
+      "missing_obligation": "After an appointment is cancelled, the service must notify the patient.",
+      "verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/wrong-role-assignment.packet.json",
+        "sha256": "feab5c7cf7c41851a366082c10d7ca48bb1821169470cc07d9be64d84ee6db3d",
+        "bytes": 7726
+      },
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/wrong-role-assignment.baseline.edit.json",
+            "sha256": "77c7c6bdee3c92e1466080621e89d86e04ebea941837f03da3de782480a5c99e",
+            "bytes": 5263
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/wrong-role-assignment.baseline.request.json",
+            "sha256": "57e41390fb1cd94f1afcf09e8d56cd9b60046f3638774c703d47f4ba12747bc6",
+            "bytes": 6501
+          },
+          "prompt_bytes": 1350,
+          "evidence_bytes": 2353,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c"
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/wrong-role-assignment.candidate.edit.json",
+            "sha256": "efb3fa985fecfd5ba11a69e9664259cae4178bf448d066f868e2389baa8a296e",
+            "bytes": 5583
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/wrong-role-assignment.candidate.request.json",
+            "sha256": "df587f57ebfb5fe0e731e9362cc8592173fa2392597c3d47dd0376f6bc968574",
+            "bytes": 6821
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2459,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c"
+        }
+      }
+    },
+    {
+      "id": "unresolved-multiple-producers",
+      "cohort": "development",
+      "expected": "unlocalized",
+      "missing_obligation": "During power loss, the cabinet must keep medicine cold for eight hours, and an alarm must sound if backup cooling fails.",
+      "verdicts": [
+        "lost"
+      ],
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/unresolved-multiple-producers.packet.json",
+        "sha256": "81cea5f2fb231d10ea5fb4b303f58ecd2c695e675451209ca9cee7a308b76df4",
+        "bytes": 8394
+      },
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/unresolved-multiple-producers.baseline.edit.json",
+            "sha256": "614103655756123eb8bfe931af90129af6694a132d2dd54d4e24ff3c0b2ef5b4",
+            "bytes": 5244
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/unresolved-multiple-producers.baseline.request.json",
+            "sha256": "4a4991ba58ea3475c930d11583d2c4864c7b806e3daaf773c7489529f119161b",
+            "bytes": 6480
+          },
+          "prompt_bytes": 1350,
+          "evidence_bytes": 2330,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/unresolved-multiple-producers.candidate.edit.json",
+            "sha256": "969d6500a078eef3ec9e679cca9521924017900ef4056bb1f4e83e193d0b56f0",
+            "bytes": 5613
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/unresolved-multiple-producers.candidate.request.json",
+            "sha256": "bb122376e10f2c46bffdc70ebb63bac9bf283be4a593d56e663b4501ea2602de",
+            "bytes": 6849
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2485,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        }
+      }
+    },
+    {
+      "id": "parking-candidate",
+      "cohort": "development",
+      "expected": "candidate",
+      "missing_obligation": "Ending a parking session requires settled payment; failed payment must leave the session active.",
+      "verdicts": [
+        "preserved"
+      ],
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/parking-candidate.packet.json",
+        "sha256": "72b132be86c09881278660074690f46b60d92ff71ebdcde3b5d448bf9bf2e2cc",
+        "bytes": 6304
+      },
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/parking-candidate.baseline.edit.json",
+            "sha256": "3fef1aaf3dfbc10db30738ae60d84db08e5bb6fb90f5a84a2918b33934728f48",
+            "bytes": 4737
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/parking-candidate.baseline.request.json",
+            "sha256": "c028a7f1a8a92a42e7fc45217081e3ff6a7f004728bc48a0f6b40f9fb3dc8e87",
+            "bytes": 5973
+          },
+          "prompt_bytes": 1350,
+          "evidence_bytes": 1914,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/parking-candidate.candidate.edit.json",
+            "sha256": "5f1b7efc23ef6b598b6e3f234a036b4d8f5dd49624f3fc793d44b7098190b820",
+            "bytes": 5082
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/parking-candidate.candidate.request.json",
+            "sha256": "9091283c3231d70aa6ac93104a478c1a06dcde3fcb96e5b8448fb665a512ff24",
+            "bytes": 6318
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2045,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        }
+      }
+    },
+    {
+      "id": "captured-story",
+      "cohort": "development",
+      "expected": "candidate",
+      "missing_obligation": "When started, the application must display Hello, World!.",
+      "verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-story.packet.json",
+        "sha256": "4ba6378061be23e904263e4a1274baed780b58ffacacc1cf60c2dadf6ed95579",
+        "bytes": 16388
+      },
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-story.baseline.edit.json",
+            "sha256": "9229dec7a68550985059aee1028c53cf247a531d5ce700c69ac335bb9e0a17f6",
+            "bytes": 9061
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-story.baseline.request.json",
+            "sha256": "a34f5df19cad6b687c3210d2934b663900e2dde39845e9b3f1b5eaf389c60ddc",
+            "bytes": 10299
+          },
+          "prompt_bytes": 1350,
+          "evidence_bytes": 5836,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c"
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-story.candidate.edit.json",
+            "sha256": "77a95d288eae344b2cb4a107e46e326df9acc81b6eab17e605c0d0647392988d",
+            "bytes": 9367
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-story.candidate.request.json",
+            "sha256": "faf2ff2de90fec02e2d74e24e5cc1d5a7e0e4c44ca15ea8d78fb9d59ee54ef49",
+            "bytes": 10605
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 5928,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c"
+        }
+      },
+      "canonical_input": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.canonical.json",
+        "sha256": "4740e9b23b65027d497ed46f0f3d15963791a18aea2edf789cdb4cbe93b93718",
+        "bytes": 7541
+      }
+    },
+    {
+      "id": "sterile-door",
+      "cohort": "unused",
+      "expected": "candidate",
+      "missing_obligation": "MOCK The access door must not unlock while the sterilizer is pressurized.",
+      "verdicts": [
+        "preserved"
+      ],
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/sterile-door.packet.json",
+        "sha256": "bc8184b0903b20d427f56ebb3e602b65c29719a66db6bbb4fed50965a8fd6e99",
+        "bytes": 5721
+      },
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/sterile-door.baseline.edit.json",
+            "sha256": "a296be2753c56cd48421fc78ec5d6077073412218c6ca41eff89f9123e874a0c",
+            "bytes": 4456
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/sterile-door.baseline.request.json",
+            "sha256": "9d5910f2fa804c627b6b0c997412dbb1fbcafeaff4f8343c2c5321df3206be9a",
+            "bytes": 5692
+          },
+          "prompt_bytes": 1350,
+          "evidence_bytes": 1633,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/sterile-door.candidate.edit.json",
+            "sha256": "c1fda34829bde88f1b6f575820199bce3b46960fb84f2cdbaac04edff97a8522",
+            "bytes": 4778
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/sterile-door.candidate.request.json",
+            "sha256": "25dc1294d7bb11b0d894e855977343185d76be585fff43626cf1664c5fd3df7b",
+            "bytes": 6014
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 1741,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        }
+      }
+    },
+    {
+      "id": "voucher-release",
+      "cohort": "unused",
+      "expected": "unsupported_role",
+      "missing_obligation": "MOCK Voucher release requires manager approval as well as cleared payment.",
+      "verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/voucher-release.packet.json",
+        "sha256": "59aed9d31fd1a59a3b561e44937ebea4a4ea83da9de105204214f49edab87a8e",
+        "bytes": 8405
+      },
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/voucher-release.baseline.edit.json",
+            "sha256": "f45b162ac917873f4fe746b52eddf88dc5c9f32aa37f46354e4c042ffcbe9413",
+            "bytes": 5343
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/voucher-release.baseline.request.json",
+            "sha256": "a378fe6f7f9c52ceb508561a4022cb9a2bde3f29defb7f3ac9780430bf3da4fe",
+            "bytes": 6581
+          },
+          "prompt_bytes": 1350,
+          "evidence_bytes": 2405,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c"
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/voucher-release.candidate.edit.json",
+            "sha256": "31a58a9e2208ce669c9c817233a7b13d80e2b2ddf5bfd5fd26eb6e12fc25c734",
+            "bytes": 5666
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/voucher-release.candidate.request.json",
+            "sha256": "e6733d9c86111402107029b66484c06b087e16cb1932ccecdf4f296b2a264c28",
+            "bytes": 6904
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2514,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c"
+        }
+      }
+    },
+    {
+      "id": "dual-ready",
+      "cohort": "unused",
+      "expected": "candidate",
+      "missing_obligation": "MOCK After inspection is approved, show MOCK Ready to the inspector.",
+      "verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/dual-ready.packet.json",
+        "sha256": "d190a60cef7e480648ad72383b2fb27fd0931df9f070671e3d447458723c4f6b",
+        "bytes": 12303
+      },
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/dual-ready.baseline.edit.json",
+            "sha256": "31c0690e541086ec7276b7cfc2c3d9bad9f67a666ff46bad569576b1a9fc1d5c",
+            "bytes": 7052
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/dual-ready.baseline.request.json",
+            "sha256": "729d6fa9c7260aaafc48c42eb50bc77474223035d0ccfa73a8f0e498cb190263",
+            "bytes": 8290
+          },
+          "prompt_bytes": 1350,
+          "evidence_bytes": 3926,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c"
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/dual-ready.candidate.edit.json",
+            "sha256": "f5c62ffd22f9fdbad0aba83608b4afe0485d279d4b3481aad0629bb275da7777",
+            "bytes": 7369
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/dual-ready.candidate.request.json",
+            "sha256": "e64a690fc59a9109f283fa7c1a2ab3a68bf7949d2c9e5552d2b2f5a8f6d565fb",
+            "bytes": 8607
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 4029,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c"
+        }
+      }
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-description-baseline-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-description.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/captured-description.baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/captured-description.baseline.native-1.json"
+    },
+    {
+      "id": "captured-description-candidate-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-description.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/captured-description.candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/captured-description.candidate.native-1.json"
+    },
+    {
+      "id": "loan-candidate-candidate-1",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/loan-candidate.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/loan-candidate.candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/loan-candidate.candidate.native-1.json"
+    },
+    {
+      "id": "loan-candidate-baseline-1",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/loan-candidate.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/loan-candidate.baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/loan-candidate.baseline.native-1.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/extraction-inherited.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/extraction-inherited.baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/extraction-inherited.baseline.native-1.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/extraction-inherited.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/extraction-inherited.candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/extraction-inherited.candidate.native-1.json"
+    },
+    {
+      "id": "fan-direct-signal-candidate-1",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/fan-direct-signal.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/fan-direct-signal.candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/fan-direct-signal.candidate.native-1.json"
+    },
+    {
+      "id": "fan-direct-signal-baseline-1",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/fan-direct-signal.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/fan-direct-signal.baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/fan-direct-signal.baseline.native-1.json"
+    },
+    {
+      "id": "joint-two-sources-baseline-1",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/joint-two-sources.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/joint-two-sources.baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/joint-two-sources.baseline.native-1.json"
+    },
+    {
+      "id": "joint-two-sources-candidate-1",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/joint-two-sources.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/joint-two-sources.candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/joint-two-sources.candidate.native-1.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/wrong-role-assignment.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/wrong-role-assignment.candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/wrong-role-assignment.candidate.native-1.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/wrong-role-assignment.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/wrong-role-assignment.baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/wrong-role-assignment.baseline.native-1.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/unresolved-multiple-producers.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/unresolved-multiple-producers.baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/unresolved-multiple-producers.baseline.native-1.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/unresolved-multiple-producers.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/unresolved-multiple-producers.candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/unresolved-multiple-producers.candidate.native-1.json"
+    },
+    {
+      "id": "parking-candidate-candidate-1",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/parking-candidate.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/parking-candidate.candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/parking-candidate.candidate.native-1.json"
+    },
+    {
+      "id": "parking-candidate-baseline-1",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/parking-candidate.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/parking-candidate.baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/parking-candidate.baseline.native-1.json"
+    },
+    {
+      "id": "captured-story-baseline-1",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/captured-story.baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/captured-story.baseline.native-1.json"
+    },
+    {
+      "id": "captured-story-candidate-1",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/captured-story.candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/captured-story.candidate.native-1.json"
+    },
+    {
+      "id": "sterile-door-candidate-1",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/sterile-door.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/sterile-door.candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/sterile-door.candidate.native-1.json"
+    },
+    {
+      "id": "sterile-door-baseline-1",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/sterile-door.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/sterile-door.baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/sterile-door.baseline.native-1.json"
+    },
+    {
+      "id": "voucher-release-baseline-1",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/voucher-release.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/voucher-release.baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/voucher-release.baseline.native-1.json"
+    },
+    {
+      "id": "voucher-release-candidate-1",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/voucher-release.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/voucher-release.candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/voucher-release.candidate.native-1.json"
+    },
+    {
+      "id": "dual-ready-candidate-1",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/dual-ready.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/dual-ready.candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/dual-ready.candidate.native-1.json"
+    },
+    {
+      "id": "dual-ready-baseline-1",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/dual-ready.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/dual-ready.baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-obligation/dual-ready.baseline.native-1.json"
+    },
+    {
+      "id": "captured-description-candidate-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-description.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/captured-description.candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/captured-description.candidate.native-2.json"
+    },
+    {
+      "id": "captured-description-baseline-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-description.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/captured-description.baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/captured-description.baseline.native-2.json"
+    },
+    {
+      "id": "loan-candidate-baseline-2",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/loan-candidate.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/loan-candidate.baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/loan-candidate.baseline.native-2.json"
+    },
+    {
+      "id": "loan-candidate-candidate-2",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/loan-candidate.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/loan-candidate.candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/loan-candidate.candidate.native-2.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/extraction-inherited.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/extraction-inherited.candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/extraction-inherited.candidate.native-2.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/extraction-inherited.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/extraction-inherited.baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/extraction-inherited.baseline.native-2.json"
+    },
+    {
+      "id": "fan-direct-signal-baseline-2",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/fan-direct-signal.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/fan-direct-signal.baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/fan-direct-signal.baseline.native-2.json"
+    },
+    {
+      "id": "fan-direct-signal-candidate-2",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/fan-direct-signal.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/fan-direct-signal.candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/fan-direct-signal.candidate.native-2.json"
+    },
+    {
+      "id": "joint-two-sources-candidate-2",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/joint-two-sources.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/joint-two-sources.candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/joint-two-sources.candidate.native-2.json"
+    },
+    {
+      "id": "joint-two-sources-baseline-2",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/joint-two-sources.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/joint-two-sources.baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/joint-two-sources.baseline.native-2.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/wrong-role-assignment.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/wrong-role-assignment.baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/wrong-role-assignment.baseline.native-2.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/wrong-role-assignment.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/wrong-role-assignment.candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/wrong-role-assignment.candidate.native-2.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/unresolved-multiple-producers.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/unresolved-multiple-producers.candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/unresolved-multiple-producers.candidate.native-2.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/unresolved-multiple-producers.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/unresolved-multiple-producers.baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/unresolved-multiple-producers.baseline.native-2.json"
+    },
+    {
+      "id": "parking-candidate-baseline-2",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/parking-candidate.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/parking-candidate.baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/parking-candidate.baseline.native-2.json"
+    },
+    {
+      "id": "parking-candidate-candidate-2",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/parking-candidate.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/parking-candidate.candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/parking-candidate.candidate.native-2.json"
+    },
+    {
+      "id": "captured-story-candidate-2",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/captured-story.candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/captured-story.candidate.native-2.json"
+    },
+    {
+      "id": "captured-story-baseline-2",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/captured-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/captured-story.baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/captured-story.baseline.native-2.json"
+    },
+    {
+      "id": "sterile-door-baseline-2",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/sterile-door.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/sterile-door.baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/sterile-door.baseline.native-2.json"
+    },
+    {
+      "id": "sterile-door-candidate-2",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/sterile-door.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/sterile-door.candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/sterile-door.candidate.native-2.json"
+    },
+    {
+      "id": "voucher-release-candidate-2",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/voucher-release.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/voucher-release.candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/voucher-release.candidate.native-2.json"
+    },
+    {
+      "id": "voucher-release-baseline-2",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/voucher-release.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/voucher-release.baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/voucher-release.baseline.native-2.json"
+    },
+    {
+      "id": "dual-ready-baseline-2",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/dual-ready.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/dual-ready.baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/dual-ready.baseline.native-2.json"
+    },
+    {
+      "id": "dual-ready-candidate-2",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/obligation/dual-ready.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-obligation/dual-ready.candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-obligation/dual-ready.candidate.native-2.json"
+    }
+  ],
+  "sources": [
+    {
+      "path": "src/test_fixtures/source_loss_calibration.zig",
+      "sha256": "81acd1b90e2d981a994a4591bc409594874dd9d2af647f6efe0533390417dc11",
+      "bytes": 21384
+    },
+    {
+      "path": "src/domain/source_omission_context.zig",
+      "sha256": "1c675d4181537152e8f9612373035753d2fd74b3b923fbf51d27f0a182fac0b3",
+      "bytes": 14770
+    },
+    {
+      "path": "src/domain/source_omission_binding.zig",
+      "sha256": "49e9a58c550d4d6c4befa8d1b6193d0c5cd3f2834eb989569fe66de16419caf4",
+      "bytes": 10040
+    },
+    {
+      "path": "src/domain/source_omission_comparison.zig",
+      "sha256": "623cc3cd2cf16d9a983d16fd12c760a0f661efc39f1f90e8ccb42227877311df",
+      "bytes": 10120
+    },
+    {
+      "path": "src/domain/specification_support.zig",
+      "sha256": "a92112effd3a46a85508bdb27212d97b50998cbb1d80a58fc45feca7340a7ee5",
+      "bytes": 38140
+    },
+    {
+      "path": "src/domain/specification_support_model.zig",
+      "sha256": "b2e8154846b6704a5a4841beda12cf2413f00749549094d14edede7ad5e5a706",
+      "bytes": 7783
+    },
+    {
+      "path": "src/domain/specification_support_evidence.zig",
+      "sha256": "aba742688e461df6d6d8f8a45d563d33524ca5786593cc3e323eb3b00ef0780c",
+      "bytes": 20694
+    },
+    {
+      "path": "src/domain/specification_support_repair.zig",
+      "sha256": "c9b580d9149de7e26e08dcfb09521d9787afadeb74678c0c4dcbfca2804f0af8",
+      "bytes": 18921
+    },
+    {
+      "path": "src/domain/specification_provenance.zig",
+      "sha256": "fd2a911dcc6d0798020e9e58bbc63ba8f211e92525ed02a703bbd90fc974b148",
+      "bytes": 19237
+    },
+    {
+      "path": "src/adapters/provider/bedrock_request.zig",
+      "sha256": "c7cb3ef2e2a98315caf321030c6dc3f02d6799ca475478d4964c8a24e97fd316",
+      "bytes": 5577
+    },
+    {
+      "path": "design/workflows/spec/support-loss.prompt.md",
+      "sha256": "857df606ca070b0b589db1ff27a452556783f1efce510229b058b0e9843f70c8",
+      "bytes": 1556
+    },
+    {
+      "path": "design/workflows/spec/support.prompt.md",
+      "sha256": "65a2ae84e1b723c93fc433e48a2f0178f407b9b38a1d8cb716ccbc28dd763951",
+      "bytes": 1746
+    },
+    {
+      "path": "design/workflows/spec/support.schema.json",
+      "sha256": "afc62076a584ad0b981d33dbc8dd07b3129622b9c6482feeed19c9bf321c4104",
+      "bytes": 10879
+    }
+  ],
+  "assessment": {
+    "review": "Manual semantic assessment, unblinded; no model judge. Independent pre-call label review by separate code-review agent.",
+    "precall_label_correction": "Loan obligation retains conditional duty, not an invented only-if prohibition. Historical artifacts unchanged.",
+    "source_review_limit": "48 fixed-omission loss calls do not establish that live source review produces faithful missing_obligation. Review requests prepared and handoff validated offline; no additional source-review call authorized by this manifest.",
+    "disputes": "Keep initial labels and disputed judgments visible. A newly invalid label makes acceptance limited; do not silently relabel or replay."
+  }
+}

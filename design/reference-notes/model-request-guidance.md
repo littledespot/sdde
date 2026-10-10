@@ -64,7 +64,15 @@ This summarizes the existing contracts in
 - Authoring dependencies use resolved brief text and entity applicability/basis;
   canonical provenance and fragment bookkeeping stay native. Record purposes and
   selected schema alternatives derive from the same native eligibility decision.
-- Loss comparison keeps one omission fixed and assesses native-bound evidence
+- Source `candidate_omission` separates a required `missing_obligation` from its
+  diagnostic `detail`. The existing reviewer states the omitted source requirement
+  directly, retaining conditions, negation and obligation strength and selecting
+  its source evidence. Other findings and principle reviews forbid the field.
+  Native code validates and carries it without synthesizing meaning. Initial
+  review, insertion and protocol correction use that same closed shape; selected
+  omission-detail correction returns both obligation and explanation under the
+  existing bound verdict and source evidence.
+- Loss comparison keeps that explicit obligation fixed and assesses native-bound evidence
   collections. `preserved`, `lost` and `uncertain` describe each assigned view;
   no model-selected culprit or repair operation is accepted. Native attribution,
   currentness and permission follow [§22.1](../contracts/22-repair.md).
@@ -76,9 +84,12 @@ This summarizes the existing contracts in
   The request exposes one comparison-local member ID, resolved claim meaning and
   source identity. Canonical claim/citation IDs and half-open coordinates stay in
   native evidence; source selections use only the inclusive line catalogue.
-  Target purpose belongs to the fixed finding, not an instruction to rewrite each
-  upstream collection as that field. The already deficient subject and resolved
-  producer outputs are separately labelled supporting evidence.
+  `fixed_finding.missing_obligation` is the single comparison target. The diagnostic
+  explanation and target purpose are supporting evidence alongside the already
+  deficient subject and resolved producer outputs. They cannot supply a different
+  obligation or require upstream collections to resemble the final artifact or
+  describe its defect. Equivalent wording and meaning expressed jointly by members
+  count as preservation.
   Claim meanings omit extraction-category labels: preservation depends on what the
   collection expresses, not whether a value has a separate member. A bare value
   alone does not establish behavior. Canonical categories, occurrence identities
@@ -89,6 +100,11 @@ This summarizes the existing contracts in
   corrections use `preservation_comparisons`. Collection, diagnostic admission and
   repair authorization use the same native derivation. Native `invalid_loss` is
   terminal; this change adds no semantic retry or expanded repair permission.
+  The retained assignment binds the exact obligation, original explanation,
+  selected sources, subject, review revision and current canonical evidence.
+  Readback or repair with a changed binding rejects. Source-obligation fidelity
+  and loss-attribution quality require live measurement of both existing calls;
+  hand-written obligations alone cannot establish the complete handoff's quality.
 
 Native operation causes and expected domain rejections survive into CLI, telemetry
 and harness evidence through the closed operation contract. The harness records

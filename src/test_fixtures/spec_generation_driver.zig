@@ -297,6 +297,8 @@ pub const Driver = struct {
                 if (loss) {
                     self.loss_calls += 1;
                     std.testing.expect(!policy and input.value.object.contains("fixed_finding")) catch unreachable;
+                    const fixed = input.value.object.get("fixed_finding").?.object;
+                    std.testing.expect(fixed.count() == 1 and fixed.get("missing_obligation").?.string.len != 0) catch unreachable;
                     std.testing.expect(!input.value.object.contains("subject")) catch unreachable;
                     const supporting = input.value.object.get("supporting_evidence").?.object;
                     std.testing.expect(supporting.contains("deficient_subject") and supporting.contains("producers")) catch unreachable;
@@ -733,7 +735,8 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preser
         const gap = @import("../domain/specification_support_evidence.zig").questionRequired(decision.finding());
         if (preservation) try std.testing.expect(@import("../domain/source_preservation.zig").permits(decision.finding()) and decision != .not_applicable);
         try std.testing.expect(!properties.contains("provenance"));
-        try std.testing.expectEqual(@as(usize, if (gap) 4 else 3), properties.count());
+        try std.testing.expectEqual(@as(usize, if (gap or decision == .candidate_omission) 4 else 3), properties.count());
+        try std.testing.expectEqual(decision == .candidate_omission, properties.contains("missing_obligation"));
         try std.testing.expect(!properties.contains("decision"));
         try std.testing.expectEqual(gap, properties.contains("question"));
         try std.testing.expect(!properties.contains("loss"));

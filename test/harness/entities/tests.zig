@@ -161,10 +161,11 @@ test "entity comparison preserves authoring admission and records superseded rev
         defer restricted.release();
         if (entry.phase == .review) {
             // The frozen, unexecuted comparison predates the source-premise
-            // contract. Preserve its hashes, but do not present it as a current
+            // and explicit-obligation contracts. Preserve its hashes, but do not present it as a current
             // production comparison or silently update one arm.
-            const missing_source = "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"MOCK Missing meaning.\"}";
-            try @import("../../../src/model_payload_schema_test.zig").checkDocument(edit.schema, .{ .bytes = missing_source });
+            const legacy_missing_source = "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"MOCK Missing meaning.\"}";
+            try @import("../../../src/model_payload_schema_test.zig").checkDocument(edit.schema, .{ .bytes = legacy_missing_source });
+            const missing_source = "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"MOCK Missing meaning.\",\"missing_obligation\":\"MOCK Retain the borrower account.\"}";
             try @import("../../../src/model_payload_schema_test.zig").checkDocument(restricted.selected().modelBytes(), .{ .bytes = missing_source, .rejection = .array_length, .path = "/source_ids" });
             continue;
         }

@@ -27,18 +27,20 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 The coordinated [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md)
-cutover uses `specification/v2`; the bound-preservation amendment advances
-the state to `specification-state/v10`. Completed readback
+cutover uses `specification/v2`; the explicit source-obligation handoff advances
+the state to `specification-state/v11`. Completed readback
 validates captured reconciliation groups and per-unit associations against the
 reference ledger, resolves stored explicit support and exact occurrence handles,
 then recomputes effective claims, citations and source links. It rejects
-inconsistent review or coverage projections. Omission review evidence retains the native assignment, canonical read facts,
+inconsistent review or coverage projections. Omission review evidence retains
+the explicit source obligation, its diagnostic explanation, source selection,
+subject and review revision alongside the native assignment, canonical read facts,
 complete preservation assessments and separate comparison origin. Readback rebuilds
 that assignment from current canonical inputs and rederives its attribution using
 [§22.1](22-repair.md), without request logs or a trusted stored digest. The derived
 location is a checked projection, never independently writable authority.
-A missing or changed assignment
-rejects; loading cannot infer one from prose or eligible claims. The pending
+A missing or changed assignment or obligation binding rejects; loading cannot
+infer one from diagnostic prose or eligible claims. The pending
 variant retains reference and clarification data without claiming completed
 attributed content. Earlier versions reject without migration or a parallel
 reader. Changed authority invalidates affected descendants through the

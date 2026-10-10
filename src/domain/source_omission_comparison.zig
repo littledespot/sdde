@@ -36,7 +36,7 @@ pub const Assignment = struct {
         brief: ?@import("specification.zig").Brief,
         candidate: ?@import("specification.zig").IdentifiedContent,
     },
-    finding: struct { ordinal: u32, revision: u64, subject: authority.Id, detail: []const u8, source_ids: []const r.extraction.identity.SourceId },
+    finding: struct { ordinal: u32, revision: u64, subject: authority.Id, detail: []const u8, missing_obligation: []const u8, source_ids: []const r.extraction.identity.SourceId },
     sources: []const loss.SourceLines,
     comparisons: []const View,
     boundaries: []const Boundary,
@@ -85,6 +85,7 @@ pub fn admit(a: std.mem.Allocator, retained: Assignment, current: Assignment, so
     const now = try atomic.snapshot(Assignment, a, current);
     if (!std.mem.eql(u8, &before.bytes, &now.bytes)) return error.InvalidPreservationComparison;
     if (current.finding.ordinal == 0 or current.finding.source_ids.len == 0 or std.mem.trim(u8, current.finding.detail, " \r\n\t").len == 0) return error.InvalidPreservationComparison;
+    if (!@import("specification_support_evidence.zig").validObligation(.candidate_omission, current.finding.missing_obligation)) return error.InvalidPreservationComparison;
     if (response.assessments.len != current.comparisons.len) return error.InvalidPreservationComparison;
     for (current.comparisons, 1..) |assigned, ordinal| {
         if (assigned.id.ordinal != ordinal or assigned.purpose.len == 0) return error.InvalidPreservationComparison;

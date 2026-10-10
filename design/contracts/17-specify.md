@@ -126,7 +126,13 @@ Typed content covers these concerns; each concern does not require a separate ca
   follows existing repair/failure routing, never missing-user-information routing.
 - Focused source review sends one bound requirement at a time. Its closed response
   contains the semantic finding, explanation, required question and genuinely
-  selectable source evidence. Independent feature fields carry only the assigned
+  selectable source evidence. A source `candidate_omission` also requires an
+  explicit `missing_obligation`: the omitted source requirement, preserving its
+  conditions, negation and obligation strength, separately from the defect
+  explanation. Its selected sources support that statement; native admission
+  checks the binding and shape without deciding semantic faithfulness. Other
+  findings and principle reviews do not acquire this field.
+  Independent feature fields carry only the assigned
   field's resolved text and provenance, its purpose and complete original source
   evidence. Record-field review selects through the canonical value lens and
   retains that record's siblings; its task explains the selected field's purpose.
@@ -135,8 +141,11 @@ Typed content covers these concerns; each concern does not require a separate ca
   These read-only assignments do not certify support or alter evidence eligibility.
   Coverage assessments retain surrounding candidate context. A candidate omission
   triggers the separate bound-preservation comparison in [§22.1](22-repair.md).
-  Its packet presents the fixed finding, resolved subject, numbered source lines,
-  assigned original-claim collections and supporting producer context. Every
+  Its packet presents that unchanged obligation as the single comparison target,
+  numbered source lines and assigned original-claim collections. The resolved
+  subject, diagnostic explanation, final-field purpose and producer outputs remain
+  supporting context. Upstream collections need not have final-field form or
+  describe the downstream defect. Every
   comparison receives one evidenced `preserved`, `lost` or `uncertain` assessment;
   native code derives attribution without allowing a new verdict or culprit choice.
   The complete review and retained comparison must revalidate before repair or

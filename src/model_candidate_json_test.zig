@@ -135,7 +135,7 @@ test "independent wire cases cover every selected specification result and neste
     try checkCandidate("support", "detail", "{\"detail\":\"Which deadline applies?\"}");
     try candidateCase("support", "detail", "{\"detail\":\"Which deadline applies?\",\"finding\":\"supported\"}", .unknown_property, "/finding");
     try checkCandidate("support", "selection", "{\"source_ids\":[]}");
-    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"Preserve the required confirmation.\"}");
+    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"Preserve the required confirmation.\",\"missing_obligation\":\"MOCK After renewal display confirmation.\"}");
     try checkCandidate("support", null, "{\"kind\":\"supported\",\"source_ids\":[],\"detail\":\"\"}");
 }
 
@@ -197,7 +197,7 @@ test "D1 source variants require questions only for gaps in focused findings" {
     };
     for (std.meta.tags(review.Decision)) |tag| {
         const gap = @import("domain/specification_support_evidence.zig").questionRequired(tag.finding());
-        const value: review.Value = .{ .kind = tag, .provenance = .{ .claim_ids = if (tag == .supported or tag == .not_applicable) &.{.{ .ordinal = 1 }} else &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{.{ .ordinal = 1 }}, .detail = "The request identifies the action but leaves its duration undecided.", .question = if (gap) "Which duration applies? Supply the duration and starting event." else null };
+        const value: review.Value = .{ .kind = tag, .missing_obligation = if (tag == .candidate_omission) "MOCK Complete the requested action." else null, .provenance = .{ .claim_ids = if (tag == .supported or tag == .not_applicable) &.{.{ .ordinal = 1 }} else &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{.{ .ordinal = 1 }}, .detail = "The request identifies the action but leaves its duration undecided.", .question = if (gap) "Which duration applies? Supply the duration and starting event." else null };
         const canonical = try json.encode(review.Value, a, value);
         try std.testing.expectEqualDeep(value, try json.decode(review.Value, a, canonical));
         const valid = try model.encode(a, value, required);
@@ -279,7 +279,8 @@ test "required text and citation presence follows native rules in initial and se
     try checkCandidate("support", "applicability_finding", review_prefix ++ "not_applicable" ++ review_tail);
     inline for (.{ "ambiguous", "conflicting", "unsupported", "candidate_omission", "inconclusive" }) |kind| {
         const question = if (comptime std.mem.eql(u8, kind, "ambiguous") or std.mem.eql(u8, kind, "conflicting") or std.mem.eql(u8, kind, "unsupported")) ",\"question\":\"Which rule applies?\"" else "";
-        const body = review_prefix ++ kind ++ "\",\"source_ids\":[1],\"detail\":\"\"" ++ question ++ "}";
+        const obligation = if (comptime std.mem.eql(u8, kind, "candidate_omission")) ",\"missing_obligation\":\"MOCK Notify the patient.\"" else "";
+        const body = review_prefix ++ kind ++ "\",\"source_ids\":[1],\"detail\":\"\"" ++ question ++ obligation ++ "}";
         try candidateSchemaCase("support", "finding", body, .string_length, "/detail");
     }
     try candidateSchemaCase("support", "gap_detail", "{\"detail\":\"\",\"question\":\"Which rule applies?\"}", .string_length, "/detail");
@@ -333,7 +334,7 @@ test "focused review evidence shapes follow native minima without excluding sour
         .supported_provenance = null,
         .candidate_bound = false,
     };
-    const source_only = "{\"kind\":\"candidate_omission\",\"source_ids\":[7],\"detail\":\"The generated content omitted the source rule.\"}";
+    const source_only = "{\"kind\":\"candidate_omission\",\"source_ids\":[7],\"detail\":\"The generated content omitted the source rule.\",\"missing_obligation\":\"MOCK After cancellation notify the patient.\"}";
     try candidateSchemaCase("support", "finding", source_only, null, null);
     try std.testing.expectEqual(@as(usize, 0), (try model.decode(a, source_only, bound)).provenance.claim_ids.len);
     try std.testing.expectError(error.InvalidJsonDocument, model.decode(a, "{\"kind\":\"supported\",\"source_ids\":[7],\"detail\":\"\"}", bound));
@@ -352,7 +353,7 @@ test "preservation wire is closed and rejects old attribution choices" {
     try candidateCase("support", "preservation_comparisons", "{\"assessments\":[],\"kind\":\"candidate\"}", .unknown_property, "/kind");
     try candidateCase("support", "preservation_comparisons", "{\"assessments\":[],\"location\":{}}", .unknown_property, "/location");
     try candidateCase("support", "preservation_comparisons", "{}", .missing_required_property, "/assessments");
-    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"MOCK Preserve the deadline.\"}");
+    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"MOCK Preserve the deadline.\",\"missing_obligation\":\"MOCK After renewal display the new deadline.\"}");
 }
 
 fn checkCandidate(comptime name: []const u8, comptime selection: ?[]const u8, bytes: []const u8) !void {

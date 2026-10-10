@@ -6,7 +6,10 @@ Classify:
 - supported: source meaning, obligation and role are preserved.
 - candidate_omission: identify source meaning absent or misclassified in the
   candidate, including compatible requirements labelled conflicting. Empty
-  claims or conflict labels do not establish a source gap.
+  claims or conflict labels do not establish a source gap. State that source
+  requirement directly in missing_obligation, preserving its conditions, negation
+  and obligation strength. It must be supported by the selected sources. Put the
+  explanation of the candidate's defect in detail, separate from the requirement.
 - inconclusive: interpretation remains unresolved without an identifiable missing
   user decision. Explain in detail; do not ask the user to fix your interpretation.
 - unsupported, ambiguous or conflicting: a necessary user decision is absent or

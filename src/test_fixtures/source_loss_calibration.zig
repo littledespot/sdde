@@ -11,8 +11,8 @@ const support = @import("../domain/specification_support.zig").Source;
 const comparison = @import("../domain/source_omission_comparison.zig");
 const codec = @import("../domain/model_candidate_json.zig");
 const packets = @import("../domain/model_input_packet.zig");
-const root = "test/calibration/source-loss-attribution/bound-preservation";
-const output = ".zig-cache/source-loss-preservation";
+const root = "test/calibration/source-loss-attribution/bound-preservation/obligation";
+const output = ".zig-cache/source-loss-obligation";
 const Case = struct {
     id: []const u8,
     cohort: enum { development, unused },
@@ -20,6 +20,7 @@ const Case = struct {
     claims: []const struct { source: u32, text: []const u8, first: u32, last: u32 },
     description: []const u8,
     missing: []const u8,
+    missing_obligation: []const u8,
     mode: enum { candidate, signal, second_role },
     verdicts: []const comparison.Verdict,
     expected: []const u8,
@@ -33,82 +34,124 @@ pub fn run() !void {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const cases = try codec.decode([]const Case, a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, root ++ "/cases.json", a, .unlimited));
+    const cases = try codec.decode([]const Case, a, try read(a, root ++ "/cases.json"));
     var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    const schema = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
+    const schema = try parser.compiler().compile(a, try read(a, "design/workflows/spec/support.schema.json"));
     try std.Io.Dir.cwd().createDirPath(std.testing.io, output);
     for (cases) |example| {
         const prepared = try prepare(a, example);
         defer prepared.passive.deinit();
-        const inputs = prepared.inputs;
-        const provenance_context = prepared.context;
-        const pending = prepared.pending;
-        const packet = try support.packetForLoss(a, inputs, provenance_context, pending);
-        defer packets.release(packet);
-        const assignment = try support.comparisonAssignment(a, inputs, provenance_context, pending);
-        try std.testing.expectEqual(example.verdicts.len, assignment.comparisons.len);
-        var response = try @import("source_omission_evidence.zig").response(a, assignment, .{ .unlocalized = .{} });
+        const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);
+        const loss_packet = try support.packetForLoss(a, prepared.inputs, prepared.context, prepared.pending);
+        defer packets.release(loss_packet);
+        try std.testing.expectEqualStrings(example.missing_obligation, assigned.finding.missing_obligation);
+        try std.testing.expectEqual(example.verdicts.len, assigned.comparisons.len);
+        const model_input = try std.json.parseFromSliceLeaky(std.json.Value, a, loss_packet.body(), .{});
+        try std.testing.expectEqualStrings(example.missing_obligation, model_input.object.get("fixed_finding").?.object.get("missing_obligation").?.string);
+        try std.testing.expectEqual(@as(usize, 1), model_input.object.get("fixed_finding").?.object.count());
+        try std.testing.expect(!model_input.object.contains("expected") and !model_input.object.contains("verdicts"));
+        try write(a, example.id, "packet.json", try std.json.Stringify.valueAlloc(a, .{ .assignment = assigned, .input = model_input }, .{}));
+        try exportPacket(a, schema, example.id, "candidate", loss_packet, try read(a, "design/workflows/spec/support-loss.prompt.md"));
+        // Only an experiment builds the retired presentation. Production has no
+        // old-reader/fallback path; prior experiments and their results stay inert.
+        var baseline = try std.json.parseFromSliceLeaky(std.json.Value, a, loss_packet.body(), .{});
+        const supporting = &baseline.object.getPtr("supporting_evidence").?.object;
+        var fixed: std.json.ObjectMap = .empty;
+        try fixed.put(a, "detail", supporting.get("diagnostic_detail").?);
+        try fixed.put(a, "target_purpose", supporting.get("target_purpose").?);
+        _ = supporting.orderedRemove("diagnostic_detail");
+        _ = supporting.orderedRemove("target_purpose");
+        baseline.object.getPtr("fixed_finding").?.* = .{ .object = fixed };
+        try exportBody(a, schema, example.id, "baseline", loss_packet, try std.json.Stringify.valueAlloc(a, baseline, .{}), try read(a, root ++ "/baseline.prompt.md"));
+        const review_packet = try support.packetFor(a, prepared.inputs, prepared.context, .{ .finding = assigned.finding.subject });
+        defer packets.release(review_packet);
+        try exportPacket(a, schema, example.id, "review", review_packet, try read(a, "design/workflows/spec/support.prompt.md"));
+        const probe_id = try std.fmt.allocPrint(a, "{s}.probe", .{example.id});
+        const selected_value = prepared.pending.review.entries[prepared.pending.pending_localization.? - 1].value;
+        const requirements = try @import("../domain/specification_support_evidence.zig").requirements(a, prepared.inputs, prepared.context.inputs, assigned.finding.subject);
+        const review_response = try @import("../domain/specification_support_model.zig").encode(a, selected_value, requirements);
+        try reviewHandoff(a, schema, probe_id, 1, prepared, review_packet, review_response);
+        const probe = try std.json.parseFromSliceLeaky(std.json.Value, a, try read(a, try std.fmt.allocPrint(a, "{s}/{s}.review.native-1.json", .{ output, probe_id })), .{});
+        try std.testing.expect(probe.object.get("admitted_omission").?.bool);
+        try std.testing.expectEqualStrings(example.missing_obligation, probe.object.get("finding").?.object.get("missing_obligation").?.string);
+        var response = try @import("source_omission_evidence.zig").response(a, assigned, .{ .unlocalized = .{} });
         const assessments = try a.dupe(comparison.Assessment, response.assessments);
         for (assessments, example.verdicts) |*entry, verdict| entry.result = verdict;
         response.assessments = assessments;
-        const expected = try support.admitComparisons(a, inputs, provenance_context, pending, assignment, try codec.encode(comparison.Response, a, response));
-        const location = comparison.location(expected);
-        try std.testing.expectEqualStrings(example.expected, @tagName(location));
-        const restricted = try @import("../domain/model_result_schema.zig").restrict(a, schema.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
-        defer restricted.release();
-        const exported = .{ .input = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{}), .schema = restricted.selected().modelBytes(), .assignment = assignment, .expected = expected };
-        const exported_bytes = try std.json.Stringify.valueAlloc(a, exported, .{});
-        try write(a, example.id, "packet.json", exported_bytes);
-        const frozen = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, try std.fmt.allocPrint(a, "{s}/{s}.packet.json", .{ root, example.id }), a, .unlimited);
-        const historical = try std.json.parseFromSliceLeaky(std.json.Value, a, frozen, .{});
-        // The completed experiment is immutable. The new presentation must retain
-        // exactly its native facts, member occurrences and attribution contract.
-        try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, historical.object.get("assignment").?, .{}), try std.json.Stringify.valueAlloc(a, exported.assignment, .{}));
-        try std.testing.expectEqualStrings(historical.object.get("schema").?.string, exported.schema);
-        try checkProjection(a, exported.input, historical.object.get("input").?);
-        try std.testing.expectError(error.InvalidPreservationComparison, support.admitComparisons(a, inputs, provenance_context, pending, assignment, "{\"assessments\":[]}"));
-        try @import("../model_payload_schema_test.zig").checkDocument(restricted.selected().modelBytes(), .{ .bytes = try codec.encode(comparison.Response, a, response) });
-        for ([_][]const u8{ "baseline", "candidate", "revised", "meaning" }) |arm| {
-            const revised = std.mem.eql(u8, arm, "revised");
-            const current = std.mem.eql(u8, arm, "meaning");
-            const directory = if (current) root ++ "/meaning" else if (revised) root ++ "/projection" else root;
-            const file_arm = if (revised or current) "candidate" else arm;
-            const edit_bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, try std.fmt.allocPrint(a, "{s}/{s}.{s}.edit.json", .{ directory, example.id, file_arm }), a, .unlimited);
-            const edit = (try std.json.parseFromSlice(std.json.Value, a, edit_bytes, .{})).value;
-            const content = edit.object.get("content").?.array.items;
-            if (current) try std.testing.expectEqualStrings(try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support-loss.prompt.md", a, .unlimited), content[0].object.get("guidance").?.string);
-            const wire = try encodeEdit(a, edit);
-            try write(a, example.id, try std.fmt.allocPrint(a, "{s}.request.json", .{arm}), wire);
-            const frozen_wire = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, try std.fmt.allocPrint(a, "{s}/{s}.{s}.request.json", .{ directory, example.id, file_arm }), a, .unlimited);
-            try std.testing.expectEqualStrings(frozen_wire, wire);
-            if (!std.mem.eql(u8, arm, "baseline")) {
-                try std.testing.expectEqualStrings(restricted.selected().modelBytes(), edit.object.get("schema").?.string);
-                // Serialization whitespace is irrelevant; field values/order are fixed.
-                const frozen_body = try std.json.parseFromSlice(std.json.Value, a, edit.object.get("content").?.array.items[1].object.get("user").?.string, .{});
-                if (revised) {
-                    // Historical requests remain immutable; compare their source
-                    // identities and meanings against the current projection.
-                    try checkProjection(a, exported.input, frozen_body.value);
-                } else {
-                    try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, if (current) exported.input else historical.object.get("input").?, .{}), try std.json.Stringify.valueAlloc(a, frozen_body.value, .{}));
-                }
+        const mock = try codec.encode(comparison.Response, a, response);
+        const accepted = try support.admitComparisons(a, prepared.inputs, prepared.context, prepared.pending, assigned, mock);
+        try std.testing.expectEqualStrings(example.expected, @tagName(comparison.location(accepted)));
+        try std.testing.expectError(error.InvalidPreservationComparison, support.admitComparisons(a, prepared.inputs, prepared.context, prepared.pending, assigned, "{\"assessments\":[]}"));
+        for (1..3) |repetition| {
+            for ([_][]const u8{ "baseline", "candidate" }) |arm| {
+                const id = try std.fmt.allocPrint(a, "{s}.{s}", .{ example.id, arm });
+                try write(a, id, try std.fmt.allocPrint(a, "probe-native-{d}.json", .{repetition}), try admissionReport(a, prepared, assigned, mock));
+                if (try optional(a, try std.fmt.allocPrint(a, "{s}/{s}.response-{d}.json", .{ output, id, repetition }))) |bytes|
+                    try write(a, id, try std.fmt.allocPrint(a, "native-{d}.json", .{repetition}), try admissionReport(a, prepared, assigned, bytes));
             }
+            // Exercise the actual review -> native admission -> loss handoff.
+            // Live review text is never replaced with the cohort's expected obligation.
+            if (try optional(a, try std.fmt.allocPrint(a, "{s}/{s}.review.response-{d}.json", .{ output, example.id, repetition }))) |bytes|
+                try reviewHandoff(a, schema, example.id, repetition, prepared, review_packet, bytes);
         }
-        // Optional diagnostic response files are never test fixtures or authority.
-        // Each available response is independently passed to production admission;
-        // rejected responses are retained in the report rather than hidden.
-        for ([_][]const u8{ "", ".projection-baseline", ".projection-candidate", ".meaning-baseline", ".meaning-candidate" }) |diagnostic| for (1..3) |repetition| {
-            const diagnostic_id = try std.fmt.allocPrint(a, "{s}{s}", .{ example.id, diagnostic });
-            const filename = try std.fmt.allocPrint(a, "{s}/{s}.response-{d}.json", .{ output, diagnostic_id, repetition });
-            const bytes = std.Io.Dir.cwd().readFileAlloc(std.testing.io, filename, a, .unlimited) catch |err| switch (err) {
-                error.FileNotFound => continue,
-                else => return err,
-            };
-            const outcome = try admissionReport(a, prepared, assignment, bytes);
-            try write(a, diagnostic_id, try std.fmt.allocPrint(a, "native-{d}.json", .{repetition}), outcome);
-        };
     }
-    try runPresentation(a, schema);
+    // Requests are immutable experiment projections; never edit their generated
+    // copies to fix a mismatch. Regenerate from the canonical owners and re-freeze.
+    for (cases) |example| {
+        for ([_][]const u8{ "packet.json", "baseline.edit.json", "baseline.request.json", "candidate.edit.json", "candidate.request.json", "review.edit.json", "review.request.json" }) |suffix| {
+            const exported = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, example.id, suffix }));
+            const frozen = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ root, example.id, suffix }));
+            try std.testing.expectEqualStrings(frozen, exported);
+        }
+    }
+}
+fn read(a: std.mem.Allocator, path: []const u8) ![]const u8 {
+    return std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, a, .unlimited);
+}
+fn optional(a: std.mem.Allocator, path: []const u8) !?[]const u8 {
+    return read(a, path) catch |err| switch (err) {
+        error.FileNotFound => null,
+        else => err,
+    };
+}
+fn exportPacket(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, arm: []const u8, packet: *const packets.Packet, prompt: []const u8) !void {
+    return exportBody(a, schema, id, arm, packet, packet.body(), prompt);
+}
+fn exportBody(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, arm: []const u8, packet: *const packets.Packet, body: []const u8, prompt: []const u8) !void {
+    const restricted = try @import("../domain/model_result_schema.zig").restrict(a, schema.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+    defer restricted.release();
+    const bytes = try std.json.Stringify.valueAlloc(a, .{ .content = .{ .{ .guidance = prompt }, .{ .user = body } }, .schema = restricted.selected().modelBytes() }, .{});
+    try write(a, id, try std.fmt.allocPrint(a, "{s}.edit.json", .{arm}), bytes);
+    try write(a, id, try std.fmt.allocPrint(a, "{s}.request.json", .{arm}), try encodeEdit(a, try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{})));
+}
+fn reviewHandoff(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, repetition: usize, prepared: Prepared, packet: *const packets.Packet, bytes: []const u8) !void {
+    const ordinal = prepared.pending.pending_localization.?;
+    var prior = prepared.pending;
+    prior.pending_localization = null;
+    prior.review.entries = prior.review.entries[0 .. ordinal - 1];
+    prior.origins = prior.origins[0 .. ordinal - 1];
+    const result = try support.collectFocused(a, prepared.inputs, prepared.context, if (ordinal == 1) null else .{ .pending = prior }, packet, bytes, null);
+    const tag = @tagName(result);
+    const suffix = try std.fmt.allocPrint(a, "review.native-{d}.json", .{repetition});
+    const admitted: ?support.Candidate = switch (result) {
+        .pending => |candidate| candidate,
+        .accepted => |accepted| accepted.candidate,
+        .rejected => null,
+    };
+    if (admitted == null or admitted.?.pending_localization == null) {
+        try write(a, id, suffix, try std.json.Stringify.valueAlloc(a, .{ .admitted_omission = false, .result = tag }, .{}));
+        return;
+    }
+    const pending = admitted.?;
+    try write(a, id, suffix, try std.json.Stringify.valueAlloc(a, .{ .admitted_omission = true, .finding = pending.review.entries[ordinal - 1].value }, .{}));
+    const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, pending);
+    const loss_packet = try support.packetForLoss(a, prepared.inputs, prepared.context, pending);
+    defer packets.release(loss_packet);
+    const arm = try std.fmt.allocPrint(a, "handoff-{d}", .{repetition});
+    try exportPacket(a, schema, id, arm, loss_packet, try read(a, "design/workflows/spec/support-loss.prompt.md"));
+    const live_prepared: Prepared = .{ .inputs = prepared.inputs, .context = prepared.context, .pending = pending, .passive = prepared.passive };
+    if (try optional(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.response.json", .{ output, id, arm }))) |response|
+        try write(a, id, try std.fmt.allocPrint(a, "{s}.native.json", .{arm}), try admissionReport(a, live_prepared, assigned, response));
 }
 const Prepared = struct {
     inputs: authority.Inputs,
@@ -180,8 +223,15 @@ fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
     for (findings, 1..) |*entry, ordinal| entry.* = .{ .requirement_ordinal = @intCast(ordinal), .value = .{ .kind = .supported, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{}, .detail = "", .question = null } };
     const source_ids = try a.alloc(r.extraction.identity.SourceId, sources.corpus.sources.len);
     for (sources.corpus.sources, source_ids) |source, *id| id.* = source.id;
+    for (findings[0..index], ledger.requirements[0..index]) |*entry, required| {
+        const rules = try @import("../domain/specification_support_evidence.zig").requirements(a, inputs, sources, required.seed.id);
+        // Wire ordinals use model_candidate_json, not canonical wrapper objects.
+        const selected = try codec.encode(@import("../domain/specification_support_model.zig").Value, a, .{ .supported = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK Prior source review accepted for isolated handoff preparation." } });
+        entry.value = try @import("../domain/specification_support_model.zig").decode(a, selected, rules);
+    }
     findings[index].value.kind = .candidate_omission;
     findings[index].value.detail = example.missing;
+    findings[index].value.missing_obligation = example.missing_obligation;
     findings[index].value.source_ids = source_ids;
     const rules = try @import("../domain/specification_support_evidence.zig").requirements(a, inputs, sources, ledger.requirements[index].seed.id);
     findings[index].value.provenance.claim_ids = rules.rule(.candidate_omission, .{ .unlocalized = .{} }).fixedClaims() orelse &.{};
@@ -211,131 +261,6 @@ fn admissionReport(a: std.mem.Allocator, prepared: Prepared, assigned: compariso
         std.json.Stringify.valueAlloc(a, .{ .admitted = false, .rejection = @errorName(err) }, .{});
 }
 
-// Experimental presentation only. Start with the production loss packet; remove
-// the repeated full candidate, not its assessed subject, upstream evidence or
-// any part of the canonical assignment. This is not a runtime projection option.
-fn presentationCandidate(a: std.mem.Allocator, body: []const u8) !std.json.Value {
-    var candidate = try std.json.parseFromSliceLeaky(std.json.Value, a, body, .{});
-    const supporting = candidate.object.getPtr("supporting_evidence").?;
-    const subject = supporting.object.getPtr("deficient_subject").?;
-    const business = subject.object.getPtr("business").?;
-    const context = business.object.getPtr("context").?;
-    try std.testing.expect(context.object.orderedRemove("candidate"));
-    return candidate;
-}
-fn runPresentation(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema) !void {
-    const directory = root ++ "/presentation";
-    const cases = try codec.decode([]const Case, a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, directory ++ "/cases.json", a, .unlimited));
-    const prompt = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support-loss.prompt.md", a, .unlimited);
-    for (cases) |example| {
-        const prepared = try prepare(a, example);
-        defer prepared.passive.deinit();
-        const packet = try support.packetForLoss(a, prepared.inputs, prepared.context, prepared.pending);
-        defer packets.release(packet);
-        const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);
-        try std.testing.expectEqual(.primary_user_story, assigned.finding.subject.slot);
-        try std.testing.expectEqual(example.verdicts.len, assigned.comparisons.len);
-        const restricted = try @import("../domain/model_result_schema.zig").restrict(a, schema.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
-        defer restricted.release();
-        try write(a, example.id, "presentation.packet.json", try std.json.Stringify.valueAlloc(a, .{ .assignment = assigned, .input = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{}), .schema = restricted.selected().modelBytes() }, .{}));
-        var response = try @import("source_omission_evidence.zig").response(a, assigned, .{ .unlocalized = .{} });
-        const assessments = try a.dupe(comparison.Assessment, response.assessments);
-        for (assessments, example.verdicts) |*entry, verdict| entry.result = verdict;
-        response.assessments = assessments;
-        const mock = try codec.encode(comparison.Response, a, response);
-        const admitted = try support.admitComparisons(a, prepared.inputs, prepared.context, prepared.pending, assigned, mock);
-        try std.testing.expectEqualStrings(example.expected, @tagName(comparison.location(admitted)));
-        try std.testing.expectError(error.InvalidPreservationComparison, support.admitComparisons(a, prepared.inputs, prepared.context, prepared.pending, assigned, "{\"assessments\":[]}"));
-        const baseline = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{});
-        const candidate = try presentationCandidate(a, packet.body());
-        // Restore exactly the one omitted field and prove byte-equivalent JSON
-        // values everywhere else, including upstream classification/dependencies.
-        var restored = try presentationCandidate(a, packet.body());
-        const previous_context = baseline.object.get("supporting_evidence").?.object.get("deficient_subject").?.object.get("business").?.object.get("context").?.object;
-        const restored_context = &restored.object.getPtr("supporting_evidence").?.object.getPtr("deficient_subject").?.object.getPtr("business").?.object.getPtr("context").?.object;
-        var restored_order: std.json.ObjectMap = .empty;
-        var fields = previous_context.iterator();
-        while (fields.next()) |field| try restored_order.put(a, field.key_ptr.*, if (std.mem.eql(u8, field.key_ptr.*, "candidate")) field.value_ptr.* else restored_context.get(field.key_ptr.*).?);
-        restored_context.* = restored_order;
-        try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, baseline, .{}), try std.json.Stringify.valueAlloc(a, restored, .{}));
-        for ([_][]const u8{ "baseline", "candidate" }) |arm| {
-            const body = try std.json.Stringify.valueAlloc(a, if (std.mem.eql(u8, arm, "baseline")) baseline else candidate, .{});
-            const edit = .{ .content = .{ .{ .guidance = prompt }, .{ .user = body } }, .schema = restricted.selected().modelBytes() };
-            const edit_bytes = try std.json.Stringify.valueAlloc(a, edit, .{});
-            const wire = try encodeEdit(a, try std.json.parseFromSliceLeaky(std.json.Value, a, edit_bytes, .{}));
-            try write(a, example.id, try std.fmt.allocPrint(a, "presentation-{s}.edit.json", .{arm}), edit_bytes);
-            try write(a, example.id, try std.fmt.allocPrint(a, "presentation-{s}.request.json", .{arm}), wire);
-            try checkNamespaces(candidate);
-            try std.testing.expect(!baseline.object.contains("expected") and !baseline.object.contains("verdicts"));
-            for (1..3) |repetition| {
-                const diagnostic_id = try std.fmt.allocPrint(a, "{s}.presentation-{s}", .{ example.id, arm });
-                // Distinct probe names never masquerade as observed live results.
-                const report = try admissionReport(a, prepared, assigned, mock);
-                try write(a, diagnostic_id, try std.fmt.allocPrint(a, "probe-native-{d}.json", .{repetition}), report);
-                const valid = try std.json.parseFromSliceLeaky(std.json.Value, a, report, .{});
-                try std.testing.expect(valid.object.get("admitted").?.bool);
-                const rejected = try std.json.parseFromSliceLeaky(std.json.Value, a, try admissionReport(a, prepared, assigned, "{\"assessments\":[]}"), .{});
-                try std.testing.expect(!rejected.object.get("admitted").?.bool);
-                const path = try std.fmt.allocPrint(a, "{s}/{s}.response-{d}.json", .{ output, diagnostic_id, repetition });
-                const bytes = std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, a, .unlimited) catch |err| switch (err) {
-                    error.FileNotFound => continue,
-                    else => return err,
-                };
-                try write(a, diagnostic_id, try std.fmt.allocPrint(a, "native-{d}.json", .{repetition}), try admissionReport(a, prepared, assigned, bytes));
-            }
-        }
-    }
-    // All new exports are prepared before checking the immutable reviewed copies.
-    for (cases) |example| {
-        for ([_][]const u8{ "packet.json", "baseline.edit.json", "baseline.request.json", "candidate.edit.json", "candidate.request.json" }) |suffix| {
-            const exported_suffix = if (std.mem.eql(u8, suffix, "packet.json")) "presentation.packet.json" else try std.fmt.allocPrint(a, "presentation-{s}", .{suffix});
-            const actual = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, example.id, exported_suffix }), a, .unlimited);
-            const frozen = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ directory, example.id, suffix }), a, .unlimited);
-            try std.testing.expectEqualStrings(frozen, actual);
-        }
-    }
-}
-
 fn write(a: std.mem.Allocator, id: []const u8, suffix: []const u8, bytes: []const u8) !void {
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, id, suffix }), .data = bytes });
-}
-
-// These compare native occurrences and resolved meaning, not desired model judgments.
-fn checkProjection(a: std.mem.Allocator, current: std.json.Value, previous: std.json.Value) !void {
-    const fixed = current.object.get("fixed_finding").?.object;
-    try std.testing.expectEqualStrings(previous.object.get("fixed_finding").?.object.get("detail").?.string, fixed.get("detail").?.string);
-    try std.testing.expect(!current.object.contains("subject"));
-    const views = current.object.get("comparisons").?.array.items;
-    const old_views = previous.object.get("comparisons").?.array.items;
-    try std.testing.expectEqual(old_views.len, views.len);
-    for (views, old_views) |view, old| {
-        try std.testing.expectEqual(old.object.get("id").?.integer, view.object.get("id").?.integer);
-        try std.testing.expect(!view.object.contains("purpose"));
-        const members = view.object.get("members").?.array.items;
-        const old_members = old.object.get("members").?.array.items;
-        try std.testing.expectEqual(old_members.len, members.len);
-        for (members, old_members) |member, old_member| {
-            try std.testing.expectEqual(old_member.object.get("id").?.integer, member.object.get("id").?.integer);
-            const requirement = member.object.get("requirement").?.object;
-            const old_requirement = old_member.object.get("requirement").?.object;
-            try std.testing.expectEqual(@as(usize, 2), requirement.count());
-            for ([_][]const u8{ "meaning", "source_id" }) |key| try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, old_requirement.get(key).?, .{}), try std.json.Stringify.valueAlloc(a, requirement.get(key).?, .{}));
-        }
-    }
-    try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, previous.object.get("sources").?, .{}), try std.json.Stringify.valueAlloc(a, current.object.get("sources").?, .{}));
-    try checkNamespaces(current);
-}
-
-fn checkNamespaces(value: std.json.Value) !void {
-    switch (value) {
-        .object => |object| {
-            var it = object.iterator();
-            while (it.next()) |entry| {
-                for ([_][]const u8{ "claim_id", "claim_ids", "citation_id", "citation_ids", "location", "byte", "start", "end" }) |forbidden| try std.testing.expect(!std.mem.eql(u8, entry.key_ptr.*, forbidden));
-                try checkNamespaces(entry.value_ptr.*);
-            }
-        },
-        .array => |array| for (array.items) |child| try checkNamespaces(child),
-        else => {},
-    }
 }

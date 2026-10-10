@@ -779,7 +779,12 @@ closed requiredness/ownership policies, current support checks and outcomes.
   let review detect discarded or misclassified evidence. These projections use the
   common evidence owner and do not grant model output authority.
 - `candidate_omission` describes established meaning lost in extraction or generated
-  content. Native missing-family obligations remain invalid even after a positive
+  content. Source review requires its explicit `missing_obligation`, supported by
+  its source selection and distinct from diagnostic detail, under
+  [§22.1](../contracts/22-repair.md). Comparison, correction, persisted evidence,
+  revision checks and repair consume the same bound statement without native
+  semantic rewriting. Principle and non-omission findings forbid this field.
+  Native missing-family obligations remain invalid even after a positive
   review. Genuine source gaps route under §12.8.1 only after candidate/interpretation
   defects are resolved. `inconclusive` findings grant no question or repair authority.
 - Malformed review repair changes one authorized detail or evidence selection,

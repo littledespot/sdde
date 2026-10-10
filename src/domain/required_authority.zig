@@ -74,6 +74,8 @@ pub const ReviewEvidence = struct {
     loss: ?@import("source_omission.zig").Location = null,
     preservation: ?@import("source_omission.zig").comparisons.Evidence = null,
     detail: []const u8,
+    /// Source review's model-owned comparison target; absent for other reviews.
+    missing_obligation: ?[]const u8 = null,
     question: ?[]const u8 = null,
     provenance: @import("specification.zig").Provenance,
     source_ids: []const @import("reference_identity.zig").SourceId,
@@ -479,7 +481,7 @@ fn establishedConflict(requirement: Requirement, inputs: Inputs, gap: ForcedGap)
         if (evidence.finding != .conflicting or evidence.method != .model_assisted) return false;
         const review = evidence.review orelse return false;
         const admission = @import("specification_support_evidence.zig");
-        if (review.principle_registry != null or !admission.validDetail(evidence.finding, review.detail) or admission.questionIssue(evidence.finding, review.question) != null) return false;
+        if (review.principle_registry != null or !admission.validDetail(evidence.finding, review.detail) or !admission.validObligation(evidence.finding, review.missing_obligation) or admission.questionIssue(evidence.finding, review.question) != null) return false;
         sameSet(Authority, requirement.seed.input_authorities, evidence.authorities) catch return false;
         for (evidence.authorities) |authority| if (!contains(Authority, inputs.authorities, authority)) return false;
         sameSet(@import("reference_reconciliation.zig").ClaimId, claims, review.provenance.claim_ids) catch return false;

@@ -206,6 +206,7 @@ pub fn diagnosticClaims(records: @import("reference_support.zig").Records, locat
 /// Verify all mechanical joins. Meaning and loss attribution remain explicitly
 /// model-assisted; absence of a unique location cannot authorize a repair.
 pub fn validate(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evidence.Inputs, subject_id: authority.Id, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) (authority.Error || r.Error)!void {
+    if (!@import("specification_support_evidence.zig").validObligation(finding, review.missing_obligation)) return error.InvalidRequiredAuthority;
     if (review.preservation) |proof| {
         if (finding != .candidate_omission) return error.InvalidRequiredAuthority;
         const derived = comparisons.validate(a, inputs, sources, subject_id, review, proof) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
