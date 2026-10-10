@@ -5,7 +5,7 @@
 - **Decision authority:** Explicit user approval of Phase 0.2 in [LLM_REWORK](../../fixes/archive/LLM_REWORK.md).
 - **27 September 2026 amendment authority:** Explicit user approval of provenance-free, source-bound per-unit assignments in this session.
 - **28 September 2026 amendment authority:** Explicit user instruction to clarify generation-role assignment and require nonempty role lists when supplied.
-- **9 October 2026 amendment authority:** Explicit user instruction to implement the complete role-decision contract in [FIX01 §9.8](../../fixes/FIX01.md#98-complete-role-decisions-critical-review--9-october-2026), including shared admission, lifecycle and calibration paths.
+- **9 October 2026 amendment authority:** Explicit user instruction to implement the complete role-decision contract in [Z_FIX01 §9.8](../../fixes/Z_FIX01.md#98-complete-role-decisions-critical-review--9-october-2026), including shared admission, lifecycle and calibration paths.
 - **9 October 2026 loss-evidence amendment authority:** Explicit user instruction to implement R7 authoring-input projection and R6 retained producer-loss evidence; no change to exact-reference lineage or retry policy.
 - **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1. The overall design remains Proposed.
 

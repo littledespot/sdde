@@ -247,8 +247,9 @@ replay; it is neither an E2E case nor workflow authority.
 
 [FIX01](fixes/FIX01.md) is the sole active fix record. Keep outstanding work and
 its implementation/verification status there; remove completed tasks from active
-tracking. Prior approval records, implementation history and retained experiments
-live under `fixes/archive/`. Historical proposals and status statements do not
+tracking. Completed FIX01 work and its supporting dated reviews live in
+[Z_FIX01](fixes/Z_FIX01.md); older records and experiments remain under
+`fixes/archive/`. Historical proposals and status statements do not
 create current work, grant approval or establish successful live acceptance.
 
 [Templates](design/templates/), [legacy preset source examples](design/toolchainPresets/)

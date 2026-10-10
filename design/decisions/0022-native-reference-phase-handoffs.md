@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-10-06
 - **Authority:** User approval of all changes in FIX_003.
-- **9 October 2026 amendment authority:** Explicit user instruction to implement complete role decisions under [FIX01 §9.8](../../fixes/FIX01.md#98-complete-role-decisions-critical-review--9-october-2026).
+- **9 October 2026 amendment authority:** Explicit user instruction to implement complete role decisions under [Z_FIX01 §9.8](../../fixes/Z_FIX01.md#98-complete-role-decisions-critical-review--9-october-2026).
 - **Amends:** Reference ingestion §16.4, model boundary §12.9, repair §22,
   ADRs 0016 and 0020 for extraction/reconciliation handoffs.
 

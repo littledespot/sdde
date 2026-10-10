@@ -381,12 +381,12 @@ immutable and any packet reprojection is explicit. Production has no sparse-wire
 compatibility reader. Reports separate structural missing decisions, false
 unsupported verdicts and wrong supported selections from semantic omissions;
 complete representation is not a quality score. The completed
-[focused pilot](../../fixes/FIX01.md#r7--high-focused-role-calibration-complete-broader-calibration-remains-open)
+[focused pilot](../../fixes/Z_FIX01.md#r7--high-focused-role-calibration-complete-broader-calibration-remains-open)
 found fewer unsupported assignments but unchanged total omissions and a regression
 on the captured production input; it retains production guidance. Neither that
 small comparison nor offline tests establish whole-workflow reliability.
 
-The [R7 routing follow-up](../../fixes/FIX01.md#97-r7-routing-calibration-follow-up--9-october-2026)
+The [R7 routing follow-up](../../fixes/Z_FIX01.md#97-r7-routing-calibration-follow-up--9-october-2026)
 adds reviewed partial-role, competing-group, source-order and split-role cases,
 plus two retained production inputs. Reports identify wrong-basis pairs as a
 subset of unsupported assignments, after ordinary protocol/native admission.
