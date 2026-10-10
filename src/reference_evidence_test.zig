@@ -49,9 +49,15 @@ test "source selections preserve original line endings Unicode repeated text and
         const a = arena.allocator();
         var ids: IdSource = .{};
         const inputs = try prepare(a, &ids, try read(a, "evidence.md", bytes));
+        try std.testing.expectEqual(@as(u8, 1), ids.calls);
+        try std.testing.expectEqualStrings(feature.bytes, inputs.corpus.feature_id.bytes);
         var reconstructed: std.ArrayList(u8) = .empty;
+        var end: usize = 0;
         for (inputs.chunks.entries, 0..) |chunk, index| {
             const scope = proposals(inputs, index).scope;
+            const view = try evidence.resolve(inputs, scope);
+            try std.testing.expectEqual(end, chunk.span.start.byte);
+            try std.testing.expectEqualSlices(u8, bytes[chunk.span.start.byte..chunk.span.end.byte], view.bytes);
             const choices = try selections.project(a, inputs, scope);
             for (choices) |choice| {
                 try reconstructed.appendSlice(a, choice.text);
@@ -64,7 +70,9 @@ test "source selections preserve original line endings Unicode repeated text and
             const separate = try selections.validate(a, inputs, scope, &.{ .{ .first = choices[0].id, .last = choices[0].id }, .{ .first = choices[choices.len - 1].id, .last = choices[choices.len - 1].id } });
             try std.testing.expectEqual(@as(usize, 2), separate.valid.entries.len);
             try std.testing.expectEqualStrings(choices[choices.len - 1].text, separate.valid.entries[1].verbatim.?);
+            end = chunk.span.end.byte;
         }
+        try std.testing.expectEqual(bytes.len, end);
         try std.testing.expectEqualStrings(bytes, reconstructed.items);
     }
 }
@@ -95,31 +103,6 @@ test "source selection diagnostics distinguish missing unknown reversed and stal
     foreign = scope;
     foreign.chunk_id.bytes = "foreign";
     try std.testing.expectError(error.InvalidSourceCitation, selections.project(a, inputs, foreign));
-}
-
-test "Hello World references receive citable identities with exact chunk coverage" {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "test/e2e/wf-001-hello-world/reference/stories.md", allocator, .limited(reference.limits.source_file_bytes));
-    var ids: IdSource = .{};
-    const inputs = try prepare(allocator, &ids, try read(allocator, "stories.md", bytes));
-    try std.testing.expectEqual(@as(u8, 1), ids.calls);
-    try std.testing.expectEqualStrings(feature.bytes, inputs.corpus.feature_id.bytes);
-    var end: usize = 0;
-    for (inputs.chunks.entries, 0..) |chunk, index| {
-        const view = try evidence.resolve(inputs, proposals(inputs, index).scope);
-        try std.testing.expectEqual(end, chunk.span.start.byte);
-        try std.testing.expectEqualSlices(u8, bytes[chunk.span.start.byte..chunk.span.end.byte], view.bytes);
-        var batch = proposals(inputs, index);
-        var candidate = proposal(chunk);
-        candidate.verbatim = view.bytes;
-        batch.entries = &.{candidate};
-        const citations = try (cite.Action{}).execute(allocator, inputs, batch);
-        try std.testing.expectEqualSlices(u8, view.bytes, citations.entries[0].verbatim.?);
-        end = chunk.span.end.byte;
-    }
-    try std.testing.expectEqual(bytes.len, end);
 }
 
 test "global source block identities and total mappings are independent of provisional ordinals" {

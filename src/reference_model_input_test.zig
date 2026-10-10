@@ -68,10 +68,7 @@ test "authoring evidence resolves typed meaning without exposing citation or ext
     }
 }
 
-test "reference model packets preserve exact chunk bytes and engine bound scope" {
-    try exercisePackets(std.testing.allocator);
-}
-test "reference packet and iteration allocations have deterministic cleanup" {
+test "reference packets preserve chunk scope and evidence with deterministic allocation cleanup" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, exercisePackets, .{});
 }
 
@@ -97,7 +94,6 @@ test "reconciliation assignments scope instructions while retaining complete sou
         "The application must start. Display `Hello, World!` and the current UTC time.\n",
         "Renew a library loan and show its new due date. Display `Loan renewed!`.\n",
     }) |source_text| {
-        try exerciseAssignmentPackets(std.testing.allocator, source_text);
         try std.testing.checkAllAllocationFailures(std.testing.allocator, exerciseAssignmentPackets, .{source_text});
     }
 }
@@ -780,7 +776,6 @@ test "packet body and domain identity are owned independently of caller allocati
 }
 
 test "typed and admitted packet context preserve exact numbers and assignment ownership" {
-    try packetContextPrecision(std.testing.allocator);
     try std.testing.checkAllAllocationFailures(std.testing.allocator, packetContextPrecision, .{});
     const base = try packets.create(std.testing.allocator, "{\"candidate\":{}}", .workflow_step, .initial_generation, null);
     defer packets.release(base);
@@ -788,7 +783,6 @@ test "typed and admitted packet context preserve exact numbers and assignment ow
 }
 
 test "packet projections replace native contexts while preserving repair authority and ownership" {
-    try repairPacketContexts(std.testing.allocator);
     try std.testing.checkAllAllocationFailures(std.testing.allocator, repairPacketContexts, .{});
 }
 fn repairPacketContexts(allocator: std.mem.Allocator) !void {

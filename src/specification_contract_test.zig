@@ -101,11 +101,7 @@ test "closed specification parsing cleans up every allocation failure" {
     try testing.checkAllAllocationFailures(testing.allocator, parseAllocated, .{});
 }
 
-test "editable specification round-trips every record family and exact code spans" {
-    try roundTrip(testing.allocator);
-}
-
-test "specification codec cleans up every allocation failure" {
+test "editable specification round-trips every family and exact spans with allocation cleanup" {
     try testing.checkAllAllocationFailures(testing.allocator, roundTrip, .{});
 }
 

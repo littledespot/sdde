@@ -44,12 +44,11 @@ pub fn finishText(allocator: std.mem.Allocator, inputs: evidence.Inputs, candida
     })));
 }
 
-test "Hello World and unrelated source claims receive only engine assigned IDs" {
+test "source claims and exact tokens receive only engine assigned IDs" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    const hello = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "test/e2e/wf-001-hello-world/reference/stories.md", allocator, .limited(@import("domain/reference_ingestion.zig").limits.source_file_bytes));
-    for ([_][]const u8{ hello, "A librarian can renew a loan.\r\n" }) |bytes| {
+    for ([_][]const u8{ "MOCK Display `MOCK READY` when requested.\n", "MOCK A librarian can renew a loan.\r\n" }) |bytes| {
         var ids: fixture.IdSource = .{};
         const inputs = try fixture.prepare(allocator, &ids, try ingest(allocator, "requirements.md", bytes));
         const results = try allocator.alloc(extraction.RawResult, inputs.chunks.entries.len);
@@ -177,7 +176,6 @@ fn allocationCase(allocator: std.mem.Allocator) !void {
 }
 
 test "sealed extraction values retain only owned candidate data after inputs are released" {
-    try ownershipCase(std.testing.allocator);
     try std.testing.checkAllAllocationFailures(std.testing.allocator, ownershipCase, .{});
 }
 fn ownershipCase(allocator: std.mem.Allocator) !void {

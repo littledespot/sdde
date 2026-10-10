@@ -594,7 +594,7 @@ pub fn prepare(allocator: std.mem.Allocator, sources: []const []const u8) !Fixtu
     return .{ .inputs = citable, .extracted = try extraction.finish(allocator, citable, results), .text = try text.prepare(allocator, citable) };
 }
 
-test "reference lineage remains owned and measurable across ledger sizes" {
+test "reference lineage preserves selections and frees owned memory across ledger sizes" {
     const support = @import("domain/reference_support.zig");
     for ([_]usize{ 1, 16 }) |count| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -610,32 +610,21 @@ test "reference lineage remains owned and measurable across ledger sizes" {
         for (items.entries) |entry| if (entry.claim.content == .model) try claims.append(a, entry.claim.id);
         try std.testing.expect(claims.items.len >= count);
 
-        var allocations: usize = 0;
-        var peak_bytes: usize = 0;
-        const started: std.Io.Clock.Timestamp = .now(std.testing.io, .awake);
-        for (0..100) |_| {
-            var counted = std.testing.FailingAllocator.init(std.testing.allocator, .{});
-            const measured = counted.allocator();
-            const lineage = try support.lineage(measured, claims.items, &.{});
-            const resolved = try support.select(measured, items, fixture.inputs, lineage);
-            try std.testing.expectEqualDeep(claims.items, resolved.claim_ids);
-            const retained = counted.allocated_bytes - counted.freed_bytes;
-            peak_bytes = @max(peak_bytes, retained);
-            allocations += counted.allocations;
-            measured.free(resolved.citation_ids);
-            measured.free(resolved.scopes);
-            measured.free(lineage);
-            try std.testing.expectEqual(counted.allocated_bytes, counted.freed_bytes);
-        }
-        const nanoseconds = started.durationTo(.now(std.testing.io, .awake)).raw.toNanoseconds();
+        var counted = std.testing.FailingAllocator.init(std.testing.allocator, .{});
+        const measured = counted.allocator();
+        const lineage = try support.lineage(measured, claims.items, &.{});
+        const resolved = try support.select(measured, items, fixture.inputs, lineage);
+        try std.testing.expectEqualDeep(claims.items, resolved.claim_ids);
+        measured.free(resolved.citation_ids);
+        measured.free(resolved.scopes);
+        measured.free(lineage);
+        try std.testing.expectEqual(counted.allocated_bytes, counted.freed_bytes);
         var backing = std.testing.FailingAllocator.init(std.testing.allocator, .{});
         var measured_arena: std.heap.ArenaAllocator = .init(backing.allocator());
         const arena_lineage = try support.lineage(measured_arena.allocator(), claims.items, &.{});
         _ = try support.select(measured_arena.allocator(), items, fixture.inputs, arena_lineage);
-        const arena_capacity = measured_arena.queryCapacity();
         measured_arena.deinit();
         try std.testing.expectEqual(backing.allocated_bytes, backing.freed_bytes);
-        std.debug.print("phase3-reference-scale\tclaims={d}\titerations=100\tns={d}\tallocations={d}\tretained-bytes={d}\tarena-capacity={d}\n", .{ claims.items.len, nanoseconds, allocations, peak_bytes, arena_capacity });
     }
 }
 
@@ -1370,7 +1359,6 @@ const reuse_summary = @import("actions/reference/reuse_reference_reconciliation_
 const check_summary_reuse = @import("actions/reference/check_reference_summary_reuse.zig").Action{ .validator = f.validate_summary.validator };
 
 test "native summaries preserve normalized child content tokens and original producer lineage" {
-    try nativeSummaryCase(std.testing.allocator);
     try std.testing.checkAllAllocationFailures(std.testing.allocator, nativeSummaryCase, .{});
 }
 fn nativeSummaryCase(allocator: std.mem.Allocator) !void {
@@ -1622,7 +1610,6 @@ test "native reuse binding retains its child after the preceding pipeline value 
 }
 
 test "summary normalization preserves occurrence provenance and distinct source literals" {
-    try summaryNormalizationCase(std.testing.allocator);
     try std.testing.checkAllAllocationFailures(std.testing.allocator, summaryNormalizationCase, .{});
 }
 

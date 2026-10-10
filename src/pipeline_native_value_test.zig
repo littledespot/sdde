@@ -36,24 +36,17 @@ test "sealed native results keep identity and have one owner on apply discard an
     }
 }
 
-test "native ownership transfer rejects wrong type and exceeded bounds without consuming the owner" {
-    var destroyed: usize = 0;
-    const owner = try Owner.create(std.testing.allocator, &destroyed);
-    defer Owner.destroy(owner);
-    const schema = values.schema(.valid_toolchain, SealA, 1, @sizeOf(Owner));
-    try std.testing.expectError(error.DataSchemaMismatch, values.adopt(std.testing.allocator, schema, SealB, Owner, owner, Access(SealB).get, Owner.destroy, @sizeOf(Owner)));
-    try std.testing.expectError(error.DataValueLimitExceeded, values.adopt(std.testing.allocator, schema, SealA, Owner, owner, Access(SealA).get, Owner.destroy, @sizeOf(Owner) + 1));
-    try std.testing.expectEqual(@as(usize, 0), destroyed);
-}
-
 test "native ownership transfer releases every allocation on allocation failures" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{});
 }
 
-test "uncapped sealed ownership does not disable declared bounds or ordinary copy limits" {
+test "native ownership rejects wrong types and bounds without consuming the owner or weakening copy limits" {
     var destroyed: usize = 0;
     const owner = try Owner.create(std.testing.allocator, &destroyed);
     const bounded = values.schema(.valid_toolchain, SealA, 1, @sizeOf(Owner));
+    try std.testing.expectError(error.DataSchemaMismatch, values.adopt(std.testing.allocator, bounded, SealB, Owner, owner, Access(SealB).get, Owner.destroy, @sizeOf(Owner)));
+    try std.testing.expectError(error.DataValueLimitExceeded, values.adopt(std.testing.allocator, bounded, SealA, Owner, owner, Access(SealA).get, Owner.destroy, @sizeOf(Owner) + 1));
+    try std.testing.expectEqual(@as(usize, 0), destroyed);
     try std.testing.expectError(error.DataValueLimitExceeded, values.adopt(std.testing.allocator, bounded, SealA, Owner, owner, Access(SealA).get, Owner.destroy, null));
     const uncapped = values.schema(.valid_toolchain, SealA, 1, null);
     const native = try values.adopt(std.testing.allocator, uncapped, SealA, Owner, owner, Access(SealA).get, Owner.destroy, null);

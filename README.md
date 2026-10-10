@@ -92,6 +92,12 @@ they do not assess prompt quality. The separately invoked live `e2e-spec`
 command runs the configured LLM and grades its published output against the
 rubric.
 
+Parser and schema matrices run at their owning unit boundaries; workflow tests
+use representative cases to check routing, evidence and accounting. Historical
+calibration inputs and results under `test/calibration` retain experiment evidence;
+the automated suite does not pin every frozen panel's counts, model settings or
+prompt bytes. Calibration and live E2E execution remain separately invoked.
+
 The specification-generation integration matrix emits tab-separated
 `scenario-cost` rows to stderr, with the zero-based scenario index, outcome and
 milliseconds spent in fixture setup, bootstrap, runner setup, execution,

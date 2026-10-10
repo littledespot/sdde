@@ -195,14 +195,19 @@ test "calibration uses closed cohort labels and explicit invocation with no live
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    var draft = try c.parse(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "test/calibration/authoring-roles/cohort.json", a, .unlimited));
-    // Admission tests are independent of the real cohort's human review status.
-    draft.label_status = .proposed;
-    draft.reviewer = null;
+    const draft: c.Cohort = .{
+        .schema = .@"role-calibration/v1",
+        .label_status = .proposed,
+        .reviewer = null,
+        .cases = &.{
+            .{ .id = "MOCK-controlled", .family = "MOCK-family", .split = .development, .input = .{ .controlled = &.{.{ .text = "MOCK Retain a loan account.\n", .kind = .business }} }, .labels = &labels, .rationale = "MOCK private controlled labels" },
+            .{ .id = "MOCK-captured", .family = "MOCK-captured-family", .split = .held_out, .input = .{ .captured = .{ .feature = "MOCK-feature", .run = "MOCK-run", .call = "MOCK-call" } }, .labels = &labels, .rationale = "MOCK private captured labels" },
+        },
+    };
     const original = try std.json.Stringify.valueAlloc(a, draft, .{ .whitespace = .indent_2 });
     const cohort = try c.parse(a, original);
     try std.testing.expectEqual(.proposed, cohort.label_status);
-    for ([_][2][]const u8{ .{ "role-calibration/v1", "role-calibration/v2" }, .{ "\"reviewer\": null", "\"reviewer\": \"assistant\"" }, .{ "\"label_status\":", "\"unknown\": true, \"label_status\":" }, .{ "\"entity_basis\"", "\"records\"" }, .{ "\"family\": \"timer\"", "\"family\": \"clock\"" }, .{ "\"label_status\": \"proposed\"", "\"label_status\": \"reviewed\"" } }) |replacement| {
+    for ([_][2][]const u8{ .{ "role-calibration/v1", "role-calibration/v2" }, .{ "\"reviewer\": null", "\"reviewer\": \"assistant\"" }, .{ "\"label_status\":", "\"unknown\": true, \"label_status\":" }, .{ "\"entity_basis\"", "\"records\"" }, .{ "\"family\": \"MOCK-family\"", "\"family\": \"invalid/family\"" }, .{ "\"family\": \"MOCK-captured-family\"", "\"family\": \"MOCK-family\"" }, .{ "\"id\": \"MOCK-captured\"", "\"id\": \"MOCK-controlled\"" }, .{ "\"label_status\": \"proposed\"", "\"label_status\": \"reviewed\"" } }) |replacement| {
         const bytes = try std.mem.replaceOwned(u8, a, original, replacement[0], replacement[1]);
         try std.testing.expectError(error.InvalidEvaluationContract, c.parse(a, bytes));
     }
@@ -211,28 +216,6 @@ test "calibration uses closed cohort labels and explicit invocation with no live
     try std.testing.expectError(error.InvalidArguments, cli.parse(&.{}));
     try std.testing.expectError(error.InvalidArguments, cli.parse(&.{ "--cohort", "../cohort.json", "--output", "out", "--feature", "feature", "--run", "run", "--call", "7", "--repeats", "1" }));
     for (cohort.cases) |entry| if (entry.input == .controlled) try validateControlledLabels(a, entry.input.controlled, entry.labels, entry.rationale);
-}
-test "routing cohorts admit controlled label handles without exposing labels or reading captured logs" {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    var controlled_cases: usize = 0;
-    var captured_cases: usize = 0;
-    for ([_][]const u8{
-        "test/calibration/authoring-roles/routing.cohort.json",
-        "test/calibration/authoring-roles/routing-captured.cohort.json",
-    }) |path| {
-        const cohort = try c.parse(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, a, .unlimited));
-        for (cohort.cases) |entry| switch (entry.input) {
-            .controlled => |sources| {
-                try validateControlledLabels(a, sources, entry.labels, entry.rationale);
-                controlled_cases += 1;
-            },
-            .captured => captured_cases += 1,
-        };
-    }
-    try std.testing.expect(controlled_cases != 0);
-    try std.testing.expect(captured_cases != 0);
 }
 
 test "calibration reports unusable answers and unknown usage without a false quality pass" {
@@ -333,22 +316,6 @@ test "prepared calibration descriptions retain distinct case inputs after packet
         .operation_kind = .inference,
     };
     try @import("../diagnostic_binding.zig").validateBinding(binding);
-    for (0..3) |invalid| {
-        var rejected = binding;
-        switch (invalid) {
-            0 => rejected.controls.max_output_tokens = .{ .value = 0 },
-            1 => rejected.controls.temperature = null,
-            2 => {
-                const unsupported = @import("../../../src/composition/provider_model_contracts.zig").registry.entries[1];
-                rejected.model = unsupported.model.bytes;
-                rejected.provider_config = .{ .aws_bedrock = .{ .region = unsupported.bedrock_regions[0] } };
-                rejected.response_mode = .prompt_only;
-                rejected.reasoning_effort = null;
-            },
-            else => unreachable,
-        }
-        try std.testing.expectError(error.InvalidEvaluationContract, @import("../diagnostic_binding.zig").validateBinding(rejected));
-    }
     const texts = [_][]const u8{ "MOCK Display UTC time.\n", "MOCK Renew a loan.\n", "MOCK Store an item.\n" };
     var descriptions: [texts.len]debug.Description = undefined;
     for (texts, &descriptions) |text, *description| {

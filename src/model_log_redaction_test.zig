@@ -1,13 +1,14 @@
 const std = @import("std");
 const redaction = @import("domain/model_log_redaction.zig");
 
-test "model log redaction preserves business exact strings and malformed model text" {
-    const input = "{not JSON: Hello, World! | 2044-03-12T01:02:03Z \\n\n雪";
-    var actual = try redaction.sanitize(std.testing.allocator, input, &.{ "", "a-real-credential" });
-    defer actual.deinit(std.testing.allocator);
-    try std.testing.expectEqualStrings(input, actual.bytes);
-    try std.testing.expectEqual(.utf8, actual.encoding);
-    try std.testing.expect(!actual.redacted);
+test "model log redaction preserves empty responses business exact strings and malformed model text" {
+    for ([_][]const u8{ "", "{not JSON: Hello, World! | 2044-03-12T01:02:03Z \\n\n雪" }) |input| {
+        var actual = try redaction.sanitize(std.testing.allocator, input, &.{ "", "a-real-credential" });
+        defer actual.deinit(std.testing.allocator);
+        try std.testing.expectEqualStrings(input, actual.bytes);
+        try std.testing.expectEqual(.utf8, actual.encoding);
+        try std.testing.expect(!actual.redacted);
+    }
 }
 
 test "model log redaction removes raw and JSON escaped credentials before chunking" {
@@ -92,14 +93,6 @@ test "model log redaction base64 preserves invalid UTF8 after removing credentia
         try std.base64.standard.Decoder.decode(decoded, actual.bytes);
         try std.testing.expectEqualStrings(if (has_secret) "\xff" ++ redaction.marker ++ "\xc0tail" else input, decoded);
     }
-}
-
-test "model log redaction retains empty responses without fabricating content" {
-    var actual = try redaction.sanitize(std.testing.allocator, "", &.{ "", "credential" });
-    defer actual.deinit(std.testing.allocator);
-    try std.testing.expectEqualStrings("", actual.bytes);
-    try std.testing.expectEqual(.utf8, actual.encoding);
-    try std.testing.expect(!actual.redacted);
 }
 
 test "model log redaction releases allocations at every failure point" {

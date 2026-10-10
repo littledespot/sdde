@@ -5080,31 +5080,15 @@ test "YAML payload validation uses each exact compiled schema and retains the sa
             \\{"oneOf":[{"type":"object","properties":{"kind":{"const":"content"},"values":{"type":"array","minItems":1,"maxItems":2,"items":{"type":"integer","minimum":1,"maximum":2}},"marker":{"const":true}},"required":["kind","values","marker"],"additionalProperties":false},{"type":"object","properties":{"kind":{"const":"question"},"subject":{"enum":["alpha","beta"]}},"required":["kind","subject"],"additionalProperties":false}]}
         ;
         const Case = struct { schema: []const u8 = schema_bytes, body: []const u8, rejection: ?payload_validation.Rejection = null };
+        // Exhaustive scalar, collection and prefix matrices belong to
+        // model_payload_schema_test and model_envelope_test. These cases prove
+        // both YAML bindings preserve schema choice, rejection and association.
         for ([_]Case{
             .{ .body = "{\"answer\":\"é😀\"}" },
-            .{ .body = "{\"{\"answer\":\"é😀\"}" },
-            .{ .body = "{\"{\"answer\":42}", .rejection = .type_mismatch },
-            .{ .body = "{\"{\"answer\":\"ok\",\"approved\":true}", .rejection = .unknown_property },
-            .{ .body = "{\"answer{\"answer\":\"é😀\"}" },
-            .{ .body = "{\"answer{\"answer\":42}", .rejection = .type_mismatch },
-            .{ .body = "{\"answer{\"answer\":\"ok\",\"approved\":true}", .rejection = .unknown_property },
-            .{ .schema = variants, .body = "{\"kind{\"kind\":\"content\",\"values\":[1,2],\"marker\":true}" },
-            .{ .body = "{\"answer\":\"{\"answer\":\"é😀\"}" },
-            .{ .body = "{\"answer\":\"{\"answer\":42}", .rejection = .type_mismatch },
-            .{ .body = "{\"answer\":\"{\"answer\":\"ok\",\"approved\":true}", .rejection = .unknown_property },
-            .{ .schema = variants, .body = "{\"kind\":\"{\"kind\":\"content\",\"values\":[1,2],\"marker\":true}" },
-            .{ .body = "{\"answer\":\"" ++ "x" ** 20_000 ++ "\"}" },
             .{ .body = "{}", .rejection = .missing_required_property },
             .{ .body = "{\"answer\":42}", .rejection = .type_mismatch },
-            .{ .body = "{\"answer\":\"ok\",\"approved\":true}", .rejection = .unknown_property },
-            .{ .body = "{\"answer\":\"" ++ "x" ** 20_001 ++ "\"}", .rejection = .string_length },
             .{ .schema = variants, .body = "{\"kind\":\"content\",\"values\":[1.0,2e0],\"marker\":true}" },
-            .{ .schema = variants, .body = "{\"kind\":\"question\",\"subject\":\"alpha\"}" },
             .{ .schema = variants, .body = "{\"kind\":\"other\"}", .rejection = .unknown_variant },
-            .{ .schema = variants, .body = "{\"kind\":\"content\",\"values\":[1,3],\"marker\":true}", .rejection = .integer_range },
-            .{ .schema = variants, .body = "{\"kind\":\"content\",\"values\":[],\"marker\":true}", .rejection = .array_length },
-            .{ .schema = variants, .body = "{\"kind\":\"content\",\"values\":[1],\"marker\":false}", .rejection = .constant_mismatch },
-            .{ .schema = variants, .body = "{\"kind\":\"question\",\"subject\":\"other\"}", .rejection = .enum_mismatch },
         }) |case| {
             var fixture: Fixture = undefined;
             try fixture.init(std.testing.allocator);
@@ -5139,9 +5123,7 @@ test "YAML payload validation uses each exact compiled schema and retains the sa
 
 test "YAML payload validation preserves protocol provider cancellation and observation rejection" {
     for ([_]bool{ false, true }) |consolidated| {
-        for ([_][]const u8{ "{", "[]", "{\"answer\":1,\"answer\":2}", "{\"{\"answer\":1,\"answer\":2}", "{\"{\"answer\":1} trailing", "{} trailing" }) |body| {
-            try checkUnvalidatedPayload(.{ .complete = .{ .content = body, .input_tokens = 5, .output_tokens = 2 } }, false, consolidated);
-        }
+        try checkUnvalidatedPayload(.{ .complete = .{ .content = "{", .input_tokens = 5, .output_tokens = 2 } }, false, consolidated);
         for (std.enums.values(provider.ProviderNonCandidateStopReason)) |reason| {
             try checkUnvalidatedPayload(.{ .stopped = .{ .reason = reason, .input_tokens = 5, .output_tokens = 2 } }, false, consolidated);
         }
@@ -5322,6 +5304,8 @@ test "YAML payload validation remains available at the token budget without anot
         try std.testing.expectEqual(.ok, harness.run());
         try std.testing.expectEqual(.exhausted, runner.tokenLedger().status());
         try std.testing.expect((try payloadResult(&runner)).outcome() == .valid);
+        try std.testing.expectEqualStrings("{\"answer\":\"value\"}", (try observationResult(&runner)).outcome().validated.result().complete.content());
+        try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
         try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected.token_budget);
         try expectResponseAccounting(&runner, &fake, graph.authority.total_model_token_budget.value);
     }
@@ -5410,14 +5394,16 @@ test "compiled payload validation cannot bypass its candidate or add effects" {
     }
 }
 
-test "YAML decodes complete JSON objects and retains syntax-only evidence and exact numbers" {
-    for ([_][]const u8{
-        "{}",
-        " \t\n{\"answer\":\"value\"}\r\n",
-        "{\"values\":[null,true,false,{\"unicode\":\"\\u00e9\"}]}",
-        "{\"kind\":\"unrecognized\",\"requestId\":\"not-authority\",\"n\":1e9999}",
-        "{\"answer\":\"" ++ "x" ** 65_537 ++ "\"}",
-    }) |bytes| {
+test "YAML decoding retains syntax-only evidence and rejected outcomes with exact accounting" {
+    const Case = struct { bytes: []const u8, accepted: bool };
+    // Envelope unit tests own the complete JSON syntax matrix. Here the large
+    // payload and numeric lexeme prove the workflow adds no hidden size/schema
+    // policy; one rejection proves the invalid transition and retained origin.
+    for ([_]Case{
+        .{ .bytes = "{\"kind\":\"unrecognized\",\"requestId\":\"not-authority\",\"n\":1e9999}", .accepted = true },
+        .{ .bytes = "{\"answer\":\"" ++ "x" ** 65_537 ++ "\"}", .accepted = true },
+        .{ .bytes = "{\"x\":1,\"x\":2}", .accepted = false },
+    }) |case| {
         var fixture: Fixture = undefined;
         try fixture.init(std.testing.allocator);
         defer fixture.deinit();
@@ -5425,50 +5411,30 @@ test "YAML decodes complete JSON objects and retains syntax-only evidence and ex
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
         var fake = invocationProvider(&runner, std.testing.allocator);
-        fake.invocation_plan.complete.content = bytes;
+        fake.invocation_plan.complete.content = case.bytes;
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         var harness: Harness = .{ .runner = &runner };
-        try std.testing.expectEqual(.ok, harness.run());
+        try std.testing.expectEqual(@as(workflow.OutcomeTag, if (case.accepted) .ok else .invalid), harness.run());
         const decoded = try envelopeResult(&runner);
-        const candidate = decoded.outcome().decoded;
         const observation = try observationResult(&runner);
         try std.testing.expect(decoded.source() == observation);
-        try std.testing.expect(candidate.association() == observation.outcome().validated);
-        try std.testing.expect(candidate.association().request() == (try currentRequest(&runner)).prepared().?);
-        try std.testing.expectEqualStrings(bytes, candidate.association().result().complete.content());
-        if (candidate.root().get("n")) |number| try std.testing.expectEqualStrings("1e9999", number.number);
+        if (case.accepted) {
+            const candidate = decoded.outcome().decoded;
+            try std.testing.expect(candidate.association() == observation.outcome().validated);
+            try std.testing.expect(candidate.association().request() == (try currentRequest(&runner)).prepared().?);
+            if (candidate.root().get("n")) |number| try std.testing.expectEqualStrings("1e9999", number.number);
+        } else {
+            try std.testing.expectEqual(error.InvalidModelEnvelope, decoded.outcome().protocol_rejected.reason);
+            try std.testing.expectEqual(.invalid, runner.envelope.origins[@intFromEnum(envelope_workflow.schema.key)].?.outcome);
+        }
+        try std.testing.expectEqualStrings(case.bytes, observation.outcome().validated.result().complete.content());
         try std.testing.expectEqual(@as(u128, 7), runner.tokenLedger().committed());
         try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
         try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
         try std.testing.expectEqual(@as(usize, 0), fake.count_call_count);
-        try std.testing.expectEqual(@as(usize, 1), fixture.observer.calls);
-        try std.testing.expectEqual(.invoked, std.meta.activeTag(runner.model_accounting.?.current_operations.record(observation.operationId()).?.state));
-    }
-}
-
-test "YAML decoding returns protocol invalid for malformed duplicate non-object and trailing JSON" {
-    for ([_][]const u8{
-        "",         " ",                 "{",                       "[]",                              "null",  "true",        "17",     "\"text\"",
-        "{\"x\":}", "{\"x\":1,\"x\":2}", "{\"x\":1,\"\\u0078\":2}", "{\"items\":[{\"x\":1,\"x\":2}]}", "{} {}", "{} trailing", "{}\x00", "```json\n{}\n```",
-    }) |bytes| {
-        var fixture: Fixture = undefined;
-        try fixture.init(std.testing.allocator);
-        defer fixture.deinit();
-        const graph = try fixture.compile(try envelopeYaml(&fixture));
-        var runner = fixture.runner(graph, std.testing.allocator);
-        defer runner.deinit();
-        var fake = invocationProvider(&runner, std.testing.allocator);
-        fake.invocation_plan.complete.content = bytes;
-        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-        var harness: Harness = .{ .runner = &runner };
-        try std.testing.expectEqual(.invalid, harness.run());
-        try std.testing.expectEqual(error.InvalidModelEnvelope, (try envelopeResult(&runner)).outcome().protocol_rejected.reason);
-        try std.testing.expectEqual(.invalid, runner.envelope.origins[@intFromEnum(envelope_workflow.schema.key)].?.outcome);
-        try std.testing.expectEqualStrings(bytes, (try observationResult(&runner)).outcome().validated.result().complete.content());
-        try std.testing.expectEqual(@as(u128, 7), runner.tokenLedger().committed());
-        try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
         try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
-        try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
+        try std.testing.expectEqual(@as(usize, if (case.accepted) 1 else 0), fixture.observer.calls);
+        try std.testing.expectEqual(.invoked, std.meta.activeTag(runner.model_accounting.?.current_operations.record(observation.operationId()).?.state));
     }
 }
 
@@ -5872,25 +5838,6 @@ test "validated observation owns its request and response after source values an
     try std.testing.expectEqualStrings(schema_bytes, result.outcome().validated.request().response_schema.bytes());
     try std.testing.expectEqualStrings("origin", result.operationId().model_request_id.model_operation_id.workflow_step_id.bytes);
     try std.testing.expectEqual(@as(usize, 1), fixture.authorization.destroyed_count);
-}
-
-test "observation validation remains available after exact workflow token exhaustion" {
-    var fixture: Fixture = undefined;
-    try fixture.init(std.testing.allocator);
-    defer fixture.deinit();
-    const graph = try fixture.compile(try observationYaml(&fixture));
-    var runner = fixture.runner(graph, std.testing.allocator);
-    defer runner.deinit();
-    var fake = invocationProvider(&runner, std.testing.allocator);
-    fake.invocation_plan = .{ .complete = .{ .content = "{}", .input_tokens = graph.authority.total_model_token_budget.value, .output_tokens = 0 } };
-    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-    var harness: Harness = .{ .runner = &runner };
-    try std.testing.expectEqual(.ok, harness.run());
-    try std.testing.expectEqual(.exhausted, runner.tokenLedger().status());
-    try std.testing.expectEqual(@as(u64, 1), runner.tokenLedger().revision().value);
-    try std.testing.expectEqualStrings("{}", (try observationResult(&runner)).outcome().validated.result().complete.content());
-    try std.testing.expectEqual(error.WorkflowTokenBudgetExceeded, runner.bindings().invokeStep(.{ .bytes = "call" }).rejected.token_budget);
-    try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
 }
 
 test "observation YAML rejects missing inputs hidden operations and parameter overrides" {

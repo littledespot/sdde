@@ -5796,7 +5796,6 @@ test "persisted extraction binding resolves fresh compiled authority after origi
     const a = arena.allocator();
     const stored = try @import("domain/strict_json.zig").decode(contract.Binding, a, bytes, .{ .maximum_bytes = 10000, .maximum_depth = 32 });
     var current = try fixture_type.init(a);
-    try contract.validate(std.testing.allocator, stored, &current.authority, .source_blocks_v1);
     try std.testing.checkAllAllocationFailures(std.testing.allocator, contract.validate, .{ stored, &current.authority, .source_blocks_v1 });
     current.authority.workflow_version += 1;
     try std.testing.expectError(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, contract.validate(a, stored, &current.authority, .source_blocks_v1));
