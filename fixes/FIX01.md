@@ -3321,3 +3321,51 @@ checks passed:
 - `git diff --check`: passed.
 
 No live model calls or E2E runs were performed.
+
+### 9.19 Loss-localization response contract — 10 October 2026
+
+**Scope: R6's structural response mismatch only.** In retained E2E run
+`2026-10-10T00-13-29Z-6bd8dbfecf59623cb5ad1639d2c1f230`, call 25 returned
+`location.kind: unlocalized` together with a producer comparison. The schema
+allowed those fields independently, but `source_omission.validate` correctly
+rejected their combination. This was a gap between schema admission and the
+existing evidence invariant in §12.8/§22.1, not permission to weaken admission.
+
+The model response now uses the existing closed tagged-union schema profile:
+
+- `{"kind":"unlocalized"}` has no producer evidence; native binding constructs
+  the canonical unlocalized location and null comparison.
+- `{"kind":"localized","location":...,"comparison":...}` requires a producer
+  location and its source-line/producer-loss comparison. The location alternatives
+  exclude `unlocalized`; existing native eligibility restricts producers and IDs.
+- When no producer is available, the shared packet excludes the complete
+  `localized` alternative. No empty nested choice or fallback schema is generated.
+
+The existing schema compiler, provider projection and protocol-correction path
+consume that one selected contract. Source preservation, pre-authoring review and
+post-authoring review share the same packet/collector and native conversion.
+The obsolete independent-field wire shape is removed; canonical findings,
+persisted evidence and full source/producer validation keep their current shapes
+and authority. The concise loss prompt and mock response encoder use the new
+contract. No generic engine feature, retry allowance or repair authority is added.
+
+Offline regressions cover all producer variants, invalid combinations, unavailable
+producers/IDs, empty producer catalogues, schema/native decoding, prompt and native
+provider modes, protocol correction, shared review scopes and canonical readback.
+**Validation passed:**
+
+- `zig build test-model-payload-schema test-specification-generation --global-cache-dir .zig-cache/global --summary all`:
+  **298/298 tests**.
+- `zig build lint test-architecture test-model-result-schema test-model-request-workflow --global-cache-dir .zig-cache/global --summary all`:
+  **11/11 steps, 539/539 tests**.
+- `zig build verify --global-cache-dir .zig-cache/global --summary all`: passed,
+  including the full unit suite, separate offline integration suite and packaged
+  clean-environment smoke checks.
+- `git diff --check`: passed.
+
+The implementation and offline verification of this bounded item are complete.
+
+This closes a structural mismatch; it does not establish correct semantic loss
+attribution or improved live completion. R9's localization-origin gap (§9.12),
+earlier authoring defects and broader R6/R7 calibration remain open. No live call
+or E2E run is part of this change.

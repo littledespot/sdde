@@ -3,4 +3,5 @@ and each captured producer output. Select a location only when that producer los
 or distorted the meaning: cite its source lines from loss_sources and explain
 what its output lacks in comparison.producer_loss. Eligibility is not evidence of
 loss. If meaning survives upstream, or no unique producer defect is established,
-return unlocalized with comparison null; candidate-local repair stays downstream.
+return unlocalized; otherwise return localized with its location and comparison.
+Candidate-local repair stays downstream.

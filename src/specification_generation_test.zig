@@ -3424,7 +3424,7 @@ test "localized disposition evidence replaces positive field lineage in every so
             const selected: loss.Location = .{ .reconciliation_disposition = discarded };
             const wire = try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, selected);
             try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = wire });
-            try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = try json.encode(loss.Assessment, a, .{ .location = .{ .reconciliation_disposition = retained }, .comparison = null }), .rejection = .enum_mismatch, .path = "/location/ordinal" });
+            try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, .{ .reconciliation_disposition = retained }), .rejection = .enum_mismatch, .path = "/location/ordinal" });
             const collected = (try support.collectLoss(a, inputs, fixture.context, .{ .accepted = .{ .inputs = initial.inputs, .candidate = pending } }, packet, wire)).accepted;
             const located = collected.candidate.review.entries[index].value;
             try std.testing.expectEqualDeep(&[_]r.ClaimId{discarded}, located.provenance.claim_ids);
@@ -3438,7 +3438,7 @@ test "localized disposition evidence replaces positive field lineage in every so
                 const rejected = try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, .{ .claim_ids = wrong, .clarification_response_ids = &.{} }, located.source_ids, located.detail, selected, null);
                 try std.testing.expect(rejected == .rejected);
             }
-            const invalid_location = try model.bindLoss(required, initial.candidate.review.entries[index].value, .{ .location = .{ .reconciliation_disposition = retained }, .comparison = null });
+            const invalid_location = try model.bindLoss(required, initial.candidate.review.entries[index].value, .{ .localized = .{ .location = .{ .reconciliation_disposition = retained }, .comparison = (try @import("test_fixtures/source_omission_evidence.zig").comparison(inputs, selected)).? } });
             const rejected = try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, invalid_location.provenance, invalid_location.source_ids, invalid_location.detail, invalid_location.loss, null);
             try std.testing.expectEqual(.invalid_loss, rejected.rejected.issue);
             try std.testing.checkAllAllocationFailures(std.testing.allocator, lossPacketAllocationCase, .{ inputs, fixture.context, pending });
@@ -3506,13 +3506,18 @@ test "loss availability shares native admission for tokens groups and retained d
         defer packets.release(source_only_packet);
         const source_only_body = try std.json.parseFromSlice(std.json.Value, a, source_only_packet.body(), .{});
         try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, body.value.object.get("loss_sources").?, .{}), try std.json.Stringify.valueAlloc(a, source_only_body.value.object.get("loss_sources").?, .{}));
+        const source_only_schema = try schema.restrict(a, canonical.select(source_only_packet.resultDefinition().?).?, source_only_packet.excludedVariants(), source_only_packet.integerChoices());
+        defer source_only_schema.release();
+        try @import("model_payload_schema_test.zig").checkCompiled(source_only_schema.selected(), .{ .bytes = "{\"kind\":\"unlocalized\"}" });
+        const extraction_wire = try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, .{ .extraction_claim = fixture.extracted.ledger.chunks[0].scope.chunk_id });
+        try @import("model_payload_schema_test.zig").checkCompiled(source_only_schema.selected(), .{ .bytes = extraction_wire, .rejection = .unknown_property, .path = "/location" });
         const narrowed = try schema.restrict(a, canonical.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
         defer narrowed.release();
         for (locations) |location| try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, location) });
-        try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = "{\"location\":{\"kind\":\"reconciliation_disposition\",\"ordinal\":1},\"comparison\":null}", .rejection = .unknown_variant, .path = "/location/kind" });
-        try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = "{\"location\":{\"kind\":\"reconciliation_conflict\",\"ordinal\":999},\"comparison\":null}", .rejection = .enum_mismatch, .path = "/location/ordinal" });
+        try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"reconciliation_disposition\",\"ordinal\":1},\"comparison\":null}", .rejection = .unknown_variant, .path = "/location/kind" });
+        try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = "{\"kind\":\"localized\",\"location\":{\"kind\":\"reconciliation_conflict\",\"ordinal\":999},\"comparison\":null}", .rejection = .enum_mismatch, .path = "/location/ordinal" });
         const token = fixture.extracted_text.entries[0].token_classifications[0].id();
-        try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = try json.encode(loss.Assessment, a, .{ .location = .{ .token_classification = token }, .comparison = null }), .rejection = if (preserved) .unknown_variant else null, .path = if (preserved) "/location/kind" else null });
+        try @import("model_payload_schema_test.zig").checkDocument(narrowed.selected().modelBytes(), .{ .bytes = try @import("test_fixtures/source_omission_evidence.zig").encode(a, inputs, .{ .token_classification = token }), .rejection = if (preserved) .unknown_variant else null, .path = if (preserved) "/location/kind" else null });
         try std.testing.expectError(error.InvalidRequiredAuthority, loss.validate(a, inputs, fixture.context.inputs, .candidate_omission, evidence_value, .{ .reconciliation_signal = .{ .ordinal = 999 } }));
     }
 }
@@ -3843,7 +3848,7 @@ test "record and signal review assignments expose resolved targets and keep loca
             try std.testing.expect(!loss_subject.contains("instruction"));
             try std.testing.expectEqualStrings(wording, loss_subject.get("target").?.object.get("text").?.string);
             for ([_][]const u8{ "loss_sources", "claims", "extraction", "dispositions", "signals", "conflicts" }) |key| try std.testing.expect(loss_body.contains(key));
-            const unlocalized = try support.collectLoss(a, inputs, fixture.context, finding, locate, "{\"location\":{\"kind\":\"unlocalized\"},\"comparison\":null}");
+            const unlocalized = try support.collectLoss(a, inputs, fixture.context, finding, locate, "{\"kind\":\"unlocalized\"}");
             try std.testing.expectEqual(.candidate_omission, unlocalized.pending.review.entries[target_index].value.kind);
             try std.testing.expectEqual(.unlocalized, std.meta.activeTag(unlocalized.pending.review.entries[target_index].value.loss));
         }
@@ -6147,7 +6152,9 @@ test "FIX002 diagnostic producer evidence survives insertion repair and readback
     try std.testing.expect(!omission_object.contains("provenance"));
     const verdict = try model.decode(a, omission_wire, rule);
     try std.testing.expectEqual(.unlocalized, verdict.loss);
-    try std.testing.expectEqualDeep(entries[0].value, try model.bindLoss(rule, verdict, .{ .location = .{ .reconciliation_conflict = conflict }, .comparison = entries[0].value.loss_comparison }));
+    try std.testing.expectEqualDeep(entries[0].value, try model.bindLoss(rule, verdict, .{ .localized = .{ .location = .{ .reconciliation_conflict = conflict }, .comparison = entries[0].value.loss_comparison.? } }));
+    try std.testing.expectError(error.InvalidJsonDocument, model.bindLoss(rule, verdict, .{ .localized = .{ .location = .{ .unlocalized = .{} }, .comparison = entries[0].value.loss_comparison.? } }));
+    try std.testing.expectEqualDeep(verdict, try model.bindLoss(rule, verdict, .{ .unlocalized = .{} }));
     var echoed = omission_object;
     try echoed.put(a, "provenance", .{ .object = (try std.json.parseFromSlice(std.json.Value, a, "{\"claim_ids\":[1,2]}", .{})).value.object });
     try std.testing.expectError(error.InvalidJsonDocument, model.decode(a, try std.json.Stringify.valueAlloc(a, std.json.Value{ .object = echoed }, .{}), rule));
@@ -6168,7 +6175,7 @@ test "FIX002 diagnostic producer evidence survives insertion repair and readback
     try std.testing.expect(located == .accepted);
     try std.testing.expect(located.accepted.candidate.pending_localization == null);
     try std.testing.expectEqualDeep(original.candidate.review.entries[0].value, located.accepted.candidate.review.entries[0].value);
-    const wrong_loss = try review.collectLoss(a, inputs, fixture.context, .{ .accepted = .{ .inputs = original.inputs, .candidate = awaiting_loss } }, loss_packet, try json.encode(loss.Assessment, a, .{ .location = .{ .reconciliation_conflict = .{ .ordinal = 999 } }, .comparison = null }));
+    const wrong_loss = try review.collectLoss(a, inputs, fixture.context, .{ .accepted = .{ .inputs = original.inputs, .candidate = awaiting_loss } }, loss_packet, try json.encode(loss.Assessment, a, .{ .localized = .{ .location = .{ .reconciliation_conflict = .{ .ordinal = 999 } }, .comparison = entries[0].value.loss_comparison.? } }));
     try std.testing.expect(wrong_loss == .rejected);
     try std.testing.expectEqual(.candidate_omission, wrong_loss.rejected.candidate.?.review.entries[0].value.kind);
     try std.testing.expectEqual(.invalid_loss, wrong_loss.rejected.rejection.selected().?.evidence.?.issue);

@@ -26,5 +26,6 @@ pub fn comparison(inputs: authority.Inputs, location: loss.Location) !?loss.Comp
 }
 
 pub fn encode(a: std.mem.Allocator, inputs: authority.Inputs, location: loss.Location) ![]const u8 {
-    return @import("../domain/model_candidate_json.zig").encode(loss.Assessment, a, .{ .location = location, .comparison = try comparison(inputs, location) });
+    const assessment: loss.Assessment = if (location == .unlocalized) .{ .unlocalized = .{} } else .{ .localized = .{ .location = location, .comparison = (try comparison(inputs, location)).? } };
+    return @import("../domain/model_candidate_json.zig").encode(loss.Assessment, a, assessment);
 }

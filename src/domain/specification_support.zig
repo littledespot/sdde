@@ -193,6 +193,10 @@ pub fn Contract(comptime purpose: Purpose) type {
             const schema = @import("model_result_schema.zig");
             var excluded: std.ArrayList(schema.ExcludedVariant) = .empty;
             try excluded.appendSlice(scratch, contextual.excludedVariants());
+            const has_producer = for (locations) |location| {
+                if (location != .unlocalized) break true;
+            } else false;
+            if (!has_producer) try excluded.append(scratch, .{ .kind = "localized" });
             var choices: std.ArrayList(schema.IntegerChoice) = .empty;
             try choices.appendSlice(scratch, contextual.integerChoices());
             for (std.enums.values(std.meta.Tag(loss.Location))) |kind| {

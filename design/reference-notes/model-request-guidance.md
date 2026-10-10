@@ -56,6 +56,11 @@ This summarizes the existing contracts in
 - Loss localization keeps its omission verdict fixed. An upstream location requires
   captured source lines and a producer-loss comparison; the existing source and
   loss validators check association and retain the evidence for repair/readback.
+  The shared response schema couples these choices: `unlocalized` has no payload;
+  `localized` requires an eligible producer `location` and `comparison`. Native
+  binding constructs the canonical unlocalized location and null comparison.
+  An empty producer catalogue excludes `localized`. Initial requests, native
+  provider guidance and protocol corrections use this same selected schema.
   This does not prove semantic loss. `unlocalized` retains the existing
   candidate-local repair or failure route, without a new reviewer or retry.
 

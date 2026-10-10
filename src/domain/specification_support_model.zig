@@ -91,9 +91,18 @@ pub fn decode(a_alloc: std.mem.Allocator, bytes: []const u8, required: evidence.
 pub fn bindLoss(required: evidence.Requirements, value: Canonical, assessment: @import("source_omission.zig").Assessment) json.Error!Canonical {
     if (value.kind != .candidate_omission) return error.InvalidJsonDocument;
     var bound = value;
-    bound.loss = assessment.location;
-    bound.loss_comparison = assessment.comparison;
-    bound.provenance.claim_ids = try claimsFor(required, .candidate_omission, assessment.location);
+    switch (assessment) {
+        .unlocalized => {
+            bound.loss = .{ .unlocalized = .{} };
+            bound.loss_comparison = null;
+        },
+        .localized => |selected| {
+            if (selected.location == .unlocalized) return error.InvalidJsonDocument;
+            bound.loss = selected.location;
+            bound.loss_comparison = selected.comparison;
+        },
+    }
+    bound.provenance.claim_ids = try claimsFor(required, .candidate_omission, bound.loss);
     return bound;
 }
 

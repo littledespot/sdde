@@ -18,7 +18,12 @@ pub const Comparison = struct {
     source: struct { chunk_id: r.extraction.identity.ChunkId, lines: @import("source_selections.zig").Selection },
     producer_loss: []const u8,
 };
-pub const Assessment = struct { location: Location, comparison: ?Comparison };
+/// Model wire alternatives couple a producer selection to its required evidence.
+/// Canonical findings retain Location and the optional comparison separately.
+pub const Assessment = union(enum) {
+    unlocalized: struct {},
+    localized: struct { location: Location, comparison: Comparison },
+};
 pub const SourceLines = struct { chunk_id: r.extraction.identity.ChunkId, source_id: r.extraction.identity.SourceId, lines: []const @import("source_selections.zig").Choice };
 
 /// Allocations belong to the caller's request arena.
