@@ -43,7 +43,9 @@ pub const Assignment = struct {
 };
 
 pub const Span = struct { chunk_id: r.extraction.identity.ChunkId, lines: selections.Selection };
-pub const Assessment = struct { comparison_id: Id, result: Verdict, sources: []const Span, members: []const MemberId, explanation: []const u8 };
+/// The comparison ID binds the complete native collection. A response describes
+/// its semantic judgment; it does not select the evidence that was assessed.
+pub const Assessment = struct { comparison_id: Id, result: Verdict, sources: []const Span, explanation: []const u8 };
 pub const Response = struct { assessments: []const Assessment };
 pub const Attribution = union(enum) { unresolved, established: Owner };
 pub const Evidence = struct {
@@ -95,12 +97,7 @@ pub fn admit(a: std.mem.Allocator, retained: Assignment, current: Assignment, so
         const assigned = try view(current, entry.comparison_id);
         for (response.assessments[0..index]) |prior| if (prior.comparison_id.ordinal == entry.comparison_id.ordinal) return error.InvalidPreservationComparison;
         if (std.mem.trim(u8, entry.explanation, " \r\n\t").len == 0 or entry.sources.len == 0) return error.InvalidPreservationComparison;
-        if ((assigned.members.len == 0 and entry.members.len != 0) or (assigned.members.len != 0 and entry.members.len == 0)) return error.InvalidPreservationComparison;
         if (entry.result == .preserved and assigned.members.len == 0) return error.InvalidPreservationComparison;
-        for (entry.members, 0..) |member, at| {
-            if (member.ordinal == 0 or member.ordinal > assigned.members.len) return error.InvalidPreservationComparison;
-            for (entry.members[0..at]) |prior| if (prior.ordinal == member.ordinal) return error.InvalidPreservationComparison;
-        }
         for (entry.sources) |span| {
             const offered = for (current.sources) |source| {
                 if (source.chunk_id.eql(span.chunk_id)) break source;

@@ -4582,7 +4582,10 @@ test "reviewed copied-token narrative loss repairs the bound field without upstr
         for (assessments) |*entry| entry.sources = try a.dupe(preservation.Span, &.{.{ .chunk_id = assigned.sources[0].chunk_id, .lines = .{ .first = .{ .ordinal = 5 }, .last = .{ .ordinal = 7 } } }});
         const comparisons: preservation.Response = .{ .assessments = assessments };
         const response = try json.encode(preservation.Response, a, comparisons);
+        const rendered_comparisons = try std.json.parseFromSlice(std.json.Value, a, response, .{});
+        for (rendered_comparisons.value.object.get("assessments").?.array.items) |entry| try std.testing.expect(!entry.object.contains("members"));
         const admitted = (try support.collectLoss(a, inputs, fixture.context, .{ .pending = pending }, loss_packet, response, .{ .request = .{ .value = 16 }, .attempt = .{ .value = 1 } })).accepted;
+        try std.testing.expectEqualDeep(assigned, admitted.candidate.review.entries[index].value.preservation.?.assignment);
         try std.testing.expect(admitted.candidate.review.entries[index].value.loss == .candidate);
         try std.testing.expectEqual(@as(u32, 15), admitted.candidate.origins[index].?.request.value);
         try std.testing.expectEqual(@as(u32, 16), admitted.candidate.review.entries[index].value.preservation.?.origin.?.request.value);
@@ -5877,7 +5880,7 @@ test "incomplete specifications publish supported business evidence and bound qu
                 3 => bad.open_clarifications = &.{.{ .stage = .spec, .ordinal = 0 }},
                 4 => bad.feature = .{ .bytes = "foreign" },
                 5 => bad.clarification.revision = 0,
-                6 => bad.schema = "specification-state/v10",
+                6 => bad.schema = "specification-state/v11",
                 7 => bad.id_ledger.next[0] = 0,
                 else => unreachable,
             }
@@ -6952,10 +6955,8 @@ fn preservationTest(a: std.mem.Allocator, fixture: *const Fixture, candidate: bo
 fn preservationResponse(a: std.mem.Allocator, assigned: preservation.Assignment, verdict: preservation.Verdict) !preservation.Response {
     const entries = try a.alloc(preservation.Assessment, assigned.comparisons.len);
     for (assigned.comparisons, entries) |view, *entry| {
-        const members = try a.alloc(preservation.MemberId, view.members.len);
-        for (view.members, members) |member, *id| id.* = member.id;
         const spans = try a.dupe(preservation.Span, &.{.{ .chunk_id = assigned.sources[0].chunk_id, .lines = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 1 } } }});
-        entry.* = .{ .comparison_id = view.id, .result = verdict, .sources = spans, .members = members, .explanation = "MOCK Comparison evidence." };
+        entry.* = .{ .comparison_id = view.id, .result = verdict, .sources = spans, .explanation = "MOCK Comparison evidence." };
     }
     return .{ .assessments = entries };
 }
@@ -6999,22 +7000,16 @@ test "bound preservation rejects missing duplicate foreign evidence and empty pr
     try std.testing.expectEqual(@as(usize, 2), assigned.comparisons[0].members.len);
     try std.testing.expect(assigned.comparisons[0].members[0].claim_id.ordinal != assigned.comparisons[0].members[1].claim_id.ordinal);
     try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, assigned, assigned, fixture.context.inputs, .{ .assessments = &.{} }));
-    for (0..8) |variant| {
+    for (0..5) |variant| {
         var response = try preservationResponse(a, assigned, .preserved);
         const entries = try a.dupe(preservation.Assessment, response.assessments);
         response.assessments = entries;
         switch (variant) {
             0 => entries[0].comparison_id.ordinal = 999,
-            1 => entries[0].members = &.{.{ .ordinal = 999 }},
-            2 => entries[0].members = &.{ .{ .ordinal = 1 }, .{ .ordinal = 1 } },
-            3 => entries[0].sources = &.{},
-            4 => entries[0].sources = &.{.{ .chunk_id = assigned.sources[0].chunk_id, .lines = .{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } }},
-            5 => entries[0].explanation = " ",
-            6 => {
-                entries[0].result = .lost;
-                entries[0].members = &.{};
-            },
-            7 => response.assessments = try a.dupe(preservation.Assessment, &.{ entries[0], entries[0] }),
+            1 => entries[0].sources = &.{},
+            2 => entries[0].sources = &.{.{ .chunk_id = assigned.sources[0].chunk_id, .lines = .{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } }},
+            3 => entries[0].explanation = " ",
+            4 => response.assessments = try a.dupe(preservation.Assessment, &.{ entries[0], entries[0] }),
             else => unreachable,
         }
         try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, assigned, assigned, fixture.context.inputs, response));
@@ -7026,6 +7021,88 @@ test "bound preservation rejects missing duplicate foreign evidence and empty pr
     var malformed = assigned;
     malformed.boundaries = &.{.{ .input = .deficient_subject, .output = .source_premise, .owner = null }};
     try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, malformed, malformed, fixture.context.inputs, good));
+}
+
+test "reported lost obligations admit against complete nonempty native collections without model member selection" {
+    const support = @import("domain/specification_support.zig").Source;
+    const json = @import("domain/model_candidate_json.zig");
+    // Supplied verdicts exercise admission only; native code does not prove that
+    // these mocked source and collection meanings justify the judgment.
+    for ([_][3][]const u8{
+        .{ "MOCK Shut down the pump after an alarm and keep it off until recovery.", "MOCK Record pump temperature.", "MOCK Pump monitoring does not state alarm shutdown or recovery." },
+        .{ "MOCK Enable backup cooling and sound an alarm when temperature is unsafe.", "MOCK Display temperature.", "MOCK Temperature display does not state cooling or alarm behavior." },
+    }) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example[0], null, true, example[1], 2);
+        defer fixture.deinit();
+        const state = try preservationTest(a, &fixture, false, example[0]);
+        const assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, state.pending);
+        try std.testing.expectEqual(@as(usize, 2), assigned.comparisons[0].members.len);
+        var response = try preservationResponse(a, assigned, .lost);
+        const assessments = try a.dupe(preservation.Assessment, response.assessments);
+        for (assessments) |*assessment| assessment.explanation = example[2];
+        response.assessments = assessments;
+        const bytes = try json.encode(preservation.Response, a, response);
+        const parsed = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
+        for (parsed.value.object.get("assessments").?.array.items) |entry| try std.testing.expect(!entry.object.contains("members"));
+        const attribution = try support.admitComparisons(a, state.inputs, fixture.context, state.pending, assigned, bytes);
+        try std.testing.expect(attribution == .established and attribution.established == .existing and attribution.established.existing == .extraction_claim);
+        const packet = try support.packetForLoss(a, state.inputs, fixture.context, state.pending);
+        defer @import("domain/model_input_packet.zig").release(packet);
+        const accepted = (try support.collectLoss(a, state.inputs, fixture.context, .{ .pending = state.pending }, packet, bytes, null)).accepted;
+        const retained = accepted.candidate.review.entries[state.pending.pending_localization.? - 1].value.preservation.?;
+        try std.testing.expectEqualDeep(assigned, retained.assignment);
+        try std.testing.expectEqualDeep(response, retained.response);
+        for (0..4) |variant| {
+            var changed = assigned;
+            const views = try a.dupe(preservation.View, assigned.comparisons);
+            changed.comparisons = views;
+            switch (variant) {
+                0 => views[0].members = views[0].members[0..1],
+                1 => {
+                    const members = try a.dupe(preservation.Member, views[0].members);
+                    members[1].claim_id.ordinal = members[0].claim_id.ordinal;
+                    views[0].members = members;
+                },
+                2 => views[0].purpose = "MOCK Different collection purpose.",
+                3 => changed.finding.missing_obligation = "MOCK Different obligation.",
+                else => unreachable,
+            }
+            try std.testing.expectError(error.InvalidPreservationComparison, preservation.admit(a, assigned, changed, fixture.context.inputs, response));
+        }
+    }
+}
+
+test "native preservation collection retains equal literal occurrences under different triggers" {
+    const support = @import("domain/specification_support.zig").Source;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const source = "MOCK On startup display `MOCK Ready`.\nMOCK After recovery display `MOCK Ready`.\n";
+    var claims: [2]@import("domain/reference_extraction.zig").Proposal = undefined;
+    for (&claims, [_][]const u8{ "MOCK On startup display `MOCK Ready`.", "MOCK After recovery display `MOCK Ready`." }, 1..) |*claim, value, line| claim.* = .{
+        .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = value } }} } },
+        .citations = try a.dupe(@import("domain/source_selections.zig").Selection, &.{.{ .first = .{ .ordinal = @intCast(line) }, .last = .{ .ordinal = @intCast(line) } }}),
+    };
+    var fixture = try Fixture.initClaims(a, source, .business_exact_string, .{ .selected = &claims });
+    defer fixture.deinit();
+    const state = try preservationTest(a, &fixture, false, source);
+    const assigned = try support.comparisonAssignment(a, state.inputs, fixture.context, state.pending);
+    try std.testing.expectEqual(@as(usize, 4), assigned.comparisons[0].members.len);
+    const items = assigned.facts.records.items;
+    const first = try references.r.item(items, assigned.comparisons[0].members[2].claim_id);
+    const second = try references.r.item(items, assigned.comparisons[0].members[3].claim_id);
+    try std.testing.expect(first.claim.content == .preserved_token and second.claim.content == .preserved_token);
+    try std.testing.expectEqualStrings(first.claim.content.preserved_token.value.raw_value.bytes, second.claim.content.preserved_token.value.raw_value.bytes);
+    try std.testing.expect(first.claim.id.ordinal != second.claim.id.ordinal);
+    try std.testing.expect(!std.meta.eql(first.citations[0].value.location, second.citations[0].value.location));
+    const response = try preservationResponse(a, assigned, .preserved);
+    try std.testing.expectEqual(preservation.Attribution.unresolved, try preservation.admit(a, assigned, assigned, fixture.context.inputs, response));
+    const encoded = try @import("domain/strict_json.zig").decode(preservation.Evidence, a, try std.json.Stringify.valueAlloc(a, preservation.Evidence{ .assignment = assigned, .response = response }, .{}), .{ .maximum_depth = 128 });
+    try std.testing.expectEqualDeep(assigned.comparisons, encoded.assignment.comparisons);
+    try std.testing.expectEqualDeep(response, encoded.response);
 }
 
 test "bound preservation traces source-only loss without inventing a positive claim" {
@@ -7154,6 +7231,14 @@ test "bound preservation shared schema and codec exclude culprit and verdict rea
     const foreign = try a.dupe(preservation.Assessment, response.assessments);
     foreign[0].comparison_id.ordinal = 999;
     try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = try json.encode(preservation.Response, a, .{ .assessments = foreign }), .rejection = .enum_mismatch, .path = "/assessments/0/comparison_id" });
+    for ([_][]const u8{ "[]", "[1]" }) |members| {
+        const obsolete = try std.fmt.allocPrint(a, "{{\"assessments\":[{{\"comparison_id\":1,\"result\":\"lost\",\"sources\":[{{\"chunk_id\":{{\"bytes\":\"{s}\"}},\"lines\":{{\"first\":1,\"last\":1}}}}],\"members\":{s},\"explanation\":\"MOCK Missing alarm behavior.\"}}]}}", .{ assigned.sources[0].chunk_id.bytes, members });
+        try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = obsolete, .rejection = .unknown_property, .path = "/assessments/0/members" });
+        try std.testing.expectError(error.InvalidJsonDocument, json.decode(preservation.Response, a, obsolete));
+    }
+    const unknown = try std.mem.replaceOwned(u8, a, bytes, "\"preserved\"", "\"approved\"");
+    try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = unknown, .rejection = .enum_mismatch, .path = "/assessments/0/result" });
+    try std.testing.expectError(error.InvalidJsonDocument, json.decode(preservation.Response, a, unknown));
 }
 
 fn preservationAllocationCheck(a: std.mem.Allocator) !void {

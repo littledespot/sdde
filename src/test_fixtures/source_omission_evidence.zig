@@ -23,9 +23,7 @@ pub fn response(a: std.mem.Allocator, assigned: c.Assignment, location: loss.Loc
     // A fixture cannot turn a former culprit label into native authority. When
     // no unique producer was bound, supply uncertainty rather than inventing it.
     for (assigned.comparisons, values) |view, *value| {
-        const members = try a.alloc(c.MemberId, view.members.len);
-        for (view.members, members) |member, *id| id.* = member.id;
-        value.* = .{ .comparison_id = view.id, .result = if (!bound or location == .unlocalized) .uncertain else if (lost_from != null and view.id.ordinal >= lost_from.?) .lost else .preserved, .sources = try a.dupe(c.Span, &.{.{ .chunk_id = assigned.sources[0].chunk_id, .lines = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 1 } } }}), .members = members, .explanation = "MOCK Supplied preservation assessment." };
+        value.* = .{ .comparison_id = view.id, .result = if (!bound or location == .unlocalized) .uncertain else if (lost_from != null and view.id.ordinal >= lost_from.?) .lost else .preserved, .sources = try a.dupe(c.Span, &.{.{ .chunk_id = assigned.sources[0].chunk_id, .lines = .{ .first = .{ .ordinal = 1 }, .last = .{ .ordinal = 1 } } }}), .explanation = "MOCK Supplied preservation assessment." };
     }
     return .{ .assessments = values };
 }

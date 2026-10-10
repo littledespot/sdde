@@ -350,6 +350,8 @@ test "focused review evidence shapes follow native minima without excluding sour
 
 test "preservation wire is closed and rejects old attribution choices" {
     try checkCandidate("support", "preservation_comparisons", "{\"assessments\":[]}");
+    try checkCandidate("support", "preservation_comparisons", "{\"assessments\":[{\"comparison_id\":1,\"result\":\"lost\",\"sources\":[{\"chunk_id\":{\"bytes\":\"MOCK source\"},\"lines\":{\"first\":1,\"last\":1}}],\"explanation\":\"MOCK The supplied collection lacks shutdown behavior.\"}]}");
+    try candidateCase("support", "preservation_comparisons", "{\"assessments\":[{\"comparison_id\":1,\"result\":\"lost\",\"sources\":[{\"chunk_id\":{\"bytes\":\"MOCK source\"},\"lines\":{\"first\":1,\"last\":1}}],\"members\":[],\"explanation\":\"MOCK The supplied collection lacks shutdown behavior.\"}]}", .unknown_property, "/assessments/0/members");
     try candidateCase("support", "preservation_comparisons", "{\"assessments\":[],\"kind\":\"candidate\"}", .unknown_property, "/kind");
     try candidateCase("support", "preservation_comparisons", "{\"assessments\":[],\"location\":{}}", .unknown_property, "/location");
     try candidateCase("support", "preservation_comparisons", "{}", .missing_required_property, "/assessments");

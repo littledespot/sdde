@@ -1,0 +1,36 @@
+[
+  {
+    "expected": "supported",
+    "detail": "MOCK The description preserves the required maintenance locking behavior.",
+    "question": null,
+    "fixture": {
+      "id": "handoff-supported",
+      "cohort": "development",
+      "sources": ["During maintenance, the access controller must keep the door locked.\n"],
+      "claims": [{"source": 1, "text": "During maintenance, the access controller must keep the door locked.", "first": 1, "last": 1}],
+      "description": "During maintenance, the access controller must keep the door locked.",
+      "missing": "MOCK Preparation placeholder; the source-review control is supported.",
+      "missing_obligation": "During maintenance, the access controller must keep the door locked.",
+      "mode": "candidate",
+      "verdicts": ["preserved"],
+      "expected": "candidate"
+    }
+  },
+  {
+    "expected": "unsupported",
+    "detail": "MOCK The source leaves the release policy after maintenance unselected; automatic unlocking is not established.",
+    "question": "What release policy should apply after maintenance: automatic unlocking or an explicit authorized release?",
+    "fixture": {
+      "id": "handoff-source-gap",
+      "cohort": "development",
+      "sources": ["During maintenance, the access controller must keep the door locked.\nThe release policy after maintenance has not yet been selected.\n"],
+      "claims": [{"source": 1, "text": "During maintenance, the access controller must keep the door locked.", "first": 1, "last": 1}],
+      "description": "During maintenance, the access controller must keep the door locked. After maintenance, it automatically unlocks the door.",
+      "missing": "MOCK Preparation placeholder; the source-review control requires the missing release-policy choice.",
+      "missing_obligation": "During maintenance, the access controller must keep the door locked.",
+      "mode": "candidate",
+      "verdicts": ["preserved"],
+      "expected": "candidate"
+    }
+  }
+]

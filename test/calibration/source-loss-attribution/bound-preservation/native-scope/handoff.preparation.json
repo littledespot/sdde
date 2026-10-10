@@ -1,0 +1,224 @@
+{
+  "status": "offline_prepared_no_live_dispatch_authority",
+  "review_requests": [
+    {
+      "id": "captured-description",
+      "expected": "candidate_omission",
+      "oracle_obligation_for_scoring_only": "When started, the application must display Hello, World!.",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.review.edit.json",
+        "sha256": "1375f550862718d4f4f280a1d1cf4342d93c21ce424e0dd6beaab1521d71d7cb",
+        "bytes": 6971
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.review.request.json",
+        "sha256": "048dee3167565bd34681d47341c781eec6f8f2e63ccea0939eec8c47fb0dc986",
+        "bytes": 8853
+      }
+    },
+    {
+      "id": "loan-candidate",
+      "expected": "candidate_omission",
+      "oracle_obligation_for_scoring_only": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/loan-candidate.review.edit.json",
+        "sha256": "08e66c8e89b04fc6071972a8f506fd3e6ee7fe7d390e0218c08602422af539e5",
+        "bytes": 5707
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/loan-candidate.review.request.json",
+        "sha256": "d9f0955f9ef378ffee6622e332aa765ee58c6049247e7e1614af97fd81c1f04a",
+        "bytes": 7589
+      }
+    },
+    {
+      "id": "extraction-inherited",
+      "expected": "candidate_omission",
+      "oracle_obligation_for_scoring_only": "When the reservoir falls below the minimum, the pump must stop and remain stopped until the level recovers.",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.review.edit.json",
+        "sha256": "6cd0abfd461a5d5a5d7f1222a7dddbb6fa4ab4fd3f966d55c680e4b6bad96f82",
+        "bytes": 5994
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.review.request.json",
+        "sha256": "e9ac3e43eab8e83924eb9ab5cd076bfa6bc23df7a871cc324cec50875c6946cf",
+        "bytes": 7876
+      }
+    },
+    {
+      "id": "fan-direct-signal",
+      "expected": "candidate_omission",
+      "oracle_obligation_for_scoring_only": "After the chamber door closes, the fan may restart only when the operator confirms readiness.",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/fan-direct-signal.review.edit.json",
+        "sha256": "400bb563fd56e1f4a0193d739509bde2d0227a813f84f34dde2f9ae2f496b411",
+        "bytes": 5668
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/fan-direct-signal.review.request.json",
+        "sha256": "e90e293bc9cd801784d683e53e8f271dee14f783ccbd0d420a8035dd1fa92fd4",
+        "bytes": 7550
+      }
+    },
+    {
+      "id": "joint-two-sources",
+      "expected": "candidate_omission",
+      "oracle_obligation_for_scoring_only": "Parcel release requires both recipient identity verification and payment confirmation.",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/joint-two-sources.review.edit.json",
+        "sha256": "2a55651c0074cca1907446329d912b0f9fff60a196bfc592138f2739505330be",
+        "bytes": 6033
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/joint-two-sources.review.request.json",
+        "sha256": "17f5cde9e799d902f783aae4b3bc70c1c60cecc70e5004fe20a8c979fcb74a48",
+        "bytes": 7927
+      }
+    },
+    {
+      "id": "wrong-role-assignment",
+      "expected": "candidate_omission",
+      "oracle_obligation_for_scoring_only": "After an appointment is cancelled, the service must notify the patient.",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.review.edit.json",
+        "sha256": "2dac11aa3b3977d7bc805ae471db497979345f7e448e7498af66ef7523203b84",
+        "bytes": 5996
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.review.request.json",
+        "sha256": "9b29e6da859558e4ccbe20e6e41d335dab07e68b859e73e6c08d38db9bcc88de",
+        "bytes": 7878
+      }
+    },
+    {
+      "id": "unresolved-multiple-producers",
+      "expected": "candidate_omission",
+      "oracle_obligation_for_scoring_only": "During power loss, the cabinet must keep medicine cold for eight hours, and an alarm must sound if backup cooling fails.",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/unresolved-multiple-producers.review.edit.json",
+        "sha256": "3edb93e314f40a44644b35719ce1e8be2e725fa2f4f8d73ae3b05e42e6bbfe13",
+        "bytes": 6075
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/unresolved-multiple-producers.review.request.json",
+        "sha256": "7a089b5211a294399acb882f3d667f08d89a2ad07714e220e3de7add16ebab8e",
+        "bytes": 7969
+      }
+    },
+    {
+      "id": "parking-candidate",
+      "expected": "candidate_omission",
+      "oracle_obligation_for_scoring_only": "Ending a parking session requires settled payment; failed payment must leave the session active.",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/parking-candidate.review.edit.json",
+        "sha256": "a002a9e10b68f957533d730f29629b05747e4042df253f6bf8ed00dbbd32fa29",
+        "bytes": 5663
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/parking-candidate.review.request.json",
+        "sha256": "2b1c38e92718623c831cbae73d9dfa27908aaad4376230df5bf99308d865ed6a",
+        "bytes": 7545
+      }
+    },
+    {
+      "id": "captured-story",
+      "expected": "candidate_omission",
+      "oracle_obligation_for_scoring_only": "When started, the application must display Hello, World!.",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.review.edit.json",
+        "sha256": "a44c9c17303742189656c9943f5d3c72363c4f26afa515f2401f6e9922ad542a",
+        "bytes": 7156
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.review.request.json",
+        "sha256": "3b196fbf10f1a9e7564ea89fbaf8fd3c679fda4a5d1992663508376ea9e7f133",
+        "bytes": 9038
+      }
+    },
+    {
+      "id": "sterile-door",
+      "expected": "candidate_omission",
+      "oracle_obligation_for_scoring_only": "MOCK The access door must not unlock while the sterilizer is pressurized.",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/sterile-door.review.edit.json",
+        "sha256": "0be9ab3a2171555127423e2e3bb116044e7688b1a39a17796ffb28281687ed55",
+        "bytes": 5550
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/sterile-door.review.request.json",
+        "sha256": "ab030c2650ad50bb7360da4abfffbc6d2c7dd22bfcaf36b1722bd7094cade6e6",
+        "bytes": 7432
+      }
+    },
+    {
+      "id": "voucher-release",
+      "expected": "candidate_omission",
+      "oracle_obligation_for_scoring_only": "MOCK Voucher release requires manager approval as well as cleared payment.",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.review.edit.json",
+        "sha256": "bb1910da7d4c14a2db852739f91215844701b30bc481a58d39f40ad479ab4cb3",
+        "bytes": 5964
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.review.request.json",
+        "sha256": "7b3871eef399462d5164814626347980adbd636d797c14b19ca1ee2a534ad818",
+        "bytes": 7858
+      }
+    },
+    {
+      "id": "dual-ready",
+      "expected": "candidate_omission",
+      "oracle_obligation_for_scoring_only": "MOCK After inspection is approved, show MOCK Ready to the inspector.",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.review.edit.json",
+        "sha256": "24c223323def5fa7dbe5bc49fecf6d6e6d859893be3232c21b5af74c80aed310",
+        "bytes": 6945
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.review.request.json",
+        "sha256": "20493953b74bbda6d3859df7cd3d862028628bb2ad91ac71fe72753fa87f8a7d",
+        "bytes": 8839
+      }
+    },
+    {
+      "id": "handoff-supported",
+      "expected": "supported",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/handoff-supported.review.edit.json",
+        "sha256": "b0191d2f444be59f98c0a7d7f4a8c6b15591d60588e10e5e28880b231c2b9e56",
+        "bytes": 5550
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/handoff-supported.review.request.json",
+        "sha256": "5ae198e9d6f2b27a047204fcb137319c367dd73a2d83d2e83dd5c7d93693bcb1",
+        "bytes": 7432
+      }
+    },
+    {
+      "id": "handoff-source-gap",
+      "expected": "unsupported",
+      "edit": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/handoff-source-gap.review.edit.json",
+        "sha256": "4752a3fdb5a3f5bfa4ad34b6b3b4ea880a420ff952e371a18785c4820168d83f",
+        "bytes": 5670
+      },
+      "request": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/handoff-source-gap.review.request.json",
+        "sha256": "ddcac3fd000a497587190e45adeb6b92d38453472941d5b06b7754aec13e04d6",
+        "bytes": 7552
+      }
+    }
+  ],
+  "repetitions_proposed": 2,
+  "maximum_review_calls_proposed": 28,
+  "loss_calls": "Derive only from admitted actual candidate_omission review output. Obligations, comparisons and count are not replaced from oracle cases; bind and freeze that second stage before dispatch.",
+  "criteria": [
+    "source-grounded obligation retains all conditions, triggers, negation and obligation strength",
+    "correct candidate_omission, supported and genuine-gap decisions",
+    "no loss assignment from supported or genuine-gap control",
+    "exact unchanged admitted missing_obligation reaches every loss input",
+    "schema and native admission reported independently from meaning",
+    "publication/rubric E2E remains separate"
+  ]
+}

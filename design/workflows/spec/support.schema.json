@@ -68,14 +68,6 @@
                   "$ref": "#/$defs/source_span"
                 }
               },
-              "members": {
-                "type": "array",
-                "minItems": 0,
-                "maxItems": 4294967295,
-                "items": {
-                  "$ref": "#/$defs/ordinal"
-                }
-              },
               "explanation": {
                 "type": "string",
                 "minLength": 1,
@@ -86,7 +78,6 @@
               "comparison_id",
               "result",
               "sources",
-              "members",
               "explanation"
             ],
             "additionalProperties": false

@@ -28,7 +28,9 @@ before model calls; it never executes persisted contract bytes.
 
 The coordinated [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md)
 cutover uses `specification/v2`; the explicit source-obligation handoff advances
-the state to `specification-state/v11`. Completed readback
+the state to `specification-state/v11`. The native-owned assessed-collection
+amendment advances it to `specification-state/v12`, removing model-returned member
+subsets while retaining complete native collections. Completed readback
 validates captured reconciliation groups and per-unit associations against the
 reference ledger, resolves stored explicit support and exact occurrence handles,
 then recomputes effective claims, citations and source links. It rejects

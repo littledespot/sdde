@@ -124,8 +124,9 @@ fn intersects(left: []const r.ClaimId, right: []const r.ClaimId) bool {
     return false;
 }
 
-/// Loss requests select comparison-local member IDs. Canonical claim/citation
-/// identities and half-open source coordinates stay in the retained assignment.
+/// Loss requests expose complete native collections with local member labels.
+/// Canonical claim/citation identities and half-open source coordinates stay in
+/// the retained assignment.
 /// Preservation compares resolved meaning, not extraction categories. Categories
 /// remain in canonical evidence and classification decisions, where they matter.
 pub const ClaimMeaning = struct { meaning: []const u8, source_id: r.extraction.identity.SourceId };

@@ -1,0 +1,5664 @@
+{
+  "status": "executed_assessed",
+  "planned_physical_calls": 72,
+  "planned_assembled_decisions": 48,
+  "physical_trials": [
+    {
+      "trial_id": "captured-description-baseline-2-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1534,
+      "output_tokens": 184,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1000,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "members": [
+          2
+        ],
+        "explanation": "The comparison’s member 2 states the requirement \"When started, the application must display `Hello, World!`\", which matches the supplied missing obligation. The obligation is fully expressed in the comparison’s complete collection, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "captured-description-baseline-2-1",
+        "response_id": "0927da922d645848af881f3dad546954",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "9ec66ecbfe7b3974d0099d87fbeb57ab345471d17acef346e71c61492d7d4ba8"
+      }
+    },
+    {
+      "trial_id": "captured-description-baseline-1-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1554,
+      "output_tokens": 190,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1018,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "members": [
+          2
+        ],
+        "explanation": "The comparison’s member 2 states the obligation \"When started, the application must display `Hello, World!`\", which matches the supplied missing obligation. No part of the obligation is omitted or weakened, so the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "captured-description-baseline-1-1",
+        "response_id": "441cc192a6a3078f10420fbed554441c",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "f39fda1741b11ea4982c0233c962e6366741d50b36c386ed60aaaf39b94b8d1a"
+      }
+    },
+    {
+      "trial_id": "captured-description-candidate-2-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1490,
+      "output_tokens": 166,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 968,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "explanation": "The comparison collection includes the requirement \"When started, the application must display `Hello, World!`\", which matches the missing obligation. The obligation is explicitly present and not weakened or omitted."
+      },
+      "origin": {
+        "trial_id": "captured-description-candidate-2-1",
+        "response_id": "33e817e952a0ce6638cabb9f99856288",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "67652b37d408a868a07af1393a5c1c2cf512263f49212622e3e7c1b769a18ab6"
+      }
+    },
+    {
+      "trial_id": "captured-description-candidate-1-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1510,
+      "output_tokens": 174,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1110,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "explanation": "The comparison’s member with id 2 contains the exact obligation \"When started, the application must display `Hello, World!`\", matching the missing obligation. Therefore the obligation is preserved in the complete collection."
+      },
+      "origin": {
+        "trial_id": "captured-description-candidate-1-1",
+        "response_id": "e9fafb5c2d04ac5ada542ee245f614ec",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "ac7967feca3b23bf9275cc99cc4855444b50731cda236730c09bbbc3cf2b9a9f"
+      }
+    },
+    {
+      "trial_id": "loan-candidate-candidate-1-1",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1071,
+      "output_tokens": 150,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1001,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s single member expresses the exact obligation stated in the missing_obligation, including the conditions of borrower eligibility and no reservation, and extends the due date by seven days. Therefore the obligation is preserved in the complete collection."
+      },
+      "origin": {
+        "trial_id": "loan-candidate-candidate-1-1",
+        "response_id": "13d0693972502a826e105ed98be10cff",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "2dbcd1e06084d593b249bde66ad44b913f8ce8006d8c211bda71161de8351f19"
+      }
+    },
+    {
+      "trial_id": "loan-candidate-baseline-1-1",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1115,
+      "output_tokens": 160,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 889,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The comparison’s single member expresses the exact obligation stated in the missing_obligation, including the borrower eligibility and no reservation condition, and extends the due date by seven days. Therefore the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "loan-candidate-baseline-1-1",
+        "response_id": "de062f038998be7a64d25b89fd7ea554",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "5d23357bb75eeaf527cc17c022ff6838e987f0b2b659db66bed7ab2a03db4d77"
+      }
+    },
+    {
+      "trial_id": "extraction-inherited-baseline-2-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1118,
+      "output_tokens": 235,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1219,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The supplied missing obligation – that the pump must stop and remain stopped until the level recovers – is not expressed in the comparison’s complete collection. The only member in the collection is the requirement that the controller must record each measurement, which does not convey any pump shutdown behavior. Therefore the obligation is lost."
+      },
+      "origin": {
+        "trial_id": "extraction-inherited-baseline-2-1",
+        "response_id": "722057b0e6fe8b13ec27481b9ad5e463",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "11cf518163ef0e0a79fe4c1ad441d87203faf90b4fb11cf279ad363067018bf5"
+      }
+    },
+    {
+      "trial_id": "extraction-inherited-baseline-1-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1141,
+      "output_tokens": 211,
+      "latency_ms": null,
+      "notes": [
+        "Correct lost verdict, source and explanation, but superseded contract returns members:[] for a nonempty collection."
+      ],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": false,
+      "round_trip_ms": 1105,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [],
+        "explanation": "The supplied obligation requires the pump to stop and remain stopped until the level recovers. The comparison’s members only include the controller’s display and recording requirements, which do not express any pump shutdown behavior. Therefore the obligation is lost in this comparison."
+      },
+      "origin": {
+        "trial_id": "extraction-inherited-baseline-1-1",
+        "response_id": "96b0e61f497035b3989cf229a647f78b",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "4cca4ee81afe998b3c798689c2a00cafcbf71c6262745708a6dcd82daa9c72d8"
+      }
+    },
+    {
+      "trial_id": "extraction-inherited-candidate-2-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1074,
+      "output_tokens": 184,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 987,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison collection contains only the requirement that the controller must record each measurement. It does not include any statement that the pump must stop when the reservoir falls below the minimum or that it must remain stopped until the level recovers. Therefore the supplied missing obligation is not expressed in the complete collection, and the obligation is lost."
+      },
+      "origin": {
+        "trial_id": "extraction-inherited-candidate-2-1",
+        "response_id": "f1ab5c255798b752a310c69b002751e7",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "e846e18943bab0accd6585929d39d256d1f2a409d576b9949e775b844e838147"
+      }
+    },
+    {
+      "trial_id": "extraction-inherited-candidate-1-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1097,
+      "output_tokens": 154,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 902,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison collection contains only the controller display and record requirements; it does not include the pump‑stop obligation that is present in the source line 1. Therefore the missing obligation is not preserved in this collection."
+      },
+      "origin": {
+        "trial_id": "extraction-inherited-candidate-1-1",
+        "response_id": "916c0c769c2cdc2688a28cafc4f570ee",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "7bebd49396c96ba00f2adc73e10526832c8d8e74a74a10607fe681b5eb16d377"
+      }
+    },
+    {
+      "trial_id": "fan-direct-signal-candidate-1-1",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1021,
+      "output_tokens": 151,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 700,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s single member contains the exact obligation: \"After the chamber door closes, it may restart only when the operator confirms readiness.\" This matches the missing_obligation verbatim, so the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "fan-direct-signal-candidate-1-1",
+        "response_id": "e65e4c949f04646b496664668856e684",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "6cf3a28441282f95feec1489ca8bdad45908ad47eb76ce322ba77d07ca65836c"
+      }
+    },
+    {
+      "trial_id": "fan-direct-signal-baseline-1-1",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1065,
+      "output_tokens": 194,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1122,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The single member in comparison 1 states the exact obligation that the fan may restart only when the operator confirms readiness after the door closes, matching the missing_obligation. No part of the obligation is omitted or weakened, so the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "fan-direct-signal-baseline-1-1",
+        "response_id": "db6f5547384894d915680028c1140b2b",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "d38ec2dec150f3c1c7bca66fc5601e4a3568c3f3f5137b48115e3decd0837e76"
+      }
+    },
+    {
+      "trial_id": "joint-two-sources-baseline-1-1",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1167,
+      "output_tokens": 207,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1741,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1,
+          2
+        ],
+        "explanation": "The comparison’s complete collection includes both required conditions—recipient identity verification and payment confirmation—exactly matching the supplied missing obligation. Both members are present and directly express the obligation, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "joint-two-sources-baseline-1-1",
+        "response_id": "622665826e991dbbf846bd526622089c",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "e81d83b2c129f578f24bebf0de9f30a09e23eb72219ddc50ae28f89ba3a81e97"
+      }
+    },
+    {
+      "trial_id": "joint-two-sources-candidate-1-1",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1123,
+      "output_tokens": 157,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 989,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s members collectively state that parcel release requires recipient identity verification and payment confirmation, matching the missing obligation exactly."
+      },
+      "origin": {
+        "trial_id": "joint-two-sources-candidate-1-1",
+        "response_id": "fd49dd48ee52b83164fc0964be530911",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "528d141ca01ecc6596b3e9e156e83aa7602e1dee53dac19bff5fd60e564d6be8"
+      }
+    },
+    {
+      "trial_id": "wrong-role-assignment-candidate-1-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1106,
+      "output_tokens": 145,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 922,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s members include a requirement that exactly matches the missing obligation: \"After an appointment is cancelled, the service must notify the patient.\" This obligation is present in the complete collection, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "wrong-role-assignment-candidate-1-1",
+        "response_id": "523e691f1f34f16b17a5482bcc465d3a",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "a76379a91676469df1a7c55d475910f4bb14ba746f5b10e1cd975d7a9ae9a561"
+      }
+    },
+    {
+      "trial_id": "wrong-role-assignment-candidate-2-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1078,
+      "output_tokens": 182,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1058,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s complete collection contains only the requirement to display clinic opening hours. It does not include the obligation that after an appointment is cancelled the service must notify the patient, which is the missing_obligation supplied in the fixed_finding. Therefore the obligation is lost in this comparison."
+      },
+      "origin": {
+        "trial_id": "wrong-role-assignment-candidate-2-1",
+        "response_id": "ea4446678e7bbf562662d5502575f27a",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "4b90aa77689a6fd9f12719dd9a608445cb076baef0010ca9a7b57ffbb010488f"
+      }
+    },
+    {
+      "trial_id": "wrong-role-assignment-baseline-1-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1150,
+      "output_tokens": 237,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1138,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The obligation \"After an appointment is cancelled, the service must notify the patient.\" is explicitly expressed in member 1 of comparison 1, matching the supplied missing_obligation. No weakening or omission occurs."
+      },
+      "origin": {
+        "trial_id": "wrong-role-assignment-baseline-1-1",
+        "response_id": "9f797e61626032c756ee0ad72504e1c9",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "1211a94bc8125c28c89d9f2c2a94b24e98fe2af1d4fc898860acb6582c39aff0"
+      }
+    },
+    {
+      "trial_id": "wrong-role-assignment-baseline-2-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1122,
+      "output_tokens": 190,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1209,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The comparison’s single member expresses only the obligation to display clinic opening hours, which does not include the supplied missing obligation that the service must notify the patient after an appointment is cancelled. Therefore the supplied obligation is not preserved in this comparison."
+      },
+      "origin": {
+        "trial_id": "wrong-role-assignment-baseline-2-1",
+        "response_id": "9d4302a052c691a544b70b743c041cbb",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "5fbf5fd7fdbddb58cc7a03393f65d8f51479455d1d43c0c92662b67223e4e8d5"
+      }
+    },
+    {
+      "trial_id": "unresolved-multiple-producers-baseline-1-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1196,
+      "output_tokens": 341,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1654,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1,
+          2
+        ],
+        "explanation": "The supplied obligation requires the cabinet to keep medicine cold for eight hours during power loss and to sound an alarm if backup cooling fails. The comparison’s members only express that the cabinet must show its temperature and record each temperature measurement, which do not cover either the eight‑hour cooling requirement or the alarm requirement. Therefore the obligation is lost in this comparison."
+      },
+      "origin": {
+        "trial_id": "unresolved-multiple-producers-baseline-1-1",
+        "response_id": "da66bc24020036f8ecb1bab27f0c232a",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "bb122376e10f2c46bffdc70ebb63bac9bf283be4a593d56e663b4501ea2602de"
+      }
+    },
+    {
+      "trial_id": "unresolved-multiple-producers-candidate-1-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1152,
+      "output_tokens": 337,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1639,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison collection contains only the obligations to show temperature and record each measurement. It does not include the obligation that the cabinet must keep medicine cold for eight hours during a power loss, nor the obligation that an alarm must sound if backup cooling fails. These two obligations are explicitly stated in the source material (chunk‑1 line 1 and chunk‑2 line 1) but are absent from the comparison’s members, so the supplied missing_obligation is not preserved."
+      },
+      "origin": {
+        "trial_id": "unresolved-multiple-producers-candidate-1-1",
+        "response_id": "e149ea11d44fdd5b203bcadf99dd620a",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "cb0bade29247195754728c65aecdef2632420c62783c3e1a66501ac5d706503c"
+      }
+    },
+    {
+      "trial_id": "parking-candidate-candidate-1-1",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1035,
+      "output_tokens": 179,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 937,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s single member states the exact obligation that ending a parking session requires settled payment and that a failed payment must leave the session active, matching the missing_obligation in the fixed_finding. Therefore the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "parking-candidate-candidate-1-1",
+        "response_id": "b7aee25ea41f17085b63f01fb49f134c",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "c239d5fa44e91aba753147957c7afec573c31dd577a45d8e501672cba2f38bbe"
+      }
+    },
+    {
+      "trial_id": "parking-candidate-baseline-1-1",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1079,
+      "output_tokens": 167,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 904,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The single member in comparison 1 contains the exact obligation \"A driver may end a parking session only after payment settles; a failed payment must leave the session active.\" which matches the supplied missing_obligation. Therefore the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "parking-candidate-baseline-1-1",
+        "response_id": "b6e41d498180ee49453228e2f2c03e70",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "9091283c3231d70aa6ac93104a478c1a06dcde3fcb96e5b8448fb665a512ff24"
+      }
+    },
+    {
+      "trial_id": "captured-story-baseline-2-1",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1899,
+      "output_tokens": 157,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1068,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "members": [
+          2
+        ],
+        "explanation": "The comparison’s member 2 states the obligation \"When started, the application must display `Hello, World!`\", which matches the supplied missing_obligation. Therefore the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "captured-story-baseline-2-1",
+        "response_id": "be55a1983b79078546770e5107fa0f9d",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "62d0c42476786bf198c2462f5351a335571ab2aa6c4f3708c7e9a280811b0c9a"
+      }
+    },
+    {
+      "trial_id": "captured-story-baseline-1-1",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1919,
+      "output_tokens": 159,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 881,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "members": [
+          2
+        ],
+        "explanation": "The comparison’s member 2 contains the exact obligation \"When started, the application must display `Hello, World!`\", matching the supplied missing_obligation. No part of the obligation is omitted or weakened, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "captured-story-baseline-1-1",
+        "response_id": "f6febb7b66645090228b5b13f3487253",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "d5ce379f2a0e609367d3d36484fb4562ce17d54396b93804b1886c6e9f1542f5"
+      }
+    },
+    {
+      "trial_id": "captured-story-candidate-2-1",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1855,
+      "output_tokens": 160,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 939,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 5,
+              "last": 6
+            }
+          }
+        ],
+        "explanation": "The comparison’s member 2 explicitly states \"When started, the application must display `Hello, World!`\", matching the supplied missing_obligation. The obligation is fully expressed in the complete collection, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "captured-story-candidate-2-1",
+        "response_id": "e7c1c933ffd4cd6ebb45a99b313d227c",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "25fc131866419836d3a3ade6c60ad74915961198b91dd337f82f1c5009d91c12"
+      }
+    },
+    {
+      "trial_id": "captured-story-candidate-1-1",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1875,
+      "output_tokens": 172,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1012,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "explanation": "The comparison collection includes the requirement \"When started, the application must display `Hello, World!`\" (member id 2), which directly expresses the supplied missing obligation. Therefore the obligation is preserved in the complete collection."
+      },
+      "origin": {
+        "trial_id": "captured-story-candidate-1-1",
+        "response_id": "d333da3b6463bc713b51d42238f93dbb",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "bc3a48d610475e71f2eeaeb15583cc376428849f04f599988fd7a037053e28e3"
+      }
+    },
+    {
+      "trial_id": "sterile-door-candidate-1-1",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1003,
+      "output_tokens": 166,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 868,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The requirement in comparison 1 states \"MOCK The access door must stay locked whenever the sterilizer is under pressure,\" which is equivalent to the missing obligation \"MOCK The access door must not unlock while the sterilizer is pressurized.\" Thus the obligation is preserved in the complete collection."
+      },
+      "origin": {
+        "trial_id": "sterile-door-candidate-1-1",
+        "response_id": "be820d7dcada655a1ba53c2252ad48d3",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "d337ff0c420889adc289d14161f47be02a38a422fcc2f949e1728a48bf8ab388"
+      }
+    },
+    {
+      "trial_id": "sterile-door-baseline-1-1",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1047,
+      "output_tokens": 208,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 957,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The comparison member states \"The access door must stay locked whenever the sterilizer is under pressure,\" which is equivalent to the missing obligation \"The access door must not unlock while the sterilizer is pressurized.\" Thus the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "sterile-door-baseline-1-1",
+        "response_id": "e19833ce78a6b86e5a5c7f9ed3c86e03",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "25dc1294d7bb11b0d894e855977343185d76be585fff43626cf1664c5fd3df7b"
+      }
+    },
+    {
+      "trial_id": "voucher-release-baseline-2-1",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1169,
+      "output_tokens": 215,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 946,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The supplied obligation requires both manager approval and cleared payment. The comparison’s complete collection contains only the cleared‑payment requirement (member 1). The manager‑approval requirement is absent, so the obligation is not preserved."
+      },
+      "origin": {
+        "trial_id": "voucher-release-baseline-2-1",
+        "response_id": "9016dbe8ee40eb8806abd88363d0e705",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "3175c6a06ad295723ed01faadce70a4da41b33d4a0aedc8cac184d7f504917d3"
+      }
+    },
+    {
+      "trial_id": "voucher-release-baseline-1-1",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1193,
+      "output_tokens": 199,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1022,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1,
+          2
+        ],
+        "explanation": "The comparison’s complete collection contains both required obligations: manager approval (member 1) and cleared payment (member 2). Together they express the supplied missing obligation, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "voucher-release-baseline-1-1",
+        "response_id": "4df680c04c31997614631ab7463e96b1",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "976723bf066d7471433c1b039332f062ae13cff322f0fff4de190384705f9812"
+      }
+    },
+    {
+      "trial_id": "voucher-release-candidate-2-1",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1125,
+      "output_tokens": 207,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1024,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison collection contains only the obligation that payment must clear before voucher release. It omits the required manager approval, so the full missing obligation is not preserved."
+      },
+      "origin": {
+        "trial_id": "voucher-release-candidate-2-1",
+        "response_id": "6b439f6d1b5ba466ce1b76212cc0f8ff",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "4e2271df16549cb15494a35b96270b18033443f8935f9a817139315d375c86dc"
+      }
+    },
+    {
+      "trial_id": "voucher-release-candidate-1-1",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1149,
+      "output_tokens": 201,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 824,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s members collectively state that a manager must approve voucher release and that payment must clear before release, matching the supplied missing obligation. Both required conditions are present, so the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "voucher-release-candidate-1-1",
+        "response_id": "cc3f838f9ddcdfbb974194e89f352cf7",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "a1de65bcc6f445b4fb8d18bddf43397c779e3936704656319afdad25353ea871"
+      }
+    },
+    {
+      "trial_id": "dual-ready-candidate-1-1",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1550,
+      "output_tokens": 177,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 998,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s member id3 contains the exact obligation \"MOCK After inspection is approved, show `MOCK Ready` to the inspector.`, matching the missing_obligation. Therefore the obligation is preserved in the complete collection."
+      },
+      "origin": {
+        "trial_id": "dual-ready-candidate-1-1",
+        "response_id": "2838bbe139a62655831004d0e83d91d6",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "2a45370e1c5c39ef1832272ef94804ab65ac4eeba7ca19014d52c12e31946326"
+      }
+    },
+    {
+      "trial_id": "dual-ready-candidate-2-1",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "repetition": 1,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1512,
+      "output_tokens": 172,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1049,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison collection includes a member whose meaning exactly matches the supplied missing obligation: \"MOCK After inspection is approved, show `MOCK Ready` to the inspector.\" Therefore the obligation is preserved in the complete collection."
+      },
+      "origin": {
+        "trial_id": "dual-ready-candidate-2-1",
+        "response_id": "15dce5c73fed882530ee9a071c7f38bc",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "c1fddc24917f39d4a8e83d3fc68f4d556b72db9d327334cf44588f69e437cbda"
+      }
+    },
+    {
+      "trial_id": "dual-ready-baseline-1-1",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1594,
+      "output_tokens": 188,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1034,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          3
+        ],
+        "explanation": "The comparison’s member 3 contains the exact obligation \"MOCK After inspection is approved, show `MOCK Ready` to the inspector.\" which matches the supplied missing_obligation. No part of the obligation is omitted or weakened, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "dual-ready-baseline-1-1",
+        "response_id": "fce44945cd2c02cbab132f454d6ff9e3",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "190a93373751b2552cb727b6912b941dd5b78578f27ade9d83cd464c07df2c6f"
+      }
+    },
+    {
+      "trial_id": "dual-ready-baseline-2-1",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "repetition": 1,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1556,
+      "output_tokens": 196,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1003,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          2
+        ],
+        "explanation": "The comparison’s member 2 contains the exact obligation \"MOCK After inspection is approved, show `MOCK Ready` to the inspector.\" which matches the supplied missing_obligation. No part of the obligation is omitted or weakened, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "dual-ready-baseline-2-1",
+        "response_id": "1c8e34ba98ed1804bed03f4309e5487a",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "71bd2517c07a7814a2236360129d700b500de20898c237a3ab730042857214b2"
+      }
+    },
+    {
+      "trial_id": "captured-description-candidate-1-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1510,
+      "output_tokens": 170,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1136,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "explanation": "The comparison collection includes a requirement that matches the missing obligation: \"When started, the application must display `Hello, World!`\" (member id 2). This obligation is explicitly present in the complete collection, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "captured-description-candidate-1-2",
+        "response_id": "73668f18364a64b42fa2acea438fca6c",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "ac7967feca3b23bf9275cc99cc4855444b50731cda236730c09bbbc3cf2b9a9f"
+      }
+    },
+    {
+      "trial_id": "captured-description-candidate-2-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1490,
+      "output_tokens": 153,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 696,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 5,
+              "last": 6
+            }
+          }
+        ],
+        "explanation": "The comparison’s members include the requirement \"When started, the application must display `Hello, World!`\", which matches the supplied missing_obligation. The obligation is explicitly expressed in the complete collection, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "captured-description-candidate-2-2",
+        "response_id": "3692927dd39cd661ae3a04728de9a28e",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "67652b37d408a868a07af1393a5c1c2cf512263f49212622e3e7c1b769a18ab6"
+      }
+    },
+    {
+      "trial_id": "captured-description-baseline-1-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1554,
+      "output_tokens": 190,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 832,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "members": [
+          2
+        ],
+        "explanation": "The comparison’s member 2 states the exact obligation \"When started, the application must display `Hello, World!`\", which matches the supplied missing obligation. No part of the obligation is omitted or weakened, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "captured-description-baseline-1-2",
+        "response_id": "17108fbf4dc51b65f4948f71d4a26a2b",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "f39fda1741b11ea4982c0233c962e6366741d50b36c386ed60aaaf39b94b8d1a"
+      }
+    },
+    {
+      "trial_id": "captured-description-baseline-2-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1534,
+      "output_tokens": 173,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 984,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "members": [
+          2
+        ],
+        "explanation": "The comparison’s member 2 states the exact obligation \"When started, the application must display `Hello, World!`\", matching the supplied missing_obligation. No part of the obligation is omitted or weakened, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "captured-description-baseline-2-2",
+        "response_id": "9e5c5456705a4902c90db6158d6ca14b",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "9ec66ecbfe7b3974d0099d87fbeb57ab345471d17acef346e71c61492d7d4ba8"
+      }
+    },
+    {
+      "trial_id": "loan-candidate-baseline-1-2",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1115,
+      "output_tokens": 164,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 851,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The single member in comparison 1 expresses the exact obligation stated in the missing_obligation, including the borrower eligibility and no reservation condition, and the due date extension of seven days. Therefore the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "loan-candidate-baseline-1-2",
+        "response_id": "2a4058dcf5c7402b6af28be541ab80d8",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "5d23357bb75eeaf527cc17c022ff6838e987f0b2b659db66bed7ab2a03db4d77"
+      }
+    },
+    {
+      "trial_id": "loan-candidate-candidate-1-2",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1071,
+      "output_tokens": 161,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 829,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s single member contains the exact obligation \"When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.\" which matches the missing_obligation in the fixed_finding. Therefore the obligation is preserved in the complete collection."
+      },
+      "origin": {
+        "trial_id": "loan-candidate-candidate-1-2",
+        "response_id": "f57c93a47c144bf3e2554cc28521c654",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "2dbcd1e06084d593b249bde66ad44b913f8ce8006d8c211bda71161de8351f19"
+      }
+    },
+    {
+      "trial_id": "extraction-inherited-candidate-1-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1097,
+      "output_tokens": 154,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 790,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison collection contains only the controller display and record requirements; it does not include the pump‑stop obligation that is present in the source line 1. Therefore the missing obligation is not preserved in this collection."
+      },
+      "origin": {
+        "trial_id": "extraction-inherited-candidate-1-2",
+        "response_id": "8c8209409a7f71e689dbccb98c67f9b3",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "7bebd49396c96ba00f2adc73e10526832c8d8e74a74a10607fe681b5eb16d377"
+      }
+    },
+    {
+      "trial_id": "extraction-inherited-candidate-2-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1074,
+      "output_tokens": 180,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1023,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s complete collection contains only the requirement that the controller must record each measurement, which does not express the missing obligation that the pump must stop and remain stopped when the reservoir falls below the minimum. The obligation is absent from the assigned collection, so it is lost."
+      },
+      "origin": {
+        "trial_id": "extraction-inherited-candidate-2-2",
+        "response_id": "39c1c1edde4560ed46073376ae93316c",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "e846e18943bab0accd6585929d39d256d1f2a409d576b9949e775b844e838147"
+      }
+    },
+    {
+      "trial_id": "extraction-inherited-baseline-1-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1141,
+      "output_tokens": 277,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1682,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1,
+          2
+        ],
+        "explanation": "The supplied obligation requires the pump to stop and remain stopped until the level recovers when the reservoir falls below the minimum. The comparison’s complete collection contains only the controller’s display and record requirements, which do not express any pump shutdown behavior. Therefore the obligation is lost. The source span for the missing obligation is line 1 of chunk‑1, which contains the pump shutdown statement. The comparison members 1 and 2 are cited to show the existing requirements that do not cover the obligation."
+      },
+      "origin": {
+        "trial_id": "extraction-inherited-baseline-1-2",
+        "response_id": "8e118383354790fa7090efa32378e9b2",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "4cca4ee81afe998b3c798689c2a00cafcbf71c6262745708a6dcd82daa9c72d8"
+      }
+    },
+    {
+      "trial_id": "extraction-inherited-baseline-2-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1118,
+      "output_tokens": 235,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1105,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The supplied missing obligation – that the pump must stop and remain stopped until the level recovers – is not expressed in the comparison’s complete collection. The only member in the collection is the requirement that the controller must record each measurement, which does not convey any pump shutdown behavior. Therefore the obligation is lost."
+      },
+      "origin": {
+        "trial_id": "extraction-inherited-baseline-2-2",
+        "response_id": "8b1fc485b105828037e012eff2bef0cd",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "11cf518163ef0e0a79fe4c1ad441d87203faf90b4fb11cf279ad363067018bf5"
+      }
+    },
+    {
+      "trial_id": "fan-direct-signal-baseline-1-2",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1065,
+      "output_tokens": 189,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1013,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The single member in comparison 1 states the exact obligation that the fan may restart only when the operator confirms readiness after the door closes, matching the missing_obligation. No part of the obligation is omitted or weakened."
+      },
+      "origin": {
+        "trial_id": "fan-direct-signal-baseline-1-2",
+        "response_id": "02a53e609c922bd534fa30d0a45e3d6e",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "d38ec2dec150f3c1c7bca66fc5601e4a3568c3f3f5137b48115e3decd0837e76"
+      }
+    },
+    {
+      "trial_id": "fan-direct-signal-candidate-1-2",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1021,
+      "output_tokens": 151,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 864,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s single member states the exact obligation: after the chamber door closes, the fan may restart only when the operator confirms readiness. This matches the missing_obligation verbatim, so the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "fan-direct-signal-candidate-1-2",
+        "response_id": "1667ea1e90cefee546cf4061808ee08a",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "6cf3a28441282f95feec1489ca8bdad45908ad47eb76ce322ba77d07ca65836c"
+      }
+    },
+    {
+      "trial_id": "joint-two-sources-candidate-1-2",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1123,
+      "output_tokens": 157,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 865,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s members collectively state that parcel release requires recipient identity verification and payment confirmation, matching the missing obligation exactly."
+      },
+      "origin": {
+        "trial_id": "joint-two-sources-candidate-1-2",
+        "response_id": "0b5106ae8ceea81038c8fd390a856503",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "528d141ca01ecc6596b3e9e156e83aa7602e1dee53dac19bff5fd60e564d6be8"
+      }
+    },
+    {
+      "trial_id": "joint-two-sources-baseline-1-2",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1167,
+      "output_tokens": 207,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 850,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1,
+          2
+        ],
+        "explanation": "The comparison’s complete collection includes both required conditions—recipient identity verification and payment confirmation—exactly matching the supplied missing obligation. Both members are present and directly express the obligation, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "joint-two-sources-baseline-1-2",
+        "response_id": "67d0488820e11476d643273a677f17b3",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "e81d83b2c129f578f24bebf0de9f30a09e23eb72219ddc50ae28f89ba3a81e97"
+      }
+    },
+    {
+      "trial_id": "wrong-role-assignment-baseline-2-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1122,
+      "output_tokens": 223,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1196,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The comparison’s only member (requirement 1) expresses the obligation to display clinic opening hours, but it does not express the supplied missing obligation that the service must notify the patient after an appointment is cancelled. Therefore the supplied obligation is lost in this comparison."
+      },
+      "origin": {
+        "trial_id": "wrong-role-assignment-baseline-2-2",
+        "response_id": "712df5ccc888250c1cad3eb1aeb63b7e",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "5fbf5fd7fdbddb58cc7a03393f65d8f51479455d1d43c0c92662b67223e4e8d5"
+      }
+    },
+    {
+      "trial_id": "wrong-role-assignment-baseline-1-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1150,
+      "output_tokens": 237,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1089,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The obligation \"After an appointment is cancelled, the service must notify the patient.\" is explicitly expressed in member 1 of comparison 1, matching the supplied missing_obligation. No weakening or omission occurs."
+      },
+      "origin": {
+        "trial_id": "wrong-role-assignment-baseline-1-2",
+        "response_id": "5b889d32cfd883d013829f08cefc6b5d",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "1211a94bc8125c28c89d9f2c2a94b24e98fe2af1d4fc898860acb6582c39aff0"
+      }
+    },
+    {
+      "trial_id": "wrong-role-assignment-candidate-2-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1078,
+      "output_tokens": 171,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 985,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s complete collection contains only the requirement to display clinic opening hours. It does not express the obligation that after an appointment is cancelled the service must notify the patient, which is the missing_obligation in the fixed_finding. Therefore the obligation is lost in this collection."
+      },
+      "origin": {
+        "trial_id": "wrong-role-assignment-candidate-2-2",
+        "response_id": "d840a88bf35225020172f6cadd9bad87",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "4b90aa77689a6fd9f12719dd9a608445cb076baef0010ca9a7b57ffbb010488f"
+      }
+    },
+    {
+      "trial_id": "wrong-role-assignment-candidate-1-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1106,
+      "output_tokens": 145,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 867,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s members include a requirement that exactly matches the missing obligation: \"After an appointment is cancelled, the service must notify the patient.\" This obligation is present in the complete collection, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "wrong-role-assignment-candidate-1-2",
+        "response_id": "ed31357eef4c31d9141d24ce976c9734",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "a76379a91676469df1a7c55d475910f4bb14ba746f5b10e1cd975d7a9ae9a561"
+      }
+    },
+    {
+      "trial_id": "unresolved-multiple-producers-candidate-1-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": false,
+      "input_tokens": 1152,
+      "output_tokens": 262,
+      "latency_ms": null,
+      "notes": [
+        "Explanation names both cooling and alarm losses, but cites only cooling chunk-1:1; alarm premise chunk-2:1 is missing."
+      ],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": false,
+      "round_trip_ms": 1402,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison collection contains only the obligations to show temperature and record each measurement. It does not include the obligation that the cabinet must keep medicine cold for eight hours during a power loss, nor the obligation that an alarm must sound if backup cooling fails. Therefore the supplied missing_obligation is not expressed in the complete collection, and the obligation is lost."
+      },
+      "origin": {
+        "trial_id": "unresolved-multiple-producers-candidate-1-2",
+        "response_id": "bc87928c58f646df53c02f669261d4d6",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "cb0bade29247195754728c65aecdef2632420c62783c3e1a66501ac5d706503c"
+      }
+    },
+    {
+      "trial_id": "unresolved-multiple-producers-baseline-1-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1196,
+      "output_tokens": 410,
+      "latency_ms": null,
+      "notes": [
+        "Correct lost verdict, both sources and explanation, but superseded contract returns members:[] for a nonempty collection."
+      ],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": false,
+      "round_trip_ms": 1863,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [],
+        "explanation": "The supplied missing obligation requires that the cabinet keep medicine cold for eight hours during a power loss and that an alarm sound if backup cooling fails. The comparison’s members only express the cabinet’s temperature display and recording, which do not cover the eight‑hour cooling requirement or the alarm. Therefore the obligation is lost in this comparison."
+      },
+      "origin": {
+        "trial_id": "unresolved-multiple-producers-baseline-1-2",
+        "response_id": "c19133d70ae0bee2866752d030f11849",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "bb122376e10f2c46bffdc70ebb63bac9bf283be4a593d56e663b4501ea2602de"
+      }
+    },
+    {
+      "trial_id": "parking-candidate-baseline-1-2",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1079,
+      "output_tokens": 192,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 845,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The single member in comparison 1 expresses the exact obligation supplied in the fixed finding: a driver may end a parking session only after payment settles, and a failed payment must leave the session active. The source span (chunk-1, line 1) contains the full statement, and the member’s meaning matches the obligation verbatim, satisfying the preservation criteria."
+      },
+      "origin": {
+        "trial_id": "parking-candidate-baseline-1-2",
+        "response_id": "9cb7da7b9b30e5d94fe8aaba5455a0ed",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "9091283c3231d70aa6ac93104a478c1a06dcde3fcb96e5b8448fb665a512ff24"
+      }
+    },
+    {
+      "trial_id": "parking-candidate-candidate-1-2",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1035,
+      "output_tokens": 159,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 921,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s single member states the exact obligation that the fixed finding requires: a driver may end a parking session only after payment settles, and a failed payment must leave the session active. This obligation is fully expressed in the comparison’s complete collection, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "parking-candidate-candidate-1-2",
+        "response_id": "d473faf51d310cd60b454f5881c01ef0",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "c239d5fa44e91aba753147957c7afec573c31dd577a45d8e501672cba2f38bbe"
+      }
+    },
+    {
+      "trial_id": "captured-story-candidate-1-2",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1875,
+      "output_tokens": 172,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1007,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "explanation": "The comparison collection includes the requirement \"When started, the application must display `Hello, World!`\" (member id 2), which directly expresses the supplied missing obligation. Therefore the obligation is preserved in the complete collection."
+      },
+      "origin": {
+        "trial_id": "captured-story-candidate-1-2",
+        "response_id": "8663d206911bad0dd3c9ff4147655942",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "bc3a48d610475e71f2eeaeb15583cc376428849f04f599988fd7a037053e28e3"
+      }
+    },
+    {
+      "trial_id": "captured-story-candidate-2-2",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1855,
+      "output_tokens": 154,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 890,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 5,
+              "last": 6
+            }
+          }
+        ],
+        "explanation": "The comparison collection includes the requirement \"When started, the application must display `Hello, World!`\", which matches the missing obligation. The obligation is explicitly present in the source lines 5–6, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "captured-story-candidate-2-2",
+        "response_id": "76559ac94716351bdd052f80c4e43c26",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "25fc131866419836d3a3ade6c60ad74915961198b91dd337f82f1c5009d91c12"
+      }
+    },
+    {
+      "trial_id": "captured-story-baseline-1-2",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1919,
+      "output_tokens": 175,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 937,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "members": [
+          2
+        ],
+        "explanation": "The comparison’s member with id 2 contains the exact obligation \"When started, the application must display `Hello, World!`\", matching the supplied missing_obligation. No other member is required to express this obligation, and the obligation is not weakened or omitted. Thus the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "captured-story-baseline-1-2",
+        "response_id": "b10329f129dafb2fb484b8fa394d0125",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "d5ce379f2a0e609367d3d36484fb4562ce17d54396b93804b1886c6e9f1542f5"
+      }
+    },
+    {
+      "trial_id": "captured-story-baseline-2-2",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1899,
+      "output_tokens": 188,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1097,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 6,
+              "last": 6
+            }
+          }
+        ],
+        "members": [
+          2
+        ],
+        "explanation": "The comparison’s member with id 2 contains the requirement \"When started, the application must display `Hello, World!`\", which matches the supplied missing obligation. No part of the obligation is omitted or weakened, so the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "captured-story-baseline-2-2",
+        "response_id": "063cfc10e0183989935c52c37dda327e",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "62d0c42476786bf198c2462f5351a335571ab2aa6c4f3708c7e9a280811b0c9a"
+      }
+    },
+    {
+      "trial_id": "sterile-door-baseline-1-2",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1047,
+      "output_tokens": 206,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 871,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The comparison member states \"The access door must stay locked whenever the sterilizer is under pressure,\" which is equivalent to the missing obligation \"must not unlock while the sterilizer is pressurized.\" Thus the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "sterile-door-baseline-1-2",
+        "response_id": "711029a8bb62c706487bdceeca4b508e",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "25dc1294d7bb11b0d894e855977343185d76be585fff43626cf1664c5fd3df7b"
+      }
+    },
+    {
+      "trial_id": "sterile-door-candidate-1-2",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1003,
+      "output_tokens": 166,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 812,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The requirement in comparison 1 states \"MOCK The access door must stay locked whenever the sterilizer is under pressure,\" which is equivalent to the missing obligation \"MOCK The access door must not unlock while the sterilizer is pressurized.\" Thus the obligation is preserved in the complete collection."
+      },
+      "origin": {
+        "trial_id": "sterile-door-candidate-1-2",
+        "response_id": "ddd6af50722b7ff2d0175b9bc7367af5",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "d337ff0c420889adc289d14161f47be02a38a422fcc2f949e1728a48bf8ab388"
+      }
+    },
+    {
+      "trial_id": "voucher-release-candidate-1-2",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1149,
+      "output_tokens": 201,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1062,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s members collectively state that a manager must approve voucher release and that payment must clear before release, matching the supplied missing obligation. Both required conditions are present, so the obligation is preserved."
+      },
+      "origin": {
+        "trial_id": "voucher-release-candidate-1-2",
+        "response_id": "a621eb35e3c5567123983b076c2a32cc",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "a1de65bcc6f445b4fb8d18bddf43397c779e3936704656319afdad25353ea871"
+      }
+    },
+    {
+      "trial_id": "voucher-release-candidate-2-2",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1125,
+      "output_tokens": 214,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 994,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s single member only expresses the obligation that payment must clear before voucher release. The required manager approval is absent from the complete collection, so the supplied missing_obligation is not preserved."
+      },
+      "origin": {
+        "trial_id": "voucher-release-candidate-2-2",
+        "response_id": "4b6ca863670900bd75d6496a4ff09e0f",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "4e2271df16549cb15494a35b96270b18033443f8935f9a817139315d375c86dc"
+      }
+    },
+    {
+      "trial_id": "voucher-release-baseline-1-2",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1193,
+      "output_tokens": 200,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1117,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1,
+          2
+        ],
+        "explanation": "The comparison’s complete collection contains both required obligations: manager approval (member 1) and cleared payment (member 2). Together they express the supplied missing obligation, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "voucher-release-baseline-1-2",
+        "response_id": "3c3686cc8ff34a62a20ad78bd9e22a77",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "976723bf066d7471433c1b039332f062ae13cff322f0fff4de190384705f9812"
+      }
+    },
+    {
+      "trial_id": "voucher-release-baseline-2-2",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "lost",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1169,
+      "output_tokens": 222,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1060,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          },
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          1
+        ],
+        "explanation": "The comparison’s single member states that payment must clear before the voucher is released, but it does not include the manager approval requirement that is part of the supplied missing_obligation. Therefore the obligation is lost in this comparison."
+      },
+      "origin": {
+        "trial_id": "voucher-release-baseline-2-2",
+        "response_id": "a2d6a715af4baa15ccb69a2cbe6ae16a",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "3175c6a06ad295723ed01faadce70a4da41b33d4a0aedc8cac184d7f504917d3"
+      }
+    },
+    {
+      "trial_id": "dual-ready-baseline-2-2",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1556,
+      "output_tokens": 196,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 775,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          2
+        ],
+        "explanation": "The comparison’s member 2 contains the exact obligation \"MOCK After inspection is approved, show `MOCK Ready` to the inspector.\" which matches the supplied missing_obligation. No part of the obligation is omitted or weakened, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "dual-ready-baseline-2-2",
+        "response_id": "6aeb9234c71f62a4a9867abe029d1235",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "71bd2517c07a7814a2236360129d700b500de20898c237a3ab730042857214b2"
+      }
+    },
+    {
+      "trial_id": "dual-ready-baseline-1-2",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1594,
+      "output_tokens": 189,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 1053,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "members": [
+          3
+        ],
+        "explanation": "The comparison’s member 3 contains the exact obligation \"MOCK After inspection is approved, show `MOCK Ready` to the inspector.\" which matches the supplied missing_obligation. No part of the obligation is omitted or weakened, so it is preserved."
+      },
+      "origin": {
+        "trial_id": "dual-ready-baseline-1-2",
+        "response_id": "b993ce22672c989506fd72466bc7c17f",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "190a93373751b2552cb727b6912b941dd5b78578f27ade9d83cd464c07df2c6f"
+      }
+    },
+    {
+      "trial_id": "dual-ready-candidate-2-2",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 2,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1512,
+      "output_tokens": 179,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 759,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 2,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison’s member with source_id 2 contains the exact obligation \"MOCK After inspection is approved, show `MOCK Ready` to the inspector.\" which matches the missing_obligation. Therefore the obligation is preserved in the complete collection."
+      },
+      "origin": {
+        "trial_id": "dual-ready-candidate-2-2",
+        "response_id": "95e8b65bd5932a186afb9c68da0293fa",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "c1fddc24917f39d4a8e83d3fc68f4d556b72db9d327334cf44588f69e437cbda"
+      }
+    },
+    {
+      "trial_id": "dual-ready-candidate-1-2",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "repetition": 2,
+      "comparison_id": 1,
+      "dispatched": true,
+      "completed": true,
+      "schema_valid": true,
+      "verdict": "preserved",
+      "correct_verdict": true,
+      "adequate_explanation_and_sources": true,
+      "input_tokens": 1550,
+      "output_tokens": 171,
+      "latency_ms": null,
+      "notes": [],
+      "json_valid": true,
+      "adequate_frozen_contract_evidence": true,
+      "round_trip_ms": 949,
+      "provider_stop": "stop",
+      "assessment": {
+        "comparison_id": 1,
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-2"
+            },
+            "lines": {
+              "first": 1,
+              "last": 1
+            }
+          }
+        ],
+        "explanation": "The comparison collection contains a member (id3) whose meaning exactly matches the supplied missing obligation: \"MOCK After inspection is approved, show `MOCK Ready` to the inspector.\" Therefore the obligation is preserved in the complete collection."
+      },
+      "origin": {
+        "trial_id": "dual-ready-candidate-1-2",
+        "response_id": "e0a909e56ca8cea69fd2404790a6c701",
+        "run_id": "debugger-1878adb3a3cb43507ac2198426fe05fc",
+        "request_sha256": "2a45370e1c5c39ef1832272ef94804ab65ac4eeba7ca19014d52c12e31946326"
+      }
+    }
+  ],
+  "assembled_decisions": [
+    {
+      "decision_id": "captured-description-baseline-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 3088,
+      "output_tokens": 374,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 2018,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "captured-description-baseline-2-1",
+        "captured-description-baseline-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "captured-description-candidate-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 3000,
+      "output_tokens": 340,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 2078,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 2,
+            "origin": {
+              "trial_id": "captured-description-candidate-2-1",
+              "response_id": "33e817e952a0ce6638cabb9f99856288",
+              "request_sha256": "67652b37d408a868a07af1393a5c1c2cf512263f49212622e3e7c1b769a18ab6"
+            }
+          },
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "captured-description-candidate-1-1",
+              "response_id": "e9fafb5c2d04ac5ada542ee245f614ec",
+              "request_sha256": "ac7967feca3b23bf9275cc99cc4855444b50731cda236730c09bbbc3cf2b9a9f"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "captured-description-candidate-2-1",
+        "captured-description-candidate-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "loan-candidate-candidate-1",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1071,
+      "output_tokens": 150,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1001,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "loan-candidate-candidate-1-1",
+              "response_id": "13d0693972502a826e105ed98be10cff",
+              "request_sha256": "2dbcd1e06084d593b249bde66ad44b913f8ce8006d8c211bda71161de8351f19"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "loan-candidate-candidate-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "loan-candidate-baseline-1",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1115,
+      "output_tokens": 160,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 889,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "loan-candidate-baseline-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "extraction-inherited-baseline-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 1,
+      "expected_attribution": "extraction_claim",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": false,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": false,
+      "correct_admitted_attribution": false,
+      "observed_attribution": null,
+      "input_tokens": 2259,
+      "output_tokens": 446,
+      "serial_latency_ms": null,
+      "notes": [
+        "Correct lost verdict, source and explanation, but superseded contract returns members:[] for a nonempty collection."
+      ],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 2324,
+      "native_report": {
+        "admitted": false,
+        "rejection": "InvalidPreservationComparison"
+      },
+      "physical_trials": [
+        "extraction-inherited-baseline-2-1",
+        "extraction-inherited-baseline-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "extraction-inherited-candidate-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 1,
+      "expected_attribution": "extraction_claim",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "extraction_claim",
+      "input_tokens": 2171,
+      "output_tokens": 338,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1889,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 2,
+            "origin": {
+              "trial_id": "extraction-inherited-candidate-2-1",
+              "response_id": "f1ab5c255798b752a310c69b002751e7",
+              "request_sha256": "e846e18943bab0accd6585929d39d256d1f2a409d576b9949e775b844e838147"
+            }
+          },
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "extraction-inherited-candidate-1-1",
+              "response_id": "916c0c769c2cdc2688a28cafc4f570ee",
+              "request_sha256": "7bebd49396c96ba00f2adc73e10526832c8d8e74a74a10607fe681b5eb16d377"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "extraction_claim": {
+                "bytes": "chunk-1"
+              }
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "extraction-inherited-candidate-2-1",
+        "extraction-inherited-candidate-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "fan-direct-signal-candidate-1",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 1,
+      "expected_attribution": "reconciliation_signal",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "reconciliation_signal",
+      "input_tokens": 1021,
+      "output_tokens": 151,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 700,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "fan-direct-signal-candidate-1-1",
+              "response_id": "e65e4c949f04646b496664668856e684",
+              "request_sha256": "6cf3a28441282f95feec1489ca8bdad45908ad47eb76ce322ba77d07ca65836c"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "reconciliation_signal": {
+                "ordinal": 1
+              }
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "fan-direct-signal-candidate-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "fan-direct-signal-baseline-1",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 1,
+      "expected_attribution": "reconciliation_signal",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "reconciliation_signal",
+      "input_tokens": 1065,
+      "output_tokens": 194,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1122,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "reconciliation_signal": {
+                "ordinal": 1
+              }
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "fan-direct-signal-baseline-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "joint-two-sources-baseline-1",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1167,
+      "output_tokens": 207,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1741,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "joint-two-sources-baseline-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "joint-two-sources-candidate-1",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1123,
+      "output_tokens": 157,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 989,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "joint-two-sources-candidate-1-1",
+              "response_id": "fd49dd48ee52b83164fc0964be530911",
+              "request_sha256": "528d141ca01ecc6596b3e9e156e83aa7602e1dee53dac19bff5fd60e564d6be8"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "joint-two-sources-candidate-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "wrong-role-assignment-candidate-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 1,
+      "expected_attribution": "unsupported_role",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "unsupported_role",
+      "input_tokens": 2184,
+      "output_tokens": 327,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1980,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "wrong-role-assignment-candidate-1-1",
+              "response_id": "523e691f1f34f16b17a5482bcc465d3a",
+              "request_sha256": "a76379a91676469df1a7c55d475910f4bb14ba746f5b10e1cd975d7a9ae9a561"
+            }
+          },
+          {
+            "comparison_id": 2,
+            "origin": {
+              "trial_id": "wrong-role-assignment-candidate-2-1",
+              "response_id": "ea4446678e7bbf562662d5502575f27a",
+              "request_sha256": "4b90aa77689a6fd9f12719dd9a608445cb076baef0010ca9a7b57ffbb010488f"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "role_assignment": "description"
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "wrong-role-assignment-candidate-1-1",
+        "wrong-role-assignment-candidate-2-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "wrong-role-assignment-baseline-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 1,
+      "expected_attribution": "unsupported_role",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "unsupported_role",
+      "input_tokens": 2272,
+      "output_tokens": 427,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 2347,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "role_assignment": "description"
+          }
+        }
+      },
+      "physical_trials": [
+        "wrong-role-assignment-baseline-1-1",
+        "wrong-role-assignment-baseline-2-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "unresolved-multiple-producers-baseline-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 1,
+      "expected_attribution": "unlocalized",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "unlocalized",
+      "input_tokens": 1196,
+      "output_tokens": 341,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1654,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "unresolved": {}
+        }
+      },
+      "physical_trials": [
+        "unresolved-multiple-producers-baseline-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "unresolved-multiple-producers-candidate-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 1,
+      "expected_attribution": "unlocalized",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "unlocalized",
+      "input_tokens": 1152,
+      "output_tokens": 337,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1639,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "unresolved-multiple-producers-candidate-1-1",
+              "response_id": "e149ea11d44fdd5b203bcadf99dd620a",
+              "request_sha256": "cb0bade29247195754728c65aecdef2632420c62783c3e1a66501ac5d706503c"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "unresolved": {}
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "unresolved-multiple-producers-candidate-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "parking-candidate-candidate-1",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1035,
+      "output_tokens": 179,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 937,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "parking-candidate-candidate-1-1",
+              "response_id": "b7aee25ea41f17085b63f01fb49f134c",
+              "request_sha256": "c239d5fa44e91aba753147957c7afec573c31dd577a45d8e501672cba2f38bbe"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "parking-candidate-candidate-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "parking-candidate-baseline-1",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1079,
+      "output_tokens": 167,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 904,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "parking-candidate-baseline-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "captured-story-baseline-1",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 3818,
+      "output_tokens": 316,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1949,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "captured-story-baseline-2-1",
+        "captured-story-baseline-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "captured-story-candidate-1",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 3730,
+      "output_tokens": 332,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1951,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 2,
+            "origin": {
+              "trial_id": "captured-story-candidate-2-1",
+              "response_id": "e7c1c933ffd4cd6ebb45a99b313d227c",
+              "request_sha256": "25fc131866419836d3a3ade6c60ad74915961198b91dd337f82f1c5009d91c12"
+            }
+          },
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "captured-story-candidate-1-1",
+              "response_id": "d333da3b6463bc713b51d42238f93dbb",
+              "request_sha256": "bc3a48d610475e71f2eeaeb15583cc376428849f04f599988fd7a037053e28e3"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "captured-story-candidate-2-1",
+        "captured-story-candidate-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "sterile-door-candidate-1",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1003,
+      "output_tokens": 166,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 868,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "sterile-door-candidate-1-1",
+              "response_id": "be820d7dcada655a1ba53c2252ad48d3",
+              "request_sha256": "d337ff0c420889adc289d14161f47be02a38a422fcc2f949e1728a48bf8ab388"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "sterile-door-candidate-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "sterile-door-baseline-1",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1047,
+      "output_tokens": 208,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 957,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "sterile-door-baseline-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "voucher-release-baseline-1",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "repetition": 1,
+      "expected_attribution": "unsupported_role",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "unsupported_role",
+      "input_tokens": 2362,
+      "output_tokens": 414,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1968,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "role_assignment": "description"
+          }
+        }
+      },
+      "physical_trials": [
+        "voucher-release-baseline-2-1",
+        "voucher-release-baseline-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "voucher-release-candidate-1",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "repetition": 1,
+      "expected_attribution": "unsupported_role",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "unsupported_role",
+      "input_tokens": 2274,
+      "output_tokens": 408,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1848,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 2,
+            "origin": {
+              "trial_id": "voucher-release-candidate-2-1",
+              "response_id": "6b439f6d1b5ba466ce1b76212cc0f8ff",
+              "request_sha256": "4e2271df16549cb15494a35b96270b18033443f8935f9a817139315d375c86dc"
+            }
+          },
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "voucher-release-candidate-1-1",
+              "response_id": "cc3f838f9ddcdfbb974194e89f352cf7",
+              "request_sha256": "a1de65bcc6f445b4fb8d18bddf43397c779e3936704656319afdad25353ea871"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "role_assignment": "description"
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "voucher-release-candidate-2-1",
+        "voucher-release-candidate-1-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "dual-ready-candidate-1",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 3062,
+      "output_tokens": 349,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 2047,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "dual-ready-candidate-1-1",
+              "response_id": "2838bbe139a62655831004d0e83d91d6",
+              "request_sha256": "2a45370e1c5c39ef1832272ef94804ab65ac4eeba7ca19014d52c12e31946326"
+            }
+          },
+          {
+            "comparison_id": 2,
+            "origin": {
+              "trial_id": "dual-ready-candidate-2-1",
+              "response_id": "15dce5c73fed882530ee9a071c7f38bc",
+              "request_sha256": "c1fddc24917f39d4a8e83d3fc68f4d556b72db9d327334cf44588f69e437cbda"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "dual-ready-candidate-1-1",
+        "dual-ready-candidate-2-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "dual-ready-baseline-1",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "repetition": 1,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 3150,
+      "output_tokens": 384,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 2037,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "dual-ready-baseline-1-1",
+        "dual-ready-baseline-2-1"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "captured-description-candidate-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 3000,
+      "output_tokens": 323,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1832,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "captured-description-candidate-1-2",
+              "response_id": "73668f18364a64b42fa2acea438fca6c",
+              "request_sha256": "ac7967feca3b23bf9275cc99cc4855444b50731cda236730c09bbbc3cf2b9a9f"
+            }
+          },
+          {
+            "comparison_id": 2,
+            "origin": {
+              "trial_id": "captured-description-candidate-2-2",
+              "response_id": "3692927dd39cd661ae3a04728de9a28e",
+              "request_sha256": "67652b37d408a868a07af1393a5c1c2cf512263f49212622e3e7c1b769a18ab6"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "captured-description-candidate-1-2",
+        "captured-description-candidate-2-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "captured-description-baseline-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 3088,
+      "output_tokens": 363,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1816,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "captured-description-baseline-1-2",
+        "captured-description-baseline-2-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "loan-candidate-baseline-2",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1115,
+      "output_tokens": 164,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 851,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "loan-candidate-baseline-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "loan-candidate-candidate-2",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1071,
+      "output_tokens": 161,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 829,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "loan-candidate-candidate-1-2",
+              "response_id": "f57c93a47c144bf3e2554cc28521c654",
+              "request_sha256": "2dbcd1e06084d593b249bde66ad44b913f8ce8006d8c211bda71161de8351f19"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "loan-candidate-candidate-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "extraction-inherited-candidate-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 2,
+      "expected_attribution": "extraction_claim",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "extraction_claim",
+      "input_tokens": 2171,
+      "output_tokens": 334,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1813,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "extraction-inherited-candidate-1-2",
+              "response_id": "8c8209409a7f71e689dbccb98c67f9b3",
+              "request_sha256": "7bebd49396c96ba00f2adc73e10526832c8d8e74a74a10607fe681b5eb16d377"
+            }
+          },
+          {
+            "comparison_id": 2,
+            "origin": {
+              "trial_id": "extraction-inherited-candidate-2-2",
+              "response_id": "39c1c1edde4560ed46073376ae93316c",
+              "request_sha256": "e846e18943bab0accd6585929d39d256d1f2a409d576b9949e775b844e838147"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "extraction_claim": {
+                "bytes": "chunk-1"
+              }
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "extraction-inherited-candidate-1-2",
+        "extraction-inherited-candidate-2-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "extraction-inherited-baseline-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 2,
+      "expected_attribution": "extraction_claim",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "extraction_claim",
+      "input_tokens": 2259,
+      "output_tokens": 512,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 2787,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "extraction_claim": {
+                "bytes": "chunk-1"
+              }
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "extraction-inherited-baseline-1-2",
+        "extraction-inherited-baseline-2-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "fan-direct-signal-baseline-2",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 2,
+      "expected_attribution": "reconciliation_signal",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "reconciliation_signal",
+      "input_tokens": 1065,
+      "output_tokens": 189,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1013,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "reconciliation_signal": {
+                "ordinal": 1
+              }
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "fan-direct-signal-baseline-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "fan-direct-signal-candidate-2",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 2,
+      "expected_attribution": "reconciliation_signal",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "reconciliation_signal",
+      "input_tokens": 1021,
+      "output_tokens": 151,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 864,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "fan-direct-signal-candidate-1-2",
+              "response_id": "1667ea1e90cefee546cf4061808ee08a",
+              "request_sha256": "6cf3a28441282f95feec1489ca8bdad45908ad47eb76ce322ba77d07ca65836c"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "reconciliation_signal": {
+                "ordinal": 1
+              }
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "fan-direct-signal-candidate-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "joint-two-sources-candidate-2",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1123,
+      "output_tokens": 157,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 865,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "joint-two-sources-candidate-1-2",
+              "response_id": "0b5106ae8ceea81038c8fd390a856503",
+              "request_sha256": "528d141ca01ecc6596b3e9e156e83aa7602e1dee53dac19bff5fd60e564d6be8"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "joint-two-sources-candidate-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "joint-two-sources-baseline-2",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1167,
+      "output_tokens": 207,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 850,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "joint-two-sources-baseline-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "wrong-role-assignment-baseline-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 2,
+      "expected_attribution": "unsupported_role",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "unsupported_role",
+      "input_tokens": 2272,
+      "output_tokens": 460,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 2285,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "role_assignment": "description"
+          }
+        }
+      },
+      "physical_trials": [
+        "wrong-role-assignment-baseline-2-2",
+        "wrong-role-assignment-baseline-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "wrong-role-assignment-candidate-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 2,
+      "expected_attribution": "unsupported_role",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "unsupported_role",
+      "input_tokens": 2184,
+      "output_tokens": 316,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1852,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 2,
+            "origin": {
+              "trial_id": "wrong-role-assignment-candidate-2-2",
+              "response_id": "d840a88bf35225020172f6cadd9bad87",
+              "request_sha256": "4b90aa77689a6fd9f12719dd9a608445cb076baef0010ca9a7b57ffbb010488f"
+            }
+          },
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "wrong-role-assignment-candidate-1-2",
+              "response_id": "ed31357eef4c31d9141d24ce976c9734",
+              "request_sha256": "a76379a91676469df1a7c55d475910f4bb14ba746f5b10e1cd975d7a9ae9a561"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "role_assignment": "description"
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "wrong-role-assignment-candidate-2-2",
+        "wrong-role-assignment-candidate-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "unresolved-multiple-producers-candidate-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 2,
+      "expected_attribution": "unlocalized",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": false,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "unlocalized",
+      "input_tokens": 1152,
+      "output_tokens": 262,
+      "serial_latency_ms": null,
+      "notes": [
+        "Explanation names both cooling and alarm losses, but cites only cooling chunk-1:1; alarm premise chunk-2:1 is missing."
+      ],
+      "adequate_assembled_explanation_and_sources": false,
+      "serial_round_trip_ms": 1402,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "unresolved-multiple-producers-candidate-1-2",
+              "response_id": "bc87928c58f646df53c02f669261d4d6",
+              "request_sha256": "cb0bade29247195754728c65aecdef2632420c62783c3e1a66501ac5d706503c"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "unresolved": {}
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "unresolved-multiple-producers-candidate-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "unresolved-multiple-producers-baseline-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 2,
+      "expected_attribution": "unlocalized",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": false,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": false,
+      "correct_admitted_attribution": false,
+      "observed_attribution": null,
+      "input_tokens": 1196,
+      "output_tokens": 410,
+      "serial_latency_ms": null,
+      "notes": [
+        "Correct lost verdict, both sources and explanation, but superseded contract returns members:[] for a nonempty collection."
+      ],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1863,
+      "native_report": {
+        "admitted": false,
+        "rejection": "InvalidPreservationComparison"
+      },
+      "physical_trials": [
+        "unresolved-multiple-producers-baseline-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "parking-candidate-baseline-2",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1079,
+      "output_tokens": 192,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 845,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "parking-candidate-baseline-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "parking-candidate-candidate-2",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1035,
+      "output_tokens": 159,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 921,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "parking-candidate-candidate-1-2",
+              "response_id": "d473faf51d310cd60b454f5881c01ef0",
+              "request_sha256": "c239d5fa44e91aba753147957c7afec573c31dd577a45d8e501672cba2f38bbe"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "parking-candidate-candidate-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "captured-story-candidate-2",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 3730,
+      "output_tokens": 326,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1897,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "captured-story-candidate-1-2",
+              "response_id": "8663d206911bad0dd3c9ff4147655942",
+              "request_sha256": "bc3a48d610475e71f2eeaeb15583cc376428849f04f599988fd7a037053e28e3"
+            }
+          },
+          {
+            "comparison_id": 2,
+            "origin": {
+              "trial_id": "captured-story-candidate-2-2",
+              "response_id": "76559ac94716351bdd052f80c4e43c26",
+              "request_sha256": "25fc131866419836d3a3ade6c60ad74915961198b91dd337f82f1c5009d91c12"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "captured-story-candidate-1-2",
+        "captured-story-candidate-2-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "captured-story-baseline-2",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 3818,
+      "output_tokens": 363,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 2034,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "captured-story-baseline-1-2",
+        "captured-story-baseline-2-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "sterile-door-baseline-2",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1047,
+      "output_tokens": 206,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 871,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "sterile-door-baseline-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "sterile-door-candidate-2",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 1003,
+      "output_tokens": 166,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 812,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "sterile-door-candidate-1-2",
+              "response_id": "ddd6af50722b7ff2d0175b9bc7367af5",
+              "request_sha256": "d337ff0c420889adc289d14161f47be02a38a422fcc2f949e1728a48bf8ab388"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "sterile-door-candidate-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "voucher-release-candidate-2",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "repetition": 2,
+      "expected_attribution": "unsupported_role",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "unsupported_role",
+      "input_tokens": 2274,
+      "output_tokens": 415,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 2056,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "voucher-release-candidate-1-2",
+              "response_id": "a621eb35e3c5567123983b076c2a32cc",
+              "request_sha256": "a1de65bcc6f445b4fb8d18bddf43397c779e3936704656319afdad25353ea871"
+            }
+          },
+          {
+            "comparison_id": 2,
+            "origin": {
+              "trial_id": "voucher-release-candidate-2-2",
+              "response_id": "4b6ca863670900bd75d6496a4ff09e0f",
+              "request_sha256": "4e2271df16549cb15494a35b96270b18033443f8935f9a817139315d375c86dc"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "role_assignment": "description"
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "voucher-release-candidate-1-2",
+        "voucher-release-candidate-2-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "voucher-release-baseline-2",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "repetition": 2,
+      "expected_attribution": "unsupported_role",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "unsupported_role",
+      "input_tokens": 2362,
+      "output_tokens": 422,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 2177,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "role_assignment": "description"
+          }
+        }
+      },
+      "physical_trials": [
+        "voucher-release-baseline-1-2",
+        "voucher-release-baseline-2-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "dual-ready-baseline-2",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 3150,
+      "output_tokens": 385,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1828,
+      "native_report": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "physical_trials": [
+        "dual-ready-baseline-2-2",
+        "dual-ready-baseline-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    },
+    {
+      "decision_id": "dual-ready-candidate-2",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "repetition": 2,
+      "expected_attribution": "candidate",
+      "completed": true,
+      "schema_valid": true,
+      "native_admitted": true,
+      "all_verdicts_correct": true,
+      "adequate_assembled_evidence": true,
+      "correct_admitted_attribution": true,
+      "observed_attribution": "candidate",
+      "input_tokens": 3062,
+      "output_tokens": 350,
+      "serial_latency_ms": null,
+      "notes": [],
+      "adequate_assembled_explanation_and_sources": true,
+      "serial_round_trip_ms": 1708,
+      "native_report": {
+        "status": "admitted",
+        "origins": [
+          {
+            "comparison_id": 2,
+            "origin": {
+              "trial_id": "dual-ready-candidate-2-2",
+              "response_id": "95e8b65bd5932a186afb9c68da0293fa",
+              "request_sha256": "c1fddc24917f39d4a8e83d3fc68f4d556b72db9d327334cf44588f69e437cbda"
+            }
+          },
+          {
+            "comparison_id": 1,
+            "origin": {
+              "trial_id": "dual-ready-candidate-1-2",
+              "response_id": "e0a909e56ca8cea69fd2404790a6c701",
+              "request_sha256": "2a45370e1c5c39ef1832272ef94804ab65ac4eeba7ca19014d52c12e31946326"
+            }
+          }
+        ],
+        "missing_comparison_ids": [],
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        },
+        "rejection": null
+      },
+      "physical_trials": [
+        "dual-ready-candidate-2-2",
+        "dual-ready-candidate-1-2"
+      ],
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertain": false
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "planned_decisions": 24,
+      "all_children_complete": 24,
+      "schema_valid": 24,
+      "native_admitted": 22,
+      "preservation_labels_correct": 24,
+      "correct_admitted_attribution": 22,
+      "evidence_adequate": 22,
+      "explanation_and_sources_adequate": 24,
+      "physical_explanation_and_sources_adequate": 36,
+      "false_upstream": 0,
+      "false_candidate": 0,
+      "unnecessary_uncertain": 0,
+      "physical_calls": 36,
+      "input_tokens": 47236,
+      "output_tokens": 7511,
+      "median_serial_round_trip_ms": 1822.0,
+      "cases": {
+        "captured-description": 2,
+        "loan-candidate": 2,
+        "extraction-inherited": 1,
+        "fan-direct-signal": 2,
+        "joint-two-sources": 2,
+        "wrong-role-assignment": 2,
+        "unresolved-multiple-producers": 1,
+        "parking-candidate": 2,
+        "captured-story": 2,
+        "sterile-door": 2,
+        "voucher-release": 2,
+        "dual-ready": 2
+      }
+    },
+    "candidate": {
+      "planned_decisions": 24,
+      "all_children_complete": 24,
+      "schema_valid": 24,
+      "native_admitted": 24,
+      "preservation_labels_correct": 24,
+      "correct_admitted_attribution": 24,
+      "evidence_adequate": 23,
+      "explanation_and_sources_adequate": 23,
+      "physical_explanation_and_sources_adequate": 35,
+      "false_upstream": 0,
+      "false_candidate": 0,
+      "unnecessary_uncertain": 0,
+      "physical_calls": 36,
+      "input_tokens": 45652,
+      "output_tokens": 6354,
+      "median_serial_round_trip_ms": 1673.5,
+      "cases": {
+        "captured-description": 2,
+        "loan-candidate": 2,
+        "extraction-inherited": 2,
+        "fan-direct-signal": 2,
+        "joint-two-sources": 2,
+        "wrong-role-assignment": 2,
+        "unresolved-multiple-producers": 2,
+        "parking-candidate": 2,
+        "captured-story": 2,
+        "sterile-door": 2,
+        "voucher-release": 2,
+        "dual-ready": 2
+      }
+    }
+  },
+  "disputed_judgments": [],
+  "original_eight_summary": {
+    "baseline": {
+      "planned_decisions": 16,
+      "all_children_complete": 16,
+      "schema_valid": 16,
+      "native_admitted": 14,
+      "preservation_labels_correct": 16,
+      "correct_admitted_attribution": 14,
+      "evidence_adequate": 14,
+      "explanation_and_sources_adequate": 16,
+      "physical_explanation_and_sources_adequate": 22,
+      "false_upstream": 0,
+      "false_candidate": 0,
+      "unnecessary_uncertain": 0,
+      "physical_calls": 22,
+      "input_tokens": 26482,
+      "output_tokens": 4813,
+      "median_serial_round_trip_ms": 1697.5,
+      "cases": {
+        "captured-description": 2,
+        "loan-candidate": 2,
+        "extraction-inherited": 1,
+        "fan-direct-signal": 2,
+        "joint-two-sources": 2,
+        "wrong-role-assignment": 2,
+        "unresolved-multiple-producers": 1,
+        "parking-candidate": 2
+      }
+    },
+    "candidate": {
+      "planned_decisions": 16,
+      "all_children_complete": 16,
+      "schema_valid": 16,
+      "native_admitted": 16,
+      "preservation_labels_correct": 16,
+      "correct_admitted_attribution": 16,
+      "evidence_adequate": 15,
+      "explanation_and_sources_adequate": 15,
+      "physical_explanation_and_sources_adequate": 21,
+      "false_upstream": 0,
+      "false_candidate": 0,
+      "unnecessary_uncertain": 0,
+      "physical_calls": 22,
+      "input_tokens": 25514,
+      "output_tokens": 3842,
+      "median_serial_round_trip_ms": 1201.5,
+      "cases": {
+        "captured-description": 2,
+        "loan-candidate": 2,
+        "extraction-inherited": 2,
+        "fan-direct-signal": 2,
+        "joint-two-sources": 2,
+        "wrong-role-assignment": 2,
+        "unresolved-multiple-producers": 2,
+        "parking-candidate": 2
+      }
+    }
+  },
+  "gate": {
+    "original_eight": {
+      "candidate_completed_schema_native_minimum": 15,
+      "candidate_false_upstream_or_candidate": 0,
+      "correct_extraction_signal_role_each": 2,
+      "correct_unresolved": 2,
+      "correct_candidate_defects_minimum": 7,
+      "unnecessary_uncertain_maximum": 1,
+      "adequate_evidence_minimum": 14,
+      "correct_attribution_improvement_over_baseline_minimum": 2,
+      "case_level_regression": 0
+    },
+    "captured_story": {
+      "completed_schema_native_correct_adequate": 2
+    },
+    "failures_remain_in_denominator": true,
+    "gate_failure": "No semantic promotion or Phase 4 invocation. Preserve findings; no automatic retries or additional calls.",
+    "three_previously_fresh_regression_cases": {
+      "completed_schema_native_correct_adequate": 6
+    },
+    "interpretation": "Gates apply per complete assembled case/repetition. A missing, invalid or rejected child fails that trial; no partial credit for correct siblings. The three previous fresh cases are now known regressions, not unused qualification."
+  },
+  "gate_results": {
+    "original_complete_schema_native_at_least_15": true,
+    "original_zero_false_attribution": true,
+    "original_both_extraction_signal_role_correct": true,
+    "original_both_safe_unresolved": true,
+    "original_candidate_defects_at_least_7": true,
+    "original_unnecessary_uncertain_at_most_1": true,
+    "original_adequate_evidence_at_least_14": true,
+    "original_improvement_at_least_2": true,
+    "original_no_correct_attribution_case_regression": true,
+    "captured_story_both_correct_adequate_admitted": true,
+    "previously_fresh_all_6_correct_adequate_admitted": true
+  },
+  "attribution_gate_metrics_passed": true,
+  "gate_passed": true,
+  "gate_interpretation": "Inherited no-case-regression is attribution/preservation accuracy, documented in meaning/comparison.json:no_case_accuracy_regression and obligation/scorecard.json:original_no_case_regression despite its extraction citation defect. Evidence adequacy is separately gated. Current candidate has a source-citation regression; no claim of zero semantic regressions.",
+  "physical_sends": 72,
+  "completed_physical_calls": 72,
+  "total_tokens": 106753,
+  "started_utc": "2026-10-10T20:42:55.707931+00:00",
+  "finished_utc": "2026-10-10T20:44:47.888319+00:00",
+  "artifacts": "zig-out/source-loss-native-scope-comparison/2026-10-10T20-42-55Z/results",
+  "manifest_sha256": "d5a8237b791aaee66e1c416d00b5099327ee0b0d084f0e7b5255c9ee09666eb0",
+  "assessment": "Manual unblinded source/collection review of all 72 answers, independent reviewers covering cases0–5 and6–11, primary review of exceptions. No model judges.",
+  "limitations": [
+    "Fixed obligations rather than actual source-review output.",
+    "Same 12 known regression cases, two repetitions, one model/settings pair.",
+    "Production still uses one complete loss call; isolated dispatch is diagnostic only.",
+    "No live source-review handoff, repair, publication or rubric evaluation in this allowance."
+  ],
+  "review_artifacts": [
+    {
+      "path": "zig-out/source-loss-native-scope-comparison/2026-10-10T20-42-55Z/results/review-cases-0-5.json",
+      "sha256": "2f04d453d967b0744b9d3a70ad4157aeee4c0374f671e5aaf2a6bd5506e67777"
+    },
+    {
+      "path": "zig-out/source-loss-native-scope-comparison/2026-10-10T20-42-55Z/results/review-cases-6-11.json",
+      "sha256": "f146e1567127716581630257dd3ec550425185798745aada865548aa67e23afc"
+    },
+    {
+      "path": "zig-out/source-loss-native-scope-comparison/2026-10-10T20-42-55Z/results/review-gates.json",
+      "sha256": "9bbb563d1bc114c5c5e9da93d5b68c00430fe9d02eb06bb2f5fb815b9936f016"
+    }
+  ],
+  "frozen_pins_verified_after_assessment": 106
+}

@@ -79,8 +79,10 @@ This summarizes the existing contracts in
   Omission admission requires its supporting sources even when claim evidence is
   fixed by the subject; this provides the comparison's original-source premise.
   Original claims selected for authoring remain its meaning input; signal prose is
-  supporting evidence. Complete comparison responses retain source/member evidence
-  and their own call origin. Stored evidence is rederived without request logs.
+  supporting evidence. Complete comparison responses retain original-source spans,
+  judgments, explanations and their own call origin. The retained native assignment
+  owns complete collection membership; responses do not select a member subset.
+  Stored evidence is rederived without request logs.
   The request exposes one comparison-local member ID, resolved claim meaning and
   source identity. Canonical claim/citation IDs and half-open coordinates stay in
   native evidence; source selections use only the inclusive line catalogue.

@@ -12,12 +12,11 @@ or weakened; uncertain when the evidence cannot establish either. Judge expresse
 meaning, allowing equivalent wording and joint support, regardless of how it is
 divided or categorized: a value already expressed in a requirement needs no
 separate member. A value alone does not express its required
-behavior. Preserve conditions, negation and obligation strength. Cite source
-spans and assessed members, and briefly explain the result. For lost, identify the
-part of the supplied obligation missing from the complete assigned collection.
-Empty collections have no members to cite and cannot be preserved. Do not select
+behavior. Preserve conditions, negation and obligation strength. Cite original-source
+spans and briefly explain where the obligation survives or what is missing from
+the complete assigned collection. Empty collections cannot be preserved. Do not select
 a culprit or repair operation.
 
-comparison_id selects comparisons[].id; members selects IDs only from that
-comparison's members. Source spans select sources[].chunk_id and inclusive
+comparison_id identifies the complete native-assigned collection in comparisons[].id;
+the response does not select its members. Source spans select sources[].chunk_id and inclusive
 first/last IDs from its lines. Supporting evidence supplies no selectable IDs.

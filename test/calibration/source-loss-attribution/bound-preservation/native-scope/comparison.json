@@ -1,0 +1,2349 @@
+{
+  "parent": {
+    "run": "RUN-a8204eab393239c09cb75264943ca0d0",
+    "artifact_root": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016",
+    "call": "request-16-inference-1",
+    "context": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/context.json",
+      "sha256": "38ace18123819b29821208654e4a0157659257caa908fdcc1c38bfb22e5319e7",
+      "bytes": 9570
+    },
+    "request": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/request.json",
+      "sha256": "a34f5df19cad6b687c3210d2934b663900e2dde39845e9b3f1b5eaf389c60ddc",
+      "bytes": 10299
+    },
+    "response": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/response.json",
+      "sha256": "6a738b0a01c33357f6753db77893850ac82592dbc6a8ff2a2c3951595c44b00e",
+      "bytes": 1655
+    },
+    "captured_input_canonical_sha256": "14b9d8041a500ff31fd8749cbc2553ebf69248dc15ade54ba5aedf1da194ccc1",
+    "execution_id": "2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e"
+  },
+  "settings": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "controls": {
+      "reasoning_effort": {
+        "present": true,
+        "value": "low"
+      },
+      "temperature": {
+        "present": true,
+        "value": 0
+      },
+      "max_completion_tokens": {
+        "present": true,
+        "value": 16384
+      },
+      "top_p": {
+        "present": false
+      },
+      "seed": {
+        "present": false
+      }
+    },
+    "response_mode": "native_schema"
+  },
+  "status": "frozen_before_dispatch_awaiting_bounded_approval",
+  "authority": "Implementation authorized on 2026-10-11; this manifest grants no live diagnostic calls. Prior 60-call isolation allowance consumed.",
+  "factor": "Both arms receive the same one complete isolated collection and identical business input. The candidate removes returned members from the closed response contract and updates its concise shared task guidance. Frozen baseline edit/request bytes are unchanged from prior isolation candidate requests. This tests the combined contract/guidance change; not separate wording effects.",
+  "limits": {
+    "maximum_physical_sends": 72,
+    "repetitions_per_case_arm": 2,
+    "retries_corrections_repairs_model_judges_e2e": 0,
+    "stop_at_accounted_input_plus_output_tokens": 300000,
+    "usage_stop_semantics": "Check actual cumulative usage after every completed exchange; at or above threshold send no further trial. A single in-flight completion may cross the threshold. This is an experiment spending stop, not a runtime reservation or provider token ceiling. No dollar cap is asserted.",
+    "stop_on": [
+      "unknown usage",
+      "uncertain dispatch or transport outcome",
+      "request/config/hash drift",
+      "exhausted approved sends"
+    ],
+    "restart_renews_allowance": false,
+    "resend_uncertain_trial": false
+  },
+  "quality_gate": {
+    "original_eight": {
+      "candidate_completed_schema_native_minimum": 15,
+      "candidate_false_upstream_or_candidate": 0,
+      "correct_extraction_signal_role_each": 2,
+      "correct_unresolved": 2,
+      "correct_candidate_defects_minimum": 7,
+      "unnecessary_uncertain_maximum": 1,
+      "adequate_evidence_minimum": 14,
+      "correct_attribution_improvement_over_baseline_minimum": 2,
+      "case_level_regression": 0
+    },
+    "captured_story": {
+      "completed_schema_native_correct_adequate": 2
+    },
+    "failures_remain_in_denominator": true,
+    "gate_failure": "No semantic promotion or Phase 4 invocation. Preserve findings; no automatic retries or additional calls.",
+    "three_previously_fresh_regression_cases": {
+      "completed_schema_native_correct_adequate": 6
+    },
+    "interpretation": "Gates apply per complete assembled case/repetition. A missing, invalid or rejected child fails that trial; no partial credit for correct siblings. The three previous fresh cases are now known regressions, not unused qualification."
+  },
+  "cases_file": {
+    "path": "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.json",
+    "sha256": "f7180fce39fcfcb9e242b520f4249da67a2dc0b71216136c1e2eaf7f07b306a9",
+    "bytes": 12676
+  },
+  "historical_baseline_manifest": {
+    "path": "test/calibration/source-loss-attribution/bound-preservation/isolation/comparison.json",
+    "sha256": "0e4926011a59b6a05a2f4930cfe3210ffc830a34e1463eff908dd8966581da06",
+    "bytes": 84881
+  },
+  "baseline_native_source": {
+    "revision": "6830129f6ce41baa1cd9982e77aa208345b2a8b1",
+    "archive": {
+      "path": "zig-out/source-loss-native-scope-baseline/source.tar",
+      "sha256": "ebc1b9efece0059758ebd9bc9e1ea6b69c5cf10fe122c52f1eb6f3583df81c6e",
+      "bytes": 15585280
+    },
+    "offline_receipt": {
+      "path": "zig-out/source-loss-native-scope-baseline/offline-receipts.json",
+      "sha256": "c80568792fb171fa5faca02649ea6c50c7ede92a20ccf6b4f5f7bf5c9aff6302",
+      "bytes": 10747
+    },
+    "command": "zig build test-specification-generation --summary all -j2",
+    "command_cwd": "extracted frozen source snapshot",
+    "validation": "290/290 tests passed; all twelve old/current native assignments identical; unchanged historical isolation answers reproduce 22/24 admissions and both old rejections."
+  },
+  "handoff_controls": {
+    "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/handoff.controls.json",
+    "sha256": "e34775969e434f36782b22bcb91e6d46c3755c24aaf6df27dd33cde6bd9c3e00",
+    "bytes": 1977
+  },
+  "cases": [
+    {
+      "id": "captured-description",
+      "expected": "candidate",
+      "missing_obligation": "When started, the application must display Hello, World!.",
+      "verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "cohort": "original_eight_regression",
+      "comparison_count": 2,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.packet.json",
+        "sha256": "22cd84b8310d573408fa9a905f25d972211a698f3eae97db5d681672bc63fff8",
+        "bytes": 11976
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.baseline-1.edit.json",
+            "sha256": "e5c2b7ced449b5a8ff93635b5b6ce6cfadb9c00bf950c13ee7d0adc25d399033",
+            "bytes": 7185
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.baseline-1.request.json",
+            "sha256": "f39fda1741b11ea4982c0233c962e6366741d50b36c386ed60aaaf39b94b8d1a",
+            "bytes": 8421
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 3878,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.candidate-1.edit.json",
+            "sha256": "bcccdd840d770f9bc30fb504d6c633a93924a798b89b88223ec3b899205a2ff4",
+            "bytes": 7009
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.candidate-1.request.json",
+            "sha256": "ac7967feca3b23bf9275cc99cc4855444b50731cda236730c09bbbc3cf2b9a9f",
+            "bytes": 8181
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 3878,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "baseline-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.baseline-2.edit.json",
+            "sha256": "922ef9c09c16286488ccc6b27f678858bbe4dfe84cbc08193501cb962ce3fdc2",
+            "bytes": 7110
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.baseline-2.request.json",
+            "sha256": "9ec66ecbfe7b3974d0099d87fbeb57ab345471d17acef346e71c61492d7d4ba8",
+            "bytes": 8346
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 3813,
+          "schema_sha256": "c13fb4d854415707116ecf15fe7a8d0346a28a616573f1bea300df0d7b8b545a"
+        },
+        "candidate-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.candidate-2.edit.json",
+            "sha256": "02fd9e1ab2eedc4354c676ae6cb06c845d27e793e25f778f979b8110583774d7",
+            "bytes": 6934
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.candidate-2.request.json",
+            "sha256": "67652b37d408a868a07af1393a5c1c2cf512263f49212622e3e7c1b769a18ab6",
+            "bytes": 8106
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 3813,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        }
+      }
+    },
+    {
+      "id": "loan-candidate",
+      "expected": "candidate",
+      "missing_obligation": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.",
+      "verdicts": [
+        "preserved"
+      ],
+      "cohort": "original_eight_regression",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/loan-candidate.packet.json",
+        "sha256": "3b022106eeef51c040973f682aed78275097ebcde759ac4075a1a46fe6cae18b",
+        "bytes": 6498
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/loan-candidate.baseline-1.edit.json",
+            "sha256": "13450413c2fbb6b7d95369287a7a4498b858963c2961e3ffd3425d8243e996a5",
+            "bytes": 5186
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/loan-candidate.baseline-1.request.json",
+            "sha256": "5d23357bb75eeaf527cc17c022ff6838e987f0b2b659db66bed7ab2a03db4d77",
+            "bytes": 6422
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2149,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/loan-candidate.candidate-1.edit.json",
+            "sha256": "59063df21f0e27917619a9b834908877df8f885949ea9d10782d6acb21d0ef09",
+            "bytes": 5010
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/loan-candidate.candidate-1.request.json",
+            "sha256": "2dbcd1e06084d593b249bde66ad44b913f8ce8006d8c211bda71161de8351f19",
+            "bytes": 6182
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2149,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    },
+    {
+      "id": "extraction-inherited",
+      "expected": "extraction_claim",
+      "missing_obligation": "When the reservoir falls below the minimum, the pump must stop and remain stopped until the level recovers.",
+      "verdicts": [
+        "lost",
+        "lost"
+      ],
+      "cohort": "original_eight_regression",
+      "comparison_count": 2,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.packet.json",
+        "sha256": "7bac0000c53cf254d67d7b6ef28582386f10e58491972691ecc11cd0a8db5470",
+        "bytes": 7807
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.baseline-1.edit.json",
+            "sha256": "a27553945fa5236c488a5b455edaa248ae93cd4d1ff477696c7a0dddc912e030",
+            "bytes": 5424
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.baseline-1.request.json",
+            "sha256": "4cca4ee81afe998b3c798689c2a00cafcbf71c6262745708a6dcd82daa9c72d8",
+            "bytes": 6660
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2309,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.candidate-1.edit.json",
+            "sha256": "506504ab45d0439579e4c91656da0c7838921d2a837dff460b190b6e269a923e",
+            "bytes": 5248
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.candidate-1.request.json",
+            "sha256": "7bebd49396c96ba00f2adc73e10526832c8d8e74a74a10607fe681b5eb16d377",
+            "bytes": 6420
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2309,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "baseline-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.baseline-2.edit.json",
+            "sha256": "a28fd524e97af8577fe16ad292365bddb80794c86fce3ccf74be6f07044b3113",
+            "bytes": 5315
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.baseline-2.request.json",
+            "sha256": "11cf518163ef0e0a79fe4c1ad441d87203faf90b4fb11cf279ad363067018bf5",
+            "bytes": 6551
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2210,
+          "schema_sha256": "c13fb4d854415707116ecf15fe7a8d0346a28a616573f1bea300df0d7b8b545a"
+        },
+        "candidate-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.candidate-2.edit.json",
+            "sha256": "fab1267ec70d995af85d4046de00d3e1e0e3211d62bcbc643447d93394e210db",
+            "bytes": 5139
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.candidate-2.request.json",
+            "sha256": "e846e18943bab0accd6585929d39d256d1f2a409d576b9949e775b844e838147",
+            "bytes": 6311
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2210,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        }
+      }
+    },
+    {
+      "id": "fan-direct-signal",
+      "expected": "reconciliation_signal",
+      "missing_obligation": "After the chamber door closes, the fan may restart only when the operator confirms readiness.",
+      "verdicts": [
+        "preserved"
+      ],
+      "cohort": "original_eight_regression",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/fan-direct-signal.packet.json",
+        "sha256": "b5bc91ca8f3c48237271afebae3ba137a1fbb993b6c83aa876491edc1d66a7f4",
+        "bytes": 5457
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/fan-direct-signal.baseline-1.edit.json",
+            "sha256": "e5b76c6a18376a0b6cd2968dc634dad05ceec6bdf23cdf71ace72d7c17f57b4e",
+            "bytes": 4889
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/fan-direct-signal.baseline-1.request.json",
+            "sha256": "d38ec2dec150f3c1c7bca66fc5601e4a3568c3f3f5137b48115e3decd0837e76",
+            "bytes": 6125
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 1858,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/fan-direct-signal.candidate-1.edit.json",
+            "sha256": "fc752e3105d4a40765c192e55ac11f6cc86b5c83e1de1c42b7496764a79fbd15",
+            "bytes": 4713
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/fan-direct-signal.candidate-1.request.json",
+            "sha256": "6cf3a28441282f95feec1489ca8bdad45908ad47eb76ce322ba77d07ca65836c",
+            "bytes": 5885
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 1858,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    },
+    {
+      "id": "joint-two-sources",
+      "expected": "candidate",
+      "missing_obligation": "Parcel release requires both recipient identity verification and payment confirmation.",
+      "verdicts": [
+        "preserved"
+      ],
+      "cohort": "original_eight_regression",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/joint-two-sources.packet.json",
+        "sha256": "975b7eeb17907f10cbbe815e7c2272ae1939a31c54b38893b04cc3db631ec450",
+        "bytes": 8116
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/joint-two-sources.baseline-1.edit.json",
+            "sha256": "900a585a7008f723aef54a2eca553b2efc789658d11fce83592bd6439e118c65",
+            "bytes": 5551
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/joint-two-sources.baseline-1.request.json",
+            "sha256": "e81d83b2c129f578f24bebf0de9f30a09e23eb72219ddc50ae28f89ba3a81e97",
+            "bytes": 6787
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2437,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/joint-two-sources.candidate-1.edit.json",
+            "sha256": "3b3bb8ea5f899eeb3ea343316d79f4ab41a70f8971d2e948e951c3e15edf7465",
+            "bytes": 5375
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/joint-two-sources.candidate-1.request.json",
+            "sha256": "528d141ca01ecc6596b3e9e156e83aa7602e1dee53dac19bff5fd60e564d6be8",
+            "bytes": 6547
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2437,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    },
+    {
+      "id": "wrong-role-assignment",
+      "expected": "unsupported_role",
+      "missing_obligation": "After an appointment is cancelled, the service must notify the patient.",
+      "verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "cohort": "original_eight_regression",
+      "comparison_count": 2,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.packet.json",
+        "sha256": "feab5c7cf7c41851a366082c10d7ca48bb1821169470cc07d9be64d84ee6db3d",
+        "bytes": 7726
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.baseline-1.edit.json",
+            "sha256": "a6da2a3a19ce56f7115ccfd56564b2ecc0f644b25413c87acde66be6cd60da41",
+            "bytes": 5444
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.baseline-1.request.json",
+            "sha256": "1211a94bc8125c28c89d9f2c2a94b24e98fe2af1d4fc898860acb6582c39aff0",
+            "bytes": 6680
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2336,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.candidate-1.edit.json",
+            "sha256": "2a0003d8611e75f860b8cd5054478c36cd5305cfad88d7b36b24bbb0a8fe61fa",
+            "bytes": 5268
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.candidate-1.request.json",
+            "sha256": "a76379a91676469df1a7c55d475910f4bb14ba746f5b10e1cd975d7a9ae9a561",
+            "bytes": 6440
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2336,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "baseline-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.baseline-2.edit.json",
+            "sha256": "e0da565e11db452ce54f2cd06c12f49863ff0ab85bc910397530fec9dcbf30ee",
+            "bytes": 5311
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.baseline-2.request.json",
+            "sha256": "5fbf5fd7fdbddb58cc7a03393f65d8f51479455d1d43c0c92662b67223e4e8d5",
+            "bytes": 6547
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2213,
+          "schema_sha256": "c13fb4d854415707116ecf15fe7a8d0346a28a616573f1bea300df0d7b8b545a"
+        },
+        "candidate-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.candidate-2.edit.json",
+            "sha256": "dc05dc80a3e8154696ce264b7dc2cde07b49f65757c983ad153c8ce71fd333d9",
+            "bytes": 5135
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.candidate-2.request.json",
+            "sha256": "4b90aa77689a6fd9f12719dd9a608445cb076baef0010ca9a7b57ffbb010488f",
+            "bytes": 6307
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2213,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        }
+      }
+    },
+    {
+      "id": "unresolved-multiple-producers",
+      "expected": "unlocalized",
+      "missing_obligation": "During power loss, the cabinet must keep medicine cold for eight hours, and an alarm must sound if backup cooling fails.",
+      "verdicts": [
+        "lost"
+      ],
+      "cohort": "original_eight_regression",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/unresolved-multiple-producers.packet.json",
+        "sha256": "81cea5f2fb231d10ea5fb4b303f58ecd2c695e675451209ca9cee7a308b76df4",
+        "bytes": 8394
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/unresolved-multiple-producers.baseline-1.edit.json",
+            "sha256": "969d6500a078eef3ec9e679cca9521924017900ef4056bb1f4e83e193d0b56f0",
+            "bytes": 5613
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/unresolved-multiple-producers.baseline-1.request.json",
+            "sha256": "bb122376e10f2c46bffdc70ebb63bac9bf283be4a593d56e663b4501ea2602de",
+            "bytes": 6849
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2485,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/unresolved-multiple-producers.candidate-1.edit.json",
+            "sha256": "3a6975b07ee1611fd8a92f53b7eab6c63a41dd86f566669075ccf4a38ba0d86a",
+            "bytes": 5437
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/unresolved-multiple-producers.candidate-1.request.json",
+            "sha256": "cb0bade29247195754728c65aecdef2632420c62783c3e1a66501ac5d706503c",
+            "bytes": 6609
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2485,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    },
+    {
+      "id": "parking-candidate",
+      "expected": "candidate",
+      "missing_obligation": "Ending a parking session requires settled payment; failed payment must leave the session active.",
+      "verdicts": [
+        "preserved"
+      ],
+      "cohort": "original_eight_regression",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/parking-candidate.packet.json",
+        "sha256": "72b132be86c09881278660074690f46b60d92ff71ebdcde3b5d448bf9bf2e2cc",
+        "bytes": 6304
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/parking-candidate.baseline-1.edit.json",
+            "sha256": "5f1b7efc23ef6b598b6e3f234a036b4d8f5dd49624f3fc793d44b7098190b820",
+            "bytes": 5082
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/parking-candidate.baseline-1.request.json",
+            "sha256": "9091283c3231d70aa6ac93104a478c1a06dcde3fcb96e5b8448fb665a512ff24",
+            "bytes": 6318
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2045,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/parking-candidate.candidate-1.edit.json",
+            "sha256": "8495805111320fd8360869a2d952cf806c1f5cc0d6193a12cf6c9882485351d6",
+            "bytes": 4906
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/parking-candidate.candidate-1.request.json",
+            "sha256": "c239d5fa44e91aba753147957c7afec573c31dd577a45d8e501672cba2f38bbe",
+            "bytes": 6078
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2045,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    },
+    {
+      "id": "captured-story",
+      "expected": "candidate",
+      "missing_obligation": "When started, the application must display Hello, World!.",
+      "verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "cohort": "captured_story",
+      "comparison_count": 2,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.packet.json",
+        "sha256": "4ba6378061be23e904263e4a1274baed780b58ffacacc1cf60c2dadf6ed95579",
+        "bytes": 16388
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.baseline-1.edit.json",
+            "sha256": "a25a87f7573ff90641dcd439447e1ddf00d1dd8fd41b3b3017f8d50f14cbb15d",
+            "bytes": 8997
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.baseline-1.request.json",
+            "sha256": "d5ce379f2a0e609367d3d36484fb4562ce17d54396b93804b1886c6e9f1542f5",
+            "bytes": 10233
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 5594,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.candidate-1.edit.json",
+            "sha256": "92e43e0f983733de7e46a8bc225be18b04e29ebe2ac1e9fc86e9d7d26b8be75b",
+            "bytes": 8821
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.candidate-1.request.json",
+            "sha256": "bc3a48d610475e71f2eeaeb15583cc376428849f04f599988fd7a037053e28e3",
+            "bytes": 9993
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 5594,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "baseline-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.baseline-2.edit.json",
+            "sha256": "15f3468928d8bad78cafa6189945d436b7ff6f437f3577d822e0fbef5c9618a2",
+            "bytes": 8922
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.baseline-2.request.json",
+            "sha256": "62d0c42476786bf198c2462f5351a335571ab2aa6c4f3708c7e9a280811b0c9a",
+            "bytes": 10158
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 5529,
+          "schema_sha256": "c13fb4d854415707116ecf15fe7a8d0346a28a616573f1bea300df0d7b8b545a"
+        },
+        "candidate-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.candidate-2.edit.json",
+            "sha256": "5937792cacfea653f696f8883bcca3a6ab6a55ced0043b86a51a9bc1a0c94ef9",
+            "bytes": 8746
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.candidate-2.request.json",
+            "sha256": "25fc131866419836d3a3ade6c60ad74915961198b91dd337f82f1c5009d91c12",
+            "bytes": 9918
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 5529,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        }
+      }
+    },
+    {
+      "id": "sterile-door",
+      "expected": "candidate",
+      "missing_obligation": "MOCK The access door must not unlock while the sterilizer is pressurized.",
+      "verdicts": [
+        "preserved"
+      ],
+      "cohort": "previously_fresh_regression",
+      "comparison_count": 1,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/sterile-door.packet.json",
+        "sha256": "bc8184b0903b20d427f56ebb3e602b65c29719a66db6bbb4fed50965a8fd6e99",
+        "bytes": 5721
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/sterile-door.baseline-1.edit.json",
+            "sha256": "c1fda34829bde88f1b6f575820199bce3b46960fb84f2cdbaac04edff97a8522",
+            "bytes": 4778
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/sterile-door.baseline-1.request.json",
+            "sha256": "25dc1294d7bb11b0d894e855977343185d76be585fff43626cf1664c5fd3df7b",
+            "bytes": 6014
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 1741,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/sterile-door.candidate-1.edit.json",
+            "sha256": "0473a6458ae442a5398e400e55443f895812dde746c4850def7900c9462649b2",
+            "bytes": 4602
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/sterile-door.candidate-1.request.json",
+            "sha256": "d337ff0c420889adc289d14161f47be02a38a422fcc2f949e1728a48bf8ab388",
+            "bytes": 5774
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 1741,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        }
+      }
+    },
+    {
+      "id": "voucher-release",
+      "expected": "unsupported_role",
+      "missing_obligation": "MOCK Voucher release requires manager approval as well as cleared payment.",
+      "verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "cohort": "previously_fresh_regression",
+      "comparison_count": 2,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.packet.json",
+        "sha256": "59aed9d31fd1a59a3b561e44937ebea4a4ea83da9de105204214f49edab87a8e",
+        "bytes": 8405
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.baseline-1.edit.json",
+            "sha256": "5cc48791822368576eea3d637b738f3e9b466bc8cdd48e34d8b4117bbdf109b1",
+            "bytes": 5522
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.baseline-1.request.json",
+            "sha256": "976723bf066d7471433c1b039332f062ae13cff322f0fff4de190384705f9812",
+            "bytes": 6758
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2386,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.candidate-1.edit.json",
+            "sha256": "6c48e15322bb26f47f7a4f72a4557b8fd1d6ec8fc3a6b0cc5b73ff38b1be04b3",
+            "bytes": 5346
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.candidate-1.request.json",
+            "sha256": "a1de65bcc6f445b4fb8d18bddf43397c779e3936704656319afdad25353ea871",
+            "bytes": 6518
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2386,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "baseline-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.baseline-2.edit.json",
+            "sha256": "dfdd64232b1ff144107287430e94771a32ee4e14b76593783e3a34cc3a17fe07",
+            "bytes": 5416
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.baseline-2.request.json",
+            "sha256": "3175c6a06ad295723ed01faadce70a4da41b33d4a0aedc8cac184d7f504917d3",
+            "bytes": 6652
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 2290,
+          "schema_sha256": "c13fb4d854415707116ecf15fe7a8d0346a28a616573f1bea300df0d7b8b545a"
+        },
+        "candidate-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.candidate-2.edit.json",
+            "sha256": "01c59f96d594f01085c52324f7353da70554dfd3112baa52fcb58b274d41e251",
+            "bytes": 5240
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.candidate-2.request.json",
+            "sha256": "4e2271df16549cb15494a35b96270b18033443f8935f9a817139315d375c86dc",
+            "bytes": 6412
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 2290,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        }
+      }
+    },
+    {
+      "id": "dual-ready",
+      "expected": "candidate",
+      "missing_obligation": "MOCK After inspection is approved, show MOCK Ready to the inspector.",
+      "verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "cohort": "previously_fresh_regression",
+      "comparison_count": 2,
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.packet.json",
+        "sha256": "d190a60cef7e480648ad72383b2fb27fd0931df9f070671e3d447458723c4f6b",
+        "bytes": 12303
+      },
+      "arms": {
+        "baseline-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.baseline-1.edit.json",
+            "sha256": "f52967e5a52f2aba5bc020cc1c89c7227016706b0395f693c924e6bd76e4fd4d",
+            "bytes": 7088
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.baseline-1.request.json",
+            "sha256": "190a93373751b2552cb727b6912b941dd5b78578f27ade9d83cd464c07df2c6f",
+            "bytes": 8324
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 3774,
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197"
+        },
+        "candidate-1": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.candidate-1.edit.json",
+            "sha256": "09bf32e76981722e4bc0552e163949bc511789b80ae9797e7bacb53bd6284885",
+            "bytes": 6912
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.candidate-1.request.json",
+            "sha256": "2a45370e1c5c39ef1832272ef94804ab65ac4eeba7ca19014d52c12e31946326",
+            "bytes": 8084
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 3774,
+          "schema_sha256": "2eca81bb6b7b644c69d55cc8373420d822b87292d694bbb60b04a607f2f6762c"
+        },
+        "baseline-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.baseline-2.edit.json",
+            "sha256": "dff22ea76b729f233554d737fad05fc6bd754c7eb2e74599a22e95ac60645c11",
+            "bytes": 6944
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.baseline-2.request.json",
+            "sha256": "71bd2517c07a7814a2236360129d700b500de20898c237a3ab730042857214b2",
+            "bytes": 8180
+          },
+          "prompt_bytes": 1556,
+          "evidence_bytes": 3650,
+          "schema_sha256": "c13fb4d854415707116ecf15fe7a8d0346a28a616573f1bea300df0d7b8b545a"
+        },
+        "candidate-2": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.candidate-2.edit.json",
+            "sha256": "9ccd84a77c1e3c1cfde2cddf10ab5747dbcc6ec8c3f1ac47ad88bb3692fe1098",
+            "bytes": 6768
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.candidate-2.request.json",
+            "sha256": "c1fddc24917f39d4a8e83d3fc68f4d556b72db9d327334cf44588f69e437cbda",
+            "bytes": 7940
+          },
+          "prompt_bytes": 1520,
+          "evidence_bytes": 3650,
+          "schema_sha256": "bc9a84f637d8864db598328bce5d6ddf683242c37d2b6815e5694a3a4f1cb33b"
+        }
+      }
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-description-baseline-2-1",
+      "decision_id": "captured-description-baseline-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-description.baseline-2.response-1.json"
+    },
+    {
+      "id": "captured-description-baseline-1-1",
+      "decision_id": "captured-description-baseline-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-description.baseline-1.response-1.json"
+    },
+    {
+      "id": "captured-description-candidate-2-1",
+      "decision_id": "captured-description-candidate-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-description.candidate-2.response-1.json"
+    },
+    {
+      "id": "captured-description-candidate-1-1",
+      "decision_id": "captured-description-candidate-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-description.candidate-1.response-1.json"
+    },
+    {
+      "id": "loan-candidate-candidate-1-1",
+      "decision_id": "loan-candidate-candidate-1",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/loan-candidate.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/loan-candidate.candidate-1.response-1.json"
+    },
+    {
+      "id": "loan-candidate-baseline-1-1",
+      "decision_id": "loan-candidate-baseline-1",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/loan-candidate.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/loan-candidate.baseline-1.response-1.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-2-1",
+      "decision_id": "extraction-inherited-baseline-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/extraction-inherited.baseline-2.response-1.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-1-1",
+      "decision_id": "extraction-inherited-baseline-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/extraction-inherited.baseline-1.response-1.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-2-1",
+      "decision_id": "extraction-inherited-candidate-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/extraction-inherited.candidate-2.response-1.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-1-1",
+      "decision_id": "extraction-inherited-candidate-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/extraction-inherited.candidate-1.response-1.json"
+    },
+    {
+      "id": "fan-direct-signal-candidate-1-1",
+      "decision_id": "fan-direct-signal-candidate-1",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/fan-direct-signal.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/fan-direct-signal.candidate-1.response-1.json"
+    },
+    {
+      "id": "fan-direct-signal-baseline-1-1",
+      "decision_id": "fan-direct-signal-baseline-1",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/fan-direct-signal.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/fan-direct-signal.baseline-1.response-1.json"
+    },
+    {
+      "id": "joint-two-sources-baseline-1-1",
+      "decision_id": "joint-two-sources-baseline-1",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/joint-two-sources.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/joint-two-sources.baseline-1.response-1.json"
+    },
+    {
+      "id": "joint-two-sources-candidate-1-1",
+      "decision_id": "joint-two-sources-candidate-1",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/joint-two-sources.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/joint-two-sources.candidate-1.response-1.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-1-1",
+      "decision_id": "wrong-role-assignment-candidate-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/wrong-role-assignment.candidate-1.response-1.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-2-1",
+      "decision_id": "wrong-role-assignment-candidate-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/wrong-role-assignment.candidate-2.response-1.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-1-1",
+      "decision_id": "wrong-role-assignment-baseline-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/wrong-role-assignment.baseline-1.response-1.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-2-1",
+      "decision_id": "wrong-role-assignment-baseline-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/wrong-role-assignment.baseline-2.response-1.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-1-1",
+      "decision_id": "unresolved-multiple-producers-baseline-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/unresolved-multiple-producers.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/unresolved-multiple-producers.baseline-1.response-1.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-1-1",
+      "decision_id": "unresolved-multiple-producers-candidate-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/unresolved-multiple-producers.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/unresolved-multiple-producers.candidate-1.response-1.json"
+    },
+    {
+      "id": "parking-candidate-candidate-1-1",
+      "decision_id": "parking-candidate-candidate-1",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/parking-candidate.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/parking-candidate.candidate-1.response-1.json"
+    },
+    {
+      "id": "parking-candidate-baseline-1-1",
+      "decision_id": "parking-candidate-baseline-1",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/parking-candidate.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/parking-candidate.baseline-1.response-1.json"
+    },
+    {
+      "id": "captured-story-baseline-2-1",
+      "decision_id": "captured-story-baseline-1",
+      "case": "captured-story",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-story.baseline-2.response-1.json"
+    },
+    {
+      "id": "captured-story-baseline-1-1",
+      "decision_id": "captured-story-baseline-1",
+      "case": "captured-story",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-story.baseline-1.response-1.json"
+    },
+    {
+      "id": "captured-story-candidate-2-1",
+      "decision_id": "captured-story-candidate-1",
+      "case": "captured-story",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-story.candidate-2.response-1.json"
+    },
+    {
+      "id": "captured-story-candidate-1-1",
+      "decision_id": "captured-story-candidate-1",
+      "case": "captured-story",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-story.candidate-1.response-1.json"
+    },
+    {
+      "id": "sterile-door-candidate-1-1",
+      "decision_id": "sterile-door-candidate-1",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/sterile-door.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/sterile-door.candidate-1.response-1.json"
+    },
+    {
+      "id": "sterile-door-baseline-1-1",
+      "decision_id": "sterile-door-baseline-1",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/sterile-door.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/sterile-door.baseline-1.response-1.json"
+    },
+    {
+      "id": "voucher-release-baseline-2-1",
+      "decision_id": "voucher-release-baseline-1",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/voucher-release.baseline-2.response-1.json"
+    },
+    {
+      "id": "voucher-release-baseline-1-1",
+      "decision_id": "voucher-release-baseline-1",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/voucher-release.baseline-1.response-1.json"
+    },
+    {
+      "id": "voucher-release-candidate-2-1",
+      "decision_id": "voucher-release-candidate-1",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/voucher-release.candidate-2.response-1.json"
+    },
+    {
+      "id": "voucher-release-candidate-1-1",
+      "decision_id": "voucher-release-candidate-1",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/voucher-release.candidate-1.response-1.json"
+    },
+    {
+      "id": "dual-ready-candidate-1-1",
+      "decision_id": "dual-ready-candidate-1",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/dual-ready.candidate-1.response-1.json"
+    },
+    {
+      "id": "dual-ready-candidate-2-1",
+      "decision_id": "dual-ready-candidate-1",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/dual-ready.candidate-2.response-1.json"
+    },
+    {
+      "id": "dual-ready-baseline-1-1",
+      "decision_id": "dual-ready-baseline-1",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 1,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/dual-ready.baseline-1.response-1.json"
+    },
+    {
+      "id": "dual-ready-baseline-2-1",
+      "decision_id": "dual-ready-baseline-1",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 1,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/dual-ready.baseline-2.response-1.json"
+    },
+    {
+      "id": "captured-description-candidate-1-2",
+      "decision_id": "captured-description-candidate-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-description.candidate-1.response-2.json"
+    },
+    {
+      "id": "captured-description-candidate-2-2",
+      "decision_id": "captured-description-candidate-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-description.candidate-2.response-2.json"
+    },
+    {
+      "id": "captured-description-baseline-1-2",
+      "decision_id": "captured-description-baseline-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-description.baseline-1.response-2.json"
+    },
+    {
+      "id": "captured-description-baseline-2-2",
+      "decision_id": "captured-description-baseline-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-description.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-description.baseline-2.response-2.json"
+    },
+    {
+      "id": "loan-candidate-baseline-1-2",
+      "decision_id": "loan-candidate-baseline-2",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/loan-candidate.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/loan-candidate.baseline-1.response-2.json"
+    },
+    {
+      "id": "loan-candidate-candidate-1-2",
+      "decision_id": "loan-candidate-candidate-2",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/loan-candidate.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/loan-candidate.candidate-1.response-2.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-1-2",
+      "decision_id": "extraction-inherited-candidate-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/extraction-inherited.candidate-1.response-2.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-2-2",
+      "decision_id": "extraction-inherited-candidate-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/extraction-inherited.candidate-2.response-2.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-1-2",
+      "decision_id": "extraction-inherited-baseline-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/extraction-inherited.baseline-1.response-2.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-2-2",
+      "decision_id": "extraction-inherited-baseline-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/extraction-inherited.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/extraction-inherited.baseline-2.response-2.json"
+    },
+    {
+      "id": "fan-direct-signal-baseline-1-2",
+      "decision_id": "fan-direct-signal-baseline-2",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/fan-direct-signal.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/fan-direct-signal.baseline-1.response-2.json"
+    },
+    {
+      "id": "fan-direct-signal-candidate-1-2",
+      "decision_id": "fan-direct-signal-candidate-2",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/fan-direct-signal.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/fan-direct-signal.candidate-1.response-2.json"
+    },
+    {
+      "id": "joint-two-sources-candidate-1-2",
+      "decision_id": "joint-two-sources-candidate-2",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/joint-two-sources.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/joint-two-sources.candidate-1.response-2.json"
+    },
+    {
+      "id": "joint-two-sources-baseline-1-2",
+      "decision_id": "joint-two-sources-baseline-2",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/joint-two-sources.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/joint-two-sources.baseline-1.response-2.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-2-2",
+      "decision_id": "wrong-role-assignment-baseline-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/wrong-role-assignment.baseline-2.response-2.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-1-2",
+      "decision_id": "wrong-role-assignment-baseline-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/wrong-role-assignment.baseline-1.response-2.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-2-2",
+      "decision_id": "wrong-role-assignment-candidate-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/wrong-role-assignment.candidate-2.response-2.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-1-2",
+      "decision_id": "wrong-role-assignment-candidate-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/wrong-role-assignment.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/wrong-role-assignment.candidate-1.response-2.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-1-2",
+      "decision_id": "unresolved-multiple-producers-candidate-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/unresolved-multiple-producers.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/unresolved-multiple-producers.candidate-1.response-2.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-1-2",
+      "decision_id": "unresolved-multiple-producers-baseline-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/unresolved-multiple-producers.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/unresolved-multiple-producers.baseline-1.response-2.json"
+    },
+    {
+      "id": "parking-candidate-baseline-1-2",
+      "decision_id": "parking-candidate-baseline-2",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/parking-candidate.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/parking-candidate.baseline-1.response-2.json"
+    },
+    {
+      "id": "parking-candidate-candidate-1-2",
+      "decision_id": "parking-candidate-candidate-2",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/parking-candidate.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/parking-candidate.candidate-1.response-2.json"
+    },
+    {
+      "id": "captured-story-candidate-1-2",
+      "decision_id": "captured-story-candidate-2",
+      "case": "captured-story",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-story.candidate-1.response-2.json"
+    },
+    {
+      "id": "captured-story-candidate-2-2",
+      "decision_id": "captured-story-candidate-2",
+      "case": "captured-story",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-story.candidate-2.response-2.json"
+    },
+    {
+      "id": "captured-story-baseline-1-2",
+      "decision_id": "captured-story-baseline-2",
+      "case": "captured-story",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-story.baseline-1.response-2.json"
+    },
+    {
+      "id": "captured-story-baseline-2-2",
+      "decision_id": "captured-story-baseline-2",
+      "case": "captured-story",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/captured-story.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/captured-story.baseline-2.response-2.json"
+    },
+    {
+      "id": "sterile-door-baseline-1-2",
+      "decision_id": "sterile-door-baseline-2",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/sterile-door.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/sterile-door.baseline-1.response-2.json"
+    },
+    {
+      "id": "sterile-door-candidate-1-2",
+      "decision_id": "sterile-door-candidate-2",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/sterile-door.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/sterile-door.candidate-1.response-2.json"
+    },
+    {
+      "id": "voucher-release-candidate-1-2",
+      "decision_id": "voucher-release-candidate-2",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/voucher-release.candidate-1.response-2.json"
+    },
+    {
+      "id": "voucher-release-candidate-2-2",
+      "decision_id": "voucher-release-candidate-2",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/voucher-release.candidate-2.response-2.json"
+    },
+    {
+      "id": "voucher-release-baseline-1-2",
+      "decision_id": "voucher-release-baseline-2",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/voucher-release.baseline-1.response-2.json"
+    },
+    {
+      "id": "voucher-release-baseline-2-2",
+      "decision_id": "voucher-release-baseline-2",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/voucher-release.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/voucher-release.baseline-2.response-2.json"
+    },
+    {
+      "id": "dual-ready-baseline-2-2",
+      "decision_id": "dual-ready-baseline-2",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "request_arm": "baseline-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.baseline-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/dual-ready.baseline-2.response-2.json"
+    },
+    {
+      "id": "dual-ready-baseline-1-2",
+      "decision_id": "dual-ready-baseline-2",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "request_arm": "baseline-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.baseline-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/dual-ready.baseline-1.response-2.json"
+    },
+    {
+      "id": "dual-ready-candidate-2-2",
+      "decision_id": "dual-ready-candidate-2",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "request_arm": "candidate-2",
+      "repetition": 2,
+      "comparison_id": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.candidate-2.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/dual-ready.candidate-2.response-2.json"
+    },
+    {
+      "id": "dual-ready-candidate-1-2",
+      "decision_id": "dual-ready-candidate-2",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "request_arm": "candidate-1",
+      "repetition": 2,
+      "comparison_id": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/native-scope/dual-ready.candidate-1.edit.json",
+      "response_file": ".zig-cache/source-loss-native-scope/dual-ready.candidate-1.response-2.json"
+    }
+  ],
+  "decision_trials": [
+    {
+      "id": "captured-description-baseline-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "captured-description-baseline-2-1",
+        "captured-description-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/captured-description.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/captured-description.baseline.receipt-1.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "captured-description-candidate-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "captured-description-candidate-2-1",
+        "captured-description-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/captured-description.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/captured-description.candidate.receipt-1.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "loan-candidate-candidate-1",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "loan-candidate-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/loan-candidate.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/loan-candidate.candidate.receipt-1.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "loan-candidate-baseline-1",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "loan-candidate-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/loan-candidate.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/loan-candidate.baseline.receipt-1.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "extraction-inherited-baseline-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "extraction-inherited-baseline-2-1",
+        "extraction-inherited-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/extraction-inherited.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/extraction-inherited.baseline.receipt-1.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "extraction-inherited-candidate-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "extraction-inherited-candidate-2-1",
+        "extraction-inherited-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/extraction-inherited.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/extraction-inherited.candidate.receipt-1.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "fan-direct-signal-candidate-1",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "fan-direct-signal-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/fan-direct-signal.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/fan-direct-signal.candidate.receipt-1.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "fan-direct-signal-baseline-1",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "fan-direct-signal-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/fan-direct-signal.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/fan-direct-signal.baseline.receipt-1.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "joint-two-sources-baseline-1",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "joint-two-sources-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/joint-two-sources.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/joint-two-sources.baseline.receipt-1.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "joint-two-sources-candidate-1",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "joint-two-sources-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/joint-two-sources.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/joint-two-sources.candidate.receipt-1.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "wrong-role-assignment-candidate-1-1",
+        "wrong-role-assignment-candidate-2-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/wrong-role-assignment.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/wrong-role-assignment.candidate.receipt-1.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "wrong-role-assignment-baseline-1-1",
+        "wrong-role-assignment-baseline-2-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/wrong-role-assignment.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/wrong-role-assignment.baseline.receipt-1.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "unresolved-multiple-producers-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/unresolved-multiple-producers.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/unresolved-multiple-producers.baseline.receipt-1.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "unresolved-multiple-producers-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/unresolved-multiple-producers.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/unresolved-multiple-producers.candidate.receipt-1.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "parking-candidate-candidate-1",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "parking-candidate-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/parking-candidate.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/parking-candidate.candidate.receipt-1.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "parking-candidate-baseline-1",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "parking-candidate-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/parking-candidate.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/parking-candidate.baseline.receipt-1.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "captured-story-baseline-1",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "captured-story-baseline-2-1",
+        "captured-story-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/captured-story.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/captured-story.baseline.receipt-1.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "captured-story-candidate-1",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "captured-story-candidate-2-1",
+        "captured-story-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/captured-story.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/captured-story.candidate.receipt-1.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "sterile-door-candidate-1",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "sterile-door-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/sterile-door.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/sterile-door.candidate.receipt-1.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "sterile-door-baseline-1",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "sterile-door-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/sterile-door.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/sterile-door.baseline.receipt-1.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "voucher-release-baseline-1",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "voucher-release-baseline-2-1",
+        "voucher-release-baseline-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/voucher-release.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/voucher-release.baseline.receipt-1.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "voucher-release-candidate-1",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "voucher-release-candidate-2-1",
+        "voucher-release-candidate-1-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/voucher-release.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/voucher-release.candidate.receipt-1.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "dual-ready-candidate-1",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "repetition": 1,
+      "physical_trials": [
+        "dual-ready-candidate-1-1",
+        "dual-ready-candidate-2-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/dual-ready.candidate.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/dual-ready.candidate.receipt-1.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "dual-ready-baseline-1",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "repetition": 1,
+      "physical_trials": [
+        "dual-ready-baseline-1-1",
+        "dual-ready-baseline-2-1"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/dual-ready.baseline.native-1.json",
+      "receipt": ".zig-cache/source-loss-native-scope/dual-ready.baseline.receipt-1.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "captured-description-candidate-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "captured-description-candidate-1-2",
+        "captured-description-candidate-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/captured-description.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/captured-description.candidate.receipt-2.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "captured-description-baseline-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "captured-description-baseline-1-2",
+        "captured-description-baseline-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/captured-description.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/captured-description.baseline.receipt-2.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "loan-candidate-baseline-2",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "loan-candidate-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/loan-candidate.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/loan-candidate.baseline.receipt-2.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "loan-candidate-candidate-2",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "loan-candidate-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/loan-candidate.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/loan-candidate.candidate.receipt-2.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "extraction-inherited-candidate-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "extraction-inherited-candidate-1-2",
+        "extraction-inherited-candidate-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/extraction-inherited.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/extraction-inherited.candidate.receipt-2.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "extraction-inherited-baseline-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "extraction-inherited-baseline-1-2",
+        "extraction-inherited-baseline-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/extraction-inherited.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/extraction-inherited.baseline.receipt-2.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "fan-direct-signal-baseline-2",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "fan-direct-signal-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/fan-direct-signal.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/fan-direct-signal.baseline.receipt-2.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "fan-direct-signal-candidate-2",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "fan-direct-signal-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/fan-direct-signal.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/fan-direct-signal.candidate.receipt-2.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "joint-two-sources-candidate-2",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "joint-two-sources-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/joint-two-sources.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/joint-two-sources.candidate.receipt-2.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "joint-two-sources-baseline-2",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "joint-two-sources-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/joint-two-sources.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/joint-two-sources.baseline.receipt-2.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "wrong-role-assignment-baseline-2-2",
+        "wrong-role-assignment-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/wrong-role-assignment.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/wrong-role-assignment.baseline.receipt-2.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "wrong-role-assignment-candidate-2-2",
+        "wrong-role-assignment-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/wrong-role-assignment.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/wrong-role-assignment.candidate.receipt-2.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "unresolved-multiple-producers-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/unresolved-multiple-producers.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/unresolved-multiple-producers.candidate.receipt-2.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "unresolved-multiple-producers-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/unresolved-multiple-producers.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/unresolved-multiple-producers.baseline.receipt-2.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "parking-candidate-baseline-2",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "parking-candidate-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/parking-candidate.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/parking-candidate.baseline.receipt-2.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "parking-candidate-candidate-2",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "parking-candidate-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/parking-candidate.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/parking-candidate.candidate.receipt-2.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "captured-story-candidate-2",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "captured-story-candidate-1-2",
+        "captured-story-candidate-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/captured-story.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/captured-story.candidate.receipt-2.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "captured-story-baseline-2",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "captured-story-baseline-1-2",
+        "captured-story-baseline-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/captured-story.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/captured-story.baseline.receipt-2.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "sterile-door-baseline-2",
+      "case": "sterile-door",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "sterile-door-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/sterile-door.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/sterile-door.baseline.receipt-2.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "sterile-door-candidate-2",
+      "case": "sterile-door",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "sterile-door-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/sterile-door.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/sterile-door.candidate.receipt-2.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "voucher-release-candidate-2",
+      "case": "voucher-release",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "voucher-release-candidate-1-2",
+        "voucher-release-candidate-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/voucher-release.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/voucher-release.candidate.receipt-2.json",
+      "native_owner": "current_native_owned_scope"
+    },
+    {
+      "id": "voucher-release-baseline-2",
+      "case": "voucher-release",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "voucher-release-baseline-1-2",
+        "voucher-release-baseline-2-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/voucher-release.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/voucher-release.baseline.receipt-2.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "dual-ready-baseline-2",
+      "case": "dual-ready",
+      "arm": "baseline",
+      "repetition": 2,
+      "physical_trials": [
+        "dual-ready-baseline-2-2",
+        "dual-ready-baseline-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/dual-ready.baseline.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/dual-ready.baseline.receipt-2.json",
+      "native_owner": "frozen_HEAD_old_contract"
+    },
+    {
+      "id": "dual-ready-candidate-2",
+      "case": "dual-ready",
+      "arm": "candidate",
+      "repetition": 2,
+      "physical_trials": [
+        "dual-ready-candidate-2-2",
+        "dual-ready-candidate-1-2"
+      ],
+      "native_report": ".zig-cache/source-loss-native-scope/dual-ready.candidate.native-2.json",
+      "receipt": ".zig-cache/source-loss-native-scope/dual-ready.candidate.receipt-2.json",
+      "native_owner": "current_native_owned_scope"
+    }
+  ],
+  "sources": [
+    {
+      "path": "src/test_fixtures/source_loss_calibration.zig",
+      "sha256": "34f0e9209c9bcc14b96d6410c8007ead94be27953d7318752de8db68c477fd59",
+      "bytes": 43401
+    },
+    {
+      "path": "src/domain/source_omission_comparison.zig",
+      "sha256": "43f585a1ad4623acba78a49d666bf6f15708cb5b9754dc26fb2bfc0f204ae07e",
+      "bytes": 9774
+    },
+    {
+      "path": "src/domain/specification_support.zig",
+      "sha256": "a92112effd3a46a85508bdb27212d97b50998cbb1d80a58fc45feca7340a7ee5",
+      "bytes": 38140
+    },
+    {
+      "path": "src/domain/specification_support_model.zig",
+      "sha256": "b2e8154846b6704a5a4841beda12cf2413f00749549094d14edede7ad5e5a706",
+      "bytes": 7783
+    },
+    {
+      "path": "src/domain/specification_support_evidence.zig",
+      "sha256": "aba742688e461df6d6d8f8a45d563d33524ca5786593cc3e323eb3b00ef0780c",
+      "bytes": 20694
+    },
+    {
+      "path": "src/domain/specification_support_repair.zig",
+      "sha256": "c9b580d9149de7e26e08dcfb09521d9787afadeb74678c0c4dcbfca2804f0af8",
+      "bytes": 18921
+    },
+    {
+      "path": "src/domain/source_omission_context.zig",
+      "sha256": "49b333e3803bc6b5fc40a8f3ace7dcaff0787ef045606eb6715d6f3b1629fd87",
+      "bytes": 14799
+    },
+    {
+      "path": "src/domain/source_omission_binding.zig",
+      "sha256": "49e9a58c550d4d6c4befa8d1b6193d0c5cd3f2834eb989569fe66de16419caf4",
+      "bytes": 10040
+    },
+    {
+      "path": "src/domain/model_candidate_json.zig",
+      "sha256": "4ccb44d77212aeb846d741cf3801a601349127b440ebf7fecfeeb6fd300a37c7",
+      "bytes": 13384
+    },
+    {
+      "path": "src/domain/model_result_schema.zig",
+      "sha256": "c357589aecc82a7769d556812a1abf83279db425d512dac1851e36e61321b447",
+      "bytes": 36324
+    },
+    {
+      "path": "src/adapters/provider/bedrock_request.zig",
+      "sha256": "c7cb3ef2e2a98315caf321030c6dc3f02d6799ca475478d4964c8a24e97fd316",
+      "bytes": 5577
+    },
+    {
+      "path": "design/workflows/spec/support-loss.prompt.md",
+      "sha256": "79348d80c19922afe03ef3c9333a2d323410aabfe15db3b2e759f5a400061859",
+      "bytes": 1520
+    },
+    {
+      "path": "design/workflows/spec/support.prompt.md",
+      "sha256": "65a2ae84e1b723c93fc433e48a2f0178f407b9b38a1d8cb716ccbc28dd763951",
+      "bytes": 1746
+    },
+    {
+      "path": "design/workflows/spec/support.schema.json",
+      "sha256": "e7d723fc00b4aa99b102654b384a4e5cd5548b2787181300aff77d1ebb89af5c",
+      "bytes": 10617
+    }
+  ],
+  "assessment": {
+    "review": "Manual semantic assessment, unblinded; no model judge. Original expectations and gates unchanged.",
+    "baseline_native_owner": "The unchanged old owner is run from a frozen HEAD source snapshot through build.zig. Historical baseline payloads are never admitted by the candidate owner, edited to remove members or reinterpreted under revised policy.",
+    "candidate_native_owner": "The candidate receipt binds every child to current assignment, original comparison ID, case/repetition, origin and frozen request SHA. Only all admitted responses reach current full-assignment native attribution.",
+    "evidence_rule": "Existing adequate-assembled-evidence gate remains; individual child adequacy separately reported.",
+    "source_review_limit": "These 72 sends start from fixed admitted obligations. Prepared actual source-review requests and two controls are outside this allowance; live handoff qualification needs its own frozen panel and bounded approval.",
+    "baseline_ceiling": "A high baseline may prevent the unchanged minimum improvement of two; do not lower that gate after seeing outputs."
+  }
+}

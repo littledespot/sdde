@@ -90,9 +90,10 @@ test "preservation responses require closed assessments and reject culprit selec
         .{ .bytes = "{\"assessments\":[],\"location\":{}}", .rejection = .unknown_property, .path = "/location" },
     }) |case| try checkDocument(selected.modelBytes(), case);
     for ([_][]const u8{ "preserved", "lost", "uncertain" }) |verdict| {
-        const bytes = try std.fmt.allocPrint(a, "{{\"assessments\":[{{\"comparison_id\":1,\"result\":\"{s}\",\"sources\":[{{\"chunk_id\":{{\"bytes\":\"MOCK source\"}},\"lines\":{{\"first\":1,\"last\":2}}}}],\"members\":[1,2],\"explanation\":\"MOCK assessed meaning.\"}}]}}", .{verdict});
+        const bytes = try std.fmt.allocPrint(a, "{{\"assessments\":[{{\"comparison_id\":1,\"result\":\"{s}\",\"sources\":[{{\"chunk_id\":{{\"bytes\":\"MOCK source\"}},\"lines\":{{\"first\":1,\"last\":2}}}}],\"explanation\":\"MOCK assessed meaning.\"}}]}}", .{verdict});
         try checkDocument(selected.modelBytes(), .{ .bytes = bytes });
     }
+    try checkDocument(selected.modelBytes(), .{ .bytes = "{\"assessments\":[{\"comparison_id\":1,\"result\":\"lost\",\"sources\":[{\"chunk_id\":{\"bytes\":\"MOCK source\"},\"lines\":{\"first\":1,\"last\":2}}],\"members\":[],\"explanation\":\"MOCK Missing behavior.\"}]}", .rejection = .unknown_property, .path = "/assessments/0/members" });
 }
 
 test "loss protocol correction preserves the complete selected contract in both response modes" {
@@ -132,8 +133,9 @@ test "loss protocol correction preserves the complete selected contract in both 
                 try std.testing.expect(!shape.object.get("additionalProperties").?.bool);
                 const assessment = shape.object.get("properties").?.object.get("assessments").?.object.get("items").?;
                 try std.testing.expect(!assessment.object.get("additionalProperties").?.bool);
-                try std.testing.expectEqual(@as(usize, 5), assessment.object.get("required").?.array.items.len);
+                try std.testing.expectEqual(@as(usize, 4), assessment.object.get("required").?.array.items.len);
                 try std.testing.expect(assessment.object.get("properties").?.object.get("location") == null);
+                try std.testing.expect(assessment.object.get("properties").?.object.get("members") == null);
             }
         }
     }

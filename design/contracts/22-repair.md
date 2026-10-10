@@ -98,19 +98,26 @@ wording and support jointly expressed by its members. It must not require a
 standalone literal, final-field form or a description of the downstream defect.
 The model returns exactly one
 `preserved`, `lost` or `uncertain` assessment per assigned comparison ID, with
-source spans, assessed member IDs and an explanation. Shared identical views are
+original-source spans and an explanation of where the obligation survives or what
+is missing. `comparison_id` binds the whole native-assigned collection; the model
+does not select a member subset. Complete member identities, evidence, obligations
+and dependencies remain in the retained assignment. Shared identical views are
 assessed once. Other producer outputs are supporting context, not selectable
 culprits or permission to expand the finding.
 
 Native admission rejects missing, duplicate, foreign or stale comparisons and
-invalid source/member joins, including a changed obligation binding. It derives
+invalid source joins or native collection identities, including a changed obligation
+binding. The closed response rejects the superseded `members` field; no reader,
+correction or normalization fills member IDs into rejected responses. It derives
 attribution backwards through the bound path: preserved input and lost output
 establish the boundary's owner; lost input
 and lost output establish only inherited absence. Required uncertainty, composite
 ownership or unavailable facts leave attribution unresolved. Preserved original
 claims assigned to authoring cut off upstream blame; signal paraphrases are not
 substituted for those claims. Native checks do not prove the semantic labels or
-explanations. A forced no-feature extraction owns its forced classifications;
+explanations, or prove that the model considered every assigned member. Explanation
+adequacy and judgment correctness require separate semantic assessment. A forced
+no-feature extraction owns its forced classifications;
 a separately classified claims collection does not identify a unique extraction
 or classification culprit merely because meaning is missing.
 

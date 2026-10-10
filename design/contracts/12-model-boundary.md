@@ -822,7 +822,9 @@ means no reliable attribution was established. Both retain ordinary eligibility.
 Native source-review evidence retains the bound preservation assignment and complete
 assessment response under [§22.1](22-repair.md). The derived location must agree
 with re-admission against current canonical facts. Non-omission and principle
-findings carry no comparison. `specification-state/v11` rejects earlier snapshot
+findings carry no comparison. The response supplies judgments, original-source
+spans and explanations; its comparison ID binds the entire native collection.
+`specification-state/v12` rejects earlier snapshot
 contracts without supplying missing bindings. ADR 0020 governs exact lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
