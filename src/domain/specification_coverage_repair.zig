@@ -127,9 +127,27 @@ pub const AuthorizationRejection = struct {
     revision: u64,
     outstanding_requirements: []const authority.Entry,
     review_origin: ?@import("model_candidate_origin.zig").Origin,
+    targets: []const TargetAssessment,
 };
 
-pub fn authorizationRejection(a: std.mem.Allocator, support: Support, cause: Error) std.mem.Allocator.Error!AuthorizationRejection {
+/// Observations from the actual authorization attempt, never a second permission
+/// calculation. Unchecked targets retain no derived owner or producer.
+pub const TargetAssessment = struct {
+    requirement: authority.Id,
+    reason: enum { not_checked, invalid_evidence, no_supported_omission, upstream_owner, unsupported_owner, missing_claim_evidence, unsupported_target, incompatible_record_binding, claim_evidence_mismatch, citation_evidence_mismatch, authorized } = .not_checked,
+    owner: ?@import("source_omission.zig").Location = null,
+    target: ?Target = null,
+    reviewed_provenance: ?g.spec.Provenance = null,
+    target_provenance: ?g.spec.Provenance = null,
+    target_origin: ?@import("model_candidate_origin.zig").Origin = null,
+    finding_origin: ?@import("model_candidate_origin.zig").Origin = null,
+    comparison_origin: ?@import("model_candidate_origin.zig").Origin = null,
+};
+/// Initialize once per attempt. The caller owns targets; its evidence slices
+/// borrow the same inputs/arena as the authorization. Copy before their release.
+pub const AuthorizationTrace = struct { targets: []TargetAssessment = &.{} };
+
+pub fn authorizationRejection(a: std.mem.Allocator, support: Support, trace: AuthorizationTrace, cause: Error) std.mem.Allocator.Error!AuthorizationRejection {
     var outstanding: std.ArrayList(authority.Entry) = .empty;
     for (support.result.entries) |entry| if (entry.candidate_defect != null) {
         try outstanding.append(a, entry);
@@ -139,46 +157,103 @@ pub fn authorizationRejection(a: std.mem.Allocator, support: Support, cause: Err
         .revision = support.inputs.revision,
         .outstanding_requirements = try outstanding.toOwnedSlice(a),
         .review_origin = support.inputs.review_origin,
+        .targets = trace.targets,
     };
 }
 
 /// Only a current, shared-classified omission may select a native content slot.
 /// No coverage row, source record or review verdict is a repair target.
-pub fn authorizeOmission(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, support: Support) Error!Authorization {
+pub fn authorizeOmission(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, support: Support, trace: *AuthorizationTrace) Error!Authorization {
+    var count: usize = 0;
+    for (support.result.entries) |entry| if (entry.candidate_defect != null) {
+        count += 1;
+    };
+    trace.targets = try a.alloc(TargetAssessment, count);
+    var index: usize = 0;
+    for (support.result.entries) |entry| if (entry.candidate_defect != null) {
+        trace.targets[index] = .{ .requirement = entry.requirement };
+        index += 1;
+    };
     const rebuilt = try sessions.assemble(a, validator, context, current);
     if (!try g.spec.sameContent(a, rebuilt.content, candidate)) return error.InvalidSpecificationCoverageRepair;
     const facts = try reviewedFacts(a, current, context, candidate, support);
     defer a.free(facts.references.lineage.history);
-    for (support.result.entries) |entry| {
-        const evidence = (try authority.supportedOmission(a, support.inputs, support.observations, support.result, entry.requirement)) orelse continue;
+    for (trace.targets) |*assessment| {
+        assessment.reason = .invalid_evidence;
+        const evidence = (try authority.supportedOmission(a, support.inputs, support.observations, support.result, assessment.requirement)) orelse {
+            assessment.reason = .no_supported_omission;
+            continue;
+        };
+        for (support.inputs.evidence, 0..) |item, evidence_index| if (std.meta.eql(item.id, evidence.id)) {
+            if (evidence_index < support.inputs.review_origins.len) assessment.finding_origin = support.inputs.review_origins[evidence_index];
+            break;
+        };
+        if (evidence.review) |review| if (review.preservation) |proof| {
+            assessment.comparison_origin = proof.origin;
+        };
         try @import("specification_support_evidence.zig").validate(a, support.inputs, context.inputs, evidence);
-        if (@import("source_omission.zig").isUpstream(evidence.review.?.loss orelse return error.InvalidSpecificationCoverageRepair)) continue;
-        if (evidence.review.?.loss.? == .unsupported_role or evidence.review.?.loss.? == .unsupported_summary) continue;
-        if (evidence.review.?.provenance.claim_ids.len == 0) continue;
-        const target = omissionTarget(candidate, entry.requirement, current) catch |err| switch (err) {
-            error.UnsafeSpecificationOmissionRepair => continue,
+        assessment.reviewed_provenance = evidence.review.?.provenance;
+        assessment.owner = evidence.review.?.loss orelse return error.InvalidSpecificationCoverageRepair;
+        const selected_target = omissionTarget(candidate, assessment.requirement, current) catch |err| switch (err) {
+            error.UnsafeSpecificationOmissionRepair => null,
             else => return err,
+        };
+        assessment.target = selected_target;
+        if (selected_target) |target| assessment.target_origin = current.units[target.unit].?.origins.at(switch (target.part) {
+            .record => .unit,
+            .value => |value| .{ .target = .{ .value = .{ .subject = value.subject, .field = value.field } } },
+        });
+        if (@import("source_omission.zig").isUpstream(assessment.owner.?)) {
+            assessment.reason = .upstream_owner;
+            continue;
+        }
+        if (assessment.owner.? == .unsupported_role or assessment.owner.? == .unsupported_summary) {
+            assessment.reason = .unsupported_owner;
+            continue;
+        }
+        if (evidence.review.?.provenance.claim_ids.len == 0) {
+            assessment.reason = .missing_claim_evidence;
+            continue;
+        }
+        const target = selected_target orelse {
+            assessment.reason = .unsupported_target;
+            continue;
         };
         if (target.part == .record) {
             _ = @import("specification_source_binding.zig").recordForClaims(a, @import("reference_support.zig").records(context.references), context.inputs, evidence.review.?.provenance.claim_ids) catch |err| switch (err) {
-                error.InvalidSpecificationBinding => continue,
+                error.InvalidSpecificationBinding => {
+                    assessment.reason = .incompatible_record_binding;
+                    continue;
+                },
                 else => return err,
             };
-            return bindRetry(a, try atomic.authorizeInsert(a, try sessions.ownerFor(a, current, target.unit), current.revision, target, .record, facts, .{ .omission = evidence }));
+            const authorized = try bindRetry(a, try atomic.authorizeInsert(a, try sessions.ownerFor(a, current, target.unit), current.revision, target, .record, facts, .{ .omission = evidence }));
+            assessment.reason = .authorized;
+            return authorized;
         }
         const selected = target.part.value;
         const value = try candidates.attributedValue(.canonical, current.units[target.unit].?.response, selected.subject, selected.field);
         const provenance = evidence.review.?.provenance;
         const effective = try effectiveTarget(a, current.units[target.unit].?, selected.subject, selected.field);
+        assessment.target_provenance = value.provenance;
+        assessment.target_provenance.?.claim_ids = effective;
         r.sameSet(r.ClaimId, provenance.claim_ids, effective) catch |err| switch (err) {
-            error.InvalidReferenceReconciliation => continue,
+            error.InvalidReferenceReconciliation => {
+                assessment.reason = .claim_evidence_mismatch;
+                continue;
+            },
             else => return err,
         };
         r.sameSet(r.CitationId, provenance.citation_ids, value.provenance.citation_ids) catch |err| switch (err) {
-            error.InvalidReferenceReconciliation => continue,
+            error.InvalidReferenceReconciliation => {
+                assessment.reason = .citation_evidence_mismatch;
+                continue;
+            },
             else => return err,
         };
-        return bindRetry(a, try atomic.authorize(a, try sessions.ownerFor(a, current, target.unit), current.revision, target, .{ .value = value.value }, facts, .{ .omission = evidence }));
+        const authorized = try bindRetry(a, try atomic.authorize(a, try sessions.ownerFor(a, current, target.unit), current.revision, target, .{ .value = value.value }, facts, .{ .omission = evidence }));
+        assessment.reason = .authorized;
+        return authorized;
     }
     return error.UnsafeSpecificationOmissionRepair;
 }
@@ -226,7 +301,7 @@ pub fn omissionPacket(a: std.mem.Allocator, current: sessions.Session, context: 
     const packets = @import("model_input_packet.zig");
     const allowed: ?[]const r.ClaimId = if (authorization.target.part == .value) allowed: {
         const selected = authorization.target.part.value;
-        break :allowed try effectiveTarget(a, current.units[authorization.target.unit].?, selected.subject, selected.field);
+        break :allowed try effectiveTarget(arena.allocator(), current.units[authorization.target.unit].?, selected.subject, selected.field);
     } else null;
     const task = if (authorization.target.part == .record)
         try descriptions.record(arena.allocator(), try omissionRecordKind(authorization.rule.omission.requirement))

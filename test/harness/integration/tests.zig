@@ -1279,3 +1279,33 @@ test "build evidence preserves bytes deletion and incompleteness and marks crede
         try std.testing.expectError(error.InvalidBuildInputs, save(store, try std.json.Stringify.valueAlloc(a, invalid, .{})));
     }
 }
+
+test "omission rejection reports retain separate target finding and comparison origins without a single culprit call" {
+    const Diagnostic = @import("../../../src/domain/candidate_validation_diagnostic.zig").Diagnostic;
+    const repair = @import("../../../src/domain/specification_coverage_repair.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const diagnostic = captured: {
+        var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer scratch.deinit();
+        const targets = try scratch.allocator().dupe(repair.TargetAssessment, &.{
+            .{ .requirement = .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .primary_user_story }, .reason = .unsupported_owner, .owner = .{ .unsupported_role = .primary_user_story }, .target_origin = .{ .request = .{ .value = 9 }, .attempt = .{ .value = 1 } }, .finding_origin = .{ .request = .{ .value = 15 }, .attempt = .{ .value = 1 } }, .comparison_origin = .{ .request = .{ .value = 16 }, .attempt = .{ .value = 2 } } },
+            .{ .requirement = .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .description }, .reason = .claim_evidence_mismatch, .owner = .{ .candidate = .{} } },
+        });
+        break :captured try (Diagnostic{ .omission_authorization = .{ .reason = .UnsafeSpecificationOmissionRepair, .revision = 2, .outstanding_requirements = &.{}, .review_origin = null, .targets = targets } }).copy(a);
+    };
+    var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .invalid, .terminal_step = "authorize-omission", .candidate_error = diagnostic };
+    try @import("../e2e/observation.zig").correlate(a, &.{}, &report);
+    try std.testing.expect(report.candidate_model_call == null);
+    try std.testing.expect(report.candidate_model_output == null);
+    const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
+    try std.testing.expectEqualDeep(report, decoded);
+    try std.testing.expectEqual(.candidate, decoded.candidate_error.?.attribution());
+    try std.testing.expect(decoded.candidate_error.?.origin() == null);
+    const bytes = try std.json.Stringify.valueAlloc(a, diagnostic, .{});
+    for ([_][]const u8{ try @import("../e2e/report.zig").renderMarkdown(a, decoded), try @import("../e2e/report.zig").terminal(a, decoded, "runs", "case") }) |output| {
+        try std.testing.expect(std.mem.indexOf(u8, output, bytes) != null);
+        try std.testing.expect(std.mem.indexOf(u8, output, "no single model response is selected") != null);
+    }
+}

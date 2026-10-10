@@ -21,10 +21,11 @@ pub const Authorize = struct {
         const self = context.?;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
-        const authorization = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), try content(&input.step.data), try support(&input.step.data)) catch |err| {
+        var trace: repair.AuthorizationTrace = .{};
+        const authorization = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), try content(&input.step.data), try support(&input.step.data), &trace) catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
             owner.rejection = err;
-            owner.payload = .{ .omission_rejected = try repair.authorizationRejection(owner.arena.allocator(), try support(&input.step.data), err) };
+            owner.payload = .{ .omission_rejected = try repair.authorizationRejection(owner.arena.allocator(), try support(&input.step.data), trace, err) };
             return owned.publish(self.allocator, schema, owner, .invalid) catch |operation_error| operation_error;
         };
         owner.payload = .{ .omission_repair = .{ .authorization = authorization } };

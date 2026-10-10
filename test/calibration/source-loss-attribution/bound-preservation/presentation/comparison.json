@@ -1,0 +1,405 @@
+{
+  "status": "prepared_not_executed",
+  "authority": "FIX01-02 Phase 1; explicit approval required for these 12 new physical sends",
+  "factor": "Remove only supporting_evidence.deficient_subject.business.context.candidate; all other request content, schema and controls fixed",
+  "parent": {
+    "run": "RUN-a8204eab393239c09cb75264943ca0d0",
+    "artifact_root": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016",
+    "call": "request-16-inference-1",
+    "context": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/context.json",
+      "sha256": "38ace18123819b29821208654e4a0157659257caa908fdcc1c38bfb22e5319e7",
+      "bytes": 9570
+    },
+    "request": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/request.json",
+      "sha256": "a34f5df19cad6b687c3210d2934b663900e2dde39845e9b3f1b5eaf389c60ddc",
+      "bytes": 10299
+    },
+    "response": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/response.json",
+      "sha256": "6a738b0a01c33357f6753db77893850ac82592dbc6a8ff2a2c3951595c44b00e",
+      "bytes": 1655
+    },
+    "captured_input_canonical_sha256": "14b9d8041a500ff31fd8749cbc2553ebf69248dc15ade54ba5aedf1da194ccc1",
+    "execution_id": "2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e"
+  },
+  "settings": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "controls": {
+      "reasoning_effort": {
+        "present": true,
+        "value": "low"
+      },
+      "temperature": {
+        "present": true,
+        "value": 0
+      },
+      "max_completion_tokens": {
+        "present": true,
+        "value": 16384
+      },
+      "top_p": {
+        "present": false
+      },
+      "seed": {
+        "present": false
+      }
+    },
+    "response_mode": "native_schema"
+  },
+  "limits": {
+    "maximum_physical_sends": 12,
+    "repetitions_per_case_arm": 2,
+    "retries_corrections_repairs_model_judges_e2e": 0,
+    "stop_at_accounted_input_plus_output_tokens": 100000,
+    "usage_stop_semantics": "Check actual cumulative usage after every completed exchange; at or above threshold send no further trial. A single in-flight completion may cross the threshold. This is an experiment spending stop, not a runtime reservation or provider token ceiling. No dollar cap is asserted.",
+    "stop_on": [
+      "unknown usage",
+      "uncertain dispatch or transport outcome",
+      "request/config/hash drift",
+      "exhausted approved sends"
+    ],
+    "restart_renews_allowance": false,
+    "resend_uncertain_trial": false
+  },
+  "quality_gate": {
+    "candidate_completed_schema_native_correct_and_adequate": 6,
+    "candidate_false_upstream_or_candidate": 0,
+    "candidate_genuine_role_loss_correct": 2,
+    "semantic_superiority_requires": "Strictly more correct attributable trials than concurrent baseline, with no paired-case regression. A perfect baseline/candidate tie is inconclusive.",
+    "failures_remain_in_denominator": true,
+    "gate_failure": "Stop production promotion; optional effort pilot requires separate preparation and explicit 9-call approval if justified."
+  },
+  "cases_file": {
+    "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/cases.json",
+    "sha256": "3dea3b17dc2c8cb872ca34f551421f600738a79363fc89e38ebb02949ebd8360",
+    "bytes": 3976
+  },
+  "cases": [
+    {
+      "id": "captured-story",
+      "cohort": "observed_failure",
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.packet.json",
+        "sha256": "b610729a9d4fdb4c74a6d10afba31601e09f79ffa043320bcdc1daa9675f154a",
+        "bytes": 17471
+      },
+      "canonical_input": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.canonical.json",
+        "sha256": "4740e9b23b65027d497ed46f0f3d15963791a18aea2edf789cdb4cbe93b93718",
+        "bytes": 7541
+      },
+      "expected": "candidate",
+      "expected_verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.baseline.edit.json",
+            "sha256": "9229dec7a68550985059aee1028c53cf247a531d5ce700c69ac335bb9e0a17f6",
+            "bytes": 9061
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.baseline.request.json",
+            "sha256": "a34f5df19cad6b687c3210d2934b663900e2dde39845e9b3f1b5eaf389c60ddc",
+            "bytes": 10299
+          },
+          "prompt_sha256": "ead02788de3c01572c2b1d85c4f74e6332f657cb6f73ac0e87b0cf7490cac9b9",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 5836,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "schema_bytes": 1074
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.candidate.edit.json",
+            "sha256": "41eda3c0432d5f8fa71a9f6105cb81bb159daafeda6306d061146a4dc49496a0",
+            "bytes": 7978
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.candidate.request.json",
+            "sha256": "df0bc4a15e3f8fb974975822948c7b30a05445dea6650ecaf610a52149e3bfb2",
+            "bytes": 9216
+          },
+          "prompt_sha256": "ead02788de3c01572c2b1d85c4f74e6332f657cb6f73ac0e87b0cf7490cac9b9",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 4849,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "schema_bytes": 1074
+        }
+      }
+    },
+    {
+      "id": "loan-story",
+      "cohort": "synthetic_development",
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.packet.json",
+        "sha256": "0e07598f52bfae6e6956d855a8458a86c97d8bb3fa98e91c612825de5bee5939",
+        "bytes": 16091
+      },
+      "canonical_input": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.canonical.json",
+        "sha256": "cfa0300ca5db16ded94d9f5713f275e56e15c8fad99447a7068f10d293fea382",
+        "bytes": 8519
+      },
+      "expected": "candidate",
+      "expected_verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.baseline.edit.json",
+            "sha256": "d9a5593c122bf842c4fb462334adbd777bcf92f8bec1530e7063e11b892a15ff",
+            "bytes": 8187
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.baseline.request.json",
+            "sha256": "3f6406a5188c9aef0aee6606a07b086b23121afaf5c54ff0202a6aab4fc8213f",
+            "bytes": 9425
+          },
+          "prompt_sha256": "ead02788de3c01572c2b1d85c4f74e6332f657cb6f73ac0e87b0cf7490cac9b9",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 4942,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "schema_bytes": 1074
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.candidate.edit.json",
+            "sha256": "4319253659eb12a8c23308948f37d731d835e50542642edaeba77c07d7d67d4b",
+            "bytes": 6952
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.candidate.request.json",
+            "sha256": "f67d275c4af9af2fac24b34a55a4428f9339ab208cd24698dd781a3c79d162d5",
+            "bytes": 8190
+          },
+          "prompt_sha256": "ead02788de3c01572c2b1d85c4f74e6332f657cb6f73ac0e87b0cf7490cac9b9",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 3835,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "schema_bytes": 1074
+        }
+      }
+    },
+    {
+      "id": "wrong-role-story",
+      "cohort": "synthetic_development",
+      "native_packet": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.packet.json",
+        "sha256": "1547a6c9f3d1b902d37f65ddb3e8a1a35ac6f68020cbc6099494e5f6674ffa1b",
+        "bytes": 11816
+      },
+      "canonical_input": {
+        "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.canonical.json",
+        "sha256": "6f098a77b1ef670063e04468d8faf3f0bd5e2a3471c3dc2dca3c38b446bc65c0",
+        "bytes": 5049
+      },
+      "expected": "unsupported_role",
+      "expected_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "arms": {
+        "baseline": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.baseline.edit.json",
+            "sha256": "01d862378930208ef17d10b6dccc0d6333bdbe4f0ea4804d276ff51737ca4d19",
+            "bytes": 6549
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.baseline.request.json",
+            "sha256": "a2b2b4a6cbcd802f9d75f70ea44a0844ee91debc7769b9f41d35b207989c84c4",
+            "bytes": 7787
+          },
+          "prompt_sha256": "ead02788de3c01572c2b1d85c4f74e6332f657cb6f73ac0e87b0cf7490cac9b9",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 3527,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "schema_bytes": 1074
+        },
+        "candidate": {
+          "edit": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.candidate.edit.json",
+            "sha256": "c614128f079fa59af6dc602e74512cf4b51f293876596366407884cabb47ed97",
+            "bytes": 5701
+          },
+          "request": {
+            "path": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.candidate.request.json",
+            "sha256": "4e92c68fa6e9c0fab49741c0286fec6accd12942f9abb3f67a5ab1862f26085d",
+            "bytes": 6939
+          },
+          "prompt_sha256": "ead02788de3c01572c2b1d85c4f74e6332f657cb6f73ac0e87b0cf7490cac9b9",
+          "prompt_bytes": 1350,
+          "evidence_bytes": 2763,
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "schema_bytes": 1074
+        }
+      }
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-story-baseline-1",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/captured-story.presentation-baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-preservation/captured-story.presentation-baseline.native-1.json"
+    },
+    {
+      "id": "captured-story-candidate-1",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/captured-story.presentation-candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-preservation/captured-story.presentation-candidate.native-1.json"
+    },
+    {
+      "id": "loan-story-candidate-1",
+      "case": "loan-story",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/loan-story.presentation-candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-preservation/loan-story.presentation-candidate.native-1.json"
+    },
+    {
+      "id": "loan-story-baseline-1",
+      "case": "loan-story",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/loan-story.presentation-baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-preservation/loan-story.presentation-baseline.native-1.json"
+    },
+    {
+      "id": "wrong-role-story-baseline-1",
+      "case": "wrong-role-story",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-baseline.native-1.json"
+    },
+    {
+      "id": "wrong-role-story-candidate-1",
+      "case": "wrong-role-story",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-candidate.native-1.json"
+    },
+    {
+      "id": "captured-story-candidate-2",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/captured-story.presentation-candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-preservation/captured-story.presentation-candidate.native-2.json"
+    },
+    {
+      "id": "captured-story-baseline-2",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/captured-story.presentation-baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-preservation/captured-story.presentation-baseline.native-2.json"
+    },
+    {
+      "id": "loan-story-baseline-2",
+      "case": "loan-story",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/loan-story.presentation-baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-preservation/loan-story.presentation-baseline.native-2.json"
+    },
+    {
+      "id": "loan-story-candidate-2",
+      "case": "loan-story",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/loan-story.presentation-candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-preservation/loan-story.presentation-candidate.native-2.json"
+    },
+    {
+      "id": "wrong-role-story-candidate-2",
+      "case": "wrong-role-story",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-candidate.native-2.json"
+    },
+    {
+      "id": "wrong-role-story-baseline-2",
+      "case": "wrong-role-story",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-baseline.native-2.json"
+    }
+  ],
+  "sources": [
+    {
+      "path": "src/test_fixtures/source_loss_calibration.zig",
+      "sha256": "0c442d8767e3c2e594b15f32b1e6afea0b81fda3f8cf1e9a90ff3563461cd3ee",
+      "bytes": 27363
+    },
+    {
+      "path": "src/domain/source_omission_context.zig",
+      "sha256": "1c675d4181537152e8f9612373035753d2fd74b3b923fbf51d27f0a182fac0b3",
+      "bytes": 14770
+    },
+    {
+      "path": "src/domain/source_omission_binding.zig",
+      "sha256": "ebdd6afd0895dfbbe44dc1778e3021b01d5c2811b1527a463968d61bac8b080f",
+      "bytes": 9828
+    },
+    {
+      "path": "src/domain/source_omission_comparison.zig",
+      "sha256": "faa301380d3b9a8be93ba43a7ec065dab1625d9c2d8c8a5cf90250f4157f232c",
+      "bytes": 9915
+    },
+    {
+      "path": "src/domain/specification_support.zig",
+      "sha256": "7d3c4bcf49341ad1c27020ceee132ef7e40048f6c7b5bd78173c39c2290dddeb",
+      "bytes": 37622
+    },
+    {
+      "path": "src/domain/specification_provenance.zig",
+      "sha256": "fd2a911dcc6d0798020e9e58bbc63ba8f211e92525ed02a703bbd90fc974b148",
+      "bytes": 19237
+    },
+    {
+      "path": "src/adapters/provider/bedrock_request.zig",
+      "sha256": "c7cb3ef2e2a98315caf321030c6dc3f02d6799ca475478d4964c8a24e97fd316",
+      "bytes": 5577
+    },
+    {
+      "path": "design/workflows/spec/support-loss.prompt.md",
+      "sha256": "ead02788de3c01572c2b1d85c4f74e6332f657cb6f73ac0e87b0cf7490cac9b9",
+      "bytes": 1350
+    },
+    {
+      "path": "design/workflows/spec/support.schema.json",
+      "sha256": "f8285e781065ec47defd8175245613ad7ca489b119cb6543195744502d59bec3",
+      "bytes": 10384
+    }
+  ]
+}

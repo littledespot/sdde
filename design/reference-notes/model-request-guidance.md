@@ -98,6 +98,14 @@ survives transport retirement independently of protocol rejection. See the
 [retained evidence contract](../harness/e2e.md#retained-results). These observations
 grant no retry, repair, continuation or publication authority.
 
+Omission authorization retains each considered target's actual rejection reason,
+validated loss location and available target, finding and comparison origins.
+Unchecked targets stay explicit when stale or invalid evidence stops admission.
+These separate observations do not replace assembled-candidate attribution with
+a single culprit call. Target origins follow accepted replacements; absent origins
+remain absent. Reporting consumes the authorization trace without repeating its
+eligibility checks.
+
 ## Guidance by call type
 
 **Every call** receives one shared engine instruction, emitted once by serialization

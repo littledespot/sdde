@@ -23,6 +23,10 @@ const Case = struct {
     mode: enum { candidate, signal, second_role },
     verdicts: []const comparison.Verdict,
     expected: []const u8,
+    target: ?enum { description, primary_user_story } = null,
+    candidate_file: ?[]const u8 = null,
+    source_path: ?[]const u8 = null,
+    signal_text: ?[]const u8 = null,
 };
 
 pub fn run() !void {
@@ -34,70 +38,11 @@ pub fn run() !void {
     const schema = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
     try std.Io.Dir.cwd().createDirPath(std.testing.io, output);
     for (cases) |example| {
-        var ids: @import("../reference_evidence_test.zig").IdSource = .{};
-        const sources = try @import("../reference_evidence_test.zig").prepare(a, &ids, try @import("../reference_ingestion_test.zig").readSources(std.testing.io, a, example.sources));
-        const passive = try text.prepare(a, sources);
-        defer passive.deinit();
-        const available = try tokens.candidates(a, sources);
-        const raw = try a.alloc(r.extraction.RawResult, sources.chunks.entries.len);
-        for (sources.chunks.entries, raw) |chunk, *result| {
-            const resolved = try r.evidence.resolve(sources, .{ .state_id = sources.corpus.state_id, .chunk_id = chunk.id });
-            var claims: std.ArrayList(r.extraction.Proposal) = .empty;
-            for (example.claims) |claim| if (claim.source == resolved.source.id.ordinal) {
-                try claims.append(a, .{ .content = .{ .business = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = claim.text } }}) } }, .citations = try a.dupe(@import("../domain/source_selections.zig").Selection, &.{.{ .first = .{ .ordinal = claim.first }, .last = .{ .ordinal = claim.last } }}) });
-            };
-            result.* = .{ .scope = .{ .state_id = sources.corpus.state_id, .chunk_id = chunk.id }, .result = .{ .response = try codec.encode(@import("../domain/reference_extraction_parser.zig").Response, a, .{ .claims = .{ .claims = claims.items, .token_classifications = try tokens.classifications(a, available, chunk) } }) } };
-        }
-        const extracted = try extraction.finish(a, sources, raw);
-        const context: refs.Context = .{ .inputs = sources, .registry = passive.registry, .current = text.safety.value(passive.owner) };
-        const global = try refs.summaries(a, try refs.initialize(a, sources, extracted, 2), context);
-        var proposed = try refs.global(a, global);
-        var groups: std.ArrayList(r.SignalProposal) = .empty;
-        var business: std.ArrayList(r.ClaimId) = .empty;
-        var combined: std.ArrayList(u8) = .empty;
-        for (global.items) |item| if (item.claim.content == .model) {
-            try business.append(a, item.claim.id);
-            for (item.claim.content.model.business.value.segments) |segment| try combined.appendSlice(a, segment.literal.value);
-            try combined.append(a, ' ');
-        };
-        if (example.mode == .second_role) {
-            for (proposed.signals) |signal| try groups.append(a, signal);
-        } else {
-            try groups.append(a, .{ .claim_ids = business.items, .content = .{ .model = .{ .business = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = if (example.mode == .signal) example.description else combined.items } }}) } } } });
-            for (proposed.signals) |signal| if (signal.content == .preserved_token) try groups.append(a, signal);
-        }
-        proposed.signals = groups.items;
-        var roles: std.ArrayList(r.RoleAssignment) = .empty;
-        for (proposed.signals, 1..) |signal, ordinal| if (signal.content == .model) {
-            try roles.append(a, .{ .signal_id = .{ .ordinal = @intCast(ordinal) }, .generation_roles = if (example.mode == .second_role and ordinal == 1) &.{.records} else std.enums.values(r.GenerationRole) });
-        };
-        proposed.role_decisions = try refs.roleDecisions(a, roles.items);
-        const finished = (try refs.finish(a, global, proposed, context)).valid;
-        const provenance_context: @import("../domain/specification_provenance.zig").Context = .{ .inputs = sources, .references = finished, .registry = context.registry, .current = context.current };
-        const records = @import("../domain/reference_support.zig").records(finished);
-        const assigned = try @import("../domain/specification_source_binding.zig").roleClaimIds(a, records, .description);
-        const attribution = try @import("../domain/specification_provenance.zig").select(a, provenance_context, .{ .claim_ids = assigned, .clarification_response_ids = &.{} });
-        const spec = @import("../domain/specification.zig");
-        const value: spec.AttributedValue = .{ .value = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = example.description } }}) }, .provenance = attribution };
-        const brief: spec.Brief = .{ .title = value, .description = value, .primary_goal = value };
-        const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished, null, if (example.mode == .signal) null else brief);
-        const ledger = try authority.build(a, inputs);
-        const index = for (ledger.requirements, 0..) |required, at| {
-            if (if (example.mode == .signal) required.seed.id.unit == .signal else required.seed.id.unit == .feature and required.seed.id.slot == .description) break at;
-        } else return error.MissingCalibrationTarget;
-        // A fixed admitted omission is the experimental premise, not a model judge.
-        const findings = try a.alloc(support.Finding, index + 1);
-        for (findings, 1..) |*entry, ordinal| entry.* = .{ .requirement_ordinal = @intCast(ordinal), .value = .{ .kind = .supported, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{}, .detail = "", .question = null } };
-        const source_ids = try a.alloc(r.extraction.identity.SourceId, sources.corpus.sources.len);
-        for (sources.corpus.sources, source_ids) |source, *id| id.* = source.id;
-        findings[index].value.kind = .candidate_omission;
-        findings[index].value.detail = example.missing;
-        findings[index].value.source_ids = source_ids;
-        const rules = try @import("../domain/specification_support_evidence.zig").requirements(a, inputs, sources, ledger.requirements[index].seed.id);
-        findings[index].value.provenance.claim_ids = rules.rule(.candidate_omission, .{ .unlocalized = .{} }).fixedClaims() orelse &.{};
-        const origins = try a.alloc(?@import("../domain/model_candidate_origin.zig").Origin, findings.len);
-        @memset(origins, null);
-        const pending: support.Candidate = .{ .review = .{ .entries = findings }, .pending_localization = @intCast(index + 1), .working = true, .origin = null, .origins = origins };
+        const prepared = try prepare(a, example);
+        defer prepared.passive.deinit();
+        const inputs = prepared.inputs;
+        const provenance_context = prepared.context;
+        const pending = prepared.pending;
         const packet = try support.packetForLoss(a, inputs, provenance_context, pending);
         defer packets.release(packet);
         const assignment = try support.comparisonAssignment(a, inputs, provenance_context, pending);
@@ -130,17 +75,9 @@ pub fn run() !void {
             const file_arm = if (revised or current) "candidate" else arm;
             const edit_bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, try std.fmt.allocPrint(a, "{s}/{s}.{s}.edit.json", .{ directory, example.id, file_arm }), a, .unlimited);
             const edit = (try std.json.parseFromSlice(std.json.Value, a, edit_bytes, .{})).value;
-            const compiled = try parser.compiler().compile(a, edit.object.get("schema").?.string);
             const content = edit.object.get("content").?.array.items;
             if (current) try std.testing.expectEqualStrings(try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support-loss.prompt.md", a, .unlimited), content[0].object.get("guidance").?.string);
-            const wire = try @import("../adapters/provider/bedrock_request.zig").encodeText(a, .{
-                .content = &.{ .{ .guidance = content[0].object.get("guidance").?.string }, .{ .user = content[1].object.get("user").?.string } },
-                .schema = .{ .native = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .bedrock) } },
-                .schema_name = "sdde_model_envelope_v1",
-                .temperature = .zero,
-                .max_output_tokens = .{ .value = 16384 },
-                .reasoning_effort = .low,
-            }, .inference);
+            const wire = try encodeEdit(a, edit);
             try write(a, example.id, try std.fmt.allocPrint(a, "{s}.request.json", .{arm}), wire);
             const frozen_wire = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, try std.fmt.allocPrint(a, "{s}/{s}.{s}.request.json", .{ directory, example.id, file_arm }), a, .unlimited);
             try std.testing.expectEqualStrings(frozen_wire, wire);
@@ -167,14 +104,198 @@ pub fn run() !void {
                 error.FileNotFound => continue,
                 else => return err,
             };
-            const outcome = if (support.admitComparisons(a, inputs, provenance_context, pending, assignment, bytes)) |accepted|
-                try std.json.Stringify.valueAlloc(a, .{ .admitted = true, .attribution = accepted }, .{})
-            else |err|
-                try std.json.Stringify.valueAlloc(a, .{ .admitted = false, .rejection = @errorName(err) }, .{});
+            const outcome = try admissionReport(a, prepared, assignment, bytes);
             try write(a, diagnostic_id, try std.fmt.allocPrint(a, "native-{d}.json", .{repetition}), outcome);
         };
     }
+    try runPresentation(a, schema);
 }
+const Prepared = struct {
+    inputs: authority.Inputs,
+    context: @import("../domain/specification_provenance.zig").Context,
+    pending: support.Candidate,
+    passive: text.Prepared,
+};
+fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
+    var ids: @import("../reference_evidence_test.zig").IdSource = .{};
+    const sources = try @import("../reference_evidence_test.zig").prepare(a, &ids, if (example.source_path) |path| try @import("../reference_ingestion_test.zig").read(a, path, example.sources[0]) else try @import("../reference_ingestion_test.zig").readSources(std.testing.io, a, example.sources));
+    const passive = try text.prepare(a, sources);
+    errdefer passive.deinit();
+    const available = try tokens.candidates(a, sources);
+    const raw = try a.alloc(r.extraction.RawResult, sources.chunks.entries.len);
+    for (sources.chunks.entries, raw) |chunk, *result| {
+        const resolved = try r.evidence.resolve(sources, .{ .state_id = sources.corpus.state_id, .chunk_id = chunk.id });
+        var claims: std.ArrayList(r.extraction.Proposal) = .empty;
+        for (example.claims) |claim| if (claim.source == resolved.source.id.ordinal) {
+            try claims.append(a, .{ .content = .{ .business = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = claim.text } }}) } }, .citations = try a.dupe(@import("../domain/source_selections.zig").Selection, &.{.{ .first = .{ .ordinal = claim.first }, .last = .{ .ordinal = claim.last } }}) });
+        };
+        result.* = .{ .scope = .{ .state_id = sources.corpus.state_id, .chunk_id = chunk.id }, .result = .{ .response = try codec.encode(@import("../domain/reference_extraction_parser.zig").Response, a, .{ .claims = .{ .claims = claims.items, .token_classifications = try tokens.classifications(a, available, chunk) } }) } };
+    }
+    const extracted = try extraction.finish(a, sources, raw);
+    const context: refs.Context = .{ .inputs = sources, .registry = passive.registry, .current = text.safety.value(passive.owner) };
+    const global = try refs.summaries(a, try refs.initialize(a, sources, extracted, 2), context);
+    var proposed = try refs.global(a, global);
+    var groups: std.ArrayList(r.SignalProposal) = .empty;
+    var business: std.ArrayList(r.ClaimId) = .empty;
+    var combined: std.ArrayList(u8) = .empty;
+    for (global.items) |item| if (item.claim.content == .model) {
+        try business.append(a, item.claim.id);
+        for (item.claim.content.model.business.value.segments) |segment| try combined.appendSlice(a, segment.literal.value);
+        try combined.append(a, ' ');
+    };
+    if (example.mode == .second_role) {
+        for (proposed.signals) |signal| try groups.append(a, signal);
+    } else {
+        try groups.append(a, .{ .claim_ids = business.items, .content = .{ .model = .{ .business = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = example.signal_text orelse (if (example.mode == .signal) example.description else combined.items) } }}) } } } });
+        for (proposed.signals) |signal| if (signal.content == .preserved_token) try groups.append(a, signal);
+    }
+    proposed.signals = groups.items;
+    var roles: std.ArrayList(r.RoleAssignment) = .empty;
+    for (proposed.signals, 1..) |signal, ordinal| if (signal.content == .model) {
+        try roles.append(a, .{ .signal_id = .{ .ordinal = @intCast(ordinal) }, .generation_roles = if (example.mode == .second_role and ordinal == 1) &.{.records} else std.enums.values(r.GenerationRole) });
+    };
+    proposed.role_decisions = try refs.roleDecisions(a, roles.items);
+    const finished = (try refs.finish(a, global, proposed, context)).valid;
+    const provenance_context: @import("../domain/specification_provenance.zig").Context = .{ .inputs = sources, .references = finished, .registry = context.registry, .current = context.current };
+    const records = @import("../domain/reference_support.zig").records(finished);
+    const assigned = try @import("../domain/specification_source_binding.zig").roleClaimIds(a, records, if (example.target == .primary_user_story) .primary_user_story else .description);
+    const attribution = try @import("../domain/specification_provenance.zig").select(a, provenance_context, .{ .claim_ids = assigned, .clarification_response_ids = &.{} });
+    const spec = @import("../domain/specification.zig");
+    const value: spec.AttributedValue = .{ .value = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = example.description } }}) }, .provenance = attribution };
+    var brief: spec.Brief = .{ .title = value, .description = value, .primary_goal = value };
+    var candidate: ?spec.IdentifiedContent = null;
+    if (example.candidate_file) |path| {
+        const captured = try @import("../domain/strict_json.zig").decode(struct { brief: spec.Brief, candidate: spec.IdentifiedContent }, a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, a, .unlimited), .{ .maximum_depth = 128 });
+        brief = captured.brief;
+        candidate = captured.candidate;
+        try @import("../domain/specification_provenance.zig").validateStored(a, sources, .{ .records = passive.registry.records, .occurrences = passive.registry.occurrences }, records, brief, candidate.?);
+    }
+    const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished, candidate, if (example.mode == .signal) null else brief);
+    const ledger = try authority.build(a, inputs);
+    const index = for (ledger.requirements, 0..) |required, at| {
+        if (if (example.mode == .signal) required.seed.id.unit == .signal else required.seed.id.unit == .feature and required.seed.id.slot == (if (example.target == .primary_user_story) authority.Slot.primary_user_story else .description)) break at;
+    } else return error.MissingCalibrationTarget;
+    // A fixed admitted omission is the experimental premise, not a model judge.
+    const findings = try a.alloc(support.Finding, index + 1);
+    for (findings, 1..) |*entry, ordinal| entry.* = .{ .requirement_ordinal = @intCast(ordinal), .value = .{ .kind = .supported, .provenance = .{ .claim_ids = &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{}, .detail = "", .question = null } };
+    const source_ids = try a.alloc(r.extraction.identity.SourceId, sources.corpus.sources.len);
+    for (sources.corpus.sources, source_ids) |source, *id| id.* = source.id;
+    findings[index].value.kind = .candidate_omission;
+    findings[index].value.detail = example.missing;
+    findings[index].value.source_ids = source_ids;
+    const rules = try @import("../domain/specification_support_evidence.zig").requirements(a, inputs, sources, ledger.requirements[index].seed.id);
+    findings[index].value.provenance.claim_ids = rules.rule(.candidate_omission, .{ .unlocalized = .{} }).fixedClaims() orelse &.{};
+    const origins = try a.alloc(?@import("../domain/model_candidate_origin.zig").Origin, findings.len);
+    @memset(origins, null);
+    const pending: support.Candidate = .{ .review = .{ .entries = findings }, .pending_localization = @intCast(index + 1), .working = true, .origin = null, .origins = origins };
+    return .{ .inputs = inputs, .context = provenance_context, .pending = pending, .passive = passive };
+}
+
+fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
+    var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const compiled = try parser.compiler().compile(a, edit.object.get("schema").?.string);
+    const content = edit.object.get("content").?.array.items;
+    return @import("../adapters/provider/bedrock_request.zig").encodeText(a, .{
+        .content = &.{ .{ .guidance = content[0].object.get("guidance").?.string }, .{ .user = content[1].object.get("user").?.string } },
+        .schema = .{ .native = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .bedrock) } },
+        .schema_name = "sdde_model_envelope_v1",
+        .temperature = .zero,
+        .max_output_tokens = .{ .value = 16384 },
+        .reasoning_effort = .low,
+    }, .inference);
+}
+fn admissionReport(a: std.mem.Allocator, prepared: Prepared, assigned: comparison.Assignment, bytes: []const u8) ![]const u8 {
+    return if (support.admitComparisons(a, prepared.inputs, prepared.context, prepared.pending, assigned, bytes)) |accepted|
+        std.json.Stringify.valueAlloc(a, .{ .admitted = true, .attribution = accepted }, .{})
+    else |err|
+        std.json.Stringify.valueAlloc(a, .{ .admitted = false, .rejection = @errorName(err) }, .{});
+}
+
+// Experimental presentation only. Start with the production loss packet; remove
+// the repeated full candidate, not its assessed subject, upstream evidence or
+// any part of the canonical assignment. This is not a runtime projection option.
+fn presentationCandidate(a: std.mem.Allocator, body: []const u8) !std.json.Value {
+    var candidate = try std.json.parseFromSliceLeaky(std.json.Value, a, body, .{});
+    const supporting = candidate.object.getPtr("supporting_evidence").?;
+    const subject = supporting.object.getPtr("deficient_subject").?;
+    const business = subject.object.getPtr("business").?;
+    const context = business.object.getPtr("context").?;
+    try std.testing.expect(context.object.orderedRemove("candidate"));
+    return candidate;
+}
+fn runPresentation(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema) !void {
+    const directory = root ++ "/presentation";
+    const cases = try codec.decode([]const Case, a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, directory ++ "/cases.json", a, .unlimited));
+    const prompt = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support-loss.prompt.md", a, .unlimited);
+    for (cases) |example| {
+        const prepared = try prepare(a, example);
+        defer prepared.passive.deinit();
+        const packet = try support.packetForLoss(a, prepared.inputs, prepared.context, prepared.pending);
+        defer packets.release(packet);
+        const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);
+        try std.testing.expectEqual(.primary_user_story, assigned.finding.subject.slot);
+        try std.testing.expectEqual(example.verdicts.len, assigned.comparisons.len);
+        const restricted = try @import("../domain/model_result_schema.zig").restrict(a, schema.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+        defer restricted.release();
+        try write(a, example.id, "presentation.packet.json", try std.json.Stringify.valueAlloc(a, .{ .assignment = assigned, .input = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{}), .schema = restricted.selected().modelBytes() }, .{}));
+        var response = try @import("source_omission_evidence.zig").response(a, assigned, .{ .unlocalized = .{} });
+        const assessments = try a.dupe(comparison.Assessment, response.assessments);
+        for (assessments, example.verdicts) |*entry, verdict| entry.result = verdict;
+        response.assessments = assessments;
+        const mock = try codec.encode(comparison.Response, a, response);
+        const admitted = try support.admitComparisons(a, prepared.inputs, prepared.context, prepared.pending, assigned, mock);
+        try std.testing.expectEqualStrings(example.expected, @tagName(comparison.location(admitted)));
+        try std.testing.expectError(error.InvalidPreservationComparison, support.admitComparisons(a, prepared.inputs, prepared.context, prepared.pending, assigned, "{\"assessments\":[]}"));
+        const baseline = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{});
+        const candidate = try presentationCandidate(a, packet.body());
+        // Restore exactly the one omitted field and prove byte-equivalent JSON
+        // values everywhere else, including upstream classification/dependencies.
+        var restored = try presentationCandidate(a, packet.body());
+        const previous_context = baseline.object.get("supporting_evidence").?.object.get("deficient_subject").?.object.get("business").?.object.get("context").?.object;
+        const restored_context = &restored.object.getPtr("supporting_evidence").?.object.getPtr("deficient_subject").?.object.getPtr("business").?.object.getPtr("context").?.object;
+        var restored_order: std.json.ObjectMap = .empty;
+        var fields = previous_context.iterator();
+        while (fields.next()) |field| try restored_order.put(a, field.key_ptr.*, if (std.mem.eql(u8, field.key_ptr.*, "candidate")) field.value_ptr.* else restored_context.get(field.key_ptr.*).?);
+        restored_context.* = restored_order;
+        try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, baseline, .{}), try std.json.Stringify.valueAlloc(a, restored, .{}));
+        for ([_][]const u8{ "baseline", "candidate" }) |arm| {
+            const body = try std.json.Stringify.valueAlloc(a, if (std.mem.eql(u8, arm, "baseline")) baseline else candidate, .{});
+            const edit = .{ .content = .{ .{ .guidance = prompt }, .{ .user = body } }, .schema = restricted.selected().modelBytes() };
+            const edit_bytes = try std.json.Stringify.valueAlloc(a, edit, .{});
+            const wire = try encodeEdit(a, try std.json.parseFromSliceLeaky(std.json.Value, a, edit_bytes, .{}));
+            try write(a, example.id, try std.fmt.allocPrint(a, "presentation-{s}.edit.json", .{arm}), edit_bytes);
+            try write(a, example.id, try std.fmt.allocPrint(a, "presentation-{s}.request.json", .{arm}), wire);
+            try checkNamespaces(candidate);
+            try std.testing.expect(!baseline.object.contains("expected") and !baseline.object.contains("verdicts"));
+            for (1..3) |repetition| {
+                const diagnostic_id = try std.fmt.allocPrint(a, "{s}.presentation-{s}", .{ example.id, arm });
+                // Distinct probe names never masquerade as observed live results.
+                const report = try admissionReport(a, prepared, assigned, mock);
+                try write(a, diagnostic_id, try std.fmt.allocPrint(a, "probe-native-{d}.json", .{repetition}), report);
+                const valid = try std.json.parseFromSliceLeaky(std.json.Value, a, report, .{});
+                try std.testing.expect(valid.object.get("admitted").?.bool);
+                const rejected = try std.json.parseFromSliceLeaky(std.json.Value, a, try admissionReport(a, prepared, assigned, "{\"assessments\":[]}"), .{});
+                try std.testing.expect(!rejected.object.get("admitted").?.bool);
+                const path = try std.fmt.allocPrint(a, "{s}/{s}.response-{d}.json", .{ output, diagnostic_id, repetition });
+                const bytes = std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, a, .unlimited) catch |err| switch (err) {
+                    error.FileNotFound => continue,
+                    else => return err,
+                };
+                try write(a, diagnostic_id, try std.fmt.allocPrint(a, "native-{d}.json", .{repetition}), try admissionReport(a, prepared, assigned, bytes));
+            }
+        }
+    }
+    // All new exports are prepared before checking the immutable reviewed copies.
+    for (cases) |example| {
+        for ([_][]const u8{ "packet.json", "baseline.edit.json", "baseline.request.json", "candidate.edit.json", "candidate.request.json" }) |suffix| {
+            const exported_suffix = if (std.mem.eql(u8, suffix, "packet.json")) "presentation.packet.json" else try std.fmt.allocPrint(a, "presentation-{s}", .{suffix});
+            const actual = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, example.id, exported_suffix }), a, .unlimited);
+            const frozen = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ directory, example.id, suffix }), a, .unlimited);
+            try std.testing.expectEqualStrings(frozen, actual);
+        }
+    }
+}
+
 fn write(a: std.mem.Allocator, id: []const u8, suffix: []const u8, bytes: []const u8) !void {
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, id, suffix }), .data = bytes });
 }

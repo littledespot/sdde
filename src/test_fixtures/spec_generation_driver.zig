@@ -37,6 +37,7 @@ pub const Driver = struct {
     source_repair_calls: usize = 0,
     evidence_fault: @FieldType(@import("spec_generation_responses.zig").Options, "evidence_fault") = null,
     candidate_omissions: @FieldType(@import("spec_generation_responses.zig").Options, "candidate_omissions") = null,
+    story_omission: @FieldType(@import("spec_generation_responses.zig").Options, "story_omission") = null,
     extraction_omission: bool = false,
     support_repair_calls: usize = 0,
     support_merges: usize = 0,
@@ -227,7 +228,7 @@ pub const Driver = struct {
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "invoke-model")) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
             const attempt = @import("../domain/model_attempt_accounting.zig").latestAttempt(self.runner.model_accounting.?.attempts).ordinal().value;
-            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .principle_conflict = self.principle_conflict, .principle_fault = self.principle_fault, .principle_repair_calls = self.principle_repair_calls, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
+            const body = @import("spec_generation_responses.zig").build(arena.allocator(), view, .{ .global_sequence = self.global_sequence, .summary_sequence = self.summary_sequence, .disposition_sequence = self.disposition_sequence, .attempt = attempt, .source_loss = self.source_loss, .evidence_fault = self.evidence_fault, .source_gaps = self.source_gaps, .support_fault = self.support_fault, .support_merges = self.support_merges, .principle_conflict = self.principle_conflict, .principle_fault = self.principle_fault, .principle_repair_calls = self.principle_repair_calls, .applicability = self.applicability, .candidate_omissions = self.candidate_omissions, .story_omission = self.story_omission, .omission_merges = self.omission_merges, .extraction_omission = self.extraction_omission, .text_fault = self.text_fault, .failed_text_repair = self.failed_text_repair, .reconciliation_repair_fault = self.reconciliation_repair_fault, .reconciliation_fault = self.reconciliation_fault, .uncertain = self.uncertain, .brief_uncertain = self.brief_uncertain, .brief_text = self.brief_text, .repair = self.repair, .repair_across_units = self.repair_across_units, .repeated_provenance_fault = self.repeated_provenance_fault, .failed_repair = self.failed_repair, .omit_exact = self.omit_exact, .entities_required = self.entities_required, .contradict_entities = self.contradict_entities, .generation_gap = self.generation_gap, .citation_fault = self.citation_fault, .failed_citation_repair = self.failed_citation_repair, .missing_classifications = self.missing_classifications, .failed_classification_repair = self.failed_classification_repair }) catch |err| std.debug.panic("invalid scripted candidate: {s}", .{@errorName(err)});
             self.fake.invocation_plan.complete.content = if (self.malformed or (self.malformed_once and self.calls == 0)) "{" else body;
             const current_request = requests.readCurrent(&view, requests.prepared_schema) catch unreachable;
             std.testing.expectEqualStrings(if (current_request.id().purpose == .atomic_repair) "repair" else "spec_generation", current_request.prepared().?.binding_id.slot_id.bytes) catch unreachable;
@@ -461,7 +462,7 @@ pub const Driver = struct {
         defer for (before_merge.slots) |value| if (value) |retained| values.destroy(retained);
         var semantic_parent: ?@import("../domain/workflow_retry.zig").Permit = null;
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes)) {
-            if (self.candidate_omissions != null and std.mem.eql(u8, entry.operation_id.bytes, "apply-specification-support")) semantic_parent = self.runner.repair_retry.currentPermit();
+            if ((self.candidate_omissions != null or self.story_omission == .recover) and std.mem.eql(u8, entry.operation_id.bytes, "apply-specification-support")) semantic_parent = self.runner.repair_retry.currentPermit();
             const keys: []const @import("../domain/pipeline.zig").DataKey = if (std.mem.eql(u8, entry.operation_id.bytes, "collect-specification-support-loss")) &.{.specification_support_review} else if (std.mem.eql(u8, entry.operation_id.bytes, "merge-specification-support-repair")) &.{ .specification_support_review, .specification_support_repair } else if (std.mem.eql(u8, entry.operation_id.bytes, "merge-specification-omission-repair")) &.{.specification_omission_repair} else if ((self.summary_sequence != null or self.global_sequence != null) and std.mem.eql(u8, entry.operation_id.bytes, "merge-reference-reconciliation-repair")) &.{.parsed_reference_reconciliation} else &.{};
             for (keys) |key| {
                 const index = @intFromEnum(key);
@@ -508,8 +509,13 @@ pub const Driver = struct {
         }
         if (before_merge.contains(.specification_omission_repair) and result.status() == .ok) {
             const permit = assertOmissionMerge(arena.allocator(), &before_merge, &.{ .slots = self.runner.envelope.slots }) catch unreachable;
-            for (self.omission_keys[0..self.omission_merges]) |key| std.testing.expect(!std.meta.eql(key.?, permit.key)) catch unreachable;
-            self.omission_keys[self.omission_merges] = permit.key;
+            if (self.story_omission != null) {
+                if (self.omission_keys[0]) |key| std.testing.expectEqualDeep(key, permit.key) catch unreachable;
+                self.omission_keys[0] = permit.key;
+            } else {
+                for (self.omission_keys[0..self.omission_merges]) |key| std.testing.expect(!std.meta.eql(key.?, permit.key)) catch unreachable;
+                self.omission_keys[self.omission_merges] = permit.key;
+            }
             self.omission_merges += 1;
         }
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, @import("../actions/reference/merge_reference_reconciliation_repair.zig").Action.contract.id) and result.status() == .ok) {
@@ -858,13 +864,27 @@ fn assertOmissionMerge(allocator: std.mem.Allocator, before: *const data.View, a
     const authorization = state.authorization;
     const prior = authorization.dependencies.session;
     const current = try spec_workflow.readSession(after);
+    for (@import("../actions/specification/merge_specification_omission_repair.zig").Action.contract.invalidates) |key| try std.testing.expect(!after.contains(key));
     try std.testing.expectEqual(prior.revision + 1, current.revision);
     for (prior.units, current.units, 0..) |old, next, index| {
         if (index != authorization.target.unit) {
             try std.testing.expectEqualDeep(old, next);
         } else {
-            try std.testing.expectEqual(old.?.response.content.records.len + 1, next.?.response.content.records.len);
-            try std.testing.expectEqualDeep(old.?.response.content.records, next.?.response.content.records[0..old.?.response.content.records.len]);
+            switch (authorization.target.part) {
+                .record => {
+                    try std.testing.expectEqual(old.?.response.content.records.len + 1, next.?.response.content.records.len);
+                    try std.testing.expectEqualDeep(old.?.response.content.records, next.?.response.content.records[0..old.?.response.content.records.len]);
+                },
+                .value => |field| {
+                    const candidates = @import("../domain/specification_candidate.zig");
+                    const previous = try candidates.attributedValue(.canonical, old.?.response, field.subject, field.field);
+                    const updated = try candidates.attributedValue(.canonical, next.?.response, field.subject, field.field);
+                    try std.testing.expectEqualDeep(previous.provenance, updated.provenance);
+                    // Reconstruct only the authorized replacement; any sibling
+                    // mutation in this unit must fail this comparison as well.
+                    try std.testing.expectEqualDeep(try candidates.replaceCanonicalValue(allocator, old.?.response, field.subject, field.field, updated.value), next.?.response);
+                },
+            }
             try std.testing.expectEqualDeep(authorization.retry.?, next.?.last_repair.?.retry.?);
         }
     }

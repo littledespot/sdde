@@ -50,6 +50,8 @@ pub const Options = struct {
     source_gaps: bool = false,
     evidence_fault: ?enum { recover, empty_correction } = null,
     candidate_omissions: ?enum { functional, acceptance_and_functional } = null,
+    story_omission: ?enum { recover, invalid_repair, recurring } = null,
+    omission_merges: usize = 0,
     extraction_omission: bool = false,
     text_fault: bool = false,
     failed_text_repair: bool = false,
@@ -378,6 +380,14 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const omission_schema = @import("../application/specification_omission_repair_workflow.zig").schema;
                 if (view.contains(omission_schema.key)) {
                     const state = try @import("../application/specification_values.zig").storage.read(&view, omission_schema, .omission_repair);
+                    if (state.authorization.target.part == .value) {
+                        const mode = options.story_omission orelse return error.UnexpectedScriptedRepair;
+                        const replacement = if (mode == .invalid_repair)
+                            g.spec.BusinessValue{ .segments = &.{.{ .literal = .{ .value = " " } }} }
+                        else
+                            try storyValue(allocator, all, mode == .recover, options.omission_merges + 1);
+                        return @import("../domain/model_candidate_json.zig").encode(struct { value: g.spec.BusinessValue }, allocator, .{ .value = replacement });
+                    }
                     const kind = try @import("../domain/specification_coverage_repair.zig").omissionRecordKind(state.authorization.rule.omission.requirement);
                     const replacement: g.spec.Wire.RecordProposal = .{ .content = switch (kind) {
                         .functional_requirement => .{ .functional_requirement = .{ .text = value.value } },
@@ -449,6 +459,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     break :result .{ .records = records.items };
                 },
             } };
+            if (unit == .primary_user_story and options.story_omission != null) proposed.content.primary_user_story.value = try storyValue(allocator, all, false, 0);
             if (unit == .brief) if (options.brief_text) |texts| {
                 inline for (.{ "title", "description", "primary_goal" }, 0..) |field, index| {
                     @field(proposed.content.brief, field).value = try scriptedValue(allocator, all, .{ .bytes = texts[index] });
@@ -525,7 +536,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .{ .reconciliation_conflict = id.unit.conflict }
                 else if (options.source_loss) |mode|
                     try fixtureLoss(&view, inputs, context, mode)
-                else if (options.candidate_omissions != null)
+                else if (options.candidate_omissions != null or options.story_omission != null)
                     .{ .candidate = .{} }
                 else
                     .{ .unlocalized = .{} };
@@ -578,7 +589,9 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .acceptance_criteria => .acceptance_criterion,
                     else => null,
                 };
-                const omission = if (omission_kind) |kind| omittedKind(options, kind) and inputs.specification != null and !g.spec.hasRecords(inputs.specification.?, kind) else false;
+                const story_omitted = options.story_omission != null and inputs.specification != null and requirement.seed.id.slot == .primary_user_story and
+                    (options.story_omission != .recover or options.omission_merges == 0);
+                const omission = story_omitted or (if (omission_kind) |kind| omittedKind(options, kind) and inputs.specification != null and !g.spec.hasRecords(inputs.specification.?, kind) else false);
                 finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .question = if (conflict) "Should the loan be renewed or rejected? Choose the required outcome." else if (uncertain and !omission) "Which renewal deadline applies? Supply the duration and starting event." else null, .kind = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else if (unbound) .inconclusive else .supported, .provenance = selected, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The specification omits the source-supported requirement." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else if (unbound) "No validated source group binds this requirement." else "" } };
                 if (omission) finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
                 if (falseConflict(options.source_loss) and options.source_loss != .false_conflict_questions and requirement.seed.id.unit == .conflict) {
@@ -988,6 +1001,22 @@ fn misboundProjection(comptime T: type, projections: []const T) !r.SignalProposa
         if (value.content == .preserved_token) token_claims = value.claim_ids;
     }
     return .{ .claim_ids = token_claims orelse return error.InvalidReconciliationFixture, .content = business orelse return error.InvalidReconciliationFixture };
+}
+
+// Scripted semantic judgments stay in fake-provider fixtures. The native engine
+// still admits comparisons and authorizes the current story value replacement.
+fn storyValue(allocator: std.mem.Allocator, all: r.Items, repaired: bool, revision: usize) !g.spec.BusinessValue {
+    var segments: std.ArrayList(r.text.BusinessSegment) = .empty;
+    if (repaired) {
+        for (all.entries) |item| {
+            if (item.claim.content != .model) continue;
+            if (try businessValue(allocator, item.claim)) |value| try segments.appendSlice(allocator, value.segments);
+        }
+    } else try segments.append(allocator, .{ .literal = .{ .value = if (revision % 2 == 0) "MOCK kind exact_copy " else "MOCK exact_copy kind " } });
+    for (all.entries) |item| if (item.claim.content == .preserved_token) {
+        try segments.append(allocator, .{ .exact_copy = .{ .claim_id = item.claim.id } });
+    };
+    return .{ .segments = segments.items };
 }
 
 fn omittedKind(options: Options, kind: g.spec.Kind) bool {
