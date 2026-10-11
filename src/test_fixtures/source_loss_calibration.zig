@@ -1,6 +1,7 @@
 //! Offline preparation/admission for a frozen diagnostic comparison.
 //! No model dispatch, semantic judge or production fallback.
 const std = @import("std");
+const temperature_policy = @import("calibration_temperature_policy.zig");
 const refs = @import("reference_reconciliation.zig");
 const r = refs.r;
 const text = @import("reference_text.zig");
@@ -304,7 +305,7 @@ fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
         .content = &.{ .{ .guidance = content[0].object.get("guidance").?.string }, .{ .user = content[1].object.get("user").?.string } },
         .schema = .{ .native = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .bedrock) } },
         .schema_name = "sdde_model_envelope_v1",
-        .temperature = .zero,
+        .temperature = .fixed,
         .max_output_tokens = .{ .value = 16384 },
         .reasoning_effort = .low,
     }, .inference);
@@ -477,7 +478,7 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
                     for ([_][]const u8{ "edit.json", "request.json" }) |kind| {
                         const prior = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.candidate-{d}.{s}", .{ prior_root, example.id, view.id.ordinal, kind }));
                         const current = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.{s}", .{ output, example.id, name, kind }));
-                        try std.testing.expectEqualStrings(prior, current);
+                        try temperature_policy.expectProjection(a, kind, prior, current);
                     }
                 }
                 const request_bytes = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.request.json", .{ output, example.id, name }));
@@ -562,7 +563,7 @@ fn prepareHandoffControls(a: std.mem.Allocator, schema: *const @import("../domai
 fn frozenCitationCompleteness(a: std.mem.Allocator, id: []const u8, suffix: []const u8) !void {
     const exported = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, id, suffix }));
     const frozen = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ root, id, suffix }));
-    try std.testing.expectEqualStrings(frozen, exported);
+    try temperature_policy.expectProjection(a, suffix, frozen, exported);
 }
 
 fn reviewReceiptChecks(a: std.mem.Allocator, id: []const u8, prepared: Prepared, packet: *const packets.Packet, response: []const u8) !void {

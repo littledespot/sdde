@@ -1,5 +1,11 @@
 # Actual reviewer-to-loss handoff preparation
 
+This unexecuted plan is regenerated during FIX03 Phase 4 for current native
+preparation/admission code, schema, guidance and approved fixed temperature 0.1.
+Its selected duties use explicit focused `.finding` packets; the separate record
+panel prepares the new grouped transport comparison. The refresh does not alter
+scored historical requests, receipts, results or their original temperature.
+
 This directory is **offline qualification preparation**, with no live outputs,
 dispatch authority, semantic quality result or E2E claim. The production arm uses
 the current `Source.packetFor` input, support prompt, native response restrictions
@@ -14,7 +20,7 @@ reagent-clearance qualification case. Two repetitions propose 24 review sends an
 at most 24 conditional loss sends, **48 physical sends total**, with a stop at
 **250,000 actual input plus output tokens**. Review and loss share fixed
 `aws-bedrock` / `openai.gpt-oss-20b-1:0` / `ap-southeast-2`, reasoning `low`,
-temperature `0`, native schema and `max_completion_tokens=16384`; seed and top-p
+temperature `0.1`, native schema and `max_completion_tokens=16384`; seed and top-p
 are absent. No retry, correction, repair, model judge or E2E send belongs to this
 preparation. Each future live run requires separate approval. Missing usage,
 transport uncertainty, request/control drift or a reached limit stops further

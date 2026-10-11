@@ -261,16 +261,33 @@ The repair guidance contains:
 - the exact replacement schema;
 - the instruction that unrelated fields must not be returned or changed.
 
-**Focused-review repair (approved 26 September 2026).** A produced finding is
-validated before the next native subject is requested. A mechanically invalid
-finding may use the existing selected-value/field atomic repair while other
-subjects remain pending; pending subjects do not produce missing-finding defects.
+**Focused-review repair (approved 26 September 2026; task-authorized Phase 4
+transport/lifecycle amendment, 11 October 2026).** All produced findings are
+individually validated before the next native assignment is requested. The
+acceptance-criterion record assignment in §17 may produce its three existing
+Given/When/Then findings in one call. Exact complete native membership is checked
+before appending any member; partial, duplicate, foreign or misbound responses
+cannot contribute coverage. Native ledger order owns canonical ordering.
+A mechanically invalid finding may use the existing selected-value/field atomic
+repair while other subjects remain pending; valid produced siblings remain
+unchanged and future pending subjects do not produce missing-finding defects.
 Authorization binds the current diagnostic, typed subject, original value,
 revision and dependencies. An admitted negative or inconclusive finding remains
 review data; repair cannot change its verdict. Protocol correction stays on the
 same request assignment and selected schema. The collection's first admitted
 native-candidate origin stays fixed through later findings and repairs, while each
-finding retains its own origin. Complete membership, evidence and relationship
+finding retains its own origin. Batched siblings initially share their actual
+accepted review-call origin; a selected repair changes only its target's origin,
+never inventing a call for another field. A record protocol correction requests
+the same complete three-member assignment, while native detail/evidence repair
+remains scoped to the selected singleton finding and retains its verdict.
+Multiple candidate omissions are localized serially from the earliest canonical
+finding with no preservation evidence. Each keeps its own unchanged obligation,
+complete comparison assignment and comparison-call origin; completing one does
+not clear another. Selection derives from retained canonical findings, not a
+second obligation queue. Revalidate after every comparison or repair and do not
+request another review assignment while a current omission awaits localization.
+Complete membership, evidence and relationship
 validation run before reconciliation, publication or clarification. The existing
 runner owns request retirement, per-assignment and native-defect retry allowances,
 and global actual-token accounting; successful independent work does not reset an

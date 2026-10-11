@@ -204,7 +204,9 @@ only that payload schema. Native decoding restores the retained kind; the model 
 not repeat it. Target/revision ownership, sibling preservation and full validation
 remain with the existing repair owners.
 
-**Support review** returns one `decision` with evidence and brief detail. Native
+**Support review** retains one closed finding per native requirement, with evidence
+and brief detail. A singleton source assignment returns its existing source value;
+principle review retains its separate `decision` contract. Native
 policy supplies fixed applicability; `not_applicable` is a separate permitted
 decision only when applicability still needs review. Initial and missing-finding
 requests select the same closed shapes. Detail/evidence repairs preserve decisions;
@@ -223,6 +225,27 @@ Completed entity-applicability review receives the disposition, resolved basis a
 business context through the same projection as policy review. Partial source
 review and producer localization retain their existing subjects and evidence.
 
+The task-authorized Phase 4 source transport/lifecycle amendment batches the
+existing Given, When and Then findings of one acceptance-criterion record. The
+production builder selects a record assignment only at its first Given requirement
+with all three current native IDs. The response contains `findings`, each with
+`requirement_ordinal` and the existing closed source `value`. The native owner
+requires exact complete membership before append, normalizes wire order to ledger
+order and validates each field under its own purpose and evidence rule. A broad
+pass cannot fill several findings. Original sources and the same current record
+sibling context are shared; every finding remains independently attributable.
+
+Record protocol correction retains the complete assignment and schema. A native
+detail/evidence repair still receives only its selected singleton finding and
+cannot alter valid siblings or the verdict. One real accepted review call may
+appear in all three per-finding origin slots; only an actual selected replacement
+changes that field's origin. Multiple omissions are localized one at a time from
+the earliest canonical finding without preservation evidence. Each receives a
+complete bound comparison with its unchanged obligation and distinct comparison
+origin before review advances. No repair permission, required finding, collection
+coverage or principle duty is removed. Offline mechanical readiness does not
+establish lower actual cost, semantic equivalence or Phase 11 promotion.
+
 The shared requirement-description owner supplies source-only `assessment_scope`
 alongside the existing business purpose. It distinguishes authoritative original
 sources from derived claims and candidate assertions. Independent fields assess
@@ -232,7 +255,7 @@ absent from current associations. Initial requests, protocol correction and
 authorized finding/detail/evidence repair use the same packet owner. Policy and
 authoring retain their existing business purposes; loss attribution retains the
 reviewer's unchanged obligation. No finding tag, persistence shape or repair
-permission changes with this presentation.
+permission changes with this scope presentation.
 
 **Entity applicability** uses the shared requirement description for role
 selection, generation, source/policy review and authorized basis repair. It defines

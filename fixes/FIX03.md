@@ -6,8 +6,10 @@
 
 **Status:** Phases 0, 1 and 3 are complete at their offline exits: preparation,
 mechanical safety, observability and connected recovery checks. Phase 2 is partially
-complete; its finding-taxonomy decision remains pending. Phases 4–11 remain
-proposed and incomplete. The subsequent Phase 1 live run provides partial mechanical
+complete; its finding-taxonomy decision remains pending. Phase 4's bounded AC
+transport/lifecycle implementation and offline verification are complete; its
+semantic exit remains pending the Phase 11 live comparison. Phases 5–11 remain proposed and
+incomplete. The subsequent Phase 1 live run provides partial mechanical
 verification, but stopped before repair and publication; semantic quality
 improvement remains unproven.
 
@@ -483,8 +485,10 @@ assessments when selected policy chunks exist and source review has resolved.
 Record-field assignments already retain the
 [selected record's sibling fields](../src/domain/specification_review_subject.zig#L44).
 Their possible relational errors cannot be attributed to absent siblings without
-evidence. The latest handoff panel contains no record-field/collection cases and
-does not establish that batching those subjects would improve them.
+evidence. The latest historical executed handoff panel contains no record-field/
+collection cases and does not establish that batching those subjects would improve
+them. The later unexecuted Phase 3 and Phase 4 preparations add these subjects but
+provide no new live result.
 
 In the 44-call run from §2.2:
 
@@ -513,10 +517,14 @@ prove duplicated responsibility. Grounding a field, retaining its conditions and
 covering the whole collection can require distinct findings. Separate two proposals:
 batching those existing findings into one call, and changing which findings are
 required. The latter changes authority granularity; the former still changes the
-request lifecycle. [The collector](../src/domain/specification_support.zig#L284)
-currently admits the next single ordinal and pauses on one pending localization;
-[the response](../src/domain/specification_support_model.zig#L69) carries one finding.
-Neither proposal is a prompt-only change. Define complete/partial response
+request lifecycle. At the audit baseline,
+[the collector](../src/domain/specification_support.zig) admitted the next single
+ordinal and paused on one pending localization;
+[the response](../src/domain/specification_support_model.zig) carried one finding.
+The task-selected Phase 4 candidate batches one AC record's three existing field
+findings, retaining separate native IDs, evidence and repair targets. It does not
+replace them with one record-level pass. Neither proposal is a prompt-only change.
+Define complete/partial response
 admission, per-defect localization, correction, origins, persistence and repair
 identity before implementation. A record-level pass must not silently fill several
 unassessed field findings. Amend the focused-review contract in §17 where needed.
@@ -974,7 +982,7 @@ does not imply a persisted-schema change or a new recovery permission.
 | --- | --- |
 | Phase 2 existing field/collection scope | **Selected.** §17.3 already distinguishes those duties. Clarifying them requires no new requiredness policy. Assigning an unrelated duty to a previously narrower field would require an explicit shared amendment. |
 | Phase 2 addition/contradiction/gap/mixed taxonomy | **Decision pending.** Demonstrate representability before changing tags, precedence or repair. A pure addition has no missing source obligation; do not manufacture one. This is not bundled into the first candidate. |
-| Phase 4 batching or granularity change | **Deferred; retain current findings.** Distinct duties remain necessary. Any future batch needs per-finding origins, complete/partial admission, correction, localization and persistence; removing duties additionally changes §17. |
+| Phase 4 batching or granularity change | **Deferred during Phase 0; retain current findings.** Distinct duties remain necessary. The subsequent explicit Phase 4 task selects transport batching of one AC record's three existing findings, with the focused-review lifecycle amendment below. Per-finding origins, complete admission, correction, localization and persistence remain required; removing duties is not selected. |
 | Phase 5 presentation-role replacement | **Deferred; retain R10.** Replacement binding/missing-authority lifecycle needs §17/ADRs 0020 and 0022 amendment and prospective evidence. |
 | Phase 6 review retention | **Deferred; measure eligibility first.** Mixed retained/new admission, dependency witnesses and invalidation need a bounded contract. No receipt cache, narrower policy context or cross-run reuse is authorized. |
 | Phase 1 indirect failure/capture diagnosis | **Complete.** The indirect path was reproduced and the capture cause isolated offline. Shared failure preservation, legitimate recovery, capture diagnostics and full verification are recorded in the [Phase 1 delivery record](#phase-1-delivery-record). |
@@ -1547,6 +1555,11 @@ denied.
 
 ### Phase 4 — Reduce redundant review granularity
 
+**Status: bounded transport/lifecycle implementation complete at the offline
+exit — 11 October 2026.** Required-finding granularity is retained. The full
+phase's semantic gate is not complete: comparison and promotion remain Phase 11
+work. No live calls were made for this implementation.
+
 **Scope:** §5.1; conditional on Phase 0 showing distinct evidence can be retained
 with less semantic work. This may be the first simplification candidate.
 
@@ -1562,6 +1575,113 @@ with less semantic work. This may be the first simplification candidate.
 
 **Exit:** either the candidate passes its mechanical and semantic gates, or the
 current granularity is retained with evidence. Record the work actually removed.
+
+#### Phase 4 selected contract and delivery scope
+
+The explicit Phase 4 implementation request selects **one acceptance-criterion
+record** as the coherent transport unit. Its existing Given, When and Then
+requirements remain three distinct findings; no whole-record finding, requiredness
+change, new semantic repair or verdict-reassessment permission is introduced.
+The necessity map above established these distinct field responsibilities. The
+candidate must retain their evidence mechanically; whether grouping their review
+reduces semantic work without interference remains an empirical question.
+
+This task authorizes the focused-review transport/lifecycle amendment recorded
+together in [§17](../design/contracts/17-specify.md) and
+[§22](../design/contracts/22-repair.md). It supersedes their serial-request wording
+only for this complete native AC assignment, preserving independent per-field
+validation, retained failures and existing narrow recovery authority. It does not
+accept the overall Proposed design or resolve Phase 2's taxonomy decision.
+
+- **Native assignment and admission:** the production builder chooses the record
+  assignment only at its first Given requirement and only when all three current
+  native IDs are present. The closed response is `findings`, with one
+  `requirement_ordinal` and existing source `value` per member. Exact complete
+  membership is checked before append; missing, duplicate, foreign, wrong-record
+  and partial responses cannot contribute coverage. Canonical ledger order is
+  independent of response order. Each finding retains its current purpose and
+  evidence rule. The direct singleton `finding` assignment remains the paired
+  baseline and the owner of narrow repair and other subjects.
+- **Corrections, origins and recovery:** protocol correction requests the same
+  complete record response. Native detail/evidence repair changes only its
+  selected finding, preserving valid siblings and the verdict. All three original
+  findings reference the same real accepted review call; no child calls or
+  origins are fabricated. Multiple omissions are selected serially from the
+  earliest canonical finding without preservation evidence. Each retains its
+  unchanged obligation, complete loss assignment and comparison origin; neither
+  a completed sibling comparison nor unrelated success clears it. Existing
+  full validation, authority reconciliation, stored-evidence readback and runner
+  publication guards remain in force.
+- **Work changed and retained:** initial AC-field review groups three requests
+  into one. It retains three semantic findings and every existing AC/scenario
+  collection assessment, source-preservation subject and principle assessment.
+  The proposed saving is two dispatches and repeated request context per eligible
+  record, not deletion of semantic duties. Repairs, corrections and loss calls
+  remain separately counted; fewer initial calls do not establish lower actual
+  tokens, latency, false findings or whole-workflow cost.
+- **Comparison preparation:** prepare paired singleton and record requests using
+  identical current native inputs and fixed controls, with joint-condition and
+  real-loss controls. Retain per-field outcomes, complete coverage, interference,
+  false findings, rejected/unsent trials and actual cost as separate measures.
+  The preparation has no live dispatch authority. Phase 11 must independently
+  assess actual outputs before any semantic promotion; mock fixtures cannot
+  establish improved meaning or useful live recovery.
+
+#### Phase 4 implementation and verification record
+
+The existing source-review owner now constructs the complete record assignment by
+reusing its singleton packets. It retains the same current sibling record once,
+each resolved field text, original sources and each requirement's task, assessment
+scope and evidence rules. There is no second record projection or evidence-policy
+owner. Schema and native admission require all three findings; retained findings
+remain separate in publication and readback. Candidate revision advances once per
+admitted assignment, while each finding retains its own stable repair identity.
+Production selection, protocol correction, narrow finding repair and offline
+fixtures use this shared contract; the generic runtime and model routes are
+unchanged.
+
+Owning regressions verify reordered complete responses, missing/duplicate/foreign
+membership, wrong or altered records, independent source eligibility, malformed
+JSON, packet lifetime and complete protocol correction. Connected production
+integration verifies two omissions from one review, distinct subsequent comparison
+origins, invalidation and reassessment after candidate repair, repair of an invalid
+middle finding with unchanged siblings, full persisted readback and publication.
+Existing failure, exhaustion, cancellation, permission and actual-token checks
+remain in force.
+
+Verification completed through repository-owned build steps:
+
+- `zig build test-specification-generation --summary all -j2`: **310/310 tests,
+  3/3 steps passed**.
+- `zig build test-integration --summary all -j2`: **98/98 tests, 6/6 steps passed**.
+- `zig build test-architecture --summary all -j2`: **136/136 tests, 3/3 steps passed**.
+- `zig build lint --summary all`: passed.
+- `zig build verify --summary all -j2`: **1,502/1,502 tests, 142/142 steps passed**,
+  including offline integration, architecture, lint and packaged clean-environment
+  smoke checks.
+- `git diff --check`: passed.
+
+The [frozen comparison preparation](../test/calibration/source-review-record/README.md)
+contains six cases: five development assignments and one reserved qualification
+assignment, with two repetitions per arm. It schedules 24 record-level trials and
+72 required field findings: 36 singleton review sends versus 12 record review
+sends. Up to 72 loss sends may derive only from actual admitted omissions; the
+prospective ceiling is 120 physical sends and 500,000 actual input-plus-output
+tokens. Both arms use the same current model, low reasoning, temperature 0.1,
+native schema and 16,384 output allowance. The separate concurrent temperature
+policy change is not a batching effect. Only unexecuted scope/handoff preparations
+were refreshed to current requests; scored historical evidence was preserved.
+All frozen dependency and projection pins were checked. Preparation grants no
+live dispatch authority and does not fabricate reviewer obligations or receipts.
+
+Work demonstrably removed is **two initial review dispatches per eligible AC
+record**. Across the six unique frozen cases, serialized provider request bytes
+decrease from 162,331 to 76,093; this is an offline byte count, not measured tokens,
+latency or quality. Three field judgments and all collection/policy duties remain.
+Actual meaning preservation, interference, false findings, faithful omission
+formulation, recovery usefulness and cost are still unscored. The semantic exit
+and any broader reliability claim remain pending Phase 11 qualification; these
+passing offline checks do not establish that the latest live failure is fixed.
 
 ### Phase 5 — Evaluate replacing the presentation-role gate
 

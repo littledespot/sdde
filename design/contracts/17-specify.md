@@ -124,9 +124,28 @@ Typed content covers these concerns; each concern does not require a separate ca
   Existing source review must distinguish a path-valued requirement from a filename
   substituted for the behavior described in that file; confirmed candidate loss
   follows existing repair/failure routing, never missing-user-information routing.
-- Focused source review sends one bound requirement at a time. Its closed response
-  contains the semantic finding, explanation, required question and genuinely
-  selectable source evidence. A source `candidate_omission` also requires an
+- Focused source review retains one finding for each bound requirement. The
+  task-authorized Phase 4 transport/lifecycle amendment (11 October 2026) permits
+  one acceptance-criterion record assignment to batch its three existing Given,
+  When and Then requirements. Production selects this assignment only at that
+  record's first Given requirement, with all three current native IDs present.
+  The direct `finding` assignment remains a singleton for the comparison baseline,
+  other subjects and narrow finding repair; principle review remains separate.
+  The record response is a closed `findings` array whose entries contain
+  `requirement_ordinal` and `value`, the existing closed source-finding value.
+  Exactly one entry must bind to each assigned native requirement. Missing,
+  duplicate, foreign, partial or wrong-record membership rejects before any
+  member is appended; response order cannot choose canonical ledger order.
+  Each finding is independently validated with its current field purpose and
+  evidence rule before the next assignment. A whole-record pass cannot supply
+  unassessed field findings or replace acceptance/scenario collection coverage.
+  The three per-finding origins may reference the same actual accepted call;
+  batching does not create child calls or new origin authority. This amendment
+  retains requiredness, field repair permissions and failure precedence. Mechanical
+  batching does not establish semantic equivalence or justify promotion without
+  the separate Phase 11 comparison.
+  Each closed finding contains the semantic finding, explanation, required question
+  and genuinely selectable source evidence. A source `candidate_omission` also requires an
   explicit `missing_obligation`: the omitted source requirement, preserving its
   conditions, negation and obligation strength, separately from the defect
   explanation. Its selected sources support that statement; native admission
@@ -149,6 +168,11 @@ Typed content covers these concerns; each concern does not require a separate ca
   These read-only assignments do not certify support or alter evidence eligibility.
   Coverage assessments retain surrounding candidate context. A candidate omission
   triggers the separate bound-preservation comparison in [§22.1](22-repair.md).
+  When a record response contains several omissions, the engine selects the
+  earliest canonical omission without retained preservation evidence, localizes
+  it through one complete comparison assignment, then selects the next. Every
+  other finding, origin and completed comparison remains unchanged; no later
+  review assignment proceeds while a current omission awaits localization.
   Its packet presents that unchanged obligation as the single comparison target,
   numbered source lines and assigned original-claim collections. The resolved
   subject, diagnostic explanation, final-field purpose and producer outputs remain

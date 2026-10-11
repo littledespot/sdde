@@ -8020,7 +8020,7 @@ test "missing answers share protocol allowance through mixed failure and success
             if (original_id == null) original_id = request.id();
             try std.testing.expect(request.id() == original_id.?);
             try std.testing.expectEqual(json, request.prepared().?.response_guidance_mode == .native_schema);
-            try std.testing.expectEqual(.zero, request.prepared().?.controls.temperature.?);
+            try std.testing.expectEqual(.fixed, request.prepared().?.controls.temperature.?);
             try std.testing.expectEqualStrings(shape.schema, request.prepared().?.response_schema.bytes());
             try std.testing.expectEqual(@as(u32, @intCast(attempt + 1)), (try invokedOperation(&runner)).operation().id.model_attempt_ordinal.value);
             for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step|

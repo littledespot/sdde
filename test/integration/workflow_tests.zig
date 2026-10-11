@@ -1177,7 +1177,11 @@ test "configured complete omission comparisons retain uncertainty deny unsupport
     try testSpecificationWorkflows(.finding_controls);
 }
 
-fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation, role_decision_recovery, role_decision_exhaustion, reuse_regeneration, story_recovery, story_invalid, story_recurrence, finding_controls }) !void {
+test "configured acceptance criterion batch localizes separate omissions and repairs one invalid finding" {
+    try testSpecificationWorkflows(.record_reviews);
+}
+
+fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation, role_decision_recovery, role_decision_exhaustion, reuse_regeneration, story_recovery, story_invalid, story_recurrence, finding_controls, record_reviews }) !void {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
     const faults = [_]@import("../../src/test_fixtures/spec_generation_driver.zig").Fault{
@@ -1248,7 +1252,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
     const story_start = preservation_start + 3;
     const finding_start = story_start + 6;
     const finding_controls = std.meta.tags(@import("../../src/test_fixtures/spec_generation_responses.zig").LossControl);
-    var costs: [finding_start + finding_controls.len]?timing.Sample = @splat(null);
+    const record_start = finding_start + finding_controls.len;
+    const record_controls = std.meta.tags(@import("../../src/test_fixtures/spec_generation_responses.zig").RecordReviewControl);
+    var costs: [record_start + record_controls.len]?timing.Sample = @splat(null);
     const case_range_begin: usize = switch (workflow_cases) {
         .existing => 0,
         .source_preservation => preservation_start,
@@ -1259,6 +1265,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         .story_invalid => story_start + 2,
         .story_recurrence => story_start + 4,
         .finding_controls => finding_start,
+        .record_reviews => record_start,
     };
     const case_range_end: usize = switch (workflow_cases) {
         .existing => role_decision_start,
@@ -1269,7 +1276,8 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         .story_recovery => story_start + 2,
         .story_invalid => story_start + 4,
         .story_recurrence => finding_start,
-        .finding_controls => costs.len,
+        .finding_controls => record_start,
+        .record_reviews => costs.len,
     };
     defer timing.report(io, "specification-generation", costs[case_range_begin..case_range_end]) catch |err| std.debug.panic("scenario timing report failed: {s}", .{@errorName(err)});
     for (case_range_begin..case_range_end) |scenario| {
@@ -1282,7 +1290,8 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         const role_decision_scenario = scenario >= role_decision_start and scenario < preservation_start;
         const preservation_scenario = scenario >= preservation_start and scenario < story_start;
         const story_scenario = scenario >= story_start and scenario < finding_start;
-        const finding_control = if (scenario >= finding_start) finding_controls[scenario - finding_start] else null;
+        const finding_control = if (scenario >= finding_start and scenario < record_start) finding_controls[scenario - finding_start] else null;
+        const record_control = if (scenario >= record_start) record_controls[scenario - record_start] else null;
         const brief_scenario = scenario >= brief_start and scenario < applicability_start;
         const global_scenario = scenario >= global_start and scenario < brief_start;
         const summary_scenario = scenario >= summary_start and scenario < global_start;
@@ -1358,6 +1367,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             "MOCK visitor sees the current UTC date and time on startup. Display `MOCK Hello!`.\n"
         else
             "MOCK librarian renews an eligible loan and sees the new return deadline. Display `MOCK Renewed!`.\n" });
+        if (record_control != null) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "MOCK renewal is allowed only for an eligible loan with no reservation. When renewal is requested, extend the return deadline by seven days. Display `MOCK Renewed!`.\n" });
         const definition = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec.workflow.yaml", allocator, .limited(1_048_576));
         defer allocator.free(definition);
         // These cases exercise two independent model-summary request lifecycles.
@@ -1448,6 +1458,11 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             else
                 "MOCK visitor sees the current UTC date and time on startup and a greeting.";
             driver.brief_text = .{ "MOCK required behavior", behavior, behavior };
+        }
+        if (record_control) |control| {
+            driver.record_review = control;
+            const behavior = "MOCK renewal is allowed only for an eligible loan with no reservation. Requested renewal extends the return deadline by seven days and displays confirmation.";
+            driver.brief_text = .{ "MOCK loan renewal", behavior, behavior };
         }
         driver.repeated_provenance_fault = scenario == 6;
         driver.finalizer = logging.finalizer();
@@ -1718,7 +1733,15 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             const published = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_publication_workflow.zig").state_schema, .publication_state);
             const policy = published.principle_assessment;
-            const logical_reviews = published.review.evidence.len + policy.evidence.len;
+            var record_batches: usize = 0;
+            for (published.review.evidence) |evidence| {
+                const requirement = evidence.requirement;
+                if (requirement.unit == .record and requirement.unit.record.kind == .acceptance_criterion and requirement.slot == .given) record_batches += 1;
+            }
+            try std.testing.expectEqual(record_batches, driver.record_batch_requests);
+            // Source AC duties remain separate evidence entries while one
+            // current-record request carries the three field findings.
+            const logical_reviews = published.review.evidence.len + policy.evidence.len - record_batches * 2;
             try std.testing.expect(logical_reviews > 2);
             try std.testing.expectEqual(if (scenario == 0) logical_reviews + driver.support_merges else @as(usize, 0), driver.fault_requests);
             try std.testing.expectEqual(driver.fault_requests, driver.fault_calls);
@@ -2040,7 +2063,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             } else {
                 const accepted = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support)).accepted;
                 try std.testing.expectEqual(@as(u32, 2), accepted.candidate.origin.?.attempt.value);
-                try std.testing.expectEqual(@as(u64, @intCast(accepted.candidate.review.entries.len + driver.support_merges)), accepted.candidate.revision);
+                try std.testing.expectEqual(@as(u64, @intCast(try sourceReviewAssignments(allocator, accepted.inputs, accepted.candidate) + driver.support_merges)), accepted.candidate.revision);
                 for (accepted.candidate.origins) |origin| try std.testing.expect(origin != null);
             }
         }
@@ -2477,7 +2500,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                         .pending => |value| value,
                         .rejected => |value| value.candidate.?,
                     };
-                    try std.testing.expectEqual(@as(u64, @intCast(retained.review.entries.len + merges)), retained.revision);
+                    const support_workflow = @import("../../src/application/specification_support_workflow.zig");
+                    const inputs = try support_workflow.inputs(&view, try support_workflow.progress(&view));
+                    try std.testing.expectEqual(@as(u64, @intCast(try sourceReviewAssignments(allocator, inputs, retained) + merges)), retained.revision);
                     for (retained.review.entries[0..@min(4, retained.review.entries.len)], retained.origins[0..@min(4, retained.origins.len)]) |finding, origin| {
                         try std.testing.expectEqual(.unsupported, finding.value.kind);
                         try std.testing.expectEqualStrings("What duration applies? State the duration and starting event.", finding.value.question.?);
@@ -2485,8 +2510,6 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                     }
                     var evidence_arena: std.heap.ArenaAllocator = .init(allocator);
                     defer evidence_arena.deinit();
-                    const support_workflow = @import("../../src/application/specification_support_workflow.zig");
-                    const inputs = try support_workflow.inputs(&view, try support_workflow.progress(&view));
                     const ledger = try @import("../../src/domain/required_authority.zig").build(evidence_arena.allocator(), inputs);
                     for (ledger.requirements[0..retained.origins.len], retained.origins, 0..) |requirement, origin, i| if (i >= 4 and requirement.seed.id.kind != .entity_applicability) try std.testing.expect(origin != null);
                     if (driver.support_fault == .question_evidence_recover) {
@@ -2523,7 +2546,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                         try std.testing.expectEqual(@as(usize, 1), issues.len);
                         try std.testing.expectEqual(.invalid_question, issues[0].issue);
                         const retained = (try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/specification_support_workflow.zig").schema, .support)).rejected.candidate.?;
-                        try std.testing.expectEqual(@as(u64, @intCast(retained.review.entries.len + merges)), issues[0].revision);
+                        const support_workflow = @import("../../src/application/specification_support_workflow.zig");
+                        const inputs = try support_workflow.inputs(&view, try support_workflow.progress(&view));
+                        try std.testing.expectEqual(@as(u64, @intCast(try sourceReviewAssignments(allocator, inputs, retained) + merges)), issues[0].revision);
                         for (retained.origins[1..]) |origin| try std.testing.expect(origin != null);
                         try std.testing.expect(!view.contains(.published_workflow_output) and !view.contains(.clarification_needs));
                         try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
@@ -2655,6 +2680,59 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
                 try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
                 try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/clarifications.json", .{}));
+            }
+        }
+        if (record_control) |control| {
+            const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            try std.testing.expectEqual(@as(usize, 0), driver.source_repair_calls);
+            try std.testing.expect(runner.repair_retry.currentPermit() == null);
+            try std.testing.expect(view.contains(.published_workflow_output));
+            switch (control) {
+                .two_omissions => {
+                    try std.testing.expectEqual(@as(usize, 3), driver.record_batch_calls);
+                    try std.testing.expectEqual(@as(usize, 3), driver.loss_calls);
+                    try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(.candidate));
+                    try std.testing.expectEqual(@as(usize, 0), driver.support_repair_calls + driver.support_merges);
+                    try std.testing.expectEqual(@as(usize, 2), driver.omission_repair_calls);
+                    try std.testing.expectEqual(@as(usize, 2), driver.omission_merges);
+                    try std.testing.expectEqual(@as(usize, 2), driver.omission_resolutions);
+                    try std.testing.expectEqual(@as(usize, 3), driver.record_loss_count);
+                    const first = driver.record_losses[0].?;
+                    const second = driver.record_losses[1].?;
+                    const reassessed = driver.record_losses[2].?;
+                    try std.testing.expectEqual(.given, first.requirement.slot);
+                    try std.testing.expectEqual(.then, second.requirement.slot);
+                    try std.testing.expectEqualDeep(first.requirement.unit, second.requirement.unit);
+                    try std.testing.expectEqualDeep(first.review_origin, second.review_origin);
+                    try std.testing.expect(first.comparison_origin.request.value != second.comparison_origin.request.value);
+                    try std.testing.expectEqualDeep(second.requirement, reassessed.requirement);
+                    try std.testing.expect(reassessed.review_origin.request.value != second.review_origin.request.value);
+                },
+                .invalid_middle => {
+                    try std.testing.expectEqual(@as(usize, 1), driver.record_batch_calls);
+                    try std.testing.expectEqual(@as(usize, 0), driver.loss_calls + driver.omission_repair_calls + driver.omission_merges);
+                    try std.testing.expectEqual(@as(usize, 1), driver.support_repair_calls);
+                    try std.testing.expectEqual(@as(usize, 1), driver.support_merges);
+                    try std.testing.expect(driver.record_middle_repaired);
+                },
+            }
+            try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
+            try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
+            var readback: std.heap.ArenaAllocator = .init(allocator);
+            defer readback.deinit();
+            const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
+            const restored = try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
+            try std.testing.expect(restored.specified() != null);
+            const persisted = restored.specified().?;
+            try std.testing.expectEqual(.all_resolved, persisted.review.result.continuation);
+            for (persisted.review.result.entries) |entry| try std.testing.expect(entry.candidate_defect == null);
+            if (control == .two_omissions) {
+                const criterion = for (persisted.content.records) |record| {
+                    if (record.id.kind == .acceptance_criterion and record.id.ordinal == 1) break record.proposal.content.acceptance_criterion;
+                } else return error.MissingAcceptanceCriterion;
+                try std.testing.expectEqualStrings("An eligible loan has no reservation.", criterion.given.segments[0].literal.value);
+                try std.testing.expectEqualStrings("Renewal is requested.", criterion.when.segments[0].literal.value);
+                try std.testing.expectEqualStrings("The return deadline is extended by seven days.", criterion.then.segments[0].literal.value);
             }
         }
         if (driver.candidate_omissions) |omissions| {
@@ -2809,6 +2887,30 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         } else if (expected != .needs_user) try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
         cost.passed();
     }
+}
+
+fn sourceReviewAssignments(allocator: std.mem.Allocator, inputs: @import("../../src/domain/required_authority.zig").Inputs, candidate: @import("../../src/domain/specification_support.zig").Source.Candidate) !usize {
+    const authority = @import("../../src/domain/required_authority.zig");
+    const source = @import("../../src/domain/specification_support.zig").Source;
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    const ledger = try authority.build(scratch, inputs);
+    var assignments = candidate.review.entries.len;
+    for (candidate.review.entries) |finding| {
+        try std.testing.expect(finding.requirement_ordinal > 0 and finding.requirement_ordinal <= ledger.requirements.len);
+        const id = ledger.requirements[finding.requirement_ordinal - 1].seed.id;
+        if (source.assignmentScope(inputs, id) != .record) continue;
+        const subjects = try source.assignmentSubjects(scratch, inputs, id);
+        for (subjects) |subject| {
+            const present = for (candidate.review.entries) |member| {
+                if (std.meta.eql(ledger.requirements[member.requirement_ordinal - 1].seed.id, subject)) break true;
+            } else false;
+            try std.testing.expect(present);
+        }
+        assignments -= subjects.len - 1;
+    }
+    return assignments;
 }
 
 fn writeFeatureInputFixture(io: std.Io, project: std.Io.Dir) !void {

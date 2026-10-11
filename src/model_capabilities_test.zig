@@ -6,13 +6,13 @@ const operation = @import("domain/workflow_operation.zig");
 const operations = @import("ports/workflow_operation_registry.zig");
 const provider_registry = @import("domain/llm_provider_registry.zig");
 
-test "temperature policy requires zero exactly when the registered model supports it" {
+test "temperature policy requires 0.1 exactly when the registered model supports it" {
     for ([_]bool{ false, true }) |supported| {
         var capabilities = fixture.capabilities;
         capabilities.temperature = supported;
         const selected = capabilities.inferenceControls();
         try std.testing.expectEqual(supported, selected.temperature != null);
-        if (selected.temperature) |temperature| try std.testing.expectEqual(@as(f64, 0), temperature.wireValue());
+        if (selected.temperature) |temperature| try std.testing.expectEqual(@as(f64, 0.1), temperature.wireValue());
         try std.testing.expect(capabilities.supports(.prompt_only, selected));
         try std.testing.expect(!capabilities.supports(.prompt_only, .forTemperatureSupport(!supported)));
     }
@@ -86,7 +86,7 @@ test "model contracts validate capabilities without granting unsupported operati
     contract = provider_contract;
     contract.capabilities.temperature = false;
     try std.testing.expect(contract.capabilities.supports(.prompt_only, contract.capabilities.inferenceControls()));
-    try std.testing.expect(!contract.capabilities.supports(.prompt_only, .{ .temperature = .zero }));
+    try std.testing.expect(!contract.capabilities.supports(.prompt_only, .{ .temperature = .fixed }));
     try std.testing.expect(!fixture.capabilities.supports(.native_schema, fixture.capabilities.inferenceControls()));
 }
 

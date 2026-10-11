@@ -47,7 +47,7 @@ test "YAML-declared model slot resolves to one immutable provider binding" {
         fixture.services.allowlist().resolveSlot(resolved.slot_id).?.registry_entry_id,
     ));
     try std.testing.expectEqualStrings("low", resolved.reasoning_effort.?);
-    try std.testing.expectEqual(.zero, resolved.controls.temperature.?);
+    try std.testing.expectEqual(.fixed, resolved.controls.temperature.?);
 }
 
 test "binding rejects absent slot authority and non-model steps" {

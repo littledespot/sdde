@@ -19,7 +19,7 @@ const description: debug.Description = .{
     .protocol_prompt = @import("domain/model_controls.zig").response_format_guidance,
     .schema = schema,
     .response_mode = .prompt_only,
-    .controls = .{ .temperature = .zero, .max_output_tokens = .{ .value = 16384 } },
+    .controls = .{ .temperature = .fixed, .max_output_tokens = .{ .value = 16384 } },
     .reasoning_effort = "low",
     .operation_kind = .inference,
 };

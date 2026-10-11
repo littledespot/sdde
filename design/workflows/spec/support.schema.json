@@ -124,6 +124,36 @@
         }
       ]
     },
+    "record_findings": {
+      "type": "object",
+      "properties": {
+        "findings": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "properties": {
+              "requirement_ordinal": {
+                "$ref": "#/$defs/ordinal"
+              },
+              "value": {
+                "$ref": "#/$defs/finding"
+              }
+            },
+            "required": [
+              "requirement_ordinal",
+              "value"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "findings"
+      ],
+      "additionalProperties": false
+    },
     "applicability_finding": {
       "oneOf": [
         {

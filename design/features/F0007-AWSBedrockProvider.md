@@ -139,7 +139,7 @@ registration remains. No current project catalogue selects it.
   user/evidence input is required; no input text is invented.
 - CountTokens wraps the exact serialized inference body as base64 in
   `input.invokeModel.body`. A model without exact-count support rejects before dispatch.
-- Supported temperature remains `0` (§12.5); selected `reasoning_effort` is a
+- Supported temperature is `0.1` (§12.5, amended 2026-10-11); selected `reasoning_effort` is a
   top-level field. Both follow the existing binding, not adapter defaults.
 - Under the [2026-10-10 amendment to ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance),
   bound `maxOutputTokens` maps unchanged to top-level `max_completion_tokens`.

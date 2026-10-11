@@ -311,7 +311,7 @@ test "prepared calibration descriptions retain distinct case inputs after packet
         .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
         .schema = "",
         .response_mode = .native_schema,
-        .controls = .{ .temperature = .zero, .max_output_tokens = @import("../../../src/domain/model_controls.zig").OutputTokenAllowance.init(12288).? },
+        .controls = .{ .temperature = .fixed, .max_output_tokens = @import("../../../src/domain/model_controls.zig").OutputTokenAllowance.init(12288).? },
         .reasoning_effort = "low",
         .operation_kind = .inference,
     };

@@ -1,6 +1,12 @@
 # Source-review scope presentation comparison
 
 This is frozen **offline preparation**, with no live results or dispatch authority.
+The unexecuted plan is regenerated during FIX03 Phase 4 for current guidance,
+schema and the approved fixed temperature 0.1 policy. Both arms explicitly use
+the native focused `.finding` packet to isolate the presentation comparison;
+this does not claim that current production AC-record review dispatches singleton
+requests. The separate record-grouping panel owns that comparison. Historical
+scored requests, receipts and results are preserved and are not promoted here.
 The selected FIX03 Phase 2 factor makes existing field, record, collection and
 original-source review duties explicit. Candidate requests use the production
 `Source.packetFor` packet and current source-review prompt. Baseline requests omit
@@ -82,7 +88,7 @@ body. The manifest pins every request, edit, packet, input case, prompt, schema,
 scoring document, taxonomy probe and retained parent binding by SHA256 and byte
 count. The two repetitions deliberately share identical request bytes. Fixed
 controls are AWS Bedrock `openai.gpt-oss-20b-1:0`, `ap-southeast-2`, low reasoning,
-temperature 0, native schema and 16,384 output tokens; seed and top-p are absent.
+temperature 0.1, native schema and 16,384 output tokens; seed and top-p are absent.
 
 Offline mock findings prove only that selected native evidence and closed output
 shapes can be admitted. They provide no semantic quality, live recovery or E2E

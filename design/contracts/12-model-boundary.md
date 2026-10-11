@@ -238,7 +238,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 
 - one reference chunk, artifact section, requirement cluster, task cluster, or file operation per call;
 - strict JSON schema with enums and `additionalProperties: false`;
-- temperature `0` whenever the selected registered model supports temperature; omit
+- temperature `0.1` whenever the selected registered model supports temperature; omit
   the control only when unsupported, without relying on it for correctness;
 - stable IDs for sources, requirements, tokens, projects, files, tasks, commands, and diagnostics;
 - complete response-shape guidance from the bound compiled schema, including
@@ -251,9 +251,10 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 - one complete schema-valid result and explicit operation-local retry limits;
 - an optional YAML-declared fallback operation only after deterministic retry exhaustion, never as hidden behavior.
 
-The user-approved 2026-09-19 temperature policy applies to every engine model
-request and Bedrock rubric evaluation. Provider binding derives the control from
-registered capabilities; workflow definitions cannot select or override it.
+The user-approved 2026-10-11 amendment replaces the 2026-09-19 fixed temperature
+`0` with `0.1` for every engine model request and Bedrock rubric evaluation.
+Provider binding derives the control from registered capabilities; workflow
+definitions cannot select or override it.
 Prepared requests, retries and provider authorization retain and validate that
 control. OpenAI rubric evaluation remains outside this amendment.
 

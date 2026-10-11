@@ -6,11 +6,11 @@ pub const response_format_guidance = "Return exactly one JSON object matching th
 
 /// Engine policy: supported temperature controls have exactly one value.
 pub const Temperature = enum {
-    zero,
+    fixed,
 
     pub fn wireValue(self: Temperature) f64 {
         return switch (self) {
-            .zero => 0,
+            .fixed => 0.1,
         };
     }
 };
@@ -37,6 +37,6 @@ pub const InferenceControls = struct {
     }
 
     pub fn forTemperatureSupport(supported: bool) InferenceControls {
-        return .{ .temperature = if (supported) .zero else null };
+        return .{ .temperature = if (supported) .fixed else null };
     }
 };

@@ -76,6 +76,11 @@ pub const Value = union(enum) {
     not_applicable: Positive,
 };
 
+/// Complete findings for one native record assignment. The model may reorder
+/// entries, but cannot choose which required fields are assessed.
+pub const BatchFinding = struct { requirement_ordinal: u32, value: Value };
+pub const Batch = struct { findings: []const BatchFinding };
+
 /// Resolve only subject-bound or diagnostic claims. An unlocalized negative
 /// finding may use source-only evidence, never an arbitrary eligible subset.
 fn claimsFor(required: evidence.Requirements, kind: Decision, location: loss) json.Error![]const r.ClaimId {
@@ -90,7 +95,10 @@ fn claimsFor(required: evidence.Requirements, kind: Decision, location: loss) js
 }
 
 pub fn decode(a_alloc: std.mem.Allocator, bytes: []const u8, required: evidence.Requirements) json.Error!Canonical {
-    const value = try codec.decode(Value, a_alloc, bytes);
+    return canonical(try codec.decode(Value, a_alloc, bytes), required);
+}
+
+pub fn canonical(value: Value, required: evidence.Requirements) json.Error!Canonical {
     const kind: Decision = switch (value) {
         inline else => |_, tag| @field(Decision, @tagName(tag)),
     };

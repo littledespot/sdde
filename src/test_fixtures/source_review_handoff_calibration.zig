@@ -1,6 +1,7 @@
 //! Offline qualification preparation for actual Source-review values passed to
 //! one complete native preservation assignment. No dispatch or semantic oracle.
 const std = @import("std");
+const temperature_policy = @import("calibration_temperature_policy.zig");
 const shared = @import("source_loss_calibration.zig");
 const authority = @import("../domain/required_authority.zig");
 const support = @import("../domain/specification_support.zig").Source;
@@ -107,6 +108,7 @@ pub fn run() !void {
     const dependency_paths = [_][]const u8{
         "src/test_fixtures/source_review_handoff_calibration.zig",
         "src/test_fixtures/source_loss_calibration.zig",
+        "src/test_fixtures/calibration_temperature_policy.zig",
         "src/test_fixtures/source_omission_evidence.zig",
         "src/domain/specification_support.zig",
         "src/domain/specification_support_model.zig",
@@ -123,6 +125,7 @@ pub fn run() !void {
         "src/domain/required_authority_description.zig",
         "src/domain/model_envelope.zig",
         "src/domain/model_candidate_json.zig",
+        "src/domain/model_controls.zig",
         "src/domain/model_result_schema.zig",
         "src/domain/model_schema_projection.zig",
         "src/adapters/provider/bedrock_request.zig",
@@ -140,7 +143,7 @@ pub fn run() !void {
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/preparation.json", .data = try std.json.Stringify.valueAlloc(a, .{
         .status = "offline_prepared_no_live_dispatch_authority",
         .measurement = "Actual admitted reviewer values to one complete native preservation assignment; semantic discovery, attribution, repair eligibility, denial and harm remain separate judgments.",
-        .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = 0, .response_mode = "native_schema", .max_output_tokens = 16384, .seed = "absent", .top_p = "absent" },
+        .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = temperature_policy.temperature, .response_mode = "native_schema", .max_output_tokens = 16384, .seed = "absent", .top_p = "absent" },
         .limits = .{ .repetitions = 2, .development_assignments = development, .reserved_qualification_assignments = qualification, .review_sends = trials.items.len, .conditional_loss_sends = trials.items.len, .maximum_physical_sends = trials.items.len * 2, .stop_at_actual_input_plus_output_tokens = 250000, .retries_corrections_repairs_model_judges_e2e = 0 },
         .native_origin_available_from_replayed_receipt = false,
         .prior_findings = "MOCK supported prefix for isolated assignment preparation; never evidence of complete production workflow validation.",

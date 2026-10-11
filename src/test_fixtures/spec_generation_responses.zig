@@ -31,6 +31,7 @@ pub const applicability_question = "Should the displayed value be calculated on 
 
 pub const SourceLoss = enum { empty, partial, classification, signal, unchanged, false_conflict, unchanged_conflict, false_conflict_questions };
 pub const LossControl = enum { false_candidate, uncertain, denied_role };
+pub const RecordReviewControl = enum { two_omissions, invalid_middle };
 fn falseConflict(mode: ?SourceLoss) bool {
     return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions;
 }
@@ -53,6 +54,7 @@ pub const Options = struct {
     candidate_omissions: ?enum { functional, acceptance_and_functional } = null,
     story_omission: ?enum { recover, invalid_repair, recurring } = null,
     loss_control: ?LossControl = null,
+    record_review: ?RecordReviewControl = null,
     omission_merges: usize = 0,
     extraction_omission: bool = false,
     text_fault: bool = false,
@@ -383,6 +385,15 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 if (view.contains(omission_schema.key)) {
                     const state = try @import("../application/specification_values.zig").storage.read(&view, omission_schema, .omission_repair);
                     if (state.authorization.target.part == .value) {
+                        if (options.record_review == .two_omissions) {
+                            const field = state.authorization.target.part.value.field;
+                            const replacement: g.spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = switch (field) {
+                                .given => "An eligible loan has no reservation.",
+                                .then => "The return deadline is extended by seven days.",
+                                else => return error.UnexpectedScriptedRepair,
+                            } } }} };
+                            return @import("../domain/model_candidate_json.zig").encode(struct { value: g.spec.BusinessValue }, allocator, .{ .value = replacement });
+                        }
                         const mode = options.story_omission orelse return error.UnexpectedScriptedRepair;
                         const replacement = if (mode == .invalid_repair)
                             g.spec.BusinessValue{ .segments = &.{.{ .literal = .{ .value = " " } }} }
@@ -445,7 +456,14 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                             const retained = eligibleRecordClaim(dispositions, item.claim.id);
                             if (!retained or (try businessValue(allocator, item.claim)) == null or !r.contains(r.ClaimId, assigned.records.selection.claim_ids, item.claim.id)) continue;
                             const selected = try attributed(allocator, all, &.{item.claim.id});
-                            if (kind == .acceptance_criterion and item.claim.content == .model) try records.append(allocator, .{ .content = .{ .acceptance_criterion = .{ .given = selected.value, .when = selected.value, .then = selected.value } }, .provenance = selected.provenance });
+                            if (kind == .acceptance_criterion and item.claim.content == .model) {
+                                const criterion: @FieldType(g.spec.Content(g.spec.BusinessValue), "acceptance_criterion") = if (options.record_review == .two_omissions and records.items.len == 0) .{
+                                    .given = .{ .segments = &.{.{ .literal = .{ .value = "A librarian holds a loan." } }} },
+                                    .when = .{ .segments = &.{.{ .literal = .{ .value = "Renewal is requested." } }} },
+                                    .then = .{ .segments = &.{.{ .literal = .{ .value = "Renewal is acknowledged." } }} },
+                                } else .{ .given = selected.value, .when = selected.value, .then = selected.value };
+                                try records.append(allocator, .{ .content = .{ .acceptance_criterion = criterion }, .provenance = selected.provenance });
+                            }
                             if (kind == .functional_requirement and item.claim.content == .model) try records.append(allocator, .{ .content = .{ .functional_requirement = .{ .text = selected.value } }, .provenance = selected.provenance });
                             if (kind == .user_visible_outcome and item.claim.content == .model and std.meta.eql(item.claim.id, try outcomeClaim(allocator, all, dispositions, item.claim.chunk_id))) for (all.entries) |exact_item| {
                                 if (exact_item.claim.content != .preserved_token or !std.mem.eql(u8, exact_item.claim.chunk_id.bytes, item.claim.chunk_id.bytes)) continue;
@@ -542,7 +560,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .{ .reconciliation_conflict = id.unit.conflict }
                 else if (options.source_loss) |mode|
                     try fixtureLoss(&view, inputs, context, mode)
-                else if (options.candidate_omissions != null or options.story_omission != null)
+                else if (options.candidate_omissions != null or options.story_omission != null or options.record_review == .two_omissions)
                     .{ .candidate = .{} }
                 else
                     .{ .unlocalized = .{} };
@@ -600,6 +618,22 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 const omission = story_omitted or (if (omission_kind) |kind| omittedKind(options, kind) and inputs.specification != null and !g.spec.hasRecords(inputs.specification.?, kind) else false);
                 finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = .{ .question = if (conflict) "Should the loan be renewed or rejected? Choose the required outcome." else if (uncertain and !omission) "Which renewal deadline applies? Supply the duration and starting event." else null, .kind = if (conflict) .conflicting else if (omission) .candidate_omission else if (uncertain) .ambiguous else if (unbound) .inconclusive else .supported, .provenance = selected, .missing_obligation = if (omission and !conflict) context.inputs.corpus.sources[0].bytes else null, .source_ids = &.{}, .detail = if (conflict) "Should the loan be renewed or rejected? The sources disagree." else if (omission) "The specification omits the source-supported requirement." else if (uncertain) "Which renewal deadline applies? The sources do not settle it." else if (unbound) "No validated source group binds this requirement." else "" } };
                 if (omission) finding.value.source_ids = &.{context.inputs.corpus.sources[0].id};
+                if (options.record_review) |control| if (requirement.seed.id.unit == .record and requirement.seed.id.unit.record.kind == .acceptance_criterion and requirement.seed.id.unit.record.ordinal == 1) {
+                    switch (control) {
+                        .two_omissions => if ((requirement.seed.id.slot == .given and options.omission_merges == 0) or (requirement.seed.id.slot == .then and options.omission_merges < 2)) {
+                            finding.value = .{
+                                .kind = .candidate_omission,
+                                .provenance = selected,
+                                .source_ids = &.{context.inputs.corpus.sources[0].id},
+                                .detail = "The selected field omits its source-required condition or result.",
+                                .missing_obligation = if (requirement.seed.id.slot == .given) "Renewal is allowed only for an eligible loan with no reservation." else "Requested renewal extends the return deadline by seven days.",
+                            };
+                        },
+                        .invalid_middle => if (requirement.seed.id.slot == .when and options.support_merges == 0) {
+                            finding.value.detail = "Invalid\x01detail";
+                        },
+                    }
+                };
                 if (falseConflict(options.source_loss) and options.source_loss != .false_conflict_questions and requirement.seed.id.unit == .conflict) {
                     finding.value.kind = .candidate_omission;
                     finding.value.missing_obligation = context.inputs.corpus.sources[0].bytes;
@@ -689,7 +723,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .delete => return error.InvalidFixture,
                 };
                 const replacement: repair.Replacement = switch (kind) {
-                    .detail => .{ .detail = .{ .detail = "The sources do not settle the renewal deadline.", .question = "Which renewal deadline applies? Supply the duration and starting event." } },
+                    .detail => if (options.record_review == .invalid_middle) .{ .detail = .{ .detail = "The selected trigger is supported by the original source." } } else .{ .detail = .{ .detail = "The sources do not settle the renewal deadline.", .question = "Which renewal deadline applies? Supply the duration and starting event." } },
                     .selection => .{ .selection = .{ .provenance = value.provenance, .source_ids = value.source_ids } },
                     .finding => .{ .finding = value },
                 };
@@ -780,6 +814,19 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             };
             const model = @import("../domain/specification_support_model.zig");
             const admission = @import("../domain/specification_support_evidence.zig");
+            if (std.mem.eql(u8, packet.resultDefinition().?.bytes, "record_findings")) {
+                var projected = try std.json.parseFromSlice(std.json.Value, allocator, packet.body(), .{});
+                defer projected.deinit();
+                const assigned = projected.value.object.get("requirements").?.array.items;
+                const WireFinding = @typeInfo(@FieldType(model.Batch, "findings")).pointer.child;
+                const batch = try allocator.alloc(WireFinding, assigned.len);
+                for (assigned, batch) |requirement, *finding| {
+                    const ordinal = std.math.cast(u32, requirement.object.get("ordinal").?.integer) orelse return error.InvalidFixture;
+                    const index = ordinal - 1;
+                    finding.* = .{ .requirement_ordinal = ordinal, .value = try @import("../domain/model_candidate_json.zig").decode(model.Value, allocator, try model.encode(allocator, findings[index].value, try admission.requirements(allocator, inputs, context.inputs, ledger.requirements[index].seed.id))) };
+                }
+                return @import("../domain/model_candidate_json.zig").encode(model.Batch, allocator, .{ .findings = batch });
+            }
             return model.encode(allocator, findings[selected_index].value, try admission.requirements(allocator, inputs, context.inputs, ledger.requirements[selected_index].seed.id));
         },
         else => return error.InvalidFixture,

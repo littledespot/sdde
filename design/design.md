@@ -860,8 +860,8 @@ The new engine is ready for production evaluation when all of the following are 
     be used to obtain a broader capability.
 
 12. **Model results, limits, and retries.**
-    - Under the user-approved 2026-09-19 amendment to §12.5, every engine inference
-      request uses temperature `0` when supported by its registered model and
+    - Under the user-approved 2026-10-11 amendment to §12.5, every engine inference
+      request uses temperature `0.1` when supported by its registered model and
       omits it otherwise. Workflow overrides reject; preparation, authorization
       and retries preserve this policy. Bedrock evaluation uses the same policy;
       OpenAI evaluation remains unchanged.

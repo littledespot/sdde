@@ -385,7 +385,7 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
                 const encoded = try bedrock.request(a, config, inputs);
                 const root = try c.decode(std.json.Value, a, encoded);
                 try std.testing.expectEqualStrings(@tagName(effort), root.object.get("reasoning_effort").?.string);
-                try std.testing.expectEqual(@as(i64, 0), root.object.get("temperature").?.integer);
+                try std.testing.expectEqual(@as(f64, 0.1), root.object.get("temperature").?.float);
                 try std.testing.expect(std.mem.indexOf(u8, encoded, "maxTokens") == null);
             }
         }
@@ -434,7 +434,7 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, encoded, framing));
         try std.testing.expectEqualStrings(try packet.resultSchema(a), root.object.get("messages").?.array.items[0].object.get("content").?.array.items[2].object.get("text").?.string);
         try std.testing.expectEqualStrings(try packet.input(a, inputs), root.object.get("messages").?.array.items[1].object.get("content").?.array.items[0].object.get("text").?.string);
-        try std.testing.expectEqual(@as(i64, 0), root.object.get("temperature").?.integer);
+        try std.testing.expectEqual(@as(f64, 0.1), root.object.get("temperature").?.float);
         const format = root.object.get("response_format").?.object;
         try std.testing.expectEqualStrings("json_schema", format.get("type").?.string);
         const native = format.get("json_schema").?.object;
@@ -1090,7 +1090,7 @@ test "live generation capture requires completed identity and distinct valid mod
     try std.testing.expectError(error.InvalidEvaluationContract, c.validateCapture(inputs));
 }
 
-test "Bedrock temperature resolves to zero and rejects configured or forged overrides" {
+test "Bedrock temperature resolves to 0.1 and rejects configured or forged overrides" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1102,15 +1102,15 @@ test "Bedrock temperature resolves to zero and rejects configured or forged over
             continue;
         }
         const config = try configuration.parse(a, config_bytes, selection);
-        try std.testing.expectEqual(@as(?f64, 0), config.temperature);
-        const explicit_zero = try std.mem.replaceOwned(u8, a, config_bytes, "\"temperature\":null", "\"temperature\":0");
-        try std.testing.expectEqualDeep(config, try configuration.parse(a, explicit_zero, selection));
-        for ([_][]const u8{ "-1", "0.001", "0.25", "1", "2" }) |value| {
+        try std.testing.expectEqual(@as(?f64, 0.1), config.temperature);
+        const explicit_fixed = try std.mem.replaceOwned(u8, a, config_bytes, "\"temperature\":null", "\"temperature\":0.1");
+        try std.testing.expectEqualDeep(config, try configuration.parse(a, explicit_fixed, selection));
+        for ([_][]const u8{ "-1", "0", "0.001", "0.25", "1", "2" }) |value| {
             const field = try std.fmt.allocPrint(a, "\"temperature\":{s}", .{value});
             const bytes = try std.mem.replaceOwned(u8, a, config_bytes, "\"temperature\":null", field);
             try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, bytes, selection));
         }
-        for ([_]?f64{ null, 0.001, 0.25, 1, 2 }) |value| {
+        for ([_]?f64{ null, 0, 0.001, 0.25, 1, 2 }) |value| {
             var forged = config;
             forged.temperature = value;
             try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(forged));

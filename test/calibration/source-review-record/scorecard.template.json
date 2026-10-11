@@ -1,0 +1,1312 @@
+{
+  "status": "unscored_no_live_outputs",
+  "panel": "source-review-record",
+  "rules": {
+    "denominators": "All 24 scheduled arm trials and all 72 required per-field findings, including not_sent, malformed, incomplete and rejected results; singleton arm dispatches 3 requests per trial, record arm dispatches 1.",
+    "meaning": "Judge whole-record meaning and each original field role separately. Equivalent wording and distributed conditions are valid. A faithful identified defect is distinct from complete omission coverage.",
+    "coverage": "Never count a broad record pass as three findings. Report missing, duplicate, extra, partial and misbound membership separately; preserve all actual reviewer values unchanged.",
+    "localization": "Only admitted actual omissions create downstream full comparison assignments. Score every actual duty and complete assignment, per-comparison meaning, explanation adequacy and both citation completeness and relevance. No expectation substitutes for a reviewer obligation.",
+    "repair": "Diagnostic receipts do not mint native origins or repair permission. Eligibility and denied repair require the connected current native authorizer; report unexecuted repair as unexecuted.",
+    "interference": "Compare false findings, erased sibling findings, duplicated defects and altered conditions/negation/strength between arms. Conditions need not be repeated in every field.",
+    "cost": "Report every sent/not_sent operation and exact actual usage; measured transport timing and end-to-end timing separately. Do not infer fewer calls improve semantic quality.",
+    "qualification": "Freeze reserved expectations before outputs; development cases cannot be counted as untouched qualification. No retries, correction, repair dispatch, model judges or E2E are authorized by preparation."
+  },
+  "trials": [
+    {
+      "trial_id": "captured-launch-record-single_fields-review-1",
+      "case_id": "captured-launch-record",
+      "cohort": "development",
+      "arm": "single_fields",
+      "repetition": 1,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "captured-launch-record-joint_record-review-1",
+      "case_id": "captured-launch-record",
+      "cohort": "development",
+      "arm": "joint_record",
+      "repetition": 1,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "captured-launch-record-single_fields-review-2",
+      "case_id": "captured-launch-record",
+      "cohort": "development",
+      "arm": "single_fields",
+      "repetition": 2,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "captured-launch-record-joint_record-review-2",
+      "case_id": "captured-launch-record",
+      "cohort": "development",
+      "arm": "joint_record",
+      "repetition": 2,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "loan-distributed-record-single_fields-review-1",
+      "case_id": "loan-distributed-record",
+      "cohort": "development",
+      "arm": "single_fields",
+      "repetition": 1,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "loan-distributed-record-joint_record-review-1",
+      "case_id": "loan-distributed-record",
+      "cohort": "development",
+      "arm": "joint_record",
+      "repetition": 1,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "loan-distributed-record-single_fields-review-2",
+      "case_id": "loan-distributed-record",
+      "cohort": "development",
+      "arm": "single_fields",
+      "repetition": 2,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "loan-distributed-record-joint_record-review-2",
+      "case_id": "loan-distributed-record",
+      "cohort": "development",
+      "arm": "joint_record",
+      "repetition": 2,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "loan-missing-condition-record-single_fields-review-1",
+      "case_id": "loan-missing-condition-record",
+      "cohort": "development",
+      "arm": "single_fields",
+      "repetition": 1,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "loan-missing-condition-record-joint_record-review-1",
+      "case_id": "loan-missing-condition-record",
+      "cohort": "development",
+      "arm": "joint_record",
+      "repetition": 1,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "loan-missing-condition-record-single_fields-review-2",
+      "case_id": "loan-missing-condition-record",
+      "cohort": "development",
+      "arm": "single_fields",
+      "repetition": 2,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "loan-missing-condition-record-joint_record-review-2",
+      "case_id": "loan-missing-condition-record",
+      "cohort": "development",
+      "arm": "joint_record",
+      "repetition": 2,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "customs-negation-record-single_fields-review-1",
+      "case_id": "customs-negation-record",
+      "cohort": "development",
+      "arm": "single_fields",
+      "repetition": 1,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "customs-negation-record-joint_record-review-1",
+      "case_id": "customs-negation-record",
+      "cohort": "development",
+      "arm": "joint_record",
+      "repetition": 1,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "customs-negation-record-single_fields-review-2",
+      "case_id": "customs-negation-record",
+      "cohort": "development",
+      "arm": "single_fields",
+      "repetition": 2,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "customs-negation-record-joint_record-review-2",
+      "case_id": "customs-negation-record",
+      "cohort": "development",
+      "arm": "joint_record",
+      "repetition": 2,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "pump-multiple-defects-record-single_fields-review-1",
+      "case_id": "pump-multiple-defects-record",
+      "cohort": "development",
+      "arm": "single_fields",
+      "repetition": 1,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "pump-multiple-defects-record-joint_record-review-1",
+      "case_id": "pump-multiple-defects-record",
+      "cohort": "development",
+      "arm": "joint_record",
+      "repetition": 1,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "pump-multiple-defects-record-single_fields-review-2",
+      "case_id": "pump-multiple-defects-record",
+      "cohort": "development",
+      "arm": "single_fields",
+      "repetition": 2,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "pump-multiple-defects-record-joint_record-review-2",
+      "case_id": "pump-multiple-defects-record",
+      "cohort": "development",
+      "arm": "joint_record",
+      "repetition": 2,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "reserved-parcel-clearance-record-single_fields-review-1",
+      "case_id": "reserved-parcel-clearance-record",
+      "cohort": "reserved_qualification",
+      "arm": "single_fields",
+      "repetition": 1,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "reserved-parcel-clearance-record-joint_record-review-1",
+      "case_id": "reserved-parcel-clearance-record",
+      "cohort": "reserved_qualification",
+      "arm": "joint_record",
+      "repetition": 1,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "reserved-parcel-clearance-record-single_fields-review-2",
+      "case_id": "reserved-parcel-clearance-record",
+      "cohort": "reserved_qualification",
+      "arm": "single_fields",
+      "repetition": 2,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    },
+    {
+      "trial_id": "reserved-parcel-clearance-record-joint_record-review-2",
+      "case_id": "reserved-parcel-clearance-record",
+      "cohort": "reserved_qualification",
+      "arm": "joint_record",
+      "repetition": 2,
+      "transport": {
+        "sent": null,
+        "not_sent": null,
+        "exact_usage": null,
+        "input_tokens": null,
+        "output_tokens": null,
+        "transport_ms": null,
+        "end_to_end_ms": null
+      },
+      "admission": {
+        "complete": null,
+        "rejection": null,
+        "normalization": null,
+        "findings": []
+      },
+      "meaning": {
+        "joint_meaning_faithful": null,
+        "per_field_roles_faithful": null,
+        "coverage_complete": null,
+        "missed_duties": [],
+        "false_findings": [],
+        "cross_field_interference": null,
+        "condition_negation_strength_preserved": null
+      },
+      "localization": {
+        "actual_pending_defects": [],
+        "complete_comparison_admission": null,
+        "per_defect_attribution_faithful": null,
+        "explanations_adequate": null,
+        "citations_complete": null,
+        "citations_relevant": null
+      },
+      "repair": {
+        "eligible_local": null,
+        "eligible_upstream": null,
+        "denied": null,
+        "attempted": false,
+        "narrow_target_preserved": null,
+        "dependent_and_full_validation": null
+      },
+      "assessment": {
+        "assessor": null,
+        "model_assisted": false,
+        "dispute": null,
+        "adjudication": null,
+        "evidence_refs": []
+      }
+    }
+  ]
+}

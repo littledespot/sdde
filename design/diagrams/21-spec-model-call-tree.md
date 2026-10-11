@@ -110,8 +110,10 @@ requires baseline comparison and actual publication/rubric evidence.
 
 Generation runs **brief → primary user story → entities → record groups**.
 After assembly and deterministic coverage validation, source review runs before
-applicable principle review. Each review request assesses one native subject;
-it is not one request for the entire specification.
+applicable principle review. One source-review request for an acceptance-criterion
+record contains its three existing Given, When and Then field findings. Other
+source subjects and principle assessments remain focused singleton requests.
+No request assesses the entire specification.
 
 ```mermaid
 flowchart LR
@@ -129,11 +131,11 @@ flowchart LR
     CANDIDATE -. "Selected principle spans apply" .-> POLICY["policy: review-support<br/>principle-prompt"]
     ROOT -. "Pre-generation source review" .-> PRE["review-source<br/>support-prompt"]
 
-    SOURCE --> SUPPORT["review-support<br/>Repeat for each pending subject"]
+    SOURCE --> SUPPORT["review-support<br/>Repeat for each pending native assignment"]
     POLICY --> SUPPORT
     PRE --> SUPPORT
-    SUPPORT --> FINDING["model-request<br/>Assigned support or principle prompt<br/>1 call per subject"]
-    SUPPORT -. "Source finding needs omission localization" .-> LOSS["loss-model<br/>loss-prompt<br/>Additional localization call"]
+    SUPPORT --> FINDING["model-request<br/>Assigned support or principle prompt<br/>1 call per focused subject;<br/>1 source call for 3 AC-record field findings"]
+    SUPPORT -. "Source finding needs omission localization" .-> LOSS["loss-model<br/>loss-prompt<br/>1 complete comparison per omission;<br/>serial canonical order"]
     SUPPORT -. "Review validation authorizes repair" .-> SUPPORT_REPAIR["repair<br/>Assigned support or principle prompt<br/>Authorized finding repair"]
 
     REVIEW -. "Source-backed candidate omission" .-> OMISSION["repair-omission<br/>repair-prompt<br/>Generation schema; then reassemble and review"]
@@ -152,6 +154,19 @@ role; one group may produce several specification records. Review subjects come
 from the shared required-authority ledger. Empty principle selection requires no
 principle model call. Repairs and upstream rebuilding can cause renewed review
 or reconciliation calls; they do not independently commit a unit.
+
+The AC record assignment starts at its native Given requirement and retains one
+finding for each of Given, When and Then. Exact complete membership is checked
+before append, wire order is normalized to native ledger order, and each field
+keeps its own purpose and evidence validation. A record pass cannot replace any
+field finding. The separate AC/scenario collection assessments and all existing
+source-preservation and principle duties remain unchanged. Record protocol
+correction retains the complete assignment; native finding repair still changes
+only its authorized selected field. Batched findings share the actual accepted
+call origin. Multiple omissions retain their own findings and comparison origins;
+each is localized through a complete assignment before the next canonical pending
+omission or review assignment proceeds. These request-count changes grant no new
+repair or clarification permission and do not establish semantic improvement.
 
 The `model-request-with-context` subgraph retains the workflow-selected context
 for extraction repairs and specification authoring. Generation, native unit repair
