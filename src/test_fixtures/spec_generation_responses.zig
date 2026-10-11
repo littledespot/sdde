@@ -30,6 +30,7 @@ pub const applicability_detail = "The source requires a displayed value. Its ori
 pub const applicability_question = "Should the displayed value be calculated on request or read from managed records? Answer calculate, or records with their required fields.";
 
 pub const SourceLoss = enum { empty, partial, classification, signal, unchanged, false_conflict, unchanged_conflict, false_conflict_questions };
+pub const LossControl = enum { false_candidate, uncertain, denied_role };
 fn falseConflict(mode: ?SourceLoss) bool {
     return mode == .false_conflict or mode == .unchanged_conflict or mode == .false_conflict_questions;
 }
@@ -51,6 +52,7 @@ pub const Options = struct {
     evidence_fault: ?enum { recover, empty_correction } = null,
     candidate_omissions: ?enum { functional, acceptance_and_functional } = null,
     story_omission: ?enum { recover, invalid_repair, recurring } = null,
+    loss_control: ?LossControl = null,
     omission_merges: usize = 0,
     extraction_omission: bool = false,
     text_fault: bool = false,
@@ -459,7 +461,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     break :result .{ .records = records.items };
                 },
             } };
-            if (unit == .primary_user_story and options.story_omission != null) proposed.content.primary_user_story.value = try storyValue(allocator, all, false, 0);
+            if (unit == .primary_user_story and options.story_omission != null) proposed.content.primary_user_story.value = try storyValue(allocator, all, options.loss_control == .false_candidate, 0);
             if (unit == .brief) if (options.brief_text) |texts| {
                 inline for (.{ "title", "description", "primary_goal" }, 0..) |field, index| {
                     @field(proposed.content.brief, field).value = try scriptedValue(allocator, all, .{ .bytes = texts[index] });
@@ -532,7 +534,11 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 };
                 const ordinal = candidate.pending_localization orelse return error.InvalidFixture;
                 const id = ledger.requirements[ordinal - 1].seed.id;
-                const location: @import("../domain/source_omission.zig").Location = if (falseConflict(options.source_loss) and id.unit == .conflict)
+                const location: @import("../domain/source_omission.zig").Location = if (options.loss_control) |control| switch (control) {
+                    .false_candidate => .{ .candidate = .{} },
+                    .uncertain => .{ .unlocalized = .{} },
+                    .denied_role => .{ .unsupported_role = .primary_user_story },
+                } else if (falseConflict(options.source_loss) and id.unit == .conflict)
                     .{ .reconciliation_conflict = id.unit.conflict }
                 else if (options.source_loss) |mode|
                     try fixtureLoss(&view, inputs, context, mode)

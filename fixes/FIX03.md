@@ -4,11 +4,12 @@
 
 **Initial review source revision:** `607f853555beb19a2fb7509dc15ac07737d53a56`.
 
-**Status:** Phases 0 and 1 complete: offline preparation, mechanical safety and
-observability. Phases 2–11 remain proposed and incomplete. Phase 1's local changes
-and offline verification are recorded below. The subsequent live run provides
-partial mechanical verification, but stopped before repair and publication;
-semantic quality improvement remains unproven.
+**Status:** Phases 0, 1 and 3 are complete at their offline exits: preparation,
+mechanical safety, observability and connected recovery checks. Phase 2 is partially
+complete; its finding-taxonomy decision remains pending. Phases 4–11 remain
+proposed and incomplete. The subsequent Phase 1 live run provides partial mechanical
+verification, but stopped before repair and publication; semantic quality
+improvement remains unproven.
 
 **Critical rereview:** the findings justify bounded investigations, but this is
 not an implementation-ready redesign. The final review confirms the retained
@@ -798,7 +799,7 @@ dependency and is not complete. Already-implemented safeguards are not new tasks
 | 0 | Baseline, responsibility map and selected first change — **complete** | Offline preparation verified; delivery record below |
 | 1 | Failure preservation and actionable capture failures | Start alongside Phase 0 using its captured baseline |
 | 2 | Clear source-review scope and faithful finding contract | Phase 0; only applicable authority decisions are prerequisites |
-| 3 | Connected attribution and authorized recovery | Phase 0 baseline; repeat after any relevant Phase 2 or later change |
+| 3 | Connected attribution and authorized recovery — **offline complete** | Actual handoff prepared; Phase 11 supplies live acceptance; repeat checks after relevant changes |
 | 4 | Coherent review with complete coverage | Phase 0 selection and relevant Phase 2 scope decisions; conditional |
 | 5 | Replacement of the presentation-role gate | Phase 0 selection and approved replacement authority; conditional |
 | 6 | Retention of unaffected review evidence | Phase 0 dependency measurement and approved retention contract; conditional |
@@ -1452,6 +1453,9 @@ unapproved architecture amendment by local interpretation.
 
 ### Phase 3 — Connect diagnosis, attribution and permitted repair
 
+**Status: complete at the offline exit — 11 October 2026.**
+Live semantic qualification and whole-output acceptance remain Phase 11 work.
+
 **Scope:** §§3.1, 4.3 and the production-handoff gaps in §8.
 
 - Verify the compiled production path through source finding, current complete
@@ -1477,6 +1481,69 @@ acceptance evidence; it does not depend on its own future results. Exact-copy
 extension and comparison splitting each have an explicit implement/retain/defer
 disposition. Do not claim successful recovery for a path still blocked by an
 unimplemented permission or unfaithful diagnosis.
+
+#### Phase 3 delivery record
+
+The compiled production workflow already connects source findings to complete
+native comparison assignments, admission, attribution and separately authorized
+repair. This phase verifies that shared path and prepares its actual semantic
+handoff; it adds no parallel recovery route or production permission. Phase 2's
+pending addition/contradiction taxonomy remains separate.
+
+- **Connected mechanics:** extend the existing
+  [integration fixtures](../test/integration/workflow_tests.zig) through their
+  narrow fake provider port. Every loss request is checked against its complete
+  current native assignment, including resolved member meaning and the unchanged
+  reviewer obligation. Readmitted evidence retains distinct finding and loss-call
+  origins. Successful local and upstream merges invalidate their declared
+  authority and retain their repair permit until dependent review resolves it.
+  Existing rejected-merge and recurrence tests remain in use.
+- **Uncertainty and denial:** a complete uncertain assessment is admissible
+  diagnostic evidence, not business authority or permission for upstream
+  rebuilding. The reference-signal control retains its unlocalized evidence and
+  `unsupported_target` denial without a repair permit or publication: a current
+  candidate does not create a local repair target for a signal. The unrelated loan
+  control separately exercises the existing candidate-local authorization. A located
+  unsupported authoring role retains its evidence and typed denial without
+  dispatching a repair. A deliberately false finding exercises an unchanged
+  local merge and renewed review; native mechanics do not establish that the
+  finding was semantically true.
+- **Actual handoff preparation:**
+  [the qualification panel](../test/calibration/source-review-handoff/README.md)
+  prepares 12 native assignments, with 11 development cases and one reserved
+  qualification case. Two repetitions bound future dispatch to 24 source reviews
+  and at most 24 complete loss calls, with a 250,000 actual-token stop. The panel
+  is unscored and has no live dispatch authority. Collection-wide omissions use
+  native collection subjects rather than imposing unrelated duties on a local
+  description. Faithful identified duties and complete omission coverage are
+  separate scores; attribution follows the actual identified duties when a
+  collection contains losses from different producers. Exact admitted reviewer
+  detail, obligation and source IDs drive the downstream packet; no expected
+  obligation is substituted. Closed receipt,
+  stale/foreign evidence, missing/duplicate comparisons and non-omission controls
+  are checked through existing native owners. Replayed receipts remain diagnostic
+  and cannot mint a native operation origin or repair capability.
+
+| Conditional proposal | Disposition and remaining boundary |
+| --- | --- |
+| Exact-copy recovery extension | **Retain** current whole-field equality and selected-occurrence permissions. **Defer** extension until an explicit target/occurrence policy is accepted. The existing positive reconstruction case now also rejects a literal embedded in ordinary prose, preserving surrounding content. Existing typed prose-plus-exact-copy and equal-occurrence checks remain. Attribution alone cannot authorize inserting a previously unselected claim. |
+| Splitting loss comparisons | **Retain** one complete production assignment per call. **Defer** splitting until paired production evidence justifies it and the complete binding, accumulation, correction, origin, persistence and failure lifecycle is specified. Isolated diagnostic panels do not implement that lifecycle. |
+
+Verification: `zig build test-integration --summary all -j2` passed **97/97 tests,
+6/6 steps**. `zig build test-specification-generation --summary all -j2` passed
+**307/307 tests, 3/3 steps** during iteration; the final rubric was then regenerated
+without changing any of the 36 review
+projections. `zig build verify --summary all -j2` passed **1,498/1,498 tests,
+142/142 steps** against that final freeze, including generation fixtures, lint,
+architecture/contract checks, offline integration and clean packaged-executable
+smoke tests. `git diff --check` passed. Final logs are
+`/tmp/fix03-phase3-integration.log` and `/tmp/fix03-phase3-verify.log`. No live
+services were invoked.
+
+This exit does not establish faithful diagnosis, improved attribution, successful
+live recovery or E2E quality. Phase 11 must measure those outcomes separately,
+including false findings and harm; paths denied by current permissions remain
+denied.
 
 ### Phase 4 — Reduce redundant review granularity
 

@@ -143,7 +143,7 @@ fn reviewHandoff(a: std.mem.Allocator, schema: *const @import("../domain/model_r
     try exportPacket(a, schema, id, arm, loss_packet, try read(a, "design/workflows/spec/support-loss.prompt.md"));
     try write(a, id, suffix, try std.json.Stringify.valueAlloc(a, .{ .admitted_omission = true, .finding = finding, .assignment = assigned, .normalization = document.?.normalization, .source_review_origin = origin, .native_origin_available = false }, .{}));
 }
-const ReviewOrigin = struct {
+pub const ReviewOrigin = struct {
     trial_id: []const u8,
     parent_run: []const u8,
     parent_call: []const u8,
@@ -152,10 +152,10 @@ const ReviewOrigin = struct {
     request_sha256: []const u8,
     response_sha256: []const u8,
 };
-const ReviewReceipt = struct { input: []const u8, origin: ReviewOrigin, response_bytes: []const u8 };
-const ReviewParent = struct { run: []const u8, call: []const u8 };
+pub const ReviewReceipt = struct { input: []const u8, origin: ReviewOrigin, response_bytes: []const u8 };
+pub const ReviewParent = struct { run: []const u8, call: []const u8 };
 const ReviewReceiptError = @import("../domain/strict_json.zig").Error || error{ InvalidCalibrationAssignment, InvalidCalibrationOrigin };
-fn admitReviewReceipt(a: std.mem.Allocator, id: []const u8, repetition: usize, packet: *const packets.Packet, parent: ReviewParent, expected_request_sha256: []const u8, bytes: []const u8) ReviewReceiptError!ReviewReceipt {
+pub fn admitReviewReceipt(a: std.mem.Allocator, id: []const u8, repetition: usize, packet: *const packets.Packet, parent: ReviewParent, expected_request_sha256: []const u8, bytes: []const u8) ReviewReceiptError!ReviewReceipt {
     const receipt = try @import("../domain/strict_json.zig").decode(ReviewReceipt, a, bytes, .{ .maximum_depth = 128 });
     if (!std.mem.eql(u8, packet.body(), receipt.input)) return error.InvalidCalibrationAssignment;
     if (!std.mem.eql(u8, try std.fmt.allocPrint(a, "{s}-review-{d}", .{ id, repetition }), receipt.origin.trial_id) or !std.mem.eql(u8, expected_request_sha256, receipt.origin.request_sha256)) return error.InvalidCalibrationOrigin;

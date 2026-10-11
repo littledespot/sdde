@@ -2270,6 +2270,22 @@ test "coverage repair restores exact references without changing business bytes 
         try std.testing.expect(rejection.issue == .missing_exact_copy);
         try std.testing.expectEqual(.candidate, (@import("domain/candidate_validation_diagnostic.zig").Diagnostic{ .coverage = rejection }).attribution());
         const authorization = (try repair.authorize(a, current, fixture.context, identified.content, rejection)).authorized;
+        // Selecting the right source occurrence does not authorize replacing
+        // surrounding business prose with the literal. Whole-field equality
+        // remains required for native reconstruction under the current policy.
+        var embedded = current;
+        var embedded_record = record;
+        embedded_record.content.user_visible_outcome.text = .{ .segments = &.{
+            .{ .literal = .{ .value = "MOCK The visitor sees " } },
+            .{ .literal = .{ .value = raw } },
+        } };
+        embedded.units[sessions.records_index] = (try g.validate(a, text.validator, fixture.context, .records, .{ .content = .{ .records = &.{embedded_record} } })).valid;
+        const embedded_content = try sessions.assemble(a, text.validator, fixture.context, embedded);
+        const embedded_rejection = (try check.execute(a, embedded, fixture.context, embedded_content.content)).invalid;
+        try std.testing.expect(embedded_rejection.issue == .missing_exact_copy);
+        try std.testing.expectEqualDeep(claim.id, embedded_rejection.claim_id);
+        const denied = (try repair.authorize(a, embedded, fixture.context, embedded_content.content, embedded_rejection)).blocked;
+        try std.testing.expectEqual(.no_independent_supported_target, denied.blocked.?);
         var stale_context = fixture.context;
         const names = try a.dupe(@import("domain/path_token_grammar.zig").ReferenceName, stale_context.registry.grammar.reference_names);
         names[0].basename = "changed.md";
@@ -7706,6 +7722,10 @@ test "bound preservation calibration uses production packet construction and nat
 
 test "source review scope calibration prepares frozen native requests without semantic evidence or dispatch" {
     try @import("test_fixtures/source_review_scope_calibration.zig").run();
+}
+
+test "source review handoff carries actual admitted values into a complete native loss assignment" {
+    try @import("test_fixtures/source_review_handoff_calibration.zig").run();
 }
 
 // Most permission tests assert the outcome; reporting tests retain this trace.
