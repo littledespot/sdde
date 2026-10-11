@@ -9,9 +9,13 @@ mechanical safety, observability and connected recovery checks. Phase 2 is parti
 complete; its finding-taxonomy decision remains pending. Phase 4's bounded AC
 transport/lifecycle implementation and offline verification are complete; its
 semantic exit remains pending the Phase 11 live comparison. Phases 5–11 remain proposed and
-incomplete. The subsequent Phase 1 live run provides partial mechanical
-verification, but stopped before repair and publication; semantic quality
-improvement remains unproven.
+incomplete. The latest [post-Phase 4 run](#23-post-phase-4-live-run-11-october-070352-utc)
+exercised batching, localization and two candidate repairs, then exhausted the
+workflow token budget before publication. It also exposed inconsistent field
+judgments and an independent report-serialization defect. Semantic improvement
+remains unproven; the earlier Phase 1 run's narrower limits remain historical.
+The [Phase 1 reporting follow-up](#23-post-phase-4-live-run-11-october-070352-utc)
+is now complete with offline verification; no new live qualification is claimed.
 
 **Critical rereview:** the findings justify bounded investigations, but this is
 not an implementation-ready redesign. The final review confirms the retained
@@ -130,9 +134,9 @@ omission assignments, including the two false gap findings. The other nine
 responses produced no omission assignment. Diagnostic origins are authentic replay
 origins, not fabricated production-ledger acceptance.
 
-### 2.2 The retained E2E set now contains nine reports
+### 2.2 Previously reviewed nine-report baseline
 
-All nine local reports are live executions of the same Hello World case. None
+These nine reports are live executions of the same Hello World case. None
 reached publication checking or actual-output semantic grading: those fields are
 `not_run`, with no published specification or evaluation in the report.
 
@@ -181,6 +185,142 @@ does not demonstrate semantic or cost improvement, nor identify the cause of the
 model's repetition. The [Phase 1 live assessment](#phase-1-live-assessment)
 distinguishes exercised behavior from paths not reached. The frozen Phase 0
 eight-run baseline remains unchanged; this ninth run is subsequent evidence.
+
+### 2.3 Post-Phase 4 live run: 11 October 07:03:52 UTC
+
+Run `2026-10-11T07-03-52Z-1b37c292a96b5055e6cf7d3f3b85e5dc` has empty
+`report.json` and `report.md`. This assessment uses its retained
+[events](../zig-out/e2e-spec/2026-10-11T07-03-52Z-1b37c292a96b5055e6cf7d3f3b85e5dc/events.jsonl),
+48 raw provider responses, request packets and finalized production log. It does
+not reconstruct or overwrite a missing report. The captured build base is
+`aadc7505c695a3c75a6dafedf7c7a4b43f1d26f7`, source SHA-256
+`3992c6e96bcb71491989b1561e6604fba64afd804d2f8193dc2089d4a52875a0`.
+The relevant support, prompt, schema and report-serialization files match the
+executed build capture.
+
+**Terminal failure:** event 899 records `WorkflowTokenBudgetExceeded` at call 48.
+The 48 responses total **92,686 input + 7,342 output = 100,028 tokens**, exceeding
+the configured 100,000-token workflow budget by 28. Before call 48 the total was
+97,421; its 2,431 input + 176 output brought the total over budget. All 48 provider
+responses ended normally with `finish_reason: stop`; the largest output was 449
+tokens. This was cumulative workflow exhaustion, not a 16,384-token output-limit
+stop, a protocol retry or a rejected batch membership. Call 48's raw response is
+retained, while its normalized model-output projection is intentionally absent
+with `text: budget_stop`. Production logging records `run.failed` and its segment
+trailer. No specification, successful state or rubric evaluation was published.
+
+| Calls | Observed behavior | Assessment |
+| --- | --- | --- |
+| 8–11 | Brief, story, entity decision and records completed. | The workflow passed the point where the immediately preceding run stopped. Earlier authoring defects still exist: the entity basis is only `Hello, World!`, and some fragments concatenate without separation. |
+| 19 | One AC record request returned all three Given/When/Then findings as `supported`. Events 414/416 admitted the response and collected the findings. | Phase 4's complete membership, per-field evidence and real shared origin worked in a live call. This does not establish semantic correctness. |
+| 20–21 | FR1 review identified the omitted successful-startup obligation; both loss comparisons found it preserved upstream. | The assigned FR text from call 11 describes display and UTC output conditional on startup but does not require startup to succeed. This is a source-grounded candidate omission; native attribution selected candidate-local repair. |
+| 26 | Replaced only FR1 text to include successful startup, greeting and UTC output; event 538 advanced candidate revision 5→6. | A useful candidate repair was applied. Source review then restarted. Full-candidate publication acceptance had not yet completed. |
+| 34–35 | The second AC batch marked Given as a startup-success omission, with When and Then supported. Localization again found preservation upstream. | The real source obligation was attributed to the wrong field purpose. Accurate upstream preservation cannot validate that field-level diagnosis. |
+| 41 | Replaced Given with `The application must start successfully.`; event 790 advanced revision 6→7. | The repair was mechanically authorized and narrow, but placed the required result into the precondition. This is apparent semantic harm under the supplied field contract. |
+| 42–48 | Source review restarted again; the seventh review of this pass crossed the token budget. | The workflow stopped before publication, policy assessment and actual-output rubric grading. |
+
+The trace's `first_observed_defect` points to event 512, when the complete review
+retained its diagnostic. The earlier call 20 finding had already triggered
+localization at event 434. The aggregate diagnostic's timestamp must not be
+mistaken for the point where the missing behavior was authored or first detected.
+
+**The key semantic evidence is an unchanged request with a changed verdict.**
+Calls [19](../zig-out/e2e-spec/2026-10-11T07-03-52Z-1b37c292a96b5055e6cf7d3f3b85e5dc/evidence/generation/call-000019/context.json)
+and [34](../zig-out/e2e-spec/2026-10-11T07-03-52Z-1b37c292a96b5055e6cf7d3f3b85e5dc/evidence/generation/call-000034/context.json)
+had byte-identical 13,846-byte provider requests, SHA-256
+`e576391c1d41f58d4489800211db6c467aa74385e2190faa44dd987fb7d3cc16`.
+Their Given was `The application is not yet started`. Its explicit task describes
+the starting situation before the trigger, without assuming the result being
+tested. Both requests included the same sibling fields and evidence. The first
+review accepted it; the second required successful startup in Given. Neither
+missing sibling context nor the intervening FR repair changed this request.
+Successful startup is a genuine source obligation, but that does not justify
+requiring it in a pre-trigger field. Whether the AC's overall outcome coverage is
+adequate is a separate collection/Then assessment. The scoped review and repair
+must preserve that distinction.
+
+| Work | Physical calls | Actual input + output tokens |
+| --- | ---: | ---: |
+| Extraction/reconciliation | 7 | 9,614 |
+| Authoring | 4 | 5,479 |
+| Source review | 33 | 73,436 |
+| Loss comparison | 2 | 4,356 |
+| Candidate repair | 2 | 7,143 |
+| Total | 48 | 100,028 |
+
+The two completed AC batches each used one request for three findings. However,
+source review still consumed 73.4% of all tokens, with two complete review passes
+and part of a third. This supports measuring the existing Phase 6 reuse proposal,
+including identical supplied contexts, but request equality alone does not waive
+its current-dependency, origin and invalidation requirements. Increasing the
+budget would allow more work; it would not establish that the second diagnosis
+or repair was correct.
+
+**Separate report defect at this run:** [the harness saver](../test/harness/e2e/report.zig#L20)
+serialized `Report` with the engine's integer-only
+[canonical JSON encoder](../src/domain/canonical_json.zig#L47) before writing
+either reserved output file. Evaluator configuration legitimately contains an
+optional floating-point temperature; the current Bedrock selection resolves it
+to **0.1**, even when the captured evaluation settings contain `temperature: null`
+([configuration owner](../test/harness/configuration.zig#L50)). That value raises
+`InvalidCanonicalJson`. The save occurred outside the execution-error handler
+([CLI](../test/harness/e2e/cli.zig#L45)), so it could suppress both final reports.
+The relevant captured source matched the reviewed baseline and the configured
+evaluator was Bedrock. This code-level cause explains the empty files; the uncaptured
+terminal stderr is not evidence of an observed exception string. Before the
+follow-up, report persistence tests omitted `evaluation_configuration`, leaving
+this path uncovered. The required fix was to correct serialization at the harness
+boundary and test valid fractional configuration on failed and completed runs,
+preserving the native-state integer-only contract and the original workflow failure.
+Report finalization also needed its own observable failure handling.
+
+**Reporting follow-up — complete (offline):** E2E reports now use the same standard
+typed JSON serialization as the other harness reports, retaining fractional
+configuration, thresholds and scores. The adjacent `inputs.json` capture uses
+that representation too; a fractional rubric threshold must not fail before
+workflow execution. Native integer-only canonical state serialization is unchanged.
+Both report views are rendered before file writes, and their intermediate JSON,
+Markdown and nested evaluator Markdown buffers are released. Exclusive file
+reservation, permissions and sync behavior remain intact.
+
+The CLI's shared final-reporting path catches report persistence errors separately,
+retains the original workflow status/rejection/diagnostics, emits its existing
+terminal result plus a distinct finalization error and incomplete-file notice, and
+returns command failure when saving failed. It does not retry model calls or
+report writes. Offline regressions cover failed reports with temperature `0.1`,
+completed reports with fractional nested configuration/threshold/score, typed
+readback, owned-buffer cleanup, JSON/Markdown write failures, a sync failure and
+failure to write the separate stderr diagnostic without hiding the stdout result.
+
+Verification on 11 October 2026:
+
+- `zig build test-integration --summary all -j2`: **100/100 tests, 6/6 steps passed**.
+- `zig build verify --summary all -j2`: **1,504/1,504 tests, 142/142 steps passed**,
+  including architecture, lint, standalone harness checks and clean packaging smoke.
+- `git diff --check`: passed.
+
+The old run's empty report files remain historical evidence and are not reconstructed.
+No live call or E2E run was made for this follow-up. This change repairs observability,
+not the reviewer's semantic judgments or generated output quality.
+
+**Implications for rollout:** retain Phase 4's offline completion and record its
+live mechanical exercise, but do not mark its semantic gate passed. Carry this
+exact verdict reversal and subsequent repair into the prospective Phase 11
+comparison; assess correct field responsibility and repair harm separately from
+complete membership and correct upstream attribution. The reporting gap is fixed
+and verified offline; retain that distinction during subsequent live qualification.
+Phase 5's role-gate experiment does not fix the observed downstream Given diagnosis.
+The independent Phase 2 taxonomy and
+Phase 6 reuse proposals retain their own authority and evidence gates.
+
+The [immediately preceding 04:39 run](../zig-out/e2e-spec/2026-10-11T04-39-13Z-533671a00b4e7f4b23d75ffa0abc291d/report.json)
+stopped at brief call 8 after 25,979 tokens. The latest run progressed through
+review and repair, but still produced no usable output. Its low-reasoning
+GPT-OSS-20B requests use temperature **0.1**, versus **0** in that preceding run;
+code and prompts also changed. This is not a controlled comparison proving that
+batching or temperature caused either the improved completion or the incorrect
+judgment. No new live run was executed for this documentation review, and the
+frozen calibration panels remain unexecuted.
 
 ## 3. Semantic diagnosis: the highest-priority quality gap
 
@@ -1282,6 +1422,15 @@ evaluation were `not_run`. Keep the Phase 1 implementation complete and its live
 verification explicitly partial. Do not promote semantic quality or infer that
 the implementation caused the provider's malformed response from this one run.
 
+**Subsequent evidence:** the [post-Phase 4 run](#23-post-phase-4-live-run-11-october-070352-utc)
+did execute two assembled-candidate repairs with real origins and finalized its
+production failure log. Its empty harness reports exposed a separate
+serialization gap for valid fractional evaluator settings. The engine failure
+was retained; the final human/machine report was not. The reporting follow-up in
+[§2.3](#23-post-phase-4-live-run-11-october-070352-utc) addresses this gap at the
+harness owner and is complete offline; retain its separate verification and
+live-evidence limits before treating end-to-end failure reporting as qualified.
+
 ### Phase 2 — Clarify source review and remove redundant input work
 
 **Status: partially complete.** The selected presentation implementation and offline
@@ -1553,12 +1702,21 @@ live recovery or E2E quality. Phase 11 must measure those outcomes separately,
 including false findings and harm; paths denied by current permissions remain
 denied.
 
+The [subsequent post-Phase 4 run](#23-post-phase-4-live-run-11-october-070352-utc)
+exercised two actual reviewer-to-loss handoffs, candidate-local authorization and
+applied repairs. Both upstream preservation comparisons were admitted. One
+reviewer's field attribution was wrong, so downstream localization also enabled
+an inappropriate Given repair. This provides live mechanical coverage of the
+connection, not proof of diagnosis quality or fully validated recovery.
+
 ### Phase 4 — Reduce redundant review granularity
 
 **Status: bounded transport/lifecycle implementation complete at the offline
 exit — 11 October 2026.** Required-finding granularity is retained. The full
 phase's semantic gate is not complete: comparison and promotion remain Phase 11
-work. No live calls were made for this implementation.
+work. No live calls were made during implementation. The subsequent E2E run
+exercised batching but exposed an inconsistent field verdict and stopped before
+publication; see [§2.3](#23-post-phase-4-live-run-11-october-070352-utc).
 
 **Scope:** §5.1; conditional on Phase 0 showing distinct evidence can be retained
 with less semantic work. This may be the first simplification candidate.
@@ -1682,6 +1840,15 @@ Actual meaning preservation, interference, false findings, faithful omission
 formulation, recovery usefulness and cost are still unscored. The semantic exit
 and any broader reliability claim remain pending Phase 11 qualification; these
 passing offline checks do not establish that the latest live failure is fixed.
+
+**Subsequent live assessment:** calls 19 and 34 in [§2.3](#23-post-phase-4-live-run-11-october-070352-utc)
+each admitted the complete three-finding assignment, retaining individual fields
+and the actual shared review origin. No membership or native authority bypass
+was observed. Their byte-identical requests nevertheless produced opposing Given
+verdicts, followed by a repair that put an expected result in the precondition.
+The formal paired comparison remains unexecuted. Multiple omissions in one batch,
+record protocol correction, invalid sibling admission and publication/readback
+remain offline-only evidence; this run did not exercise them.
 
 ### Phase 5 — Evaluate replacing the presentation-role gate
 

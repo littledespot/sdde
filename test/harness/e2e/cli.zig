@@ -1,6 +1,7 @@
 const std = @import("std");
 const c = @import("contracts.zig");
 const fixture = @import("fixture.zig");
+const reports = @import("report.zig");
 pub const output_root = "zig-out/e2e-spec";
 
 pub fn parse(args: []const []const u8) ![]const u8 {
@@ -33,7 +34,7 @@ fn command(init: std.process.Init) !bool {
     defer parent.close(io);
     const run = try @import("run_directory.zig").Run.create(io, parent);
     defer run.close(io);
-    const output = try @import("report.zig").Output.reserve(io, run.dir);
+    const output = try reports.Output.reserve(io, run.dir);
     defer output.close(io);
     var report: c.Report = .{ .started_at_utc = &run.started_at_utc, .execution_id = &run.name, .case_source = case_path, .status = .input_invalid };
     report.build = .{
@@ -46,11 +47,30 @@ fn command(init: std.process.Init) !bool {
         if (report.status != .input_invalid) report.status = .harness_error;
         report.diagnostic = @errorName(err);
     };
-    try output.save(io, allocator, report);
-    const message = try @import("report.zig").terminal(allocator, report, output_root, &run.name);
-    try std.Io.File.stdout().writeStreamingAll(io, message);
-    if (report.specification) |path| try std.Io.File.stdout().writeStreamingAll(io, try std.fmt.allocPrint(allocator, "Specification: {s}/{s}/project/{s}\n", .{ output_root, run.name, path }));
-    return report.status.commandSucceeded();
+    return finish(io, allocator, output, report, output_root, &run.name, .stdout(), .stderr());
+}
+
+/// Final reporting cannot replace the workflow outcome or authorize a successful
+/// command when its retained reports could not be finalized.
+pub fn finish(io: std.Io, allocator: std.mem.Allocator, output: reports.Output, report: c.Report, root: []const u8, run: []const u8, stdout: std.Io.File, stderr: std.Io.File) !bool {
+    var report_error: ?[]const u8 = null;
+    output.save(io, allocator, report) catch |err| {
+        report_error = @errorName(err);
+    };
+    const message = try reports.terminal(allocator, report, root, run);
+    defer allocator.free(message);
+    try stdout.writeStreamingAll(io, message);
+    if (report.specification) |path| {
+        const location = try std.fmt.allocPrint(allocator, "Specification: {s}/{s}/project/{s}\n", .{ root, run, path });
+        defer allocator.free(location);
+        try stdout.writeStreamingAll(io, location);
+    }
+    if (report_error) |cause| {
+        try stderr.writeStreamingAll(io, "E2E report finalization failed: ");
+        try stderr.writeStreamingAll(io, cause);
+        try stderr.writeStreamingAll(io, ". report.json and report.md may be incomplete; inspect the retained workflow result and events.\n");
+    }
+    return report_error == null and report.status.commandSucceeded();
 }
 
 fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.process.Environ.Map, case_path: []const u8, run: std.Io.Dir, project: std.Io.Dir, execution_id: []const u8, report: *c.Report) !void {
@@ -60,7 +80,7 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
     report.case_id = selected.id;
     report.workflow_id = selected.workflow_id;
     const captured = try fixture.capture(io, allocator, .cwd(), selected);
-    try @import("../output.zig").write(io, run, "inputs.json", try @import("../../../src/domain/canonical_json.zig").encode(fixture.Capture, allocator, captured));
+    try @import("../output.zig").write(io, run, "inputs.json", try std.json.Stringify.valueAlloc(allocator, captured, .{ .whitespace = .indent_2 }));
     try fixture.materialize(io, project, captured);
     const selection = @import("../environment.zig").selection(environment) catch return error.InvalidEvaluationEnvironment;
     const config = @import("../configuration.zig").parse(allocator, captured.evaluation.config_bytes, selection) catch return error.InvalidEvaluationConfiguration;

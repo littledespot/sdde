@@ -531,6 +531,7 @@ test "failure reports preserve separate engine provider and model evidence" {
         .retry_error = .{ .operation_instance_id = .{ .bytes = "request-account" }, .retry_limit = 4, .completed_executions = 5 },
         .provider_diagnostic = "output_limit",
         .model_diagnostic = "InvalidModelEnvelope",
+        .evaluation_configuration = try fractionalEvaluationConfiguration(a),
         .json_error = .{ .reason = .SyntaxError, .location = .{ .byte_offset = 9, .line = 2, .column = 8 } },
         .schema_error = .{ .reason = .missing_required_property, .path = "/statements/0/content/kind" },
         .candidate_error = .{ .token_classifications = .{
@@ -548,6 +549,7 @@ test "failure reports preserve separate engine provider and model evidence" {
     try std.testing.expectEqualStrings("ENGINE_REJECTION", retained.diagnostic.?);
     try std.testing.expectEqualStrings("output_limit", retained.provider_diagnostic.?);
     try std.testing.expectEqualStrings("InvalidModelEnvelope", retained.model_diagnostic.?);
+    try std.testing.expectEqualDeep(report.evaluation_configuration, retained.evaluation_configuration);
     try std.testing.expectEqualDeep(report.json_error, retained.json_error);
     try std.testing.expectEqualDeep(report.retry_error, retained.retry_error);
     try std.testing.expectEqualDeep(report.schema_error, retained.schema_error);
@@ -570,6 +572,133 @@ test "failure reports preserve separate engine provider and model evidence" {
     for ([_][]const u8{ view, terminal }) |rendered| try std.testing.expect(std.mem.indexOf(u8, rendered, retry_diagnostic) != null);
     try std.testing.expect(std.mem.indexOf(u8, terminal, "runs/example/report.json") != null);
     try std.testing.expectError(error.PathAlreadyExists, @import("../e2e/report.zig").Output.reserve(io, dir.dir));
+}
+
+fn fractionalEvaluationConfiguration(a: std.mem.Allocator) !@import("../configuration.zig").Config {
+    return @import("../configuration.zig").parse(a, @embedFile("../../e2e/config/evaluation.json"), .{
+        .api = .bedrock_invoke,
+        .model = @import("../contracts.zig").ModelId.parse("openai.gpt-oss-20b-1:0").?,
+        .region = .@"ap-southeast-2",
+    });
+}
+
+test "completed E2E reports retain fractional evaluator configuration threshold and score" {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const config = try fractionalEvaluationConfiguration(a);
+    try std.testing.expectEqual(@as(f64, 0.1), config.temperature.?);
+    const choice = try c.parse(a, @embedFile("../../e2e/wf-001-hello-world/node-vitest/workflow.case.json"));
+    var captured = try fixture.capture(io, a, .cwd(), choice);
+    captured.evaluation.rubric.pass_threshold_percent = 75.5;
+    captured.evaluation.rubric_bytes = try std.json.Stringify.valueAlloc(a, captured.evaluation.rubric, .{});
+    var report: c.Report = .{
+        .started_at_utc = "2026-10-11T00:00:00Z",
+        .execution_id = "MOCK-evaluated-run",
+        .status = .generated,
+        .workflow_outcome = .ok,
+        .publication_check = .passed,
+        .specification = "MOCK-feature/spec.md",
+        .models = &.{.{ .slot = "MOCK-slot", .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0" }},
+        .evaluation_configuration = config,
+    };
+    @import("../e2e/evaluation.zig").apply(&report, .{
+        .capture = try @import("../e2e/evaluation.zig").inputs(a, report, captured.evaluation, "MOCK published specification", report.execution_id.?),
+        .configuration = config,
+        .attempts = &.{},
+        .outcome = .{ .evaluated = .{ .results = &.{}, .assessment = .scored, .score_percent = 84.375, .threshold = .met } },
+    });
+    var dir = std.testing.tmpDir(.{});
+    defer dir.cleanup();
+    const output = try @import("../e2e/report.zig").Output.reserve(io, dir.dir);
+    defer output.close(io);
+    // The saver must release all of its own JSON and nested Markdown allocations.
+    try output.save(io, std.testing.allocator, report);
+    const retained = try @import("../contracts.zig").decode(c.Report, a, try @import("../files.zig").read(io, a, dir.dir, "report.json"));
+    try std.testing.expectEqual(.evaluated, retained.status);
+    try std.testing.expectEqualDeep(config, retained.evaluation_configuration.?);
+    try std.testing.expectEqualDeep(report.evaluation, retained.evaluation);
+    const markdown = try @import("../files.zig").read(io, a, dir.dir, "report.md");
+    try std.testing.expect(std.mem.indexOf(u8, markdown, "Score: 84.38%") != null);
+}
+
+test "E2E report finalization preserves workflow outcomes and exposes write and sync failures" {
+    const io = std.testing.io;
+    const Fault = enum { none, json_write, markdown_write, sync, stderr_write };
+    for ([_]c.Status{ .workflow_failed, .evaluated }) |status| {
+        for (std.meta.tags(Fault)) |fault| {
+            var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+            defer arena.deinit();
+            const a = arena.allocator();
+            var dir = std.testing.tmpDir(.{});
+            defer dir.cleanup();
+            var output = try @import("../e2e/report.zig").Output.reserve(io, dir.dir);
+            defer output.close(io);
+            switch (fault) {
+                .json_write, .stderr_write => {
+                    output.json.close(io);
+                    output.json = try dir.dir.openFile(io, "report.json", .{ .mode = .read_only });
+                },
+                .markdown_write => {
+                    output.markdown.close(io);
+                    output.markdown = try dir.dir.openFile(io, "report.md", .{ .mode = .read_only });
+                },
+                .none, .sync => {},
+            }
+            const stdout = try dir.dir.createFile(io, "MOCK-stdout.txt", .{});
+            defer stdout.close(io);
+            var stderr = try dir.dir.createFile(io, "MOCK-stderr.txt", .{});
+            defer stderr.close(io);
+            if (fault == .stderr_write) {
+                stderr.close(io);
+                stderr = try dir.dir.openFile(io, "MOCK-stderr.txt", .{ .mode = .read_only });
+            }
+            const report: c.Report = .{
+                .started_at_utc = "2026-10-11T00:00:00Z",
+                .status = status,
+                .workflow_outcome = if (status == .workflow_failed) .failed else .ok,
+                .diagnostic = if (status == .workflow_failed) "WorkflowTokenBudgetExceeded" else null,
+                .terminal_rejection = if (status == .workflow_failed) .{ .kind = .token_budget, .detail = "WorkflowTokenBudgetExceeded" } else null,
+                .evaluation_configuration = try fractionalEvaluationConfiguration(a),
+            };
+            // Override only the standard file-sync operation; all other I/O
+            // retains its real test implementation and original context.
+            var vtable = io.vtable.*;
+            if (fault == .sync) vtable.fileSync = struct {
+                fn fail(_: ?*anyopaque, _: std.Io.File) std.Io.File.SyncError!void {
+                    return error.NoSpaceLeft;
+                }
+            }.fail;
+            const selected_io: std.Io = .{ .userdata = io.userdata, .vtable = &vtable };
+            const result = @import("../e2e/cli.zig").finish(selected_io, a, output, report, "MOCK-runs", "MOCK-run", stdout, stderr);
+            const succeeded = if (fault == .stderr_write) blk: {
+                try std.testing.expectError(error.NotOpenForWriting, result);
+                break :blk false;
+            } else try result;
+            try std.testing.expectEqual(fault == .none and status.commandSucceeded(), succeeded);
+            const terminal = try @import("../files.zig").read(io, a, dir.dir, "MOCK-stdout.txt");
+            try std.testing.expect(std.mem.indexOf(u8, terminal, @tagName(status)) != null);
+            if (status == .workflow_failed) {
+                try std.testing.expect(std.mem.indexOf(u8, terminal, "WorkflowTokenBudgetExceeded") != null);
+                try std.testing.expect(std.mem.indexOf(u8, terminal, "Runner rejection:") != null);
+            }
+            const failure = try @import("../files.zig").read(io, a, dir.dir, "MOCK-stderr.txt");
+            if (fault == .none or fault == .stderr_write) {
+                try std.testing.expectEqualStrings("", failure);
+            } else {
+                try std.testing.expect(std.mem.indexOf(u8, failure, "E2E report finalization failed:") != null);
+                try std.testing.expect(std.mem.indexOf(u8, failure, "may be incomplete") != null);
+                if (fault == .sync) try std.testing.expect(std.mem.indexOf(u8, failure, "NoSpaceLeft") != null);
+            }
+            if (fault != .json_write and fault != .stderr_write) {
+                const retained = try @import("../contracts.zig").decode(c.Report, a, try @import("../files.zig").read(io, a, dir.dir, "report.json"));
+                try std.testing.expectEqual(status, retained.status);
+                try std.testing.expectEqualDeep(report.terminal_rejection, retained.terminal_rejection);
+                try std.testing.expectEqualDeep(report.diagnostic, retained.diagnostic);
+            }
+        }
+    }
 }
 
 test "retired protocol rejection stays associated with its call across later failures" {
