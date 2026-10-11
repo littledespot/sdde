@@ -11,7 +11,18 @@ const execution = @import("../domain/workflow_execution.zig");
 pub const authorization_schema = values.schema(.specification_repair_authorization, owned.Value, 1, null).captured();
 pub const schemas = [_]data.Schema{authorization_schema};
 
+pub fn authorizationBlocked(view: *const data.View) values.Error!bool {
+    const value = try values.read(view, authorization_schema, owned.Value);
+    if (!owned.retainsCurrentInputs(value, view)) return error.InvalidCandidatePayload;
+    return switch (owned.payload(value).*) {
+        .repair_authorization => false,
+        .rejected => (try authorizationRejectionOutcome(owned.rejection(value) orelse return error.InvalidCandidatePayload)) == .blocked,
+        else => error.InvalidCandidatePayload,
+    };
+}
+
 pub const Authorize = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .validated_specification_unit, .result = .specification_repair_authorization } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const Action = @import("../actions/specification/authorize_specification_repair.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .blocked, .failed };
@@ -42,6 +53,7 @@ pub const BuildInput = struct {
     }
 };
 pub const Parse = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .specification_repair_authorization, .evidence = .specification_repair_authorization, .result = .specification_repair_authorization } };
     pub const Action = @import("../actions/specification/parse_specification_repair.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -59,6 +71,7 @@ pub const Parse = struct {
     }
 };
 pub const Merge = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .specification_repair_authorization, .result = .parsed_specification_unit } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
     pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};
     pub const retry_limit: @import("../domain/workflow_operation.zig").RetryLimitDescriptor = .{ .maximum = std.math.maxInt(u32), .scope = .repair };
@@ -80,8 +93,13 @@ pub const Merge = struct {
     }
 };
 fn reject(allocator: std.mem.Allocator, schema: data.Schema, owner: *owned.Owner, err: repair.Error) operations.Error!execution.Candidate {
-    if (err == error.OutOfMemory) return error.OutOfMemory;
+    const outcome = try authorizationRejectionOutcome(err);
     owner.rejection = err;
     owner.payload = .rejected;
-    return owned.publish(allocator, schema, owner, if (err == error.UnsafeSpecificationRepair) .blocked else .invalid) catch |operation_error| operation_error;
+    return owned.publish(allocator, schema, owner, outcome) catch |operation_error| operation_error;
+}
+
+fn authorizationRejectionOutcome(err: execution.OperationError) error{OutOfMemory}!@import("../domain/workflow.zig").OutcomeTag {
+    if (err == error.OutOfMemory) return error.OutOfMemory;
+    return if (err == error.UnsafeSpecificationRepair) .blocked else .invalid;
 }

@@ -19,6 +19,7 @@ pub const schemas = [_]data.Schema{ authorization_schema, result_schema };
 const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
 
 pub const Authorize = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .validated_reference_selections, .result = .reference_extraction_repair_authorization } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const Action = @import("../actions/reference/authorize_reference_extraction_repair.zig").Action;
     pub const outcomes = @import("reference_extraction_repair_workflow.zig").outcomes;
@@ -58,6 +59,7 @@ pub const BuildInput = struct {
     }
 };
 pub const Parse = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .reference_extraction_repair_authorization, .evidence = .reference_extraction_repair_authorization, .result = .reference_extraction_repair_result } };
     pub const Action = @import("../actions/reference/parse_reference_extraction_repair.zig").Action;
     pub const outcomes = @import("reference_extraction_repair_workflow.zig").outcomes;
     allocator: std.mem.Allocator,
@@ -74,6 +76,7 @@ pub const Parse = struct {
     }
 };
 pub const Merge = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .reference_extraction_repair_authorization, .result = .text_validated_reference_extraction } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
     pub const Action = @import("../actions/reference/merge_reference_extraction_repair.zig").Action;
     pub const outcomes = @import("reference_extraction_repair_workflow.zig").outcomes;
@@ -109,6 +112,7 @@ fn facts(view: *const data.View, candidate: @import("../domain/reference_extract
 
 /// Retire derived claims/tokens while preserving the original selection facts.
 pub const RetainClaimRejection = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .validated_reference_claims, .evidence = .validated_reference_claims, .result = .validated_reference_selections } };
     pub const Action = @import("../actions/reference/retain_reference_claim_rejection.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},

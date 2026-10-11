@@ -84,6 +84,7 @@ pub fn publish(comptime selected: purpose_contract.Purpose, allocator: std.mem.A
     });
 }
 pub const Initialize = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .required_authority_inputs, .evidence = .required_authority_inputs, .result = .specification_support_review } };
     pub const Action = @import("../actions/specification/initialize_specification_review.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -115,6 +116,7 @@ pub const BuildInput = struct {
     }
 };
 pub const Collect = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .diagnostic_admission = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .specification_support_review } };
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };
     pub const Action = @import("../actions/specification/collect_specification_support.zig").Action;
     allocator: std.mem.Allocator,
@@ -138,6 +140,7 @@ pub const Collect = struct {
     }
 };
 pub const CheckLocalization = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review } };
     pub const Action = @import("../actions/specification/check_specification_support_localization.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid };
     action: Action = .{},
@@ -161,6 +164,7 @@ pub const BuildLossInput = struct {
     }
 };
 pub const CollectLoss = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .diagnostic_admission = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .specification_support_review } };
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };
     pub const Action = @import("../actions/specification/collect_specification_support_loss.zig").Action;
     allocator: std.mem.Allocator,
@@ -180,6 +184,7 @@ pub const CollectLoss = struct {
     }
 };
 pub const Advance = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .specification_support_review } };
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .failed };
     pub const Action = @import("../actions/specification/advance_specification_review.zig").Action;
     allocator: std.mem.Allocator,
@@ -201,6 +206,7 @@ pub const Advance = struct {
 /// Only admission of a completed review advances authority inputs. Repair keeps
 /// the source projection unchanged, preserving its generation and lineage.
 pub const Apply = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_validate = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .required_authority_inputs } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const Action = @import("../actions/specification/apply_specification_support.zig").Action;
     allocator: std.mem.Allocator,

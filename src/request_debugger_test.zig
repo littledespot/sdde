@@ -521,6 +521,44 @@ fn replayIdentity(id: []const u8, sequence: u64) debug.ReplayIdentity {
     return .{ .id = id, .run = .{ .bytes = "debugger-session" }, .sequence = sequence };
 }
 
+test "debugger readback preserves explicit assembled repair lineage and subsequent retry" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var sink: LogSink = .{ .a = a };
+    try sink.rows.appendSlice(a, format.prompt_heading);
+    var logger: capture.Capture = .{ .allocator = a, .logs = sink.barrier() };
+    defer logger.deinit();
+    var metadata: capture.Metadata = .{
+        .workflow = try @import("domain/telemetry.zig").WorkflowShortcode.parse("SPEC"),
+        .workflow_id = .{ .bytes = "unrelated-workflow" },
+        .node = .{ .bytes = "assembled-repair-invoke" },
+        .action = .{ .bytes = "invoke-model" },
+        .operation = .{ .bytes = "assembled-repair-prepare" },
+        .model_slot = .{ .bytes = "repair" },
+        .origin = .{ .request = .{ .value = 50 }, .attempt = .{ .value = 1 } },
+        .kind = .repair,
+        .source = .assembled_candidate,
+    };
+    logger.begin(metadata);
+    try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = "assembled repair" }, &.{}));
+    logger.end();
+    metadata.origin.attempt.value = 2;
+    logger.begin(metadata);
+    try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = "protocol correction" }, &.{}));
+    logger.end();
+    var restored: archive.Archive = .{ .allocator = a };
+    try restored.ingest(sink.rows.items);
+    const calls = try restored.calls();
+    try std.testing.expectEqual(@as(usize, 2), calls.len);
+    try std.testing.expectEqualStrings("repair", calls[0].kind);
+    try std.testing.expect(calls[0].parent == null);
+    try std.testing.expectEqualStrings(calls[0].id, calls[0].original);
+    try std.testing.expectEqualStrings("retry", calls[1].kind);
+    try std.testing.expectEqualStrings(calls[0].id, calls[1].parent.?);
+    try std.testing.expectEqualStrings(calls[0].id, calls[1].original);
+}
+
 test "debugger orders split captures across bindings by recorded sequence including retries repairs and count calls" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -555,7 +593,7 @@ test "debugger orders split captures across bindings by recorded sequence includ
     logger.end();
     metadata.origin = .{ .request = .{ .value = 99 }, .attempt = .{ .value = 1 } };
     metadata.kind = .repair;
-    metadata.source = origin;
+    metadata.source = .{ .response = origin };
     logger.begin(metadata);
     try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = "repair" }, &.{}));
     logger.end();

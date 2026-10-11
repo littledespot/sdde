@@ -53,6 +53,71 @@ fn observe(allocator: std.mem.Allocator, project: std.Io.Dir, registry: *const r
     return port.inspect(allocator, selected);
 }
 
+test "production finalization preserves capture cause through close failure and repeated cleanup" {
+    const io = std.testing.io;
+    const a = std.testing.allocator;
+    for ([_]bool{ false, true }) |fail_close| {
+        var project = std.testing.tmpDir(.{});
+        defer project.cleanup();
+        try project.dir.createDir(io, "workflows", .default_dir);
+        const root_owner = try rootOwner(a, project.dir);
+        defer roots.deinitOwner(root_owner);
+        const registry = roots.registry(root_owner);
+        const prior = try observe(a, project.dir, registry);
+        const policy = @import("domain/log_policy.zig");
+        const policy_owner = try policy.createValidated(a, .{ .level = "debug", .console = false }, try policy.canonicalizeConfiguredLevel("debug"));
+        var logs = @import("application/log_service.zig").LogService.init(policy_owner);
+        defer logs.deinit();
+        var inputs: @import("adapters/filesystem/feature_input_source.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var outputs: @import("adapters/filesystem/workflow_output.zig").Adapter = .{ .io = io, .project_root = project.dir };
+        var assembly: @import("composition/feature_logging_runtime.zig").Assembly = .{ .allocator = a, .io = io, .project = project.dir, .roots = registry, .logs = &logs, .inputs = &inputs, .outputs = &outputs };
+        defer assembly.deinit();
+        const shortcode = try @import("domain/telemetry.zig").WorkflowShortcode.parse("TEST");
+        try std.testing.expectEqual(.ready, std.meta.activeTag(assembly.activator().activate(prior, shortcode)));
+        const log_runner = @import("composition/active_feature_log_runtime.zig").runner(assembly.runtime_owner.?);
+        const CloseFault = struct {
+            original: @import("ports/feature_log_sink.zig").StreamCloser,
+            fail: bool,
+            calls: usize = 0,
+            fn close(context: *anyopaque, selected: *const log_binding.ValidatedFeatureLogBinding, stream: @import("domain/feature_log_stream.zig").Stream, state: @import("domain/feature_log_stream.zig").StreamState, trailer: []const u8) @import("ports/feature_log_sink.zig").Error!void {
+                const self: *@This() = @ptrCast(@alignCast(context));
+                self.calls += 1;
+                if (self.fail) return error.FlushFailure;
+                return self.original.close(selected, stream, state, trailer);
+            }
+        };
+        var close_fault: CloseFault = .{ .original = log_runner.actions.close_stream.sink, .fail = fail_close };
+        log_runner.actions.close_stream.sink = .{ .context = &close_fault, .close_fn = CloseFault.close };
+        var capture: @import("application/model_exchange_capture.zig").Capture = .{ .allocator = a, .logs = logs.barrier() };
+        defer capture.deinit();
+        capture.begin(.{
+            .workflow = shortcode,
+            .workflow_id = .{ .bytes = "unrelated-workflow" },
+            .node = .{ .bytes = "repair-invoke" },
+            .action = .{ .bytes = "invoke-model" },
+            .operation = .{ .bytes = "repair-prepare" },
+            .model_slot = .{ .bytes = "repair" },
+            .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } },
+            .kind = .repair,
+            .source = .none,
+        });
+        defer capture.end();
+        try std.testing.expectEqual(.blocked, capture.port().capture(.request, .{ .provider_body = "must not be dispatched" }, &.{}));
+        const original = capture.failure.?;
+        try std.testing.expectEqual(.missing_source, original.cause.lineage);
+        const reason: @import("domain/run_outcome.zig").Outcome = .{ .execution_rejected = .{ .model_capture = original } };
+        const finalized = assembly.finalizer().finish(reason);
+        var expected = original;
+        if (fail_close) expected.subsequent_logging_failure = .LOG_FLUSH_FAILURE;
+        try std.testing.expectEqualDeep(expected, finalized.execution_rejected.model_capture);
+        try std.testing.expectEqual(.blocked, finalized.executionStatus().?);
+        try std.testing.expect(assembly.finalized and logs.lifecycle.active == null);
+        const calls_before = close_fault.calls;
+        try std.testing.expectEqualDeep(finalized, assembly.finalizer().finish(finalized));
+        try std.testing.expectEqual(calls_before, close_fault.calls);
+    }
+}
+
 test "feature log layout activates absent and present directories without changing bootstrap observations" {
     const io = std.testing.io;
     for ([_]bool{ false, true }) |present| {

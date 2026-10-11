@@ -134,8 +134,16 @@ Typed content covers these concerns; each concern does not require a separate ca
   findings and principle reviews do not acquire this field.
   Independent feature fields carry only the assigned
   field's resolved text and provenance, its purpose and complete original source
-  evidence. Record-field review selects through the canonical value lens and
+  evidence. Their assessment covers represented behavior and its qualifying
+  conditions; it does not require repeating unrelated feature duties.
+  Record-field review selects through the canonical value lens and
   retains that record's siblings; its task explains the selected field's purpose.
+  Sibling fields may jointly supply conditions and results. Collection review
+  checks complete source-required coverage of its assigned purpose across the
+  selected members, including obligations absent from current claim associations.
+  The shared descriptive owner presents these scopes and distinguishes original
+  source obligations from candidate assertions and derived evidence. This
+  presentation neither assigns new duties nor changes evidence eligibility.
   Signal review presents the selected native signal and any resolved exact value.
   Exact and passive references resolve through the canonical text projector.
   These read-only assignments do not certify support or alter evidence eligibility.

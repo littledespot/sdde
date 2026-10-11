@@ -119,6 +119,50 @@ contracts likewise return a terminal typed runner rejection, never an `invalid` 
 `failed` operation outcome. Only a declared operation outcome whose delta and runner
 transitions have been accepted and applied may select a YAML successor.
 
+An applied `invalid`, `needs_user`, `blocked`, `failed` or `cancelled` outcome
+remains associated with its canonical native subject (including the complete
+provider operation ID for a request attempt), or with its exact operation
+occurrence when no native association exists. An unrelated successful operation
+cannot remove it. Registered native contracts may preserve an association or
+provide an explicit disposition using current sealed evidence. YAML edges and an
+operation's `ok` tag cannot assert resolution. Approved reclassification, including
+missing-final-answer protocol correction, requires its existing sealed proof;
+ordinary preservation cannot relabel a failure.
+Protocol correction retains the exact rejected inference identity; an older
+correction cannot authorize continuation after a later rejected attempt.
+
+Requests, repair permits/progress, required-authority reconciliation and
+clarification admission retain their existing canonical owners. Reference-only
+continuation control inside the same envelope tracks unresolved associations
+without copying native records or adding a retry, ledger or admission authority.
+Prepare these reference changes before applying a candidate delta and commit
+them together; rejected deltas change neither. Pending outcomes guard protected
+effects and require a compatible terminal. Request closure is irreversible, and
+cancellation cannot be resolved through repair.
+Current carrier provenance excludes historical replacement paths. A native repair
+merge may use its already validated transition and exact authorization reference;
+that reference alone grants neither continuation nor repair resolution.
+Dependent regeneration requires the canonical merged permit awaiting dependent
+review and current packet carriers covering every pending repair key. A new
+unbound native invalid/blocked finding may be assessed only by a semantic review
+whose current packet covers that finding; it does not gain repair authority.
+Packet scope alone cannot permit a model call after a native failure.
+Composed packets retain their exact current native base, plan, epoch and
+prerequisite snapshots; arbitrary derived packets do not establish scope.
+A retained native blocked-authorization result, with its exact current retained
+inputs, may reclassify its associated invalid rejection
+as blocked, without clearing that subject or its repair key. Neither disposition
+allows an unrelated, failed, cancelled or needs-user outcome to be relabelled.
+Incomplete publication requires current native clarification evidence carried into
+the exact prepared output; matching `needs_user` tags do not grant writer access.
+The runner rechecks cancellation/deadline immediately before invoking the binding,
+including after potentially blocking publication log finalization.
+Native repair authorization binds each unresolved subject to its exact repair
+key. A joined carrier or completed child repair cannot discharge a parent or
+foreign key; only that key's native validated resolution can do so. The canonical
+retry owner's suspended-parent relation may permit a child repair to continue,
+but grants no resolution of its parent.
+
 #### Execution-local information stack
 
 The user-approved Chunk 18 implementation extends this same envelope; no second

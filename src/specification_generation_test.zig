@@ -2298,7 +2298,63 @@ test "coverage repair restores exact references without changing business bytes 
         unsupported.units[index] = .{ .unit = .records, .response = .{ .content = .{ .records = &.{} } } };
         const omitted = try sessions.assemble(a, text.validator, fixture.context, unsupported);
         const gap = (try check.execute(a, unsupported, fixture.context, omitted.content)).invalid;
-        try std.testing.expect((try repair.authorize(a, unsupported, fixture.context, omitted.content, gap)) == .blocked);
+        const blocked = try repair.authorize(a, unsupported, fixture.context, omitted.content, gap);
+        try std.testing.expect(blocked == .blocked);
+        {
+            const data = @import("domain/pipeline_data.zig");
+            const values = @import("application/pipeline_values.zig");
+            const owned = @import("application/specification_values.zig").storage;
+            const native_spec = @import("application/specification_workflow.zig");
+            const native_repair = @import("application/specification_coverage_repair_workflow.zig");
+            const session_value = value: {
+                const owner = try owned.create(std.testing.allocator, .{});
+                errdefer owned.destroy(owner);
+                owner.payload = .{ .session = unsupported };
+                break :value try values.adopt(std.testing.allocator, native_spec.session_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null);
+            };
+            defer values.destroy(session_value);
+            var inputs: data.View = .{};
+            inputs.slots[@intFromEnum(native_spec.session_schema.key)] = session_value;
+            const rejected_value = value: {
+                const owner = try owned.create(std.testing.allocator, inputs);
+                errdefer owned.destroy(owner);
+                owner.payload = .{ .coverage_rejected = gap };
+                break :value try values.adopt(std.testing.allocator, native_spec.coverage_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null);
+            };
+            defer values.destroy(rejected_value);
+            inputs.slots[@intFromEnum(native_spec.coverage_schema.key)] = rejected_value;
+            const result_value = value: {
+                const owner = try owned.create(std.testing.allocator, inputs);
+                errdefer owned.destroy(owner);
+                owner.payload = .{ .coverage_repair = blocked };
+                break :value try values.adopt(std.testing.allocator, native_repair.schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null);
+            };
+            defer values.destroy(result_value);
+            var current_view = inputs;
+            current_view.slots[@intFromEnum(native_repair.schema.key)] = result_value;
+            try std.testing.expect(try native_repair.authorizationBlocked(&current_view));
+            const foreign_session = value: {
+                const owner = try owned.create(std.testing.allocator, .{});
+                errdefer owned.destroy(owner);
+                owner.payload = .{ .session = unsupported };
+                break :value try values.adopt(std.testing.allocator, native_spec.session_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null);
+            };
+            defer values.destroy(foreign_session);
+            current_view.slots[@intFromEnum(native_spec.session_schema.key)] = foreign_session;
+            try std.testing.expectError(error.InvalidCandidatePayload, native_repair.authorizationBlocked(&current_view));
+            current_view.slots[@intFromEnum(native_spec.session_schema.key)] = session_value;
+            const stale_rejection = value: {
+                const owner = try owned.create(std.testing.allocator, inputs);
+                errdefer owned.destroy(owner);
+                owner.payload = .{ .coverage_rejected = gap };
+                break :value try values.adopt(std.testing.allocator, native_spec.coverage_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null);
+            };
+            defer values.destroy(stale_rejection);
+            current_view.slots[@intFromEnum(native_spec.coverage_schema.key)] = stale_rejection;
+            try std.testing.expectError(error.InvalidCandidatePayload, native_repair.authorizationBlocked(&current_view));
+            current_view.slots[@intFromEnum(native_spec.coverage_schema.key)] = rejected_value;
+            try std.testing.expect(try native_repair.authorizationBlocked(&current_view));
+        }
         const copied = try (@import("domain/candidate_validation_diagnostic.zig").Diagnostic{ .coverage = gap }).copy(a);
         try std.testing.expectEqualDeep(gap, copied.coverage);
     }
@@ -2397,6 +2453,27 @@ test "source-only extraction omissions remain candidate defects without clarific
         const packet = try reviewPacketAt(support, a, inputs, fixture.context, 0);
         defer @import("domain/model_input_packet.zig").release(packet);
         const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+        const feature_id = (try @import("domain/required_authority.zig").build(a, inputs)).requirements[0].seed.id;
+        try expectReviewAssessmentScope(.source, a, .{ .object = body }, feature_id);
+        try std.testing.expect(feature_id.unit == .feature);
+        try std.testing.expectEqualStrings("source_preservation", body.get("subject").?.object.get("kind").?.string);
+        const feature_instruction = body.get("assessment_scope").?.object.get("instruction").?.string;
+        try std.testing.expect(std.mem.indexOf(u8, feature_instruction, "assigned business purpose before authoring") != null);
+        try std.testing.expect(std.mem.indexOf(u8, feature_instruction, "Sources need not supply prewritten specification fields") != null);
+        try std.testing.expect(std.mem.indexOf(u8, feature_instruction, "complete assigned original source") == null);
+        const preservation_inputs = try @import("domain/source_preservation.zig").project(a, fixture.context.inputs.corpus.feature_id, @import("domain/reference_support.zig").records(fixture.context.references), fixture.context.inputs);
+        const source_id = try support.nextSubject(a, preservation_inputs, null);
+        try std.testing.expect(source_id.unit == .source);
+        const source_packet = try support.packetFor(std.testing.allocator, preservation_inputs, fixture.context, .{ .finding = source_id });
+        defer @import("domain/model_input_packet.zig").release(source_packet);
+        const source_body = (try std.json.parseFromSlice(std.json.Value, a, source_packet.body(), .{})).value;
+        try expectReviewAssessmentScope(.source, a, source_body, source_id);
+        try std.testing.expectEqualStrings("source_preservation", source_body.object.get("subject").?.object.get("kind").?.string);
+        const source_instruction = source_body.object.get("assessment_scope").?.object.get("instruction").?.string;
+        try std.testing.expect(std.mem.indexOf(u8, source_instruction, "complete assigned original source") != null);
+        try std.testing.expect(std.mem.indexOf(u8, source_instruction, "including meaning with no surviving claim") != null);
+        try std.testing.expectEqualStrings(source, source_body.object.get("sources").?.array.items[0].object.get("text").?.string);
+        try std.testing.expectEqual(@as(usize, 0), source_body.object.get("claims").?.array.items.len);
         try std.testing.expectEqualStrings(source, body.get("sources").?.array.items[0].object.get("text").?.string);
         try std.testing.expectEqual(@as(usize, 0), body.get("claims").?.array.items.len);
         const extracted = body.get("extraction").?.array.items[0].object;
@@ -3774,6 +3851,7 @@ test "scalar source assessments resolve their assigned field and preserve comple
             const packet = try support.packetFor(std.testing.allocator, inputs, fixture.context, .{ .finding = id });
             defer packets.release(packet);
             const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+            try expectReviewAssessmentScope(.source, a, .{ .object = body }, id);
             const subject = body.get("subject").?.object;
             try std.testing.expectEqualStrings("candidate_field", subject.get("kind").?.string);
             try std.testing.expectEqualStrings(@tagName(slot), subject.get("slot").?.string);
@@ -3795,6 +3873,7 @@ test "scalar source assessments resolve their assigned field and preserve comple
             const correction = try support.packetFor(std.testing.allocator, inputs, fixture.context, .{ .correction = id });
             defer packets.release(correction);
             const correction_body = (try std.json.parseFromSlice(std.json.Value, a, correction.body(), .{})).value.object;
+            try expectSameReviewSubject(a, packet, correction);
             try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, body.get("subject").?, .{}), try std.json.Stringify.valueAlloc(a, correction_body.get("subject").?, .{}));
             for ([_][]const u8{ "extraction", "dispositions", "signals", "conflicts" }) |key| try std.testing.expect(!correction_body.contains(key));
             try std.testing.checkAllAllocationFailures(std.testing.allocator, scalarReviewPacketAllocationCase, .{ inputs, fixture.context, id });
@@ -3879,6 +3958,7 @@ test "record and signal review assignments expose resolved targets and keep loca
             const packet = try support.packetFor(std.testing.allocator, inputs, fixture.context, .{ .finding = id });
             defer packets.release(packet);
             const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+            try expectReviewAssessmentScope(.source, a, .{ .object = body }, id);
             const subject = body.get("subject").?.object;
             try std.testing.expectEqualStrings("candidate_field", subject.get("kind").?.string);
             // Different meaning stays visible for the semantic judge; native
@@ -5000,6 +5080,106 @@ test "published support validates without an execution ledger and rejects erased
     }
 }
 
+test "source review scopes distinguish field coverage and joint record conditions without granting packet authority" {
+    const authority = @import("domain/required_authority.zig");
+    const support = @import("domain/specification_support.zig").Source;
+    const packets = @import("domain/model_input_packet.zig");
+    const json = @import("domain/model_candidate_json.zig");
+    for ([_][5][]const u8{
+        .{ "Display clinic opening hours. When an appointment is cancelled, notify the patient only after verifying contact details.", "Display clinic opening hours.", "Contact details have been verified.", "An appointment is cancelled.", "Notify the patient." },
+        .{ "Issue a sender receipt after successful delivery. Do not dispatch a parcel when its label is unreadable; identify it manually before dispatch.", "Issue a sender receipt after successful delivery.", "The parcel label is unreadable.", "Dispatch is requested.", "Do not dispatch until manual identification completes." },
+    }) |example| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var fixture = try Fixture.initContent(a, example[0], null, true, example[1], 1);
+        defer fixture.deinit();
+        const local = try fixture.value(example[1]);
+        const given = try fixture.value(example[2]);
+        const when = try fixture.value(example[3]);
+        const then = try fixture.value(example[4]);
+        const records: []const spec.IdentifiedRecord = &.{
+            .{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .proposal = .{ .content = .{ .acceptance_criterion = .{ .given = given.value, .when = when.value, .then = then.value } }, .provenance = local.provenance } },
+            .{ .id = .{ .kind = .functional_requirement, .ordinal = 1 }, .proposal = .{ .content = .{ .functional_requirement = .{ .text = local.value } }, .provenance = local.provenance } },
+        };
+        const content: spec.IdentifiedContent = .{ .display_name = local, .primary_user_story = local, .entities = .{ .disposition = .not_applicable, .basis = local }, .records = records };
+        const inputs = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, content, .{ .title = local, .description = local, .primary_goal = local });
+        const ledger = try authority.build(a, inputs);
+        const field_id = try support.nextSubject(a, inputs, null);
+        try std.testing.expect(field_id.unit == .feature and field_id.slot == .display_name);
+        const collection_id = for (ledger.requirements) |requirement| {
+            if (requirement.seed.id.unit == .feature and requirement.seed.id.slot == .functional_requirements) break requirement.seed.id;
+        } else return error.MissingCollectionRequirement;
+        const field_packet = try support.packetFor(std.testing.allocator, inputs, fixture.context, .{ .finding = field_id });
+        defer packets.release(field_packet);
+        const collection_packet = try support.packetFor(std.testing.allocator, inputs, fixture.context, .{ .finding = collection_id });
+        defer packets.release(collection_packet);
+        const field_body = (try std.json.parseFromSlice(std.json.Value, a, field_packet.body(), .{})).value;
+        const collection_body = (try std.json.parseFromSlice(std.json.Value, a, collection_packet.body(), .{})).value;
+        for ([_]*packets.Packet{ field_packet, collection_packet }) |packet| {
+            const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value;
+            try expectReviewAssessmentScope(.source, a, body, if (packet == field_packet) field_id else collection_id);
+            try std.testing.expectEqualStrings(example[0], body.object.get("sources").?.array.items[0].object.get("text").?.string);
+            // The original source still contains duties omitted by this mock
+            // extraction. Packet presentation supplies no semantic verdict.
+            try std.testing.expectEqual(@as(usize, 1), body.object.get("claims").?.array.items.len);
+            try std.testing.expect(std.mem.indexOf(u8, try std.json.Stringify.valueAlloc(a, body.object.get("claims").?, .{}), example[2]) == null);
+            const correction = try support.packetFor(std.testing.allocator, inputs, fixture.context, .{ .correction = if (packet == field_packet) field_id else collection_id });
+            defer packets.release(correction);
+            try expectSameReviewSubject(a, packet, correction);
+        }
+        const field_scope = field_body.object.get("assessment_scope").?.object;
+        const collection_scope = collection_body.object.get("assessment_scope").?.object;
+        try std.testing.expect(std.mem.indexOf(u8, field_scope.get("instruction").?.string, "qualifying triggers, conditions, negation and obligation strength") != null);
+        try std.testing.expect(std.mem.indexOf(u8, field_scope.get("instruction").?.string, "Unrelated feature duties") != null);
+        try std.testing.expect(std.mem.indexOf(u8, collection_scope.get("instruction").?.string, "complete source-required coverage") != null);
+        try std.testing.expect(std.mem.indexOf(u8, collection_scope.get("instruction").?.string, "obligations absent from current claims or associations") != null);
+        try std.testing.expect(std.mem.indexOf(u8, collection_scope.get("original_sources").?.string, "Candidate assertions cannot establish source requirements") != null);
+        try std.testing.expect(std.mem.indexOf(u8, collection_scope.get("derived_evidence").?.string, "omissions or labels do not remove original obligations") != null);
+        try std.testing.expectEqualStrings(example[1], field_body.object.get("subject").?.object.get("text").?.string);
+        const members = collection_body.object.get("subject").?.object.get("records").?.array.items;
+        try std.testing.expectEqual(@as(usize, 1), members.len);
+        const member = try json.decode(spec.CapturedRecord, a, try std.json.Stringify.valueAlloc(a, members[0], .{}));
+        try std.testing.expectEqualDeep(records[1].id, member.id.?);
+        try std.testing.expect(member.content == .functional_requirement);
+        try std.testing.expectEqualStrings(example[1], member.content.functional_requirement.text.bytes);
+        for ([_]authority.Slot{ .given, .when, .then }, example[2..]) |slot, expected| {
+            const id = for (ledger.requirements) |requirement| {
+                if (requirement.seed.id.unit == .record and requirement.seed.id.unit.record.kind == .acceptance_criterion and requirement.seed.id.slot == slot) break requirement.seed.id;
+            } else return error.MissingAcceptanceCriterionRequirement;
+            const packet = try support.packetFor(std.testing.allocator, inputs, fixture.context, .{ .finding = id });
+            defer packets.release(packet);
+            const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value;
+            try expectReviewAssessmentScope(.source, a, body, id);
+            try std.testing.expectEqualStrings(expected, body.object.get("subject").?.object.get("text").?.string);
+            try std.testing.expectEqualDeep(records[0], try json.decode(spec.IdentifiedRecord, a, try std.json.Stringify.valueAlloc(a, body.object.get("subject").?.object.get("record").?, .{})));
+            const instruction = body.object.get("assessment_scope").?.object.get("instruction").?.string;
+            try std.testing.expect(std.mem.indexOf(u8, instruction, "Sibling fields may supply joint conditions and results") != null);
+            try std.testing.expect(std.mem.indexOf(u8, instruction, "each field need not repeat the whole flow") != null);
+            try expectRecordReviewPurpose(.source, a, packet, id);
+            const correction = try support.packetFor(std.testing.allocator, inputs, fixture.context, .{ .correction = id });
+            defer packets.release(correction);
+            try expectSameReviewSubject(a, packet, correction);
+        }
+        const good = try reviewFor(a, inputs, fixture.context.inputs);
+        const response = try sourceReviewWire(a, inputs, fixture.context, field_id, good.entries[0].value);
+        var changed_scope = (try std.json.parseFromSlice(std.json.Value, a, field_packet.body(), .{})).value;
+        try changed_scope.object.put(a, "assessment_scope", collection_body.object.get("assessment_scope").?);
+        for ([_][]const u8{ try std.json.Stringify.valueAlloc(a, changed_scope, .{}), collection_packet.body() }) |body| {
+            const forged = try packets.create(std.testing.allocator, body, field_packet.unit(), field_packet.purpose(), field_packet.resultDefinition());
+            defer packets.release(forged);
+            try std.testing.expectError(error.InvalidRequiredAuthority, support.collectFocused(a, inputs, fixture.context, null, forged, response, null));
+        }
+        var changed = inputs;
+        changed.specification.?.display_name = try fixture.value("MOCK A changed current display name.");
+        changed.brief.?.title = changed.specification.?.display_name;
+        try std.testing.expectError(error.InvalidRequiredAuthority, support.collectFocused(a, changed, fixture.context, null, field_packet, response, null));
+        const admitted = try support.collectFocused(a, inputs, fixture.context, null, field_packet, response, null);
+        try std.testing.expect(admitted == .pending);
+        try std.testing.expectEqualDeep(good.entries[0].value, admitted.pending.review.entries[0].value);
+    }
+}
+
 test "source and policy collections expose selected members despite matching text elsewhere and retain them through repairs" {
     const authority = @import("domain/required_authority.zig");
     const collection = @import("domain/specification_authority.zig");
@@ -5283,11 +5463,30 @@ fn policyReviewPacketAllocationCase(allocator: std.mem.Allocator, inputs: @impor
 }
 
 fn expectSameReviewSubject(a: std.mem.Allocator, expected: *@import("domain/model_input_packet.zig").Packet, actual: *@import("domain/model_input_packet.zig").Packet) !void {
-    const left = (try std.json.parseFromSlice(std.json.Value, a, expected.body(), .{})).value;
+    const expected_body = (try std.json.parseFromSlice(std.json.Value, a, expected.body(), .{})).value;
+    const left = expected_body.object.get("input") orelse expected_body;
     const body = (try std.json.parseFromSlice(std.json.Value, a, actual.body(), .{})).value;
     const right = body.object.get("input") orelse body;
     try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, left.object.get("subject").?, .{}), try std.json.Stringify.valueAlloc(a, right.object.get("subject").?, .{}));
-    try std.testing.expectEqualStrings(left.object.get("task").?.string, right.object.get("task").?.string);
+    const left_task = left.object.get("task") orelse left.object.get("requirements").?.array.items[0].object.get("task").?;
+    const right_task = right.object.get("task") orelse right.object.get("requirements").?.array.items[0].object.get("task").?;
+    try std.testing.expectEqualStrings(left_task.string, right_task.string);
+    if (left.object.get("assessment_scope")) |scope| {
+        try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, scope, .{}), try std.json.Stringify.valueAlloc(a, right.object.get("assessment_scope").?, .{}));
+    } else try std.testing.expect(!right.object.contains("assessment_scope"));
+}
+
+fn expectReviewAssessmentScope(comptime purpose: @import("domain/specification_support.zig").Purpose, a: std.mem.Allocator, input: std.json.Value, id: @import("domain/required_authority.zig").Id) !void {
+    if (purpose == .principles) return std.testing.expect(!input.object.contains("assessment_scope"));
+    const scope = input.object.get("assessment_scope").?.object;
+    try std.testing.expectEqual(@as(usize, 3), scope.count());
+    const subject = try @import("domain/model_candidate_json.zig").decode(@import("domain/specification_review_subject.zig").Subject, a, try std.json.Stringify.valueAlloc(a, input.object.get("subject").?, .{}));
+    const expected = @import("domain/required_authority_description.zig").sourceReviewScope(id, subject);
+    inline for (std.meta.fields(@TypeOf(expected))) |field| {
+        const presented = scope.get(field.name).?.string;
+        try std.testing.expect(presented.len != 0);
+        try std.testing.expectEqualStrings(@field(expected, field.name), presented);
+    }
 }
 
 fn selectedNativeRepairTask(input: std.json.Value) ![]const u8 {
@@ -5305,6 +5504,7 @@ fn expectRecordReviewPurpose(comptime purpose: @import("domain/specification_sup
     const descriptions = @import("domain/required_authority_description.zig");
     const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value;
     const input = (body.object.get("input") orelse body).object;
+    try expectReviewAssessmentScope(purpose, a, .{ .object = input }, id);
     const task = if (purpose == .principles) input.get("task").?.string else input.get("requirements").?.array.items[0].object.get("task").?.string;
     try std.testing.expectEqualStrings(try descriptions.recordTask(a, id.unit.record.kind, id.slot), task);
     try std.testing.expect(std.mem.indexOf(u8, task, descriptions.recordFamily(id.unit.record.kind)) != null);
@@ -5323,6 +5523,7 @@ fn expectRecordReviewPurpose(comptime purpose: @import("domain/specification_sup
 fn expectBusinessReviewPurpose(comptime purpose: @import("domain/specification_support.zig").Purpose, a: std.mem.Allocator, inputs: @import("domain/required_authority.zig").Inputs, context: provenance.Context, packet: *const @import("domain/model_input_packet.zig").Packet, id: @import("domain/required_authority.zig").Id) !void {
     const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value;
     const input = (body.object.get("input") orelse body).object;
+    try expectReviewAssessmentScope(purpose, a, .{ .object = input }, id);
     const task = if (purpose == .principles) input.get("task").?.string else input.get("requirements").?.array.items[0].object.get("task").?.string;
     try std.testing.expectEqualStrings(try @import("domain/required_authority_description.zig").task(a, id), task);
     const subject_value = input.get("subject").?;
@@ -5409,6 +5610,7 @@ fn checkReviewRepairPurposes(comptime purpose: @import("domain/specification_sup
     const correction = try review.packetFor(std.testing.allocator, inputs, context, .{ .correction = id });
     defer packets.release(correction);
     for ([_]*const packets.Packet{ initial, correction }) |packet| try expectReviewPurpose(purpose, a, inputs, context, packet, business_id);
+    try expectSameReviewSubject(a, initial, correction);
     const accepted = (try collectReview(review, a, inputs, context, try @import("domain/model_candidate_json.zig").encode(review.Review, a, good), null)).accepted;
     // These are native malformed-data repairs, not reconsideration of meaning.
     for (0..3) |mode| {
@@ -5445,6 +5647,7 @@ fn checkReviewRepairPurposes(comptime purpose: @import("domain/specification_sup
         const packet = try repair.packet(std.testing.allocator, inputs, context, rejected.candidate.?, authorization);
         defer packets.release(packet);
         try expectReviewPurpose(purpose, a, inputs, context, packet, business_id);
+        try expectSameReviewSubject(a, initial, packet);
         try std.testing.expectEqualDeep(id, authorization.target.requirement);
         const replacement: repair.Replacement = switch (mode) {
             0 => .{ .finding = good.entries[index].value },
@@ -7499,6 +7702,10 @@ test "omission admission requires its source premise before preparing comparison
 
 test "bound preservation calibration uses production packet construction and native admission" {
     try @import("test_fixtures/source_loss_calibration.zig").run();
+}
+
+test "source review scope calibration prepares frozen native requests without semantic evidence or dispatch" {
+    try @import("test_fixtures/source_review_scope_calibration.zig").run();
 }
 
 // Most permission tests assert the outcome; reporting tests retain this trace.

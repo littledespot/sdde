@@ -1177,6 +1177,25 @@ test "persisted extraction rejection retains its terminal diagnostic in report r
     try std.testing.expectEqualStrings("REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE", decoded.value.detail.?);
 }
 
+test "capture failure report retains the failing boundary and subsequent logging failure" {
+    const native: @import("../../../src/domain/workflow_execution.zig").Rejection = .{ .model_capture = .{
+        .code = .LOG_SERIALIZATION_FAILURE,
+        .stage = .source_snapshot,
+        .cause = .{ .source_snapshot = .missing_source_chain },
+        .origin = .{ .request = .{ .value = 4 }, .kind = .inference, .attempt = .{ .value = 2 } },
+        .direction = .request,
+        .subsequent_logging_failure = .LOG_SINK_FAILURE,
+    } };
+    const value = c.TerminalRejection.fromNative(native);
+    const bytes = try std.json.Stringify.valueAlloc(std.testing.allocator, value, .{});
+    defer std.testing.allocator.free(bytes);
+    var decoded = try std.json.parseFromSlice(c.TerminalRejection, std.testing.allocator, bytes, .{});
+    defer decoded.deinit();
+    try std.testing.expectEqual(.model_capture, decoded.value.kind);
+    try std.testing.expectEqualStrings("MODEL_CAPTURE_SOURCE_SNAPSHOT_FAILURE", decoded.value.detail.?);
+    try std.testing.expectEqualDeep(native.model_capture, decoded.value.capture_failure.?);
+}
+
 test "provider content rejection survives retirement and projects exact native event evidence" {
     const obs = @import("../e2e/observation.zig");
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);

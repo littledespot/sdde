@@ -3,6 +3,32 @@ const std = @import("std");
 const a = @import("required_authority.zig");
 const spec = @import("specification.zig");
 
+/// Presentation of an already-bound source-review assignment, not a new
+/// ownership, eligibility or finding policy. Business purposes remain shared
+/// with authoring and principle review; these evidence roles are source-only.
+pub const SourceReviewScope = struct {
+    original_sources: []const u8 = "Original sources establish business obligations and unresolved decisions. Candidate assertions cannot establish source requirements.",
+    derived_evidence: []const u8 = "Claims, associations, signals and dispositions are derived evidence. Their omissions or labels do not remove original obligations.",
+    instruction: []const u8,
+};
+
+pub fn sourceReviewScope(id: a.Id, subject: @import("specification_review_subject.zig").Subject) SourceReviewScope {
+    return .{ .instruction = switch (subject) {
+        .candidate_field => |field| if (field.record != null)
+            "Assess subject.text for its assigned field purpose within subject.record. Sibling fields may supply joint conditions and results; each field need not repeat the whole flow."
+        else
+            "Assess the behavior or decision expressed by subject.text for its assigned purpose, including its qualifying triggers, conditions, negation and obligation strength. Unrelated feature duties belong to their collection assessments.",
+        .collection => "Assess the selected records together for complete source-required coverage of the assigned collection purpose, including obligations absent from current claims or associations. Surrounding context cannot replace missing selected records.",
+        .entity_applicability => "Assess the entity disposition and its explanation together for their assigned purpose. Other feature behavior remains in force and is checked by its own field and collection assignments.",
+        .source_preservation => if (id.unit == .source)
+            "Assess extraction and reconciliation against the complete assigned original source, including meaning with no surviving claim. Current candidate associations do not limit this assignment."
+        else
+            "Assess whether original sources establish the assigned business purpose before authoring. Missing or misclassified derived meaning is candidate loss, not a missing user decision. Sources need not supply prewritten specification fields.",
+        .reference_signal => "Assess the selected signal's represented meaning against its original sources, preserving its conditions and obligations. Selected claims identify candidate evidence, not source truth.",
+        .candidate_support => "Assess whether original sources establish the assigned business purpose. Missing or misclassified derived meaning is candidate loss, not a missing user decision. Sources need not supply prewritten specification fields.",
+    } };
+}
+
 /// Business meanings shared by authoring and review; no applicability or verdict.
 pub fn recordFamily(kind: spec.Kind) []const u8 {
     return switch (kind) {

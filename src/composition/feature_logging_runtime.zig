@@ -100,7 +100,15 @@ pub const Assembly = struct {
                 }
             }
         }
-        return if (self.failure) |failure| .{ .execution_rejected = .{ .logging = failure } } else outcome;
+        if (self.failure) |failure| {
+            if (outcome == .execution_rejected and outcome.execution_rejected == .model_capture) {
+                var detail = outcome.execution_rejected.model_capture;
+                detail.subsequent_logging_failure = failure;
+                return .{ .execution_rejected = .{ .model_capture = detail } };
+            }
+            return .{ .execution_rejected = .{ .logging = failure } };
+        }
+        return outcome;
     }
 
     pub fn deinit(self: *Assembly) void {

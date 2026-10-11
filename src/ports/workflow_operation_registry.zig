@@ -182,6 +182,7 @@ pub const Registry = struct {
 };
 
 fn validContract(contract: operation.Contract, capabilities: []const []const u8) bool {
+    if (!@import("../domain/workflow_outcome_association.zig").validDescriptor(contract.outcome_association, contract.requires, contract.optional, contract.produces, contract.replaces, contract.repair_role)) return false;
     if (!@import("../domain/workflow_iteration.zig").validContract(contract, capabilities)) return false;
     if (!operation.validRepair(contract.repair_role, if (contract.retry_limit) |limit| limit.scope else null, contract.runner_accounting, contract.side_effect)) return false;
     if (contract.repair_role != .none and (contract.kind != .step or capabilities.len != 0)) return false;
@@ -198,6 +199,7 @@ fn validContract(contract: operation.Contract, capabilities: []const []const u8)
         (contract.parameters.len != 0 or contract.requires.len != 0 or contract.optional.len != 0 or contract.replaces.len != 0 or
             contract.invalidates.len != 0 or contract.side_effect != .none or contract.gates.len != 0 or
             capabilities.len != 0 or contract.retry_limit != null or contract.runner_accounting != .none or
+            contract.outcome_association != .independent or
             contract.outcomes.len != 1 or contract.outcomes[0] != .ok)) return false;
     for (contract.parameters, 0..) |descriptor, index| {
         if (workflow.WorkflowParameterId.parse(descriptor.id) == null or

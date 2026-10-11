@@ -13,6 +13,7 @@ pub const rendered_schema = values.schema(.rendered_incomplete_specification, ow
 pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ state_schema, rendered_schema };
 
 pub const Build = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .clarification, .subject = .refreshed_clarification_state, .evidence = .refreshed_clarification_state, .result = .incomplete_specification_state } };
     pub const Action = @import("../actions/specification/build_incomplete_specification.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -29,6 +30,7 @@ pub const Build = struct {
     }
 };
 pub const Render = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .clarification, .subject = .incomplete_specification_state, .evidence = .refreshed_clarification_state, .result = .rendered_incomplete_specification } };
     pub const Action = @import("../actions/specification/render_incomplete_specification.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -43,6 +45,7 @@ pub const Render = struct {
     }
 };
 pub const Prepare = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .clarification, .subject = .incomplete_specification_state, .evidence = .refreshed_clarification_state, .result = .prepared_workflow_output } };
     pub const Action = @import("../actions/specification/prepare_incomplete_specification_output.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},

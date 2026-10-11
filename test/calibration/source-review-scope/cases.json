@@ -1,0 +1,1410 @@
+[
+  {
+    "id": "d1-hours-field",
+    "card": "D1",
+    "cohort": "development",
+    "target": {
+      "unit": "feature",
+      "slot": "description",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "The selected description represents opening-hours display, not every clinic duty.",
+      "missing_obligation": null,
+      "preserve": [
+        "opening-hours display"
+      ],
+      "forbidden": [
+        "demand cancellation notification in this local hours field",
+        "magic modal word required"
+      ]
+    },
+    "retained_case": "wrong-role-assignment",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "The clinic service is available.",
+        "when": "The user views the clinic information.",
+        "then": "The service displays the clinic opening hours.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "The service displays the clinic opening hours.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "sources": [],
+    "claims": [],
+    "description": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "d1-fr-incomplete",
+    "card": "D1",
+    "cohort": "development",
+    "target": {
+      "unit": "feature",
+      "slot": "functional_requirements",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "candidate_omission",
+      "meaning": "The FR collection omits a separate original notification duty.",
+      "missing_obligation": "After an appointment is cancelled, the service must notify the patient.",
+      "preserve": [
+        "cancellation trigger",
+        "patient notification"
+      ],
+      "forbidden": [
+        "claim opening-hours display is missing"
+      ]
+    },
+    "retained_case": "wrong-role-assignment",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "The clinic service is available.",
+        "when": "The user views the clinic information.",
+        "then": "The service displays the clinic opening hours.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "The service displays the clinic opening hours.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "sources": [],
+    "claims": [],
+    "description": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "d1-scenario-complete",
+    "card": "D1",
+    "cohort": "development",
+    "target": {
+      "unit": "feature",
+      "slot": "scenario_coverage",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "Selected scenarios jointly preserve hours and cancellation-triggered notification.",
+      "missing_obligation": null,
+      "preserve": [
+        "hours display",
+        "cancellation trigger",
+        "patient notification"
+      ],
+      "forbidden": [
+        "require every selected scenario to repeat both duties"
+      ]
+    },
+    "retained_case": "wrong-role-assignment",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "The clinic service is available.",
+        "when": "The user views the clinic information.",
+        "then": "The service displays the clinic opening hours.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "acceptance_criterion",
+        "given": "An appointment exists.",
+        "when": "The appointment is cancelled.",
+        "then": "The service notifies the patient.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "The service displays the clinic opening hours.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "After an appointment is cancelled, the service notifies the patient.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "sources": [],
+    "claims": [],
+    "description": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "d2-given-lost-condition",
+    "card": "D2",
+    "cohort": "development",
+    "target": {
+      "unit": "record",
+      "slot": "given",
+      "record_kind": "acceptance_criterion",
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "candidate_omission",
+      "meaning": "The selected Given drops the no-reservation precondition on renewal.",
+      "missing_obligation": "Renewal is permitted only when no reservation exists for the loan.",
+      "preserve": [
+        "no reservation",
+        "eligible borrower"
+      ],
+      "forbidden": [
+        "allege seven-day extension is missing",
+        "invent a user choice about reservation policy"
+      ]
+    },
+    "retained_case": "loan-candidate",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "The borrower is eligible.",
+        "when": "The borrower requests renewal.",
+        "then": "The service extends the due date by seven days.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "When an eligible borrower requests renewal, the service extends the due date by seven days.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "sources": [],
+    "claims": [],
+    "description": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "d2-then-distributed",
+    "card": "D2",
+    "cohort": "development",
+    "target": {
+      "unit": "record",
+      "slot": "then",
+      "record_kind": "acceptance_criterion",
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "The selected Then expresses the extension; Given and When supply its conditions and trigger.",
+      "missing_obligation": null,
+      "preserve": [
+        "seven-day extension",
+        "sibling eligible borrower",
+        "sibling no reservation",
+        "sibling renewal request"
+      ],
+      "forbidden": [
+        "demand Given conditions be repeated in Then"
+      ]
+    },
+    "retained_case": "loan-candidate",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "The borrower is eligible and the loan has no reservation.",
+        "when": "The borrower requests renewal.",
+        "then": "The service extends the due date by seven days.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "When an eligible borrower requests renewal of a loan with no reservation, the service extends the due date by seven days.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "sources": [],
+    "claims": [],
+    "description": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "d2-ac-complete",
+    "card": "D2",
+    "cohort": "development",
+    "target": {
+      "unit": "feature",
+      "slot": "acceptance_criteria",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "The AC collection preserves eligibility, reservation, request and result together.",
+      "missing_obligation": null,
+      "preserve": [
+        "eligible borrower",
+        "no reservation",
+        "renewal request",
+        "seven-day extension"
+      ],
+      "forbidden": [
+        "split every source clause into its own required record"
+      ]
+    },
+    "retained_case": "loan-candidate",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "The borrower is eligible and the loan has no reservation.",
+        "when": "The borrower requests renewal.",
+        "then": "The service extends the due date by seven days.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "When an eligible borrower requests renewal of a loan with no reservation, the service extends the due date by seven days.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "sources": [],
+    "claims": [],
+    "description": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "d3-captured-startup-story",
+    "card": "D3",
+    "cohort": "development",
+    "target": {
+      "unit": "feature",
+      "slot": "primary_user_story",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "candidate_omission",
+      "meaning": "The actual captured story must retain the startup-triggered greeting, successful startup and UTC output.",
+      "missing_obligation": "When started, the application must display Hello, World!.",
+      "preserve": [
+        "startup trigger",
+        "exact greeting Hello, World!",
+        "successful startup",
+        "UTC date and time"
+      ],
+      "forbidden": [
+        "untriggered must display greeting as a sufficient obligation",
+        "invent smoke-reading display"
+      ]
+    },
+    "retained_case": "captured-story",
+    "sources": [],
+    "claims": [],
+    "description": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null,
+    "records": null
+  },
+  {
+    "id": "d3-smoke-source-preservation",
+    "card": "D3",
+    "cohort": "development",
+    "retained_case": null,
+    "sources": [
+      "When smoke is detected, the controller must sound the alarm.\nWhile smoke persists, the controller must keep the exit door unlocked.\n",
+      "The building log must record the sensor calibration version.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "The controller must display the current smoke reading.",
+        "first": 1,
+        "last": 2
+      },
+      {
+        "source": 2,
+        "text": "The building log must record the sensor calibration version.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "The controller displays the smoke reading.",
+    "target": {
+      "unit": "source",
+      "slot": "disposition",
+      "ordinal": 1,
+      "record_kind": null
+    },
+    "expected": {
+      "finding": "candidate_omission",
+      "meaning": "The original alarm and continuing unlocked-exit duties do not survive extraction. The derived display claim cannot establish an original display obligation.",
+      "missing_obligation": "When smoke is detected, the controller must sound the alarm and keep the exit door unlocked while smoke persists.",
+      "preserve": [
+        "smoke detection trigger",
+        "alarm obligation",
+        "exit remains unlocked while smoke persists"
+      ],
+      "forbidden": [
+        "invent an original smoke-reading display duty",
+        "treat current claim association as original truth"
+      ]
+    },
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null,
+    "records": null
+  },
+  {
+    "id": "d4-inherited-recording-field",
+    "card": "D4",
+    "cohort": "development",
+    "target": {
+      "unit": "feature",
+      "slot": "description",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "The local measurement-recording description does not own the separate pump-safety duty.",
+      "missing_obligation": null,
+      "preserve": [
+        "record each measurement"
+      ],
+      "forbidden": [
+        "demand pump shutdown or level display in this recording-only field"
+      ]
+    },
+    "retained_case": "extraction-inherited",
+    "sources": [],
+    "claims": [],
+    "description": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null,
+    "records": null
+  },
+  {
+    "id": "d4-pump-source-preservation",
+    "card": "D4",
+    "cohort": "development",
+    "target": {
+      "unit": "source",
+      "slot": "disposition",
+      "ordinal": 1,
+      "record_kind": null
+    },
+    "expected": {
+      "finding": "candidate_omission",
+      "meaning": "The original pump shutdown/until-recovery duty has no surviving extraction claim.",
+      "missing_obligation": "When the reservoir falls below the minimum, the pump must stop and remain stopped until the level recovers.",
+      "preserve": [
+        "below-minimum trigger",
+        "pump stops",
+        "until recovery restriction"
+      ],
+      "forbidden": [
+        "require a nonexistent missing claim ID",
+        "discard the original duty because role binding omits it"
+      ]
+    },
+    "retained_case": "extraction-inherited",
+    "sources": [],
+    "claims": [],
+    "description": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null,
+    "records": null
+  },
+  {
+    "id": "d5-ready-payer-field",
+    "card": "D5",
+    "cohort": "development",
+    "target": {
+      "unit": "feature",
+      "slot": "description",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "The payer occurrence supports the payer field; equal inspector text does not broaden local ownership.",
+      "missing_obligation": null,
+      "preserve": [
+        "payer actor",
+        "successful payment trigger",
+        "payer Ready occurrence"
+      ],
+      "forbidden": [
+        "cite inspector occurrence as payer support",
+        "require inspector flow in payer-only description"
+      ]
+    },
+    "retained_case": "dual-ready",
+    "description": "After payment succeeds, show MOCK Ready to the payer.",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "A payment is pending.",
+        "when": "The payment succeeds.",
+        "then": "The payer sees MOCK Ready.",
+        "source_ids": [
+          1
+        ],
+        "text": null,
+        "condition": null,
+        "expected_outcome": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "After payment succeeds, show MOCK Ready to the payer.",
+        "source_ids": [
+          1
+        ],
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null
+      }
+    ],
+    "description_sources": [
+      1
+    ],
+    "sources": [],
+    "claims": [],
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "d5-ready-fr-other-occurrence",
+    "card": "D5",
+    "cohort": "development",
+    "target": {
+      "unit": "feature",
+      "slot": "functional_requirements",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "candidate_omission",
+      "meaning": "The FR collection retains payer behavior but omits the distinct inspector trigger/actor occurrence.",
+      "missing_obligation": "After inspection is approved, show MOCK Ready to the inspector.",
+      "preserve": [
+        "inspection-approved trigger",
+        "inspector actor",
+        "distinct source occurrence"
+      ],
+      "forbidden": [
+        "use equal payer wording to satisfy inspector behavior",
+        "allege payer display is missing"
+      ]
+    },
+    "retained_case": "dual-ready",
+    "description": "After payment succeeds, show MOCK Ready to the payer.",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "A payment is pending.",
+        "when": "The payment succeeds.",
+        "then": "The payer sees MOCK Ready.",
+        "source_ids": [
+          1
+        ],
+        "text": null,
+        "condition": null,
+        "expected_outcome": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "After payment succeeds, show MOCK Ready to the payer.",
+        "source_ids": [
+          1
+        ],
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null
+      }
+    ],
+    "description_sources": [
+      1
+    ],
+    "sources": [],
+    "claims": [],
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "d5-joint-fr-complete",
+    "card": "D5",
+    "cohort": "development",
+    "target": {
+      "unit": "feature",
+      "slot": "functional_requirements",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "One FR may jointly preserve both prerequisites from two original sources.",
+      "missing_obligation": null,
+      "preserve": [
+        "identity verification",
+        "payment confirmation",
+        "both prerequisites before release"
+      ],
+      "forbidden": [
+        "require one judgment or record per claim",
+        "require exactly one supporting source"
+      ]
+    },
+    "retained_case": "joint-two-sources",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "The recipient identity is verified and payment is confirmed.",
+        "when": "The recipient requests parcel release.",
+        "then": "The parcel is released.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "A parcel is released only after recipient identity verification and payment confirmation.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "sources": [],
+    "claims": [],
+    "description": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "d6-derived-title",
+    "card": "D6",
+    "cohort": "development",
+    "target": {
+      "unit": "feature",
+      "slot": "display_name",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "A concise derived maintenance-lock name is valid without a prewritten source title.",
+      "missing_obligation": null,
+      "preserve": [
+        "maintenance purpose",
+        "access-lock behavior"
+      ],
+      "forbidden": [
+        "infer a source gap because no title was supplied",
+        "invent an automatic unlocking duty"
+      ]
+    },
+    "sources": [
+      "During maintenance, the controller must keep the access door locked.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "During maintenance, the controller must keep the access door locked.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "The controller keeps the access door locked during maintenance.",
+    "title": "Maintenance Access Lock",
+    "retained_case": null,
+    "description_sources": null,
+    "goal": null,
+    "story": null,
+    "records": null
+  },
+  {
+    "id": "d6-derived-goal",
+    "card": "D6",
+    "cohort": "development",
+    "target": {
+      "unit": "feature",
+      "slot": "primary_goal",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "A derived user benefit may express the complete supported maintenance restriction.",
+      "missing_obligation": null,
+      "preserve": [
+        "locked during maintenance"
+      ],
+      "forbidden": [
+        "require a prewritten primary goal",
+        "invent visitor tracking or release policy"
+      ]
+    },
+    "sources": [
+      "During maintenance, the controller must keep the access door locked.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "During maintenance, the controller must keep the access door locked.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "The controller keeps the access door locked during maintenance.",
+    "goal": "Prevent access through the door while maintenance is in progress.",
+    "retained_case": null,
+    "description_sources": null,
+    "title": null,
+    "story": null,
+    "records": null
+  },
+  {
+    "id": "q1-receipt-field",
+    "card": "Q1",
+    "cohort": "reserved_qualification",
+    "target": {
+      "unit": "feature",
+      "slot": "description",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "The receipt field owns its receipt behavior; the complete FR collection also owns unreadable-label manual identification.",
+      "missing_obligation": null,
+      "preserve": [
+        "delivery confirmation",
+        "sender receipt"
+      ],
+      "forbidden": [
+        "invent receipt data fields",
+        "demand manual identification in a receipt-only description"
+      ]
+    },
+    "sources": [
+      "After delivery is confirmed, the service must issue a receipt to the sender.\nIf a parcel label is unreadable, the operator must identify the parcel manually.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "After delivery is confirmed, the service must issue a receipt to the sender.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 1,
+        "text": "If a parcel label is unreadable, the operator must identify the parcel manually.",
+        "first": 2,
+        "last": 2
+      }
+    ],
+    "description": "After delivery is confirmed, the service issues a receipt to the sender.",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "A parcel has been delivered.",
+        "when": "Delivery is confirmed.",
+        "then": "The sender receives a receipt.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "After delivery is confirmed, the service issues a receipt to the sender.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "retained_case": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "q1-fr-incomplete",
+    "card": "Q1",
+    "cohort": "reserved_qualification",
+    "target": {
+      "unit": "feature",
+      "slot": "functional_requirements",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "candidate_omission",
+      "meaning": "The receipt field owns its receipt behavior; the complete FR collection also owns unreadable-label manual identification.",
+      "missing_obligation": "If a parcel label is unreadable, the operator must identify the parcel manually.",
+      "preserve": [
+        "delivery confirmation",
+        "sender receipt",
+        "unreadable label",
+        "manual identification"
+      ],
+      "forbidden": [
+        "invent receipt data fields",
+        "demand manual identification in a receipt-only description"
+      ]
+    },
+    "sources": [
+      "After delivery is confirmed, the service must issue a receipt to the sender.\nIf a parcel label is unreadable, the operator must identify the parcel manually.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "After delivery is confirmed, the service must issue a receipt to the sender.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 1,
+        "text": "If a parcel label is unreadable, the operator must identify the parcel manually.",
+        "first": 2,
+        "last": 2
+      }
+    ],
+    "description": "After delivery is confirmed, the service issues a receipt to the sender.",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "A parcel has been delivered.",
+        "when": "Delivery is confirmed.",
+        "then": "The sender receives a receipt.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "After delivery is confirmed, the service issues a receipt to the sender.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "retained_case": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "q1-fr-complete",
+    "card": "Q1",
+    "cohort": "reserved_qualification",
+    "target": {
+      "unit": "feature",
+      "slot": "functional_requirements",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "The receipt field owns its receipt behavior; the complete FR collection also owns unreadable-label manual identification.",
+      "missing_obligation": null,
+      "preserve": [
+        "delivery confirmation",
+        "sender receipt",
+        "unreadable label",
+        "manual identification"
+      ],
+      "forbidden": [
+        "invent receipt data fields",
+        "demand manual identification in a receipt-only description"
+      ]
+    },
+    "sources": [
+      "After delivery is confirmed, the service must issue a receipt to the sender.\nIf a parcel label is unreadable, the operator must identify the parcel manually.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "After delivery is confirmed, the service must issue a receipt to the sender.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 1,
+        "text": "If a parcel label is unreadable, the operator must identify the parcel manually.",
+        "first": 2,
+        "last": 2
+      }
+    ],
+    "description": "After delivery is confirmed, the service issues a receipt to the sender.",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "A parcel has been delivered.",
+        "when": "Delivery is confirmed.",
+        "then": "The sender receives a receipt.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "acceptance_criterion",
+        "given": "A parcel label cannot be read.",
+        "when": "The operator processes the parcel.",
+        "then": "The operator identifies the parcel manually.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "After delivery is confirmed, the service issues a receipt to the sender.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "If a parcel label is unreadable, the operator identifies the parcel manually.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "retained_case": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "q2-then-distributed",
+    "card": "Q2",
+    "cohort": "reserved_qualification",
+    "target": {
+      "unit": "record",
+      "slot": "then",
+      "record_kind": "acceptance_criterion",
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "The flow uses sibling temperature context and preserves the continuing quarantine restriction.",
+      "missing_obligation": null,
+      "preserve": [
+        "above-limit temperature",
+        "quarantine",
+        "until supervisor clearance"
+      ],
+      "forbidden": [
+        "infer an automatic release period",
+        "demand Then repeat the Given temperature condition"
+      ]
+    },
+    "sources": [
+      "If reagent temperature rises above the permitted limit, the batch must be quarantined until a supervisor clears it.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "If reagent temperature rises above the permitted limit, the batch must be quarantined until a supervisor clears it.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "The system quarantines batches whose reagent temperature exceeds the limit until supervisor clearance.",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "Reagent temperature exceeds the permitted limit.",
+        "when": "The batch is evaluated.",
+        "then": "The batch is quarantined until a supervisor clears it.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "The system quarantines batches whose reagent temperature exceeds the limit until supervisor clearance.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "retained_case": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "q2-ac-incomplete",
+    "card": "Q2",
+    "cohort": "reserved_qualification",
+    "target": {
+      "unit": "feature",
+      "slot": "acceptance_criteria",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "candidate_omission",
+      "meaning": "The flow uses sibling temperature context and preserves the continuing quarantine restriction.",
+      "missing_obligation": "A quarantined batch must remain quarantined until a supervisor clears it.",
+      "preserve": [
+        "above-limit temperature",
+        "quarantine",
+        "until supervisor clearance"
+      ],
+      "forbidden": [
+        "infer an automatic release period",
+        "demand Then repeat the Given temperature condition"
+      ]
+    },
+    "sources": [
+      "If reagent temperature rises above the permitted limit, the batch must be quarantined until a supervisor clears it.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "If reagent temperature rises above the permitted limit, the batch must be quarantined until a supervisor clears it.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "The system quarantines batches whose reagent temperature exceeds the limit until supervisor clearance.",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "Reagent temperature exceeds the permitted limit.",
+        "when": "The batch is evaluated.",
+        "then": "The batch is quarantined.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "The system quarantines batches whose reagent temperature exceeds the limit.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "retained_case": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "q2-ac-complete",
+    "card": "Q2",
+    "cohort": "reserved_qualification",
+    "target": {
+      "unit": "feature",
+      "slot": "acceptance_criteria",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "The flow uses sibling temperature context and preserves the continuing quarantine restriction.",
+      "missing_obligation": null,
+      "preserve": [
+        "above-limit temperature",
+        "quarantine",
+        "until supervisor clearance"
+      ],
+      "forbidden": [
+        "infer an automatic release period",
+        "demand Then repeat the Given temperature condition"
+      ]
+    },
+    "sources": [
+      "If reagent temperature rises above the permitted limit, the batch must be quarantined until a supervisor clears it.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "If reagent temperature rises above the permitted limit, the batch must be quarantined until a supervisor clears it.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "The system quarantines batches whose reagent temperature exceeds the limit until supervisor clearance.",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "Reagent temperature exceeds the permitted limit.",
+        "when": "The batch is evaluated.",
+        "then": "The batch is quarantined until a supervisor clears it.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "The system quarantines batches whose reagent temperature exceeds the limit until supervisor clearance.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "retained_case": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "q3-release-field",
+    "card": "Q3",
+    "cohort": "reserved_qualification",
+    "target": {
+      "unit": "feature",
+      "slot": "description",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "The consent-gated release field is local; complete scenarios must include revocation before release preventing delivery.",
+      "missing_obligation": null,
+      "preserve": [
+        "consent prerequisite"
+      ],
+      "forbidden": [
+        "invent permanent consent",
+        "weaken must prevent delivery to optional",
+        "demand every release field repeat the separate revocation flow"
+      ]
+    },
+    "sources": [
+      "A report may be released only after the subject consents.\nRevocation of consent before release must prevent delivery.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "A report may be released only after the subject consents.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 1,
+        "text": "Revocation of consent before release must prevent delivery.",
+        "first": 2,
+        "last": 2
+      }
+    ],
+    "description": "The service releases a report only after the subject consents.",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "The subject has consented.",
+        "when": "Report release is requested.",
+        "then": "The report is delivered.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "The service releases a report only after the subject consents.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "retained_case": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "q3-scenario-incomplete",
+    "card": "Q3",
+    "cohort": "reserved_qualification",
+    "target": {
+      "unit": "feature",
+      "slot": "scenario_coverage",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "candidate_omission",
+      "meaning": "The consent-gated release field is local; complete scenarios must include revocation before release preventing delivery.",
+      "missing_obligation": "Revocation of consent before release must prevent report delivery.",
+      "preserve": [
+        "consent prerequisite",
+        "revocation before release",
+        "prevent delivery"
+      ],
+      "forbidden": [
+        "invent permanent consent",
+        "weaken must prevent delivery to optional",
+        "demand every release field repeat the separate revocation flow"
+      ]
+    },
+    "sources": [
+      "A report may be released only after the subject consents.\nRevocation of consent before release must prevent delivery.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "A report may be released only after the subject consents.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 1,
+        "text": "Revocation of consent before release must prevent delivery.",
+        "first": 2,
+        "last": 2
+      }
+    ],
+    "description": "The service releases a report only after the subject consents.",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "The subject has consented.",
+        "when": "Report release is requested.",
+        "then": "The report is delivered.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "The service releases a report only after the subject consents.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "retained_case": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  },
+  {
+    "id": "q3-scenario-complete",
+    "card": "Q3",
+    "cohort": "reserved_qualification",
+    "target": {
+      "unit": "feature",
+      "slot": "scenario_coverage",
+      "record_kind": null,
+      "ordinal": 1
+    },
+    "expected": {
+      "finding": "supported",
+      "meaning": "The consent-gated release field is local; complete scenarios must include revocation before release preventing delivery.",
+      "missing_obligation": null,
+      "preserve": [
+        "consent prerequisite",
+        "revocation before release",
+        "prevent delivery"
+      ],
+      "forbidden": [
+        "invent permanent consent",
+        "weaken must prevent delivery to optional",
+        "demand every release field repeat the separate revocation flow"
+      ]
+    },
+    "sources": [
+      "A report may be released only after the subject consents.\nRevocation of consent before release must prevent delivery.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "A report may be released only after the subject consents.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 1,
+        "text": "Revocation of consent before release must prevent delivery.",
+        "first": 2,
+        "last": 2
+      }
+    ],
+    "description": "The service releases a report only after the subject consents.",
+    "records": [
+      {
+        "kind": "acceptance_criterion",
+        "given": "The subject has consented and has not revoked consent.",
+        "when": "Report release is requested.",
+        "then": "The report is delivered.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "acceptance_criterion",
+        "given": "The subject previously consented.",
+        "when": "The subject revokes consent before report release.",
+        "then": "The service prevents delivery.",
+        "text": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "The service releases a report only after the subject consents.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      },
+      {
+        "kind": "functional_requirement",
+        "text": "If the subject revokes consent before release, the service prevents report delivery.",
+        "given": null,
+        "when": null,
+        "then": null,
+        "condition": null,
+        "expected_outcome": null,
+        "source_ids": null
+      }
+    ],
+    "retained_case": null,
+    "description_sources": null,
+    "title": null,
+    "goal": null,
+    "story": null
+  }
+]

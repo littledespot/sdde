@@ -134,6 +134,7 @@ fn graphProjectsDefinition(
 ) bool {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
+    @import("workflow_outcome_flow.zig").validate(arena.allocator(), graph.authority) catch return false;
     const expanded = @import("workflow_subgraphs.zig").expand(arena.allocator(), source) catch return false;
     var declared = source;
     declared.steps = expanded.steps;
@@ -159,6 +160,7 @@ fn graphProjectsDefinition(
     }
     var transition_count: usize = 0;
     for (graph.authority.steps, declared.steps) |compiled, step| {
+        if (!@import("workflow_outcome_association.zig").validDescriptor(compiled.outcome_association, compiled.requires, compiled.optional, compiled.produces, compiled.replaces, compiled.repair_role)) return false;
         if (!@import("workflow_iteration.zig").validProjection(compiled)) return false;
         if (!@import("workflow_operation.zig").validAccounting(compiled.runner_accounting, compiled.requires, compiled.produces, compiled.side_effect, compiled.retry_authority != null)) return false;
         if (!@import("workflow_model.zig").validProjection(compiled)) return false;

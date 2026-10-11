@@ -106,6 +106,7 @@ pub const CheckReconciliation = struct {
     }
 };
 pub const CollectReconciliation = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .reference_reconciliation_input, .evidence = .reference_reconciliation_input, .result = .raw_reference_reconciliation } };
     pub const Action = @import("../actions/reference/collect_reference_reconciliation_result.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},

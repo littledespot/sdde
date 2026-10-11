@@ -223,6 +223,17 @@ Completed entity-applicability review receives the disposition, resolved basis a
 business context through the same projection as policy review. Partial source
 review and producer localization retain their existing subjects and evidence.
 
+The shared requirement-description owner supplies source-only `assessment_scope`
+alongside the existing business purpose. It distinguishes authoritative original
+sources from derived claims and candidate assertions. Independent fields assess
+represented meaning and its conditions; record siblings may jointly express a
+flow. Collections assess complete assigned coverage, including original duties
+absent from current associations. Initial requests, protocol correction and
+authorized finding/detail/evidence repair use the same packet owner. Policy and
+authoring retain their existing business purposes; loss attribution retains the
+reviewer's unchanged obligation. No finding tag, persistence shape or repair
+permission changes with this presentation.
+
 **Entity applicability** uses the shared requirement description for role
 selection, generation, source/policy review and authorized basis repair. It defines
 both the entity-only disposition and the explanation connecting that decision to

@@ -41,6 +41,7 @@ pub const Validate = struct {
         .produces = Action.contract.produces,
         .outcomes = &.{ .ok, .failed, .cancelled },
         .side_effect = Action.contract.side_effect,
+        .outcome_association = .{ .preserve = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_invocation_validation_result, .result = .provider_invocation_validation_result } },
     };
     allocator: std.mem.Allocator,
     action: Action = .{},

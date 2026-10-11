@@ -1703,6 +1703,7 @@ test "feature directory selection shares path policy and has no generated identi
 }
 
 test "feature inspection root handoff has one narrow consumer and cannot mix configured roots" {
+    try std.testing.expectEqual(.filesystem_read, @import("application/feature_directory_workflow.zig").Inspect.Action.contract.side_effect);
     const roots = @import("domain/bootstrap_root_registry.zig");
     const inspector = @import("ports/feature_directory_inspector.zig").Inspector;
     try std.testing.expect(@FieldType(inspector, "capability") == ?*const roots.FeatureDirectoryReadCapability);
@@ -1726,6 +1727,7 @@ test "clarification input operations have narrow read-only ports and no workflow
     const binding = @import("application/workflow_operation_binding.zig");
     const capture = comptime binding.inspect(@import("application/clarification_input_workflow.zig").Capture, &.{});
     try std.testing.expect(capture.valid and capture.feature_input_read);
+    try std.testing.expectEqual(.filesystem_read, @import("application/clarification_input_workflow.zig").Capture.Action.contract.side_effect);
     try std.testing.expect(!capture.model_provider and !capture.feature_read and !capture.reference_read);
     const parse = comptime binding.inspect(@import("application/clarification_input_workflow.zig").ParseState, &.{});
     try std.testing.expect(parse.valid and !parse.feature_input_read);

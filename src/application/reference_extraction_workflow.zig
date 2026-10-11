@@ -33,6 +33,7 @@ pub const Parse = struct {
     }
 };
 pub const ValidateText = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_validate = .{ .kind = .candidate, .subject = .parsed_reference_extraction, .evidence = .text_validated_reference_extraction, .result = .text_validated_reference_extraction } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     pub const Action = @import("../actions/reference/validate_reference_extraction_text.zig").Action;
@@ -58,6 +59,7 @@ pub const ValidateText = struct {
     }
 };
 pub const ValidateSelections = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_validate = .{ .kind = .candidate, .subject = .text_validated_reference_extraction, .evidence = .validated_reference_selections, .result = .validated_reference_selections } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     pub const Action = @import("../actions/reference/validate_reference_selections.zig").Action;
@@ -83,6 +85,7 @@ pub const ValidateSelections = struct {
     }
 };
 pub const Validate = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .candidate, .subject = .prepared_reference_claims, .evidence = .validated_reference_claims, .result = .validated_reference_claims } };
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     pub const Action = @import("../actions/reference/validate_reference_claims.zig").Action;
     allocator: std.mem.Allocator,
@@ -102,6 +105,7 @@ pub const Validate = struct {
     }
 };
 pub const Assign = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .validated_reference_claims, .evidence = .validated_reference_claims, .result = .reference_claim_identities } };
     pub const Action = @import("../actions/reference/assign_reference_claim_identities.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -115,6 +119,7 @@ pub const Assign = struct {
     }
 };
 pub const Build = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .reference_claim_identities, .evidence = .reference_claim_identities, .result = .reference_extraction_ledger } };
     pub const Action = @import("../actions/reference/build_reference_extraction_ledger.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -128,6 +133,7 @@ pub const Build = struct {
     }
 };
 pub const Account = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .authority, .subject = .reference_extraction_ledger, .evidence = .accounted_reference_extraction, .result = .accounted_reference_extraction } };
     pub const Action = @import("../actions/reference/validate_reference_extraction_accounting.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
     allocator: std.mem.Allocator,

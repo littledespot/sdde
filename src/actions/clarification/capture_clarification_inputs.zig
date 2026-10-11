@@ -12,7 +12,7 @@ pub const Action = struct {
         .kind = .action,
         .requires = &.{ .feature_directory, .feature_artifact_paths },
         .produces = &.{.raw_clarification_inputs},
-        .side_effect = .none,
+        .side_effect = .filesystem_read,
     };
     pub fn execute(self: Action, allocator: std.mem.Allocator, observed: feature.Directory, paths: artifacts.FeaturePaths) source.Error!clarification.Captures {
         return self.source.capture(allocator, observed, paths);

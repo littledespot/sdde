@@ -18,6 +18,7 @@ pub fn Retire(comptime retirement: transport.Retirement) type {
             .invalidates = Action.contract.invalidates,
             .outcomes = &.{ .ok, .failed },
             .side_effect = .none,
+            .outcome_association = .{ .preserve = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .model_payload_schema_result } },
         };
         action: Action = .{},
         pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!@import("../domain/workflow_execution.zig").Candidate {

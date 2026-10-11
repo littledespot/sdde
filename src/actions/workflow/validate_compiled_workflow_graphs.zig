@@ -43,6 +43,7 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
         if (!@import("../../domain/workflow_iteration.zig").validProjection(step)) return invalid();
         if (!@import("../../domain/workflow_operation.zig").validRepair(step.repair_role, if (step.retry_authority) |value| value.scope else null, step.runner_accounting, step.side_effect)) return invalid();
         if (step.repair_role != .none and step.capabilities.len != 0) return invalid();
+        if (!@import("../../domain/workflow_outcome_association.zig").validDescriptor(step.outcome_association, step.requires, step.optional, step.produces, step.replaces, step.repair_role)) return invalid();
         if (workflow.WorkflowStepId.parse(step.id.bytes) == null or workflow.OperationId.parse(step.operation_id.bytes) == null) return invalid();
         if (!@import("../../domain/workflow_operation.zig").validAccounting(step.runner_accounting, step.requires, step.produces, step.side_effect, step.retry_authority != null)) return invalid();
         if (!@import("../../domain/workflow_capability.zig").permits(graph.authority.allowed_capabilities, step.capabilities)) return invalid();
@@ -72,6 +73,7 @@ fn validateGraph(allocator: std.mem.Allocator, graph: compilation.CompiledWorkfl
     try validateTerminalReachability(allocator, steps, graph.authority.transitions);
     try validateBoundedCycles(allocator, steps, graph.authority.transitions);
     try validateIterationResets(allocator, steps, graph.authority.transitions);
+    @import("../../domain/workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return invalid();
     const flow = @import("../../domain/workflow_data_flow.zig").analyze(allocator, graph.authority) catch return invalid();
     allocator.free(flow);
 }
@@ -283,14 +285,15 @@ test "publication ends every outcome directly without a later pure or effectful 
 test "separate workflow branches may each select their own terminal publication" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    const select = testStep("select", null);
+    var select = testStep("select", null);
+    select.outcomes = &.{ .ok, .more };
     var first = testStep("first-output", null);
     first.side_effect = .workflow_publication;
     var second = testStep("second-output", null);
     second.side_effect = .workflow_publication;
     const transitions = [_]workflow.Transition{
         .{ .from = select.id, .outcome = .ok, .target = .{ .step = first.id } },
-        .{ .from = select.id, .outcome = .failed, .target = .{ .step = second.id } },
+        .{ .from = select.id, .outcome = .more, .target = .{ .step = second.id } },
         .{ .from = first.id, .outcome = .ok, .target = .{ .terminal = .ok } },
         .{ .from = first.id, .outcome = .failed, .target = .{ .terminal = .failed } },
         .{ .from = second.id, .outcome = .ok, .target = .{ .terminal = .ok } },

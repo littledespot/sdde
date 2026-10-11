@@ -40,6 +40,7 @@ fn parsed(view: *const data.View) operations.Error!@import("../domain/reference_
     return (try extraction.read(view, rec.parsed_schema, .reconciliation_parsed)).payload().reconciliation_parsed;
 }
 pub const Authorize = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .authority, .subject = .required_authority_inputs, .evidence = .required_authority_result, .result = .source_omission_repair } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const Action = @import("../actions/reference/authorize_source_omission_repair.zig").Action;
     pub const outcomes = @import("source_omission_repair_workflow.zig").outcomes;
@@ -77,6 +78,7 @@ pub const BuildInput = struct {
     }
 };
 pub const Parse = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .authority, .subject = .source_omission_repair, .evidence = .source_omission_repair, .result = .source_omission_repair } };
     pub const Action = @import("../actions/reference/parse_source_omission_repair.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -95,6 +97,7 @@ pub const Parse = struct {
 };
 pub fn Merge(comptime kind: enum { extraction, reconciliation }, comptime scope: loss.Scope) type {
     return struct {
+        pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = if (kind == .extraction) .text_validated_reference_extraction else .parsed_reference_reconciliation, .evidence = .source_omission_repair, .result = if (kind == .extraction) .text_validated_reference_extraction else .parsed_reference_reconciliation } };
         pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
         pub const Action = switch (kind) {
             .extraction => if (scope == .references) @import("../actions/reference/merge_source_extraction_repair.zig").Action else @import("../actions/reference/merge_upstream_extraction_repair.zig").Action,

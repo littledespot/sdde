@@ -20,10 +20,27 @@ const Payload = union(enum) {
 const owned = @import("retained_candidate.zig").Storage(Payload, .rejected);
 pub const state_schema = values.schema(.reference_reconciliation_repair, owned.Value, 1, null).captured();
 pub const schemas = [_]data.Schema{state_schema};
+
+pub fn authorizationBlocked(view: *const data.View) values.Error!bool {
+    const value = try values.read(view, state_schema, owned.Value);
+    if (!owned.retainsCurrentInputs(value, view)) return error.InvalidCandidatePayload;
+    return switch (owned.payload(value).*) {
+        .authorized => false,
+        .blocked => true,
+        .rejected => error.InvalidCandidatePayload,
+    };
+}
+
 const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .blocked, .failed };
 const Stage = enum { summary, dispositions, signals, conflicts };
 pub fn Authorize(comptime stage: Stage) type {
     return struct {
+        pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = switch (stage) {
+            .summary => .validated_reference_summary,
+            .dispositions => .validated_reference_dispositions,
+            .signals => .validated_reference_signals,
+            .conflicts => .validated_reference_conflicts,
+        }, .result = .reference_reconciliation_repair } };
         pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
         pub const Action = switch (stage) {
             .summary => @import("../actions/reference/authorize_reference_summary_repair.zig").Action,
@@ -81,6 +98,7 @@ pub const BuildInput = struct {
     }
 };
 pub const Parse = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .reference_reconciliation_repair, .evidence = .reference_reconciliation_repair, .result = .reference_reconciliation_repair } };
     pub const Action = @import("../actions/reference/parse_reference_reconciliation_repair.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -99,6 +117,7 @@ pub const Parse = struct {
     }
 };
 pub const Merge = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = .parsed_reference_reconciliation, .evidence = .reference_reconciliation_repair, .result = .parsed_reference_reconciliation } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
     pub const Action = @import("../actions/reference/merge_reference_reconciliation_repair.zig").Action;
     pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};

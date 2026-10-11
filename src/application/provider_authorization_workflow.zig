@@ -18,6 +18,7 @@ pub const Prepare = struct {
         .outcomes = &.{ .ok, .failed, .cancelled },
         .side_effect = .none,
         .parameters = &.{selection.parameter},
+        .outcome_association = .{ .observe = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_authorization_result } },
     };
     allocator: std.mem.Allocator,
     // Composition must explicitly bind a preloaded port; no fake/default provider.

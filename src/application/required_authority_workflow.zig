@@ -33,6 +33,7 @@ pub const SourcePreservationPolicy = struct {
 };
 
 pub const ProjectSpecification = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .authority, .subject = .accounted_reference_reconciliation, .evidence = .identified_specification_content, .result = .required_authority_inputs } };
     pub const Action = @import("../actions/authority/build_specification_authority_requirements.zig").Action;
     pub const outcomes = structural_outcomes;
     allocator: std.mem.Allocator,
@@ -53,6 +54,7 @@ pub const ProjectSpecification = struct {
 };
 
 pub const ProjectSourcePreservation = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .authority, .subject = .accounted_reference_reconciliation, .evidence = .accounted_reference_reconciliation, .result = .required_authority_inputs } };
     pub const Action = @import("../actions/authority/build_source_preservation_requirements.zig").Action;
     pub const outcomes = structural_outcomes;
     allocator: std.mem.Allocator,
@@ -70,6 +72,7 @@ pub const ProjectSourcePreservation = struct {
     }
 };
 pub const BuildObservations = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .authority, .subject = .required_authority_ledger, .evidence = .required_authority_ledger, .result = .required_authority_observations } };
     pub const Action = @import("../actions/authority/build_required_authority_observations.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -91,6 +94,7 @@ pub const Retire = struct {
 };
 
 pub const Build = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .authority, .subject = .required_authority_inputs, .evidence = .required_authority_inputs, .result = .required_authority_ledger } };
     pub const Action = @import("../actions/authority/build_required_authority_ledger.zig").Action;
     pub const outcomes = structural_outcomes;
     allocator: std.mem.Allocator,
@@ -105,6 +109,7 @@ pub const Build = struct {
     }
 };
 pub const Parse = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .authority, .subject = .raw_required_authority_observations, .evidence = .raw_required_authority_observations, .result = .required_authority_observations } };
     pub const Action = @import("../actions/authority/parse_required_authority_observations.zig").Action;
     pub const outcomes = structural_outcomes;
     allocator: std.mem.Allocator,
@@ -119,6 +124,7 @@ pub const Parse = struct {
     }
 };
 pub const Reconcile = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .authority, .subject = .required_authority_ledger, .evidence = .required_authority_observations, .result = .required_authority_result } };
     pub const Action = @import("../actions/authority/reconcile_required_authorities.zig").Action;
     pub const outcomes = operation_outcomes;
     allocator: std.mem.Allocator,
@@ -135,6 +141,7 @@ pub const Reconcile = struct {
     }
 };
 pub const Validate = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .authority_reconcile = .{ .kind = .authority, .subject = .required_authority_inputs, .evidence = .required_authority_result, .result = .required_authority_gate } };
     pub const Action = @import("../actions/authority/validate_required_authority_reconciliation.zig").Action;
     pub const outcomes = operation_outcomes;
     allocator: std.mem.Allocator,

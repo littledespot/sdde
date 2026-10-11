@@ -537,7 +537,7 @@ const resource_workflow =
     \\  generate:
     \\    use: model.generate
     \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2 }
-    \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
+    \\    on: { ok: end.ok, more: generate, failed: end.failed, cancelled: end.cancelled }
     \\  validate: { use: test.validate, on: { ok: generate } }
 ;
 
@@ -568,7 +568,7 @@ const wrong_parameter_workflow =
     \\  generate:
     \\    use: model.generate
     \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: two }
-    \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
+    \\    on: { ok: end.ok, more: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
 const missing_retry_limit_workflow =
@@ -584,7 +584,7 @@ const missing_retry_limit_workflow =
     \\  generate:
     \\    use: model.generate
     \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema }
-    \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
+    \\    on: { ok: end.ok, more: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
 const negative_retry_limit_workflow =
@@ -600,7 +600,7 @@ const negative_retry_limit_workflow =
     \\  generate:
     \\    use: model.generate
     \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: -1 }
-    \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
+    \\    on: { ok: end.ok, more: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
 const excessive_retry_limit_workflow =
@@ -616,7 +616,7 @@ const excessive_retry_limit_workflow =
     \\  generate:
     \\    use: model.generate
     \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 4 }
-    \\    on: { ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled }
+    \\    on: { ok: end.ok, more: generate, failed: end.failed, cancelled: end.cancelled }
 ;
 
 const missing_outcome_workflow =
@@ -632,7 +632,7 @@ const missing_outcome_workflow =
     \\  generate:
     \\    use: model.generate
     \\    with: { slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2 }
-    \\    on: { ok: end.ok, invalid: generate, failed: end.failed }
+    \\    on: { ok: end.ok, more: generate, failed: end.failed }
 ;
 
 const unguarded_cycle_workflow =
@@ -646,7 +646,7 @@ const unguarded_cycle_workflow =
     \\steps:
     \\  run:
     \\    use: test.retry
-    \\    on: { ok: end.ok, invalid: run }
+    \\    on: { ok: end.ok, more: run }
 ;
 
 const hidden_retry_limit_workflow =
@@ -661,7 +661,7 @@ const hidden_retry_limit_workflow =
     \\  run:
     \\    use: test.retry
     \\    with: { retry-limit: 1 }
-    \\    on: { ok: end.ok, invalid: run }
+    \\    on: { ok: end.ok, more: run }
 ;
 
 const descriptors = [_]inventory.InventoryDescriptor{
@@ -698,6 +698,8 @@ fn emptyInventory() inventory.Inventory {
     };
 }
 
+// These metadata-only bindings produce no native candidate/recovery facts.
+// Their bounded unfinished work is .more; failed and cancelled stay terminal.
 const operation_entries = [_]operation_registry.Entry{
     .{
         .contract = .{ .id = "test.empty", .kind = .invocation, .produces = &.{.workflow_invocation}, .outcomes = &.{.ok}, .side_effect = .none },
@@ -713,7 +715,7 @@ const operation_entries = [_]operation_registry.Entry{
                 .{ .id = "result-schema", .kind = .resource, .required = true, .workflow_definition_safe = true, .resource_kind = .result_schema },
                 .{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = 3 },
             }),
-            .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
+            .outcomes = &.{ .ok, .more, .failed, .cancelled },
             .side_effect = .none,
             .gates = &.{"model-ready@1"},
             .retry_limit = .{ .maximum = 3 },
@@ -721,7 +723,7 @@ const operation_entries = [_]operation_registry.Entry{
         .binding = operation_bindings.bind(binding_fixture.ModelContext, &binding_fixture.model_context, binding_fixture.unusedModel),
     },
     .{
-        .contract = .{ .id = "test.retry", .kind = .step, .outcomes = &.{ .ok, .invalid }, .side_effect = .none },
+        .contract = .{ .id = "test.retry", .kind = .step, .outcomes = &.{ .ok, .more }, .side_effect = .none },
         .binding = operation_bindings.bind(void, null, unusedOperation),
     },
     .{
@@ -764,7 +766,7 @@ const reusable_workflow =
     \\      generate:
     \\        use: model.generate
     \\        with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: {param: limit}}
-    \\        on: {ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled}
+    \\        on: {ok: end.ok, more: generate, failed: end.failed, cancelled: end.cancelled}
 ;
 
 fn reusableDefinitions(a: std.mem.Allocator, bytes: []const u8) ![]const @import("domain/workflow_definition.zig").Definition {
@@ -797,11 +799,11 @@ test "local reuse compiles to the identical explicit graph with separate retries
         \\  g5-first-generate:
         \\    use: model.generate
         \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 1}
-        \\    on: {ok: g6-second-generate, invalid: g5-first-generate, failed: end.failed, cancelled: end.cancelled}
+        \\    on: {ok: g6-second-generate, more: g5-first-generate, failed: end.failed, cancelled: end.cancelled}
         \\  g6-second-generate:
         \\    use: model.generate
         \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2}
-        \\    on: {ok: end.ok, invalid: g6-second-generate, failed: end.failed, cancelled: end.cancelled}
+        \\    on: {ok: end.ok, more: g6-second-generate, failed: end.failed, cancelled: end.cancelled}
     });
     const plain = try reusableCompile(a, explicit);
     try expectSameExecutableSteps(plain.authority.steps, reused.authority.steps);
@@ -830,9 +832,9 @@ test "reuse cannot bypass operation contracts gates exits or local boundaries" {
         .{ "failed: end.failed, cancelled: end.cancelled}}", "failed: end.ok, cancelled: end.cancelled}}" },
         .{ "failed: end.failed, cancelled: end.cancelled}}", "cancelled: end.cancelled}}" },
         .{ "ok: second, failed:", "ok: second, blocked: end.blocked, failed:" },
-        .{ "invalid: generate", "invalid: validate" },
+        .{ "more: generate", "more: validate" },
         .{ "ok: first", "ok: g5-first-generate" },
-        .{ "invalid: generate", "invalid: end.ok" },
+        .{ "more: generate", "more: end.ok" },
     }) |change| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
@@ -948,7 +950,7 @@ test "qualified subgraph identities accept the compiled bound and reject excess 
     child.id = workflow.WorkflowStepId.parseLocal("s" ** local_bytes).?;
     child.outcomes = &.{
         .{ .outcome = .ok, .target = .{ .terminal = .ok } },
-        .{ .outcome = .invalid, .target = .{ .step = child.id } },
+        .{ .outcome = .more, .target = .{ .step = child.id } },
         .{ .outcome = .failed, .target = .{ .terminal = .failed } },
         .{ .outcome = .cancelled, .target = .{ .terminal = .cancelled } },
     };
@@ -991,7 +993,7 @@ const nested_workflow =
     \\      generate:
     \\        use: model.generate
     \\        with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: {param: limit}}
-    \\        on: {ok: end.ok, invalid: generate, failed: end.failed, cancelled: end.cancelled}
+    \\        on: {ok: end.ok, more: generate, failed: end.failed, cancelled: end.cancelled}
 ;
 
 test "nested composition forwards parameters and compiles to the same explicit operations" {
@@ -1006,11 +1008,11 @@ test "nested composition forwards parameters and compiles to the same explicit o
         \\  g14-g5-first-inner-generate:
         \\    use: model.generate
         \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 1}
-        \\    on: {ok: g15-g6-second-inner-generate, invalid: g14-g5-first-inner-generate, failed: end.failed, cancelled: end.cancelled}
+        \\    on: {ok: g15-g6-second-inner-generate, more: g14-g5-first-inner-generate, failed: end.failed, cancelled: end.cancelled}
         \\  g15-g6-second-inner-generate:
         \\    use: model.generate
         \\    with: {slot: spec-generation, prompt: prompt, result-schema: result-schema, retry-limit: 2}
-        \\    on: {ok: end.ok, invalid: g15-g6-second-inner-generate, failed: end.failed, cancelled: end.cancelled}
+        \\    on: {ok: end.ok, more: g15-g6-second-inner-generate, failed: end.failed, cancelled: end.cancelled}
     });
     const plain = try reusableCompile(a, explicit);
     try expectSameExecutableSteps(plain.authority.steps, nested.authority.steps);
@@ -1033,7 +1035,7 @@ test "nested composition rejects recursion scope escape missing bindings and out
         .{ "call: request", "call: missing" },
         .{ "limit: {param: limit}", "limit: {param: missing}" },
         .{ "call: request, with: {limit: {param: limit}}", "call: request, with: {}" },
-        .{ "invalid: generate", "invalid: inner" },
+        .{ "more: generate", "more: inner" },
         .{ "ok: end.ok, failed: end.failed", "ok: end.ok, failed: end.ok" },
         .{ "ok: first", "ok: g14-g5-first-inner-generate" },
     }) |change| {

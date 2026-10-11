@@ -12,6 +12,7 @@ const data = @import("../domain/pipeline_data.zig");
 pub const schema = values.schema(.specification_omission_repair, owned.Value, 1, null).captured();
 pub const schemas = [_]data.Schema{schema};
 pub const Authorize = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .authority, .subject = .required_authority_inputs, .evidence = .required_authority_result, .result = .specification_omission_repair } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const Action = @import("../actions/specification/authorize_specification_omission_repair.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
@@ -46,6 +47,7 @@ pub const BuildInput = struct {
     }
 };
 pub const Parse = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .authority, .subject = .specification_omission_repair, .evidence = .specification_omission_repair, .result = .specification_omission_repair } };
     pub const Action = @import("../actions/specification/parse_specification_omission_repair.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -63,6 +65,7 @@ pub const Parse = struct {
     }
 };
 pub const Merge = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = .specification_generation_session, .evidence = .specification_omission_repair, .result = .specification_generation_session } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
     pub const Action = @import("../actions/specification/merge_specification_omission_repair.zig").Action;
     pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};

@@ -694,6 +694,7 @@ pub fn entry(comptime T: type, context: *T) operations.Entry {
             .retry_limit = if (@hasDecl(T, "retry_limit")) T.retry_limit else null,
             .iteration = if (@hasDecl(T, "iteration")) T.iteration else null,
             .repair_role = if (@hasDecl(T, "repair_role")) T.repair_role else T.Action.contract.repair_role,
+            .outcome_association = if (@hasDecl(T, "outcome_association")) T.outcome_association else if (@hasField(@TypeOf(contract), "outcome_association")) contract.outcome_association else .independent,
         },
         .binding = binding.bind(T, context, T.invoke),
     };

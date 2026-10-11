@@ -16,7 +16,7 @@ const root = "test/calibration/source-loss-attribution/bound-preservation/citati
 const output = ".zig-cache/source-loss-citation-completeness";
 const prior_root = "test/calibration/source-loss-attribution/bound-preservation/native-scope";
 const Arm = enum { baseline, candidate };
-const Case = struct {
+pub const Case = struct {
     id: []const u8,
     cohort: enum { development, unused },
     sources: []const []const u8,
@@ -47,7 +47,7 @@ pub fn run() !void {
     try runCitationCompleteness(a, schema, cases, retained.len);
 }
 
-fn read(a: std.mem.Allocator, path: []const u8) ![]const u8 {
+pub fn read(a: std.mem.Allocator, path: []const u8) ![]const u8 {
     return std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, a, .unlimited);
 }
 fn optional(a: std.mem.Allocator, path: []const u8) !?[]const u8 {
@@ -62,12 +62,31 @@ fn exportPacket(a: std.mem.Allocator, schema: *const @import("../domain/model_re
 fn exportBody(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, arm: []const u8, packet: *const packets.Packet, body: []const u8, prompt: []const u8) !void {
     return exportBodyAt(a, output, schema, id, arm, packet, body, prompt);
 }
-fn exportBodyAt(a: std.mem.Allocator, directory: []const u8, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, arm: []const u8, packet: *const packets.Packet, body: []const u8, prompt: []const u8) !void {
+pub fn exportBodyAt(a: std.mem.Allocator, directory: []const u8, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, arm: []const u8, packet: *const packets.Packet, body: []const u8, prompt: []const u8) !void {
+    const rendered = try renderBody(a, schema, packet, body, prompt);
+    try writeAt(a, directory, id, try std.fmt.allocPrint(a, "{s}.edit.json", .{arm}), rendered.edit);
+    try writeAt(a, directory, id, try std.fmt.allocPrint(a, "{s}.request.json", .{arm}), rendered.request);
+}
+
+/// Shared diagnostic projection through the production restriction and provider
+/// encoder. Neither a packet builder nor a dispatch/admission authority.
+pub fn renderBody(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, packet: *const packets.Packet, body: []const u8, prompt: []const u8) !struct { edit: []const u8, request: []const u8 } {
     const restricted = try @import("../domain/model_result_schema.zig").restrict(a, schema.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
     defer restricted.release();
     const bytes = try std.json.Stringify.valueAlloc(a, .{ .content = .{ .{ .guidance = prompt }, .{ .user = body } }, .schema = restricted.selected().modelBytes() }, .{});
-    try writeAt(a, directory, id, try std.fmt.allocPrint(a, "{s}.edit.json", .{arm}), bytes);
-    try writeAt(a, directory, id, try std.fmt.allocPrint(a, "{s}.request.json", .{arm}), try encodeEdit(a, try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{})));
+    return .{ .edit = bytes, .request = try encodeEdit(a, try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{})) };
+}
+
+/// Historical presentation only. Removing this one field cannot make a prior
+/// replay receipt current, nor does it change the production packet or schema.
+pub fn baselineReviewBody(a: std.mem.Allocator, packet: *const packets.Packet) ![]const u8 {
+    var body = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{});
+    try std.testing.expect(body.object.orderedRemove("assessment_scope"));
+    return std.json.Stringify.valueAlloc(a, body, .{});
+}
+
+fn exportHistoricalReview(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, packet: *const packets.Packet) !void {
+    try exportBody(a, schema, id, "review", packet, try baselineReviewBody(a, packet), try read(a, "test/calibration/source-review-scope/baseline.prompt.md"));
 }
 fn reviewHandoff(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, repetition: usize, prepared: Prepared, packet: *const packets.Packet, bytes: []const u8, origin: ?ReviewOrigin) !void {
     const ordinal = prepared.pending.pending_localization.?;
@@ -150,6 +169,18 @@ fn admitReviewReceipt(a: std.mem.Allocator, id: []const u8, repetition: usize, p
 fn consumeReviewReceipt(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, id: []const u8, repetition: usize, prepared: Prepared, packet: *const packets.Packet) !void {
     const bytes = (try optional(a, try std.fmt.allocPrint(a, "{s}/{s}.review.receipt-{d}.json", .{ output, id, repetition }))) orelse return;
     const request_bytes = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.review.request.json", .{ output, id }));
+    const current = try renderBody(a, schema, packet, packet.body(), try read(a, "design/workflows/spec/support.prompt.md"));
+    if (!std.mem.eql(u8, current.request, request_bytes)) {
+        // Old receipts stay recorded historical evidence. Do not supply their
+        // missing scope or classify them as current production admission.
+        const historical_path = try std.fmt.allocPrint(a, "{s}/{s}.review.native-{d}.json", .{ output, id, repetition });
+        const historical = try optional(a, historical_path);
+        const receipt_hash = try sha256(a, bytes);
+        try write(a, id, try std.fmt.allocPrint(a, "review.current-scope-rejection-{d}.json", .{repetition}), try std.json.Stringify.valueAlloc(a, .{ .admitted_omission = false, .result = "rejected_receipt", .rejection = "ObsoleteCalibrationScope", .native_origin_available = false }, .{}));
+        if (historical) |retained| try std.testing.expectEqualStrings(retained, try read(a, historical_path));
+        try std.testing.expectEqualStrings(receipt_hash, try sha256(a, try read(a, try std.fmt.allocPrint(a, "{s}/{s}.review.receipt-{d}.json", .{ output, id, repetition }))));
+        return;
+    }
     const parent = try @import("../domain/strict_json.zig").decode(ReviewParent, a, try read(a, root ++ "/handoff.parent.json"), .{ .maximum_depth = 8 });
     const receipt = admitReviewReceipt(a, id, repetition, packet, parent, try sha256(a, request_bytes), bytes) catch |err| {
         if (err == error.OutOfMemory) return err;
@@ -158,18 +189,23 @@ fn consumeReviewReceipt(a: std.mem.Allocator, schema: *const @import("../domain/
     };
     try reviewHandoff(a, schema, id, repetition, prepared, packet, receipt.response_bytes, receipt.origin);
 }
-fn sha256(a: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.Error![]const u8 {
+pub fn sha256(a: std.mem.Allocator, bytes: []const u8) std.mem.Allocator.Error![]const u8 {
     var digest: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(bytes, &digest, .{});
     return a.dupe(u8, &std.fmt.bytesToHex(digest, .lower));
 }
+pub const PreparedContext = struct {
+    inputs: authority.Inputs,
+    context: @import("../domain/specification_provenance.zig").Context,
+    passive: text.Prepared,
+};
 const Prepared = struct {
     inputs: authority.Inputs,
     context: @import("../domain/specification_provenance.zig").Context,
     pending: support.Candidate,
     passive: text.Prepared,
 };
-fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
+pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
     var ids: @import("../reference_evidence_test.zig").IdSource = .{};
     const sources = try @import("../reference_evidence_test.zig").prepare(a, &ids, if (example.source_path) |path| try @import("../reference_ingestion_test.zig").read(a, path, example.sources[0]) else try @import("../reference_ingestion_test.zig").readSources(std.testing.io, a, example.sources));
     const passive = try text.prepare(a, sources);
@@ -224,6 +260,15 @@ fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
         try @import("../domain/specification_provenance.zig").validateStored(a, sources, .{ .records = passive.registry.records, .occurrences = passive.registry.occurrences }, records, brief, candidate.?);
     }
     const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished, candidate, if (example.mode == .signal) null else brief);
+    return .{ .inputs = inputs, .context = provenance_context, .passive = passive };
+}
+
+fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
+    const prepared = try prepareContext(a, example);
+    errdefer prepared.passive.deinit();
+    const inputs = prepared.inputs;
+    const provenance_context = prepared.context;
+    const sources = provenance_context.inputs;
     const ledger = try authority.build(a, inputs);
     const index = for (ledger.requirements, 0..) |required, at| {
         if (if (example.mode == .signal) required.seed.id.unit == .signal else required.seed.id.unit == .feature and required.seed.id.slot == (if (example.target == .primary_user_story) authority.Slot.primary_user_story else .description)) break at;
@@ -248,7 +293,7 @@ fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
     const origins = try a.alloc(?@import("../domain/model_candidate_origin.zig").Origin, findings.len);
     @memset(origins, null);
     const pending: support.Candidate = .{ .review = .{ .entries = findings }, .pending_localization = @intCast(index + 1), .working = true, .origin = null, .origins = origins };
-    return .{ .inputs = inputs, .context = provenance_context, .pending = pending, .passive = passive };
+    return .{ .inputs = inputs, .context = provenance_context, .pending = pending, .passive = prepared.passive };
 }
 
 fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
@@ -267,7 +312,7 @@ fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
 fn write(a: std.mem.Allocator, id: []const u8, suffix: []const u8, bytes: []const u8) !void {
     return writeAt(a, output, id, suffix, bytes);
 }
-fn writeAt(a: std.mem.Allocator, directory: []const u8, id: []const u8, suffix: []const u8, bytes: []const u8) !void {
+pub fn writeAt(a: std.mem.Allocator, directory: []const u8, id: []const u8, suffix: []const u8, bytes: []const u8) !void {
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ directory, id, suffix }), .data = bytes });
 }
 
@@ -448,7 +493,7 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
         }
         const review_packet = try support.packetFor(a, prepared.inputs, prepared.context, .{ .finding = assigned.finding.subject });
         defer packets.release(review_packet);
-        try exportPacket(a, schema, example.id, "review", review_packet, try read(a, "design/workflows/spec/support.prompt.md"));
+        try exportHistoricalReview(a, schema, example.id, review_packet);
         const probe_id = try std.fmt.allocPrint(a, "{s}.probe", .{example.id});
         const selected = prepared.pending.review.entries[prepared.pending.pending_localization.? - 1].value;
         const requirements = try @import("../domain/specification_support_evidence.zig").requirements(a, prepared.inputs, prepared.context.inputs, assigned.finding.subject);
@@ -494,7 +539,7 @@ fn prepareHandoffControls(a: std.mem.Allocator, schema: *const @import("../domai
         const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);
         const packet = try support.packetFor(a, prepared.inputs, prepared.context, .{ .finding = assigned.finding.subject });
         defer packets.release(packet);
-        try exportPacket(a, schema, control.fixture.id, "review", packet, try read(a, "design/workflows/spec/support.prompt.md"));
+        try exportHistoricalReview(a, schema, control.fixture.id, packet);
         const model = @import("../domain/specification_support_model.zig");
         const requirements = try @import("../domain/specification_support_evidence.zig").requirements(a, prepared.inputs, prepared.context.inputs, assigned.finding.subject);
         const finding = try model.decode(a, try codec.encode(model.Value, a, switch (control.expected) {
@@ -521,7 +566,10 @@ fn frozenCitationCompleteness(a: std.mem.Allocator, id: []const u8, suffix: []co
 }
 
 fn reviewReceiptChecks(a: std.mem.Allocator, id: []const u8, prepared: Prepared, packet: *const packets.Packet, response: []const u8) !void {
-    const request_bytes = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.review.request.json", .{ output, id }));
+    var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schema = try parser.compiler().compile(a, try read(a, "design/workflows/spec/support.schema.json"));
+    const current = try renderBody(a, schema, packet, packet.body(), try read(a, "design/workflows/spec/support.prompt.md"));
+    const request_bytes = current.request;
     const request_hash = try sha256(a, request_bytes);
     const parent = try @import("../domain/strict_json.zig").decode(ReviewParent, a, try read(a, root ++ "/handoff.parent.json"), .{ .maximum_depth = 8 });
     const receipt: ReviewReceipt = .{
@@ -569,8 +617,6 @@ fn reviewReceiptChecks(a: std.mem.Allocator, id: []const u8, prepared: Prepared,
     try std.testing.expectError(error.InvalidJsonDocument, admitReviewReceipt(a, id, 1, packet, parent, request_hash, try std.json.Stringify.valueAlloc(a, raw, .{})));
     // A real receipt's rejected model bytes remain an explicit admission result.
     const probe_id = try std.fmt.allocPrint(a, "{s}.malformed-probe", .{id});
-    var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
-    const schema = try parser.compiler().compile(a, try read(a, "design/workflows/spec/support.schema.json"));
     const prefix_probe_id = try std.fmt.allocPrint(a, "{s}.prefix-probe", .{id});
     try reviewHandoff(a, schema, prefix_probe_id, 1, prepared, packet, accepted_prefix.response_bytes, accepted_prefix.origin);
     const prefix_report = try std.json.parseFromSliceLeaky(std.json.Value, a, try read(a, try std.fmt.allocPrint(a, "{s}/{s}.review.native-1.json", .{ output, prefix_probe_id })), .{});

@@ -40,10 +40,7 @@ pub fn validate(fragment: SanitizedPromptFragment) Error!void {
         if (telemetry.Identifier.validate(attribution.workflow_id.bytes) == null or
             telemetry.Identifier.validate(attribution.action_id.bytes) == null or
             fragment.node_id == null or attribution.call.attempt.value != fragment.attempt or
-            attribution.links.original.attempt.value == 0 or
-            (attribution.links.kind == .initial) != (attribution.links.parent == null)) return error.InvalidSanitizedPromptFragment;
-        if (attribution.links.kind == .initial and !std.meta.eql(attribution.call, attribution.links.original)) return error.InvalidSanitizedPromptFragment;
-        if (attribution.links.parent) |parent| if (parent.attempt.value == 0 or std.meta.eql(attribution.call, parent)) return error.InvalidSanitizedPromptFragment;
+            !@import("model_call_lineage.zig").valid(attribution.call, attribution.links)) return error.InvalidSanitizedPromptFragment;
     }
 }
 

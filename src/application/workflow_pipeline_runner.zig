@@ -36,6 +36,8 @@ const operation_termination = @import("provider_operation_termination_workflow.z
 const retry = @import("../domain/workflow_retry.zig");
 const iteration = @import("../domain/workflow_iteration.zig");
 const event_capture = @import("workflow_event_capture.zig");
+const outcome_association = @import("../domain/workflow_outcome_association.zig");
+const outcome_binding = @import("workflow_outcome_binding.zig");
 
 const ExpectedAccounting = union(enum) {
     none,
@@ -133,7 +135,7 @@ pub const Runner = struct {
             .produces = authority.invocation_outputs,
             .side_effect = .none,
         };
-        return self.applyCandidate(occurrence, contract, &candidate, .none, null);
+        return self.applyCandidate(occurrence, contract, &candidate, .none, null, .independent, null, null);
     }
 
     fn invokeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
@@ -143,7 +145,7 @@ pub const Runner = struct {
         const result = self.executeStep(id);
         if (self.eventsActive()) {
             if (!started) if (self.events().action(id, null, null)) |failure| return .{ .rejected = .{ .logging = failure } };
-            if (self.events().action(id, result, if (self.last_effects) |effects| effects.diagnostic else null)) |failure| return .{ .rejected = .{ .logging = failure } };
+            if (self.events().action(id, result, if (self.last_effects) |effects| effects.diagnostic else null)) |failure| return .{ .rejected = self.captureRejectionWithLogging(failure) };
             if (result == .rejected and result.rejected == .retry_limit) {
                 if (self.events().retryAttempt(id, result.rejected.retry_limit.completed_executions, true)) |failure| return .{ .rejected = .{ .logging = failure } };
             }
@@ -172,6 +174,10 @@ pub const Runner = struct {
         if (!contractMatchesStep(entry.contract, step.*) or
             !equalStrings(entry.binding.capabilities(), step.capabilities) or
             !@import("../domain/workflow_capability.zig").permits(self.selected.graph.authority.allowed_capabilities, entry.binding.capabilities())) return .{ .rejected = .authority };
+        switch (step.side_effect) {
+            .filesystem_read, .filesystem_write => if (self.envelope.outcomes.firstUnresolved() != null) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } },
+            .none, .model_call, .workflow_publication => {},
+        }
         for (step.gates) |gate| {
             if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
             const current = self.operation_registry.resolveGate(gate.id) orelse return .{ .rejected = .authority };
@@ -270,9 +276,12 @@ pub const Runner = struct {
             const invoked = state.current_operations.requireInvoked(id_value) catch return .{ .rejected = .authority };
             const valid = if (calls_count or validates_count) provider.validateCountInvocation(request.binding(), request.prepared().?, invoked) else provider.validateInferenceInvocation(request.binding(), request.prepared().?, invoked);
             if (!valid) return .{ .rejected = .authority };
-            if (calls_model and !calls_count) self.token_accounting.prepare(id_value) catch |cause| return .{ .rejected = .{ .operation_failed = cause } };
             break :call .{ .request = request.prepared().?, .provider_binding = request.binding(), .operations = state.current_operations, .operation_id = id_value };
         } else null;
+        if (calls_model and !outcome_binding.permitsModel(&self.envelope, retained_request.?, call.?.operation_id.kind, &self.repair_retry)) {
+            return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } };
+        }
+        if (calls_model and !calls_count) self.token_accounting.prepare(call.?.operation_id) catch |cause| return .{ .rejected = .{ .operation_failed = cause } };
         const token_revision = self.token_accounting.current().revision();
         const repair_permit: ?retry.Permit = if (step.retry_authority) |authority| switch (authority.scope) {
             .operation => null,
@@ -382,7 +391,15 @@ pub const Runner = struct {
                     .context_followup => .context_followup,
                     .initial_generation, .semantic_review, .clarification_resolution => .initial,
                 },
-                .source = if (retained_request.?.packet()) |packet| packet.repairOrigin() else null,
+                .source = if (retained_request.?.packet()) |packet|
+                    if (packet.repairOrigin()) |producing_origin|
+                        .{ .response = producing_origin }
+                    else if (packet.repairPermit() != null)
+                        .assembled_candidate
+                    else
+                        .none
+                else
+                    .none,
                 .description = @import("../domain/model_request_description.zig").Description.from(invoked.request, invoked.provider_binding, invoked.operation_id.kind),
                 .source_context = .{ .graph = self.selected.graph, .request = retained_request.? },
             });
@@ -394,6 +411,7 @@ pub const Runner = struct {
         defer if (calls_model) self.model_capture.end();
         if (step.side_effect == .workflow_publication) {
             const prepared_output = values.read(&input_data, @import("workflow_output_binding.zig").prepared_schema, @import("../domain/workflow_output.zig").Prepared) catch return .{ .rejected = .authority };
+            if (!outcome_binding.permitsPublication(&self.envelope, prepared_output)) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } };
             self.events_closed = true;
             if (self.publication_finalizer) |finalizer| switch (finalizer.beforePublication(prepared_output.terminal_outcome)) {
                 .execution => |outcome| if (outcome != .ok and outcome != .needs_user) return .{ .rejected = .authority },
@@ -401,6 +419,7 @@ pub const Runner = struct {
                 .bootstrap_failed, .invocation_invalid => return .{ .rejected = .authority },
             };
         }
+        if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         var candidate = entry.invoke(.{ .step = .{
             .data = input_data,
             .step = step,
@@ -419,19 +438,19 @@ pub const Runner = struct {
             if (calls_model and !calls_count) {
                 const invoked = call.?;
                 const rejection = model_invocation.reconcile(&self.token_accounting, token_revision, invoked, .{ .failed = err });
-                if (self.logModelCompletion(id, invoked, .failed)) |failure| return .{ .rejected = .{ .logging = failure } };
-                if (self.model_capture.failure) |failure| return .{ .rejected = .{ .logging = failure } };
+                if (self.logModelCompletion(id, invoked, .failed)) |failure| return .{ .rejected = self.captureRejectionWithLogging(failure) };
+                if (self.captureRejection()) |reason| return .{ .rejected = reason };
                 if (rejection) |reason| return .{ .rejected = reason };
             }
-            if (calls_model) if (self.model_capture.failure) |failure| return .{ .rejected = .{ .logging = failure } };
+            if (calls_model) if (self.captureRejection()) |reason| return .{ .rejected = reason };
             return .{ .rejected = .{ .operation_failed = err } };
         };
         defer self.envelope.discard(&candidate.delta);
         if (calls_model) {
             const invoked = call.?;
             const rejection = if (calls_count) model_invocation.validateCount(invoked, &candidate) else model_invocation.reconcile(&self.token_accounting, token_revision, invoked, .{ .candidate = &candidate });
-            if (self.logModelCompletion(id, invoked, if (rejection) |reason| reason.status() else candidate.outcome)) |failure| return .{ .rejected = .{ .logging = failure } };
-            if (self.model_capture.failure) |failure| return .{ .rejected = .{ .logging = failure } };
+            if (self.logModelCompletion(id, invoked, if (rejection) |reason| reason.status() else candidate.outcome)) |failure| return .{ .rejected = self.captureRejectionWithLogging(failure) };
+            if (self.captureRejection()) |reason| return .{ .rejected = reason };
             if (rejection) |reason| return .{ .rejected = reason };
             if (candidate.outcome != .cancelled) authorization_binding.checkDeadline(self.provider_clock.?, self.runtime, authorization_deadline.?) catch |err| return authorizationRejected(err);
         }
@@ -447,7 +466,7 @@ pub const Runner = struct {
             const result = values.read(&.{ .slots = candidate.delta.data_writes }, authorization_workflow.schema, authorization_result.Result) catch return .{ .rejected = .authority };
             break :prepared bound.validate(result, candidate.outcome) catch |err| return authorizationRejected(err);
         } else false;
-        const applied = self.applyCandidate(occurrence, stepPipelineContract(step.*), &candidate, expected, step.iteration);
+        const applied = self.applyCandidate(occurrence, stepPipelineContract(step.*), &candidate, expected, step.iteration, step.outcome_association, if (operation_id) |value| value.kind else operation_selection.resolve(step.parameters), terminalFor(self.selected.graph.authority.transitions, step.id, candidate.outcome));
         authorization_published = prepared and applied == .outcome and applied.outcome == .ok;
         if (applied == .outcome and self.eventsActive()) {
             if (self.logDiagnostics(step.*, candidate)) |failure| return .{ .rejected = .{ .logging = failure } };
@@ -463,6 +482,20 @@ pub const Runner = struct {
             if (accounted.id.eql(call.operation_id) and accounted.reconciliation == .exact_usage) usage = accounted.reconciliation.exact_usage;
         }
         return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .model_completed, status, null, usage);
+    }
+
+    fn captureRejection(self: *const Runner) ?execution.Rejection {
+        if (self.model_capture.failure) |failure| return .{ .model_capture = failure };
+        return null;
+    }
+
+    fn captureRejectionWithLogging(self: *const Runner, failure: @import("../domain/feature_log_stream.zig").FailureCode) execution.Rejection {
+        if (self.model_capture.failure) |captured| {
+            var detail = captured;
+            detail.subsequent_logging_failure = failure;
+            return .{ .model_capture = detail };
+        }
+        return .{ .logging = failure };
     }
 
     fn logDiagnostics(self: *Runner, step: compilation.CompiledStep, candidate: execution.Candidate) ?@import("../domain/feature_log_stream.zig").FailureCode {
@@ -600,7 +633,7 @@ pub const Runner = struct {
         return true;
     }
 
-    fn applyCandidate(self: *Runner, occurrence: envelope_module.Occurrence, contract: pipeline.NodeContract, candidate: *execution.Candidate, expected: ExpectedAccounting, iteration_contract: ?iteration.Descriptor) execution.Applied {
+    fn applyCandidate(self: *Runner, occurrence: envelope_module.Occurrence, contract: pipeline.NodeContract, candidate: *execution.Candidate, expected: ExpectedAccounting, iteration_contract: ?iteration.Descriptor, association: outcome_association.Descriptor, operation_kind: ?provider.ProviderOperationKind, terminal: ?workflow.OutcomeTag) execution.Applied {
         if (candidate.diagnostic) |cause| if (cause == error.OutOfMemory) return .{ .rejected = .{ .operation_failed = error.OutOfMemory } };
         if (candidate.diagnostic != null and switch (candidate.outcome) {
             .invalid, .blocked, .failed => false,
@@ -696,6 +729,9 @@ pub const Runner = struct {
             self.repair_retry.prepare(transition) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority }
         else
             null;
+        var outcome_pending = outcome_binding.prepare(&self.envelope, occurrence, association, candidate, operation_kind) catch |cause| return .{ .rejected = .{ .operation_failed = cause } };
+        defer outcome_pending.deinit();
+        if (terminal) |tag| if (!outcome_pending.compatible(tag)) return .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } };
         var effects: execution.AppliedEffects = .{ .invalidations = candidate.delta.data_invalidations, .repair = candidate.delta.repair_transition, .diagnostic = candidate.diagnostic };
         for (candidate.delta.data_writes, 0..) |value, index| if (value != null) {
             effects.writes.insert(@enumFromInt(index));
@@ -704,6 +740,7 @@ pub const Runner = struct {
             effects.replacements.insert(@enumFromInt(index));
         };
         self.envelope.applyOccurrence(occurrence, contract, &candidate.delta, candidate.outcome) catch |err| return if (err == error.OutOfMemory) .{ .rejected = .{ .operation_failed = error.OutOfMemory } } else .{ .rejected = .authority };
+        self.envelope.outcomes.commit(&outcome_pending) catch unreachable;
         if (iteration_pending) |prepared| {
             const progress = self.envelope.origins[@intFromEnum(iteration_contract.?.progress)].?;
             self.native_iteration.commit(prepared, progress.generation) catch unreachable;
@@ -768,9 +805,19 @@ fn contractMatchesStep(
         contract.side_effect == step.side_effect and
         contract.runner_accounting == step.runner_accounting and
         contract.repair_role == step.repair_role and
+        contract.outcome_association.eql(step.outcome_association) and
         std.meta.eql(contract.iteration, step.iteration) and
         gateIdsMatch(contract.gates, step.gates) and
         retryContractMatches(contract, step);
+}
+fn terminalFor(transitions: []const workflow.Transition, step: workflow.WorkflowStepId, outcome: workflow.OutcomeTag) ?workflow.OutcomeTag {
+    for (transitions) |edge| if (std.mem.eql(u8, edge.from.bytes, step.bytes) and edge.outcome == outcome) {
+        return switch (edge.target) {
+            .terminal => |terminal| terminal,
+            .step => null,
+        };
+    };
+    return null;
 }
 fn gateIdsMatch(ids: []const []const u8, gates: []const @import("../domain/workflow_gate.zig").Contract) bool {
     if (ids.len != gates.len) return false;

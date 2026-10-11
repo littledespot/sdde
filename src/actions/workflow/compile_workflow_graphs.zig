@@ -69,6 +69,7 @@ pub const Action = struct {
                     .side_effect = entry.contract.side_effect,
                     .runner_accounting = entry.contract.runner_accounting,
                     .repair_role = entry.contract.repair_role,
+                    .outcome_association = entry.contract.outcome_association,
                     .gates = try compileGates(allocator, self.registry, entry.contract.gates),
                     .capabilities = entry.binding.capabilities(),
                     .retry_authority = retry_authority,
@@ -106,6 +107,7 @@ pub const Action = struct {
                     .maximum_step_executions = maximum_step_executions,
                 },
             };
+            @import("../../domain/workflow_outcome_flow.zig").validate(allocator, graph.authority) catch return invalid();
         }
         return graphs;
     }

@@ -110,12 +110,18 @@ pub const Request = opaque {
         };
     }
 
+    /// The exact rejected inference retained by this prepared correction.
+    /// Its identity borrows this request's canonical ledger owner.
+    pub fn protocolCorrection(self: *const Request) ?provider.ProviderOperationId {
+        return if (storage(self).protocol_rejection) |rejected| rejected.operation_id else null;
+    }
+
     /// Only a response to this exact prepared correction can confirm recurrence.
     pub fn protocolRepetition(self: *const Request, rejected: *const @import("provider_invocation_validation.zig").Evidence, diagnostic: retry.Diagnostic) Error!retry.Repetition {
         const request = self.prepared() orelse return error.ModelRequestAssociationInvalid;
         if (rejected.request() != request) return error.ModelRequestAssociationInvalid;
         const previous = storage(self).protocol_rejection orelse return .unconfirmed;
-        return if (previous.eql(diagnostic)) .confirmed else .unconfirmed;
+        return if (previous.diagnostic.eql(diagnostic)) .confirmed else .unconfirmed;
     }
 
     pub fn buildSource(self: *const Request, input_id: *[32]u8) preparation.ValidationError!preparation.Source {
@@ -145,7 +151,7 @@ const Storage = struct {
     input: ?Input,
     composition: ?composition.Binding = null,
     restriction: ?*@import("model_result_schema.zig").Restricted = null,
-    protocol_rejection: ?retry.Diagnostic = null,
+    protocol_rejection: ?struct { diagnostic: retry.Diagnostic, operation_id: provider.ProviderOperationId } = null,
     phase: union(enum) {
         assigned,
         validated: *const identity.ModelRequestBindingEvidence,
@@ -286,8 +292,11 @@ pub fn prepared(current: *const Request, owned: preparation.Owned, correction: ?
     if (correction) |value| {
         if (current.id() != value.previous.id() or value.rejected.request().response_schema != owned.request.response_schema) return error.ModelRequestAssociationInvalid;
         _ = try value.previous.protocolRepetition(value.rejected, value.diagnostic);
-        // Retain only this rejection, not the previous request/body chain.
-        next.protocol_rejection = value.diagnostic;
+        const operation_id = value.rejected.operationId();
+        if (operation_id.model_request_id != current.id() or operation_id.kind != .inference or operation_id.model_attempt_ordinal.value == 0)
+            return error.ModelRequestAssociationInvalid;
+        // Retain only this diagnostic and call identity, not the prior body chain.
+        next.protocol_rejection = .{ .diagnostic = value.diagnostic, .operation_id = operation_id };
     }
     next.phase = .{ .prepared = owned };
     return create(next);
@@ -297,7 +306,7 @@ pub fn destroy(request: *Request) void {
     const value: *Storage = @ptrCast(@alignCast(request));
     if (value.phase == .prepared) value.phase.prepared.deinit();
     if (value.restriction) |restriction| restriction.release();
-    if (value.protocol_rejection) |diagnostic| diagnostic.deinit(value.allocator);
+    if (value.protocol_rejection) |rejected| rejected.diagnostic.deinit(value.allocator);
     if (value.input) |input| if (input == .packet) packets.release(input.packet);
     if (value.composition) |part| {
         packets.release(part.base);
@@ -330,7 +339,10 @@ fn create(value: Storage) Error!*Request {
         packets.release(part.base);
         value.allocator.free(result.composition.?.prerequisites);
     };
-    if (value.protocol_rejection) |diagnostic| result.protocol_rejection = try diagnostic.copy(value.allocator);
+    if (value.protocol_rejection) |rejected| result.protocol_rejection = .{
+        .diagnostic = try rejected.diagnostic.copy(value.allocator),
+        .operation_id = rejected.operation_id,
+    };
     if (value.restriction) |restriction| restriction.retain();
     return @ptrCast(result);
 }

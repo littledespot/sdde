@@ -31,7 +31,7 @@ pub const Capture = struct {
                 .outcome = outcome(value.status()),
                 .diagnostic_code = switch (value.status()) {
                     .ok, .more, .needs_user => null,
-                    else => diagnostic(&code, if (value == .rejected) value.rejected.diagnostic() else if (rejection) |cause| @errorName(cause) else @tagName(value.outcome)) orelse return .LOG_SERIALIZATION_FAILURE,
+                    else => if (value == .rejected) rejectionCode(&code, value.rejected) orelse return .LOG_SERIALIZATION_FAILURE else diagnostic(&code, if (rejection) |cause| @errorName(cause) else @tagName(value.outcome)) orelse return .LOG_SERIALIZATION_FAILURE,
                 },
             } else .{},
         });
@@ -77,6 +77,10 @@ pub const Capture = struct {
         const status = value.executionStatus() orelse .failed;
         if (status == .more) return .LOG_SERIALIZATION_FAILURE;
         var code: [96]u8 = undefined;
+        var correlation: [96]u8 = undefined;
+        const captured = if (value == .execution_rejected and value.execution_rejected == .model_capture) value.execution_rejected.model_capture else null;
+        const origin = if (captured) |failure| failure.origin else null;
+        const call_id = if (origin) |call| @import("../domain/model_call_lineage.zig").callId(&correlation, call) catch return .LOG_SERIALIZATION_FAILURE else null;
         return self.emit(.{ .event_type = switch (status) {
             .ok => .run_completed,
             .more => unreachable,
@@ -84,9 +88,9 @@ pub const Capture = struct {
             .blocked => .run_blocked,
             .cancelled => .run_cancelled,
             .invalid, .failed => .run_failed,
-        }, .fields = .{ .outcome = outcome(status), .diagnostic_code = switch (status) {
+        }, .correlation_id = if (call_id) |id| .{ .bytes = id } else null, .attempt = if (origin) |call| call.attempt.value else null, .fields = .{ .outcome = outcome(status), .diagnostic_code = switch (status) {
             .ok, .needs_user, .cancelled => null,
-            else => diagnostic(&code, if (value == .execution_rejected) value.execution_rejected.diagnostic() else @tagName(status)) orelse return .LOG_SERIALIZATION_FAILURE,
+            else => if (value == .execution_rejected) rejectionCode(&code, value.execution_rejected) orelse return .LOG_SERIALIZATION_FAILURE else diagnostic(&code, @tagName(status)) orelse return .LOG_SERIALIZATION_FAILURE,
         } } });
     }
     pub fn retryAttempt(self: Capture, node: workflow.WorkflowStepId, count: u64, exhausted: bool) ?stream.FailureCode {
@@ -97,6 +101,13 @@ pub const Capture = struct {
         } });
     }
 };
+fn rejectionCode(buffer: []u8, reason: execution.Rejection) ?t.DiagnosticCode {
+    if (reason == .model_capture) {
+        const code = reason.model_capture.diagnosticWithCause(buffer) catch return null;
+        return t.DiagnosticCode.validate(code);
+    }
+    return diagnostic(buffer, reason.diagnostic());
+}
 pub fn outcome(value: workflow.OutcomeTag) t.EventOutcome {
     return switch (value) {
         .ok, .more => .completed,

@@ -21,6 +21,7 @@ fn Completion(comptime kind: @import("../domain/llm_provider_operation.zig").Pro
             .replaces = Action.contract.replaces,
             .outcomes = if (kind == .inference) &selection.completion_outcomes else &selection.termination_outcomes,
             .side_effect = Action.contract.side_effect,
+            .outcome_association = .{ .request_closure = .{ .kind = .request, .subject = .prepared_model_request, .evidence = if (kind == .inference) .model_payload_schema_result else .provider_token_count_validation_result } },
         };
         allocator: std.mem.Allocator,
         action: Action = .{},

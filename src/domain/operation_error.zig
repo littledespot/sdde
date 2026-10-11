@@ -53,6 +53,7 @@ pub fn code(comptime Errors: type, cause: Errors) Code(Errors) {
 /// Closed union of native operation contracts. Causes cross the runner boundary
 /// by value; reporting an allocation failure never allocates another object.
 pub const Error = @import("pipeline_data.zig").ValueError ||
+    @import("workflow_outcome_association.zig").Error ||
     @import("pipeline_data.zig").EnvelopeError ||
     @import("reference_reconciliation.zig").Error ||
     @import("specification_coverage_repair.zig").Error ||

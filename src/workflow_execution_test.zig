@@ -349,42 +349,110 @@ test "publication effects finalize logging before the shared runner invokes any 
     };
     for ([_]pipeline.SideEffect{ .workflow_publication, .filesystem_write, .none }) |effect| {
         for ([_]bool{ false, true }) |fail| {
+            for ([_]pipeline.RuntimeStatus{ .active, .cancelled, .deadline_exhausted }) |after_finalization| {
+                var control: OperationControl = .{ .state = .{ .outcome = .ok } };
+                var barrier: FakeBarrier = .{};
+                var graph = try testGraph();
+                var steps = test_steps;
+                steps[0].side_effect = effect;
+                steps[0].requires = &.{prepared_schema.key};
+                graph.authority.steps = &steps;
+                graph.authority.data_schemas = &.{prepared_schema};
+                var registry = testRegistry(&control);
+                registry.data_schemas = graph.authority.data_schemas;
+                control.entries[1].contract.side_effect = effect;
+                control.entries[1].contract.requires = steps[0].requires;
+                var runtime: PublicationRuntime = .{};
+                var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{ .context = &runtime, .status_fn = PublicationRuntime.status }, null);
+                defer runner.deinit();
+                var finalizer: FakeFinalizer = .{ .fail = fail, .operations = &control.state, .runtime = &runtime, .runtime_after = after_finalization };
+                runner.publication_finalizer = finalizer.port();
+                try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
+                var delta: pipeline.NodeDelta = .{};
+                delta.data_writes[@intFromEnum(prepared_schema.key)] = try values.create(std.testing.allocator, prepared_schema, output.Prepared, prepared);
+                defer runner.envelope.discard(&delta);
+                try runner.envelope.apply(.{ .id = "test.prepare", .kind = .action, .requires = &.{}, .produces = &.{prepared_schema.key}, .side_effect = .none }, &delta, .ok);
+                const result = runner.bindings().invokeStep(steps[0].id);
+                const publication = effect == .workflow_publication;
+                try std.testing.expectEqual(@as(usize, if (publication) 1 else 0), finalizer.calls);
+                try std.testing.expectEqual(@as(usize, 0), finalizer.operations_at_finish);
+                if (publication) try std.testing.expectEqualDeep(@as(run_outcome.Outcome, .{ .execution = .needs_user }), finalizer.last.?);
+                if (publication and fail) {
+                    try std.testing.expectEqualDeep(@as(execution.Rejection, .{ .logging = .LOG_FLUSH_FAILURE }), result.rejected);
+                    try std.testing.expectEqual(@as(usize, 0), control.state.calls);
+                    try std.testing.expectEqual(@as(usize, 0), barrier.calls);
+                } else if (publication and after_finalization != .active) {
+                    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = if (after_finalization == .cancelled) .cancelled else .deadline_exhausted }), result);
+                    try std.testing.expectEqual(@as(usize, 0), control.state.calls);
+                    try std.testing.expectEqual(@as(usize, 0), barrier.calls);
+                } else {
+                    try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), result);
+                    try std.testing.expectEqual(@as(usize, 1), control.state.calls);
+                }
+            }
+        }
+    }
+    try std.testing.expectEqual(pipeline.SideEffect.workflow_publication, @import("actions/workflow/publish_workflow_output.zig").Action.contract.side_effect);
+}
+
+test "pending independent prohibiting outcome prevents publication finalization and writer invocation" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const output = @import("domain/workflow_output.zig");
+    const values = @import("application/pipeline_values.zig");
+    const prepared_schema = @import("application/workflow_output_binding.zig").prepared_schema;
+    const feature = try @import("domain/feature_directory.zig").validate(a, .{ .bytes = "example" }, .{ .specs = "specs", .archive = "archive" });
+    for ([_]output.TerminalOutcome{ .ok, .needs_user }) |terminal| {
+        for ([_]workflow.OutcomeTag{ .invalid, .failed, .blocked, .needs_user, .cancelled }) |prohibiting| {
+            const prepared: output.Prepared = .{
+                .terminal_outcome = terminal,
+                .feature = .{ .selector = feature, .root_observation = .absent, .observation = .absent },
+                .paths = try @import("domain/workflow_artifact_registry.zig").resolveFeaturePaths(a, .{ .specs = "specs", .archive = "archive", .workflows = "workflows" }, feature),
+                .prior = .{ .state = null, .forms = &.{} },
+                .files = &.{.{ .target = .{ .artifact = .specification }, .bytes = "candidate" }},
+            };
             var control: OperationControl = .{ .state = .{ .outcome = .ok } };
             var barrier: FakeBarrier = .{};
             var graph = try testGraph();
             var steps = test_steps;
-            steps[0].side_effect = effect;
+            steps[0].side_effect = .workflow_publication;
             steps[0].requires = &.{prepared_schema.key};
             graph.authority.steps = &steps;
             graph.authority.data_schemas = &.{prepared_schema};
             var registry = testRegistry(&control);
             registry.data_schemas = graph.authority.data_schemas;
-            control.entries[1].contract.side_effect = effect;
+            control.entries[1].contract.side_effect = .workflow_publication;
             control.entries[1].contract.requires = steps[0].requires;
             var runner = runner_module.Runner.init(std.testing.allocator, selected(&graph), &registry, barrier.port(), .{}, null);
             defer runner.deinit();
-            var finalizer: FakeFinalizer = .{ .fail = fail, .operations = &control.state };
+            var finalizer: FakeFinalizer = .{ .operations = &control.state };
             runner.publication_finalizer = finalizer.port();
             try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), runner.bindings().invokeInvocation());
             var delta: pipeline.NodeDelta = .{};
             delta.data_writes[@intFromEnum(prepared_schema.key)] = try values.create(std.testing.allocator, prepared_schema, output.Prepared, prepared);
             defer runner.envelope.discard(&delta);
             try runner.envelope.apply(.{ .id = "test.prepare", .kind = .action, .requires = &.{}, .produces = &.{prepared_schema.key}, .side_effect = .none }, &delta, .ok);
+
+            const occurrence = try runner.envelope.beginOccurrence("test.independent-failure");
+            var failure: execution.Candidate = .{ .outcome = prohibiting, .delta = .{} };
+            var pending = try @import("application/workflow_outcome_binding.zig").prepare(&runner.envelope, occurrence, .independent, &failure, null);
+            defer pending.deinit();
+            try runner.envelope.applyOccurrence(occurrence, .{ .id = "test.independent-failure", .kind = .action, .requires = &.{}, .produces = &.{}, .side_effect = .none }, &failure.delta, prohibiting);
+            try runner.envelope.outcomes.commit(&pending);
+            const generation = runner.envelope.generation;
+            const original = runner.envelope.outcomes.firstUnresolved().?;
+
             const result = runner.bindings().invokeStep(steps[0].id);
-            const publication = effect == .workflow_publication;
-            try std.testing.expectEqual(@as(usize, if (publication) 1 else 0), finalizer.calls);
-            try std.testing.expectEqual(@as(usize, 0), finalizer.operations_at_finish);
-            if (publication and fail) {
-                try std.testing.expectEqualDeep(@as(execution.Rejection, .{ .logging = .LOG_FLUSH_FAILURE }), result.rejected);
-                try std.testing.expectEqual(@as(usize, 0), control.state.calls);
-                try std.testing.expectEqual(@as(usize, 0), barrier.calls);
-            } else {
-                try std.testing.expectEqualDeep(@as(execution.Applied, .{ .outcome = .ok }), result);
-                try std.testing.expectEqual(@as(usize, 1), control.state.calls);
-            }
+            try std.testing.expectEqualDeep(@as(execution.Applied, .{ .rejected = .{ .operation_failed = error.UnresolvedOperationOutcome } }), result);
+            try std.testing.expectEqual(@as(usize, 0), finalizer.calls);
+            try std.testing.expectEqual(@as(usize, 0), control.state.calls);
+            try std.testing.expectEqual(@as(usize, 0), barrier.calls);
+            try std.testing.expectEqual(generation, runner.envelope.generation);
+            try std.testing.expectEqualDeep(original, runner.envelope.outcomes.firstUnresolved().?);
+            try std.testing.expect(!runner.events_closed);
         }
     }
-    try std.testing.expectEqual(pipeline.SideEffect.workflow_publication, @import("actions/workflow/publish_workflow_output.zig").Action.contract.side_effect);
 }
 
 test "maximum graph validates executes every operation and rejects cycles and overflow" {
@@ -500,88 +568,90 @@ test "runner applies an operation delta before the telemetry barrier" {
 }
 
 test "runner follows a compiled bounded cycle and enforces its limit" {
-    inline for ([_]workflow.OutcomeTag{ .invalid, .more }) |retry_outcome| {
-        const loop_steps = [_]compilation.CompiledStep{.{
-            .id = .{ .bytes = "run" },
-            .operation_id = .{ .bytes = "test.operation" },
-            .parameters = &.{},
-            .requires = &.{},
-            .produces = &.{},
-            .replaces = &.{},
-            .invalidates = &.{},
-            .outcomes = &.{ .ok, retry_outcome, .failed },
-            .side_effect = .none,
-            .gates = &.{},
-            .capabilities = &.{},
-            .retry_authority = .{
-                .workflow_id = .{ .bytes = "arbitrary-workflow" },
-                .workflow_version = 1,
-                .operation_instance_id = .{ .bytes = "run" },
-                .limit = .{ .value = 2 },
-            },
-        }};
-        const loop_transitions = [_]workflow.Transition{
-            .{ .from = .{ .bytes = "run" }, .outcome = .ok, .target = .{ .terminal = .ok } },
-            .{ .from = .{ .bytes = "run" }, .outcome = retry_outcome, .target = .{ .step = .{ .bytes = "run" } } },
-            // A runner rejection must never follow the operation's failure edge.
-            .{ .from = .{ .bytes = "run" }, .outcome = .failed, .target = .{ .terminal = .ok } },
-        };
+    const retry_outcome: workflow.OutcomeTag = .more;
+    const loop_steps = [_]compilation.CompiledStep{.{
+        .id = .{ .bytes = "run" },
+        .operation_id = .{ .bytes = "test.operation" },
+        .parameters = &.{},
+        .requires = &.{},
+        .produces = &.{},
+        .replaces = &.{},
+        .invalidates = &.{},
+        .outcomes = &.{ .ok, retry_outcome, .failed },
+        .side_effect = .none,
+        .gates = &.{},
+        .capabilities = &.{},
+        .retry_authority = .{
+            .workflow_id = .{ .bytes = "arbitrary-workflow" },
+            .workflow_version = 1,
+            .operation_instance_id = .{ .bytes = "run" },
+            .limit = .{ .value = 2 },
+        },
+    }};
+    const loop_transitions = [_]workflow.Transition{
+        .{ .from = .{ .bytes = "run" }, .outcome = .ok, .target = .{ .terminal = .ok } },
+        .{ .from = .{ .bytes = "run" }, .outcome = retry_outcome, .target = .{ .step = .{ .bytes = "run" } } },
+        // A runner rejection must never follow the operation's failure edge.
+        .{ .from = .{ .bytes = "run" }, .outcome = .failed, .target = .{ .terminal = .ok } },
+    };
 
-        var completes: OperationControl = .{ .state = .{ .outcome = retry_outcome, .scripted = &.{ retry_outcome, .ok } } };
-        var complete_barrier: FakeBarrier = .{};
-        var complete_graph = try testGraph();
-        complete_graph.authority.steps = &loop_steps;
-        complete_graph.authority.transitions = &loop_transitions;
-        complete_graph.authority.maximum_step_executions = 4;
-        var complete_registry = testRegistry(&completes);
-        completes.entries[1].contract.outcomes = &.{ .ok, retry_outcome, .failed };
-        completes.entries[1].contract.retry_limit = .{ .maximum = 2 };
-        completes.entries[1].contract.parameters = &retry_parameters;
-        var complete_runner = runner_module.Runner.init(std.testing.allocator, selected(&complete_graph), &complete_registry, complete_barrier.port(), .{}, null);
-        defer complete_runner.deinit();
-        var complete_children: TestEngineBindings = .{ .graph = &complete_graph, .runner = &complete_runner };
-        try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(complete_children.bindings()).executionStatus().?);
-        try std.testing.expectEqual(@as(usize, 2), completes.state.calls);
-        try std.testing.expectEqual(@as(usize, 2), complete_barrier.calls);
+    var completes: OperationControl = .{ .state = .{ .outcome = retry_outcome, .scripted = &.{ retry_outcome, .ok } } };
+    var complete_barrier: FakeBarrier = .{};
+    var complete_graph = try testGraph();
+    complete_graph.authority.steps = &loop_steps;
+    complete_graph.authority.transitions = &loop_transitions;
+    complete_graph.authority.maximum_step_executions = 4;
+    var complete_registry = testRegistry(&completes);
+    completes.entries[1].contract.outcomes = &.{ .ok, retry_outcome, .failed };
+    completes.entries[1].contract.retry_limit = .{ .maximum = 2 };
+    completes.entries[1].contract.parameters = &retry_parameters;
+    var complete_runner = runner_module.Runner.init(std.testing.allocator, selected(&complete_graph), &complete_registry, complete_barrier.port(), .{}, null);
+    defer complete_runner.deinit();
+    var complete_children: TestEngineBindings = .{ .graph = &complete_graph, .runner = &complete_runner };
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(complete_children.bindings()).executionStatus().?);
+    try std.testing.expectEqual(@as(usize, 2), completes.state.calls);
+    try std.testing.expectEqual(@as(usize, 2), complete_barrier.calls);
+    try std.testing.expectEqual(@as(u64, 2), complete_runner.retry_execution_counts[0]);
 
-        var exhausts: OperationControl = .{ .state = .{ .outcome = retry_outcome } };
-        var exhausted_barrier: FakeBarrier = .{};
-        var exhausted_graph = complete_graph;
-        var exhausted_registry = testRegistry(&exhausts);
-        exhausts.entries[1].contract.outcomes = &.{ .ok, retry_outcome, .failed };
-        exhausts.entries[1].contract.retry_limit = .{ .maximum = 2 };
-        exhausts.entries[1].contract.parameters = &retry_parameters;
-        var exhausted_runner = runner_module.Runner.init(std.testing.allocator, selected(&exhausted_graph), &exhausted_registry, exhausted_barrier.port(), .{}, null);
-        defer exhausted_runner.deinit();
-        var exhausted_children: TestEngineBindings = .{ .graph = &exhausted_graph, .runner = &exhausted_runner };
-        const exhausted = engine.run(exhausted_children.bindings());
-        try std.testing.expectEqual(workflow.OutcomeTag.failed, exhausted.executionStatus().?);
-        try std.testing.expectEqualStrings("RetryLimitExhausted", exhausted.execution_rejected.diagnostic());
-        const diagnostic = exhausted.execution_rejected.retry_limit;
-        try std.testing.expectEqualStrings("run", diagnostic.operation().bytes);
-        try std.testing.expectEqual(@as(u32, 2), diagnostic.limit.value);
-        try std.testing.expectEqual(@as(u64, 3), diagnostic.completed_executions);
-        try std.testing.expectEqual(@as(usize, 3), exhausts.state.calls);
-        try std.testing.expectEqual(@as(usize, 3), exhausted_barrier.calls);
+    var exhausts: OperationControl = .{ .state = .{ .outcome = retry_outcome } };
+    var exhausted_barrier: FakeBarrier = .{};
+    var exhausted_graph = complete_graph;
+    var exhausted_registry = testRegistry(&exhausts);
+    exhausts.entries[1].contract.outcomes = &.{ .ok, retry_outcome, .failed };
+    exhausts.entries[1].contract.retry_limit = .{ .maximum = 2 };
+    exhausts.entries[1].contract.parameters = &retry_parameters;
+    var exhausted_runner = runner_module.Runner.init(std.testing.allocator, selected(&exhausted_graph), &exhausted_registry, exhausted_barrier.port(), .{}, null);
+    defer exhausted_runner.deinit();
+    var exhausted_children: TestEngineBindings = .{ .graph = &exhausted_graph, .runner = &exhausted_runner };
+    const exhausted = engine.run(exhausted_children.bindings());
+    try std.testing.expectEqual(workflow.OutcomeTag.failed, exhausted.executionStatus().?);
+    try std.testing.expectEqualStrings("RetryLimitExhausted", exhausted.execution_rejected.diagnostic());
+    const diagnostic = exhausted.execution_rejected.retry_limit;
+    try std.testing.expectEqualStrings("run", diagnostic.operation().bytes);
+    try std.testing.expectEqual(@as(u32, 2), diagnostic.limit.value);
+    try std.testing.expectEqual(@as(u64, 3), diagnostic.completed_executions);
+    try std.testing.expectEqual(@as(usize, 3), exhausts.state.calls);
+    try std.testing.expectEqual(@as(usize, 3), exhausted_barrier.calls);
+    try std.testing.expectEqual(@as(u64, 3), exhausted_runner.retry_execution_counts[0]);
 
-        var zero_steps = loop_steps;
-        zero_steps[0].retry_authority.?.limit = .{ .value = 0 };
-        var zero_graph = try testGraph();
-        zero_graph.authority.steps = &zero_steps;
-        zero_graph.authority.transitions = &loop_transitions;
-        zero_graph.authority.maximum_step_executions = 1;
-        var zero_control: OperationControl = .{ .state = .{ .outcome = .ok } };
-        var zero_barrier: FakeBarrier = .{};
-        var zero_registry = testRegistry(&zero_control);
-        zero_control.entries[1].contract.outcomes = &.{ .ok, retry_outcome, .failed };
-        zero_control.entries[1].contract.retry_limit = .{ .maximum = 2 };
-        zero_control.entries[1].contract.parameters = &retry_parameters;
-        var zero_runner = runner_module.Runner.init(std.testing.allocator, selected(&zero_graph), &zero_registry, zero_barrier.port(), .{}, null);
-        defer zero_runner.deinit();
-        var zero_children: TestEngineBindings = .{ .graph = &zero_graph, .runner = &zero_runner };
-        try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(zero_children.bindings()).executionStatus().?);
-        try std.testing.expectEqual(@as(usize, 1), zero_control.state.calls);
-    }
+    var zero_steps = loop_steps;
+    zero_steps[0].retry_authority.?.limit = .{ .value = 0 };
+    var zero_graph = try testGraph();
+    zero_graph.authority.steps = &zero_steps;
+    zero_graph.authority.transitions = &loop_transitions;
+    zero_graph.authority.maximum_step_executions = 1;
+    var zero_control: OperationControl = .{ .state = .{ .outcome = .ok } };
+    var zero_barrier: FakeBarrier = .{};
+    var zero_registry = testRegistry(&zero_control);
+    zero_control.entries[1].contract.outcomes = &.{ .ok, retry_outcome, .failed };
+    zero_control.entries[1].contract.retry_limit = .{ .maximum = 2 };
+    zero_control.entries[1].contract.parameters = &retry_parameters;
+    var zero_runner = runner_module.Runner.init(std.testing.allocator, selected(&zero_graph), &zero_registry, zero_barrier.port(), .{}, null);
+    defer zero_runner.deinit();
+    var zero_children: TestEngineBindings = .{ .graph = &zero_graph, .runner = &zero_runner };
+    try std.testing.expectEqual(workflow.OutcomeTag.ok, engine.run(zero_children.bindings()).executionStatus().?);
+    try std.testing.expectEqual(@as(usize, 1), zero_control.state.calls);
+    try std.testing.expectEqual(@as(u64, 1), zero_runner.retry_execution_counts[0]);
 }
 
 test "each workflow runner owns a fresh token ledger" {
@@ -891,6 +961,8 @@ const FakeFinalizer = struct {
     fail: bool = false,
     operations: ?*const OperationState = null,
     operations_at_finish: usize = 0,
+    runtime: ?*PublicationRuntime = null,
+    runtime_after: pipeline.RuntimeStatus = .active,
 
     fn port(self: *FakeFinalizer) finalization.Finalizer {
         return .{ .context = @ptrCast(self), .finish_fn = finish };
@@ -901,7 +973,17 @@ const FakeFinalizer = struct {
         self.calls += 1;
         self.last = outcome;
         if (self.operations) |operations_state| self.operations_at_finish = operations_state.calls;
+        if (self.runtime) |runtime| runtime.value = self.runtime_after;
         return if (self.fail) .{ .execution_rejected = .{ .logging = .LOG_FLUSH_FAILURE } } else outcome;
+    }
+};
+
+const PublicationRuntime = struct {
+    value: pipeline.RuntimeStatus = .active,
+
+    fn status(context: ?*anyopaque) pipeline.RuntimeStatus {
+        const self: *const PublicationRuntime = @ptrCast(@alignCast(context.?));
+        return self.value;
     }
 };
 

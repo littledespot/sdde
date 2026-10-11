@@ -43,6 +43,7 @@ pub const Decode = struct {
         .produces = Action.contract.produces,
         .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
         .side_effect = Action.contract.side_effect,
+        .outcome_association = .{ .request_decode = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_invocation_validation_result, .result = .model_envelope_result } },
     };
     allocator: std.mem.Allocator,
     action: Action = .{},

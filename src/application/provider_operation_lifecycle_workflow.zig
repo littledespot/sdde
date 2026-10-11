@@ -19,6 +19,7 @@ pub const Advance = struct {
         .side_effect = Action.contract.side_effect,
         .runner_accounting = Action.contract.runner_accounting,
         .parameters = &.{selection.invocation_parameter},
+        .outcome_association = .{ .preserve = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .assigned_provider_operation, .result = .invoked_provider_operation } },
     };
     action: Action = .{},
 

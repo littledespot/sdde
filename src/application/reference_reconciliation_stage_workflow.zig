@@ -46,6 +46,7 @@ pub fn Build(comptime phase: stage.Stage) type {
 }
 pub fn Collect(comptime phase: stage.Stage) type {
     return struct {
+        pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = schema(phase).key, .evidence = schema(phase).key, .result = .parsed_reference_reconciliation } };
         pub const Action = switch (phase) {
             .dispositions => @import("../actions/reference/collect_reference_dispositions_candidate.zig").Action,
             .signals => @import("../actions/reference/collect_reference_signals_candidate.zig").Action,

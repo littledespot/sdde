@@ -616,6 +616,18 @@ service is published.
 
 ### Execution guards
 
+Registered outcome-association descriptors compile alongside data effects and
+identify a closed native role plus declared subject, evidence and result keys.
+Definitions cannot supply recovery permissions. Registry admission, graph
+validation and execution compare the same descriptor. Static flow validation
+rejects paths that discard an unresolved opaque outcome or closed request before
+a protected effect or incompatible terminal. A registered native disposition
+marks a possible recovery boundary; execution still requires the exact current
+sealed subject and evidence. Ordinary `ok`, pure operations, shared keys and
+unrelated repairs do not discharge a pending outcome. Protocol correction,
+authorized atomic repair and clarification routing keep explicit workflow
+transitions and their existing native authority.
+
 - A gate is a versioned native contract in the existing operation registry: its ID,
   issuing operation ID, evidence key, and nonempty authority-key set.
 - The issuer is an ordinary YAML-visible validation operation.

@@ -9,6 +9,7 @@ pub const prepared_schema = values.schema(.prepared_workflow_output, output.Prep
 pub const published_schema = values.schema(.published_workflow_output, bool, 1, @sizeOf(bool));
 pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ prepared_schema, published_schema };
 pub const PrepareClarifications = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .clarification, .subject = .refreshed_clarification_state, .evidence = .refreshed_clarification_state, .result = .prepared_workflow_output } };
     pub const Action = @import("../actions/clarification/prepare_clarification_output.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -29,6 +30,7 @@ pub const PrepareClarifications = struct {
     }
 };
 pub const Publish = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .clarification, .subject = .prepared_workflow_output, .evidence = .prepared_workflow_output, .result = .published_workflow_output } };
     pub const Action = @import("../actions/workflow/publish_workflow_output.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .needs_user, .failed };
     allocator: std.mem.Allocator,

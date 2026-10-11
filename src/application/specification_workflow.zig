@@ -19,6 +19,7 @@ pub const coverage_schema = values.schema(.specification_coverage, owned.Value, 
 pub const schemas = [_]data.Schema{ session_schema, raw_schema, parsed_schema, checked_schema, ids_schema, coverage_schema };
 
 pub const SourceReadiness = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .authority, .subject = .accounted_reference_reconciliation, .evidence = .accounted_reference_reconciliation } };
     pub const Action = @import("../actions/specification/check_specification_source_readiness.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
     action: Action = .{},
@@ -29,6 +30,7 @@ pub const SourceReadiness = struct {
 };
 
 pub const Initialize = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .authority, .subject = .accounted_reference_reconciliation, .evidence = .specification_generation_session, .result = .specification_generation_session } };
     pub const Action = @import("../actions/specification/initialize_specification_generation.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
     allocator: std.mem.Allocator,
@@ -80,6 +82,7 @@ pub const Collect = struct {
     }
 };
 pub const Parse = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .parsed_specification_unit } };
     pub const Action = @import("../actions/specification/parse_specification_unit.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     allocator: std.mem.Allocator,
@@ -99,6 +102,7 @@ pub const Parse = struct {
     }
 };
 pub const Validate = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_validate = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .validated_specification_unit, .result = .validated_specification_unit } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const Action = @import("../actions/specification/validate_specification_unit.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .needs_user, .failed };
@@ -138,6 +142,7 @@ pub const Advance = struct {
     }
 };
 pub const Assemble = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .specification_generation_session, .evidence = .specification_generation_session, .result = .identified_specification_content } };
     pub const Action = @import("../actions/specification/assemble_specification_content.zig").Action;
     allocator: std.mem.Allocator,
     action: Action,
@@ -158,6 +163,7 @@ pub const Assemble = struct {
     }
 };
 pub const ValidateCoverage = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_validate = .{ .kind = .candidate, .subject = .specification_generation_session, .evidence = .specification_coverage, .result = .specification_coverage } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const Action = @import("../actions/specification/validate_specification_coverage.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
