@@ -111,3 +111,56 @@ equipment and renewal leave both candidates' overall gates failed. Phase 5 remai
 open. A further production change must address the observed source-backed entity
 and field-purpose defects through the shared owners and measured comparisons;
 these results do not support declaring the authoring workflow reliable.
+
+## Canonical rendering audit
+
+This is retained historical assessment. The user subsequently reverted the
+authoring-input remediation set and its automatic rendering-audit test path on
+14 October 2026. The captured values and audit findings below are preserved;
+ordinary verification no longer regenerates this audit.
+
+The subsequent offline audit resolves all **17 previously native-admitted
+collections** through `specification_projection`, native record identity
+allocation and `specification_markdown`. All 17 views roundtrip through the
+editable-view codec. The original 30-trial denominator and all rejected and
+truncated outcomes remain retained. There were **zero additional model calls**.
+The input hashes are pinned by
+[rendering-audit.inputs.json](rendering-audit.inputs.json); generated resolved
+JSON and Markdown are beneath
+`.zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/`.
+
+Manual examination identifies run-together text in **10/17 admitted
+collections**: three startup, one equipment, three renewal and three warehouse
+collections. Examples include `LoanhasReturnDeadline`,
+`ParcelhasStorageLocation` and
+`The application starts successfullyThe application displays ...`. Equipment
+also joins obligations without a sentence separator and produces relationships
+such as `EquipmenthasInspectionResults`. These are actual canonical projected
+values, not hypothetical concatenations. The native codec preserves the
+model-authored composition; it adds no implicit spaces and does not establish
+readability or business meaning. Literal-only startup fields remain a distinct
+field-purpose defect.
+
+The [separate rendering assessment](rendering-audit.json) preserves the original
+scorecard and identifies the affected field occurrences. Adding the observed
+composition defect as a quality criterion reduces the previously reported known
+semantic successes to **at most 2/10 Baseline, 1/10 Family and 2/10 Ownership**.
+Those are qualified upper bounds based on this audit, not a fresh semantic
+qualification of the remaining trials. Code and schema admission remain the
+original **3/10, 7/10 and 7/10**. Mechanical rendering success cannot be treated
+as quality success.
+
+The renewal audit also narrows an earlier interpretation: its controlled
+primary user story explicitly says that the extension duration requires a
+decision. The generated records omit that assigned uncertainty, but the complete
+diagnostic view still retains it in the MOCK preceding story. This panel therefore
+demonstrates a record-collection omission, not proven disappearance from the
+whole assembled specification or a live upstream handoff.
+
+The shared representation candidate should explicitly distinguish one composed
+field value from a collection of separate values: ordinary prose can use one
+fragment; split fragments concatenate directly and must carry their own
+separators; every entity relationship is a separate complete composed value.
+Exact-copy and reference atoms retain their existing native identity and display
+semantics. Automatically inserting separators would alter the accepted
+composition contract and is not authorized by this audit.

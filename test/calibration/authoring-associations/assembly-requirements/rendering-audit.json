@@ -1,0 +1,308 @@
+{
+  "status": "offline_canonical_rendering_audit_completed",
+  "assessment": "Manual examination of native projected field values and canonical Markdown; codec roundtrip does not prove readability or semantic quality.",
+  "inputs_manifest": "test/calibration/authoring-associations/assembly-requirements/rendering-audit.inputs.json",
+  "generated_audit": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/audit.json",
+  "collection_trials": 30,
+  "native_admitted_rendered": 17,
+  "collections_with_identified_run_together_text": 10,
+  "additional_live_calls": 0,
+  "historical_scorecard_unchanged": true,
+  "historical_known_semantic_successes": {
+    "baseline": 2,
+    "family": 2,
+    "ownership": 4
+  },
+  "upper_bound_after_observed_composition_defects": {
+    "baseline": 2,
+    "family": 1,
+    "ownership": 2
+  },
+  "uncertainty": "Renewal uncertainty survives in the controlled MOCK primary user story, while the authored record collection omits it; a whole-artifact omission is not proven.",
+  "trials": [
+    {
+      "trial_id": "startup-display-baseline-records-2",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/startup-display-baseline-records-2.resolved.json",
+        "sha256": "1def6b0cdc2aa28c6827a4e7b7ec2422bf1bd0bedcc72eaffda56d5790ff34c7",
+        "bytes": 1525
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/startup-display-baseline-records-2.md",
+        "sha256": "9b0e1038f01a22c8bdbf24a052082f84b98ba17b50c861897f81d4e60a4e6096",
+        "bytes": 1059
+      },
+      "run_together_fields": [
+        "AC-001.then",
+        "AC-002.then",
+        "FR-002.text"
+      ],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "startup-display-family-records-1",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/startup-display-family-records-1.resolved.json",
+        "sha256": "8f5729b440325d62b782644edf2d5ce4aa18bfffe13184589765346a80e0102a",
+        "bytes": 1329
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/startup-display-family-records-1.md",
+        "sha256": "ce0e15a2375faeb5d65336e75e4a59ea2d03df7cb6ca9894252f4e89d6bb9fb3",
+        "bytes": 789
+      },
+      "run_together_fields": [],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "startup-display-family-records-2",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/startup-display-family-records-2.resolved.json",
+        "sha256": "9436deb97a8e7da933cd0eb481ea3b79db015267839a1cc195caf27f988675f3",
+        "bytes": 1507
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/startup-display-family-records-2.md",
+        "sha256": "81e4d4777352b6e311bee7a795733597d090cc781f5e14d23f26715661facf22",
+        "bytes": 1045
+      },
+      "run_together_fields": [
+        "AC-001.then",
+        "AC-002.then",
+        "FR-002.text"
+      ],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "startup-display-ownership-records-1",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/startup-display-ownership-records-1.resolved.json",
+        "sha256": "1bd11f52e376816b9a163d9a0bf0d268f55da1a685d343ee4860997c291100d0",
+        "bytes": 1523
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/startup-display-ownership-records-1.md",
+        "sha256": "008c73ff0ce60b6855b946c1fce35fabaf299eb73cc2221a072e90c04d67f319",
+        "bytes": 1060
+      },
+      "run_together_fields": [
+        "AC-001.then"
+      ],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "equipment-joint-support-family-records-2",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/equipment-joint-support-family-records-2.resolved.json",
+        "sha256": "4d6986c75f1d65ca6070cb38d6633f031a9880332ab0e5e69ac962106db7d2b0",
+        "bytes": 2565
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/equipment-joint-support-family-records-2.md",
+        "sha256": "dcde0b128377d760495059aeae359f15f7b635818895c5eb3c066c7b21b7eb97",
+        "bytes": 1902
+      },
+      "run_together_fields": [
+        "AC-001.then",
+        "FR-001.text",
+        "EN-001.relationships[0]",
+        "EN-001.relationships[1]",
+        "EN-002.relationships[0]"
+      ],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "renewal-information-gap-family-records-2",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/renewal-information-gap-family-records-2.resolved.json",
+        "sha256": "a837d2507dba1174810785c57a3fce93cf927e6a89c248aff531013a54ab7f84",
+        "bytes": 1090
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/renewal-information-gap-family-records-2.md",
+        "sha256": "60e198e2c875c96e07bfe25e3ff4afb71c855c9562dfbe273221e2e1f5057c59",
+        "bytes": 810
+      },
+      "run_together_fields": [
+        "EN-001.relationships[0]"
+      ],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "renewal-information-gap-ownership-records-1",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/renewal-information-gap-ownership-records-1.resolved.json",
+        "sha256": "fbedf5be79acb0eb4ea68e08e64b62715f199d9ec8814368d7a53bf531f44d00",
+        "bytes": 1085
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/renewal-information-gap-ownership-records-1.md",
+        "sha256": "0c87da3a6b38114019e0083a74dfcfeead3d1041c36a8078dcfdbac5b3398705",
+        "bytes": 806
+      },
+      "run_together_fields": [
+        "EN-001.relationships[0]"
+      ],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "renewal-information-gap-ownership-records-2",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/renewal-information-gap-ownership-records-2.resolved.json",
+        "sha256": "7758ecb666e36745b97173dbaac2987ed54d3179c47a7c64c28186dd968a6a42",
+        "bytes": 1099
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/renewal-information-gap-ownership-records-2.md",
+        "sha256": "ed48587f37c51783c0863d350c6d462af1d7a975c3a63fe95163a14f099b635f",
+        "bytes": 822
+      },
+      "run_together_fields": [
+        "EN-001.relationships[0]"
+      ],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "warehouse-location-family-records-2",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/warehouse-location-family-records-2.resolved.json",
+        "sha256": "3d63fb3545b185f083a408b7207a7e7010ba65c8a66b6523a93402c3dd7e9c2c",
+        "bytes": 1228
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/warehouse-location-family-records-2.md",
+        "sha256": "f81ac6f94e9c0575a4436fc1aa6a380e92579fd6fe1e9a982f80fae446173ba0",
+        "bytes": 948
+      },
+      "run_together_fields": [
+        "EN-001.relationships[0]"
+      ],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "warehouse-location-ownership-records-1",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/warehouse-location-ownership-records-1.resolved.json",
+        "sha256": "70d511ff9aca496107a22fb77493d8e5b748944ac43586caa3dd7a0f31d22604",
+        "bytes": 1232
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/warehouse-location-ownership-records-1.md",
+        "sha256": "b61ecfa140f40458d07700505efe0d788b81a96094a603d79a26d4899c50894a",
+        "bytes": 957
+      },
+      "run_together_fields": [
+        "EN-001.relationships[0]"
+      ],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "warehouse-location-ownership-records-2",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/warehouse-location-ownership-records-2.resolved.json",
+        "sha256": "62f48faf9c49f0b55e4f721d44e254c3b1ba44954dc34c7b2c3af6468f5dc795",
+        "bytes": 1544
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/warehouse-location-ownership-records-2.md",
+        "sha256": "ba887db75c346293186060667e69b009821f4db5ff970b1179cbbca497d8a924",
+        "bytes": 1157
+      },
+      "run_together_fields": [
+        "EN-001.relationships[0]",
+        "EN-002.relationships[0]"
+      ],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "completion-notification-baseline-records-1",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/completion-notification-baseline-records-1.resolved.json",
+        "sha256": "4ec120d01c4f65f91fc5ffbaf5b1bef56ff2383d26cfee637ea5e76dc2b1a7bb",
+        "bytes": 830
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/completion-notification-baseline-records-1.md",
+        "sha256": "c35507522cdc4dbf2879cb7ad9260b6c0b7c6cbef68af6f6e79a87fafe525533",
+        "bytes": 618
+      },
+      "run_together_fields": [],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "completion-notification-baseline-records-2",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/completion-notification-baseline-records-2.resolved.json",
+        "sha256": "8fe50f732905f0952b43a2557565c76444afc4975ca2e9f5979270528887c010",
+        "bytes": 842
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/completion-notification-baseline-records-2.md",
+        "sha256": "798f7789ab8b916c59562c9b439e711361c8eb407a4be5c28407122a622ea8ee",
+        "bytes": 630
+      },
+      "run_together_fields": [],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "completion-notification-family-records-1",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/completion-notification-family-records-1.resolved.json",
+        "sha256": "d7e8f45afa639700480cf4a942767ce1e1e686c12bde8840787d96f7e3aa2478",
+        "bytes": 894
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/completion-notification-family-records-1.md",
+        "sha256": "ce4cdaf8c0bcbc6930110ed7b437eb18b910c0c9ff4272c11d4658ec0e733585",
+        "bytes": 683
+      },
+      "run_together_fields": [],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "completion-notification-family-records-2",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/completion-notification-family-records-2.resolved.json",
+        "sha256": "f1e3ec45d87fa96d14ea855865e1fb6a5c52544b8bd4f5ed8f37fab0ed0e64ed",
+        "bytes": 833
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/completion-notification-family-records-2.md",
+        "sha256": "70cc118a566f432072002f1ab59a1531d8bdd56b376dfef9c293c1246d938e23",
+        "bytes": 621
+      },
+      "run_together_fields": [],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "completion-notification-ownership-records-1",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/completion-notification-ownership-records-1.resolved.json",
+        "sha256": "a5a9dcd17e99fc7aa25c4a03c3874813e68016e69617db98842b47c5da0f4a21",
+        "bytes": 864
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/completion-notification-ownership-records-1.md",
+        "sha256": "38cf7e02b773f833aa99edde4330ea837460959c88bddaa164c2d3a3e4e6727f",
+        "bytes": 652
+      },
+      "run_together_fields": [],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    },
+    {
+      "trial_id": "completion-notification-ownership-records-2",
+      "resolved": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/completion-notification-ownership-records-2.resolved.json",
+        "sha256": "a5a9dcd17e99fc7aa25c4a03c3874813e68016e69617db98842b47c5da0f4a21",
+        "bytes": 864
+      },
+      "markdown": {
+        "path": ".zig-cache/authoring-associations/current/assembly-requirements/rendering-audit/completion-notification-ownership-records-2.md",
+        "sha256": "38cf7e02b773f833aa99edde4330ea837460959c88bddaa164c2d3a3e4e6727f",
+        "bytes": 652
+      },
+      "run_together_fields": [],
+      "remaining_semantic_quality": "Not requalified by this readability audit."
+    }
+  ]
+}

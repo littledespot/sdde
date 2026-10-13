@@ -2465,6 +2465,68 @@ evidence using controlled prior context, not actual upstream-handoff, publicatio
 or rubric qualification. Phase 5 remains open: the shared entity/field-purpose
 and ownership failures need a supported next change before product acceptance.
 
+#### Phase 5 withdrawn authoring remediations — 14 October 2026
+
+**Withdrawn and reverted at the user's request.** None of the five authoring-input
+remediations qualified in the live comparison. Production packets, shared field
+purposes, static generation context, native projection code, associated tests and
+the executable remediation calibration path are restored to the preceding
+implementation (`b140f36`). This restores flat original-source evidence and
+removes the prior-record assembly context. Earlier assembly-family requirements,
+fixed source bindings, native validation, workflow and model settings remain as
+before this remediation set. The rollback does not resolve the preceding
+semantic defects or claim improved output quality.
+
+The [retained rendering audit](../test/calibration/authoring-associations/assembly-requirements/rendering-audit.json)
+found run-together text in **10/17 previously admitted collections**. Those findings
+and captured canonical values remain historical evidence; the reverted test suite
+no longer regenerates that audit. Its qualification of prior semantic counts
+remains **at most 2/10 Baseline, 1/10 Family and 2/10 Ownership**, without replacing
+the original scorecards. Renewal uncertainty survived the controlled preceding
+story, so record omission does not prove whole-artifact loss.
+
+The [withdrawn live comparison](../test/calibration/authoring-associations/remediations/results.md)
+received **46/60** original frozen requests. It stopped at **202,021 actual
+input-plus-output tokens** after the final in-flight response crossed the
+200,000 threshold. Four calls reached the 16,384 output allowance. All 14 remaining
+requests were unattempted. The proposed budget continuation is **cancelled** by
+withdrawal; no additional dispatch or E2E run is authorized by this experiment.
+The frozen requests, authentic exchanges, native admission, resolved text and
+manual assessments are preserved without rewriting their dependency hashes.
+
+| Factor | Historical native admission, baseline → candidate | Historical adequate meaning/readability, baseline → candidate | Finding |
+| --- | --- | --- | --- |
+| Entity purpose | 4/6 → 5/6 | 2/6 → 2/6 | Useful warehouse scope observations; equipment still truncated and relationships remained defective |
+| Assembly context | 5/6 → 1/6 | 1/6 → 0/6 | Regression: copied prior records and the planted unsupported maintenance requirement |
+| Composition guidance | 5/6 → 6/6 | 1/6 → 1/6 | Improved admission did not establish readable or faithful meaning |
+| Evidence ownership | 5/6 → 4/6, two candidates unsent | 2/6 → 2/6, two candidates unsent | Incomplete comparison; ownership uncertainty remained |
+| Source uncertainty | No sends | No observations | Untested |
+
+Before withdrawal, receipt collection passed **322/322 tests, 3/3 steps**. Native
+code admitted 35 actual units; 26 reached assembly construction and nine remained
+non-final. Those figures describe the withdrawn implementation, not the restored
+code or successful publication. No rejected response was rescued by inserted
+separators, guessed IDs or weakened validation. Implementation-agent assessments
+are semantic evidence, not deterministic proof. Development cases, two repetitions
+and fixed MOCK predecessors do not qualify a real upstream handoff or the combined
+production packet. Phase 5's product-quality exit remains open.
+
+Rollback verification passed:
+
+- `zig build test-specification-generation test-required-authority --summary all -j2`:
+  **546/546 tests, 6/6 steps**.
+- `zig build test-architecture lint --summary all -j2`: **136/136 tests, 5/5 steps**.
+- `zig build verify --summary all -j2`: **1,489/1,489 tests, 137/137 steps**,
+  including offline integration and clean packaged-executable smoke checks.
+- `zig build install --summary all -j2`: **4/4 steps**; the installed executable
+  was rebuilt from restored sources.
+- `git diff --check`: passed.
+
+All affected production, guidance, contract and test files are byte-identical to
+the preceding revision. The historical comparison and rendering evidence are
+retained separately; their validation does not become current quality authority.
+No live model calls were made during rollback.
+
 ### Phase 6 — Retain only demonstrably unaffected review evidence
 
 **Scope:** §4.2; conditional on measured within-execution reuse eligibility.
