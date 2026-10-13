@@ -19,12 +19,11 @@ pub const summary_schema = values.schema(.validated_reference_summary, owned.Val
 pub const summary_ids_schema = values.schema(.reference_summary_identities, owned.Value, 1, null).captured();
 pub const dispositions_schema = values.schema(.validated_reference_dispositions, owned.Value, 1, null).captured();
 pub const signals_schema = values.schema(.validated_reference_signals, owned.Value, 1, null).captured();
-pub const roles_schema = values.schema(.validated_reference_roles, owned.Value, 1, null).captured();
 pub const conflicts_schema = values.schema(.validated_reference_conflicts, owned.Value, 1, null).captured();
 pub const identities_schema = values.schema(.reference_reconciliation_identities, owned.Value, 1, null);
 pub const records_schema = values.schema(.reference_reconciliation_records, owned.Value, 1, null);
 pub const accounted_schema = values.schema(.accounted_reference_reconciliation, owned.Value, 1, null);
-pub const schemas = [_]data.Schema{ items_schema, layout_schema, plan_schema, progress_schema, input_schema, raw_schema, parsed_schema, summary_schema, summary_ids_schema, dispositions_schema, signals_schema, roles_schema, conflicts_schema, identities_schema, records_schema, accounted_schema };
+pub const schemas = [_]data.Schema{ items_schema, layout_schema, plan_schema, progress_schema, input_schema, raw_schema, parsed_schema, summary_schema, summary_ids_schema, dispositions_schema, signals_schema, conflicts_schema, identities_schema, records_schema, accounted_schema };
 
 pub const BuildItems = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .accounted_reference_extraction, .evidence = .accounted_reference_extraction, .result = .reference_reconciliation_items } };
@@ -119,26 +118,7 @@ pub const ValidateSummary = ValidationStage(true, @import("../actions/reference/
 pub const AssignSummary = Unary(@import("../actions/reference/assign_reference_summary_identities.zig").Action, summary_schema, .reconciliation_summary, summary_ids_schema, .reconciliation_summary_ids);
 pub const ValidateDispositions = ValidationStage(false, @import("../actions/reference/validate_reference_claim_dispositions.zig").Action, parsed_schema, .reconciliation_parsed, dispositions_schema, .reconciliation_dispositions);
 pub const ValidateSignals = ValidationStage(true, @import("../actions/reference/validate_reference_signal_proposals.zig").Action, dispositions_schema, .reconciliation_dispositions, signals_schema, .reconciliation_signals);
-pub const ValidateRoles = struct {
-    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .validated_reference_signals, .evidence = .validated_reference_signals, .result = .validated_reference_roles } };
-    pub const Action = @import("../actions/reference/validate_reference_role_assignments.zig").Action;
-    pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
-    allocator: std.mem.Allocator,
-    action: Action = .{},
-    pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
-        const self = context.?;
-        const prior = try extraction.read(&input.step.data, signals_schema, .reconciliation_signals);
-        const owner = owned.create(self.allocator, prior) catch |operation_error| return operation_error;
-        errdefer owned.destroy(owner);
-        const result = self.action.execute(owner.arena.allocator(), prior.payload().reconciliation_signals) catch |operation_error| return operation_error;
-        owner.payload = switch (result) {
-            .valid => |checked| .{ .reconciliation_roles = checked },
-            .invalid => |rejection| .{ .reconciliation_rejected = rejection },
-        };
-        return extraction.publish(self.allocator, roles_schema, owner, if (result == .valid) .ok else .invalid);
-    }
-};
-pub const ValidateConflicts = ValidationStage(true, @import("../actions/reference/validate_reference_conflict_proposals.zig").Action, roles_schema, .reconciliation_roles, conflicts_schema, .reconciliation_conflicts);
+pub const ValidateConflicts = ValidationStage(true, @import("../actions/reference/validate_reference_conflict_proposals.zig").Action, signals_schema, .reconciliation_signals, conflicts_schema, .reconciliation_conflicts);
 pub const AssignRecords = Unary(@import("../actions/reference/assign_reference_reconciliation_identities.zig").Action, conflicts_schema, .reconciliation_conflicts, identities_schema, .reconciliation_record_ids);
 pub const BuildRecords = Unary(@import("../actions/reference/build_reference_reconciliation_records.zig").Action, identities_schema, .reconciliation_record_ids, records_schema, .reconciliation_records);
 
@@ -230,7 +210,6 @@ fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: d
                 .reconciliation_parsed => prior.payload().reconciliation_parsed,
                 .reconciliation_dispositions => .{ .phase = prior.payload().reconciliation_dispositions.phase, .source = prior.payload().reconciliation_dispositions.source, .input = prior.payload().reconciliation_dispositions.input, .proposal = .{ .global = prior.payload().reconciliation_dispositions.proposal } },
                 .reconciliation_signals => .{ .phase = prior.payload().reconciliation_signals.prior.phase, .source = prior.payload().reconciliation_signals.prior.source, .input = prior.payload().reconciliation_signals.prior.input, .proposal = .{ .global = prior.payload().reconciliation_signals.prior.proposal } },
-                .reconciliation_roles => .{ .phase = prior.payload().reconciliation_roles.prior.phase, .source = prior.payload().reconciliation_roles.prior.source, .input = prior.payload().reconciliation_roles.prior.input, .proposal = .{ .global = prior.payload().reconciliation_roles.prior.proposal } },
                 else => unreachable,
             };
             const transition = if (!needs_text)
@@ -244,7 +223,6 @@ fn ValidationStage(comptime needs_text: bool, comptime A: type, comptime from: d
                 }, switch (from_tag) {
                     .reconciliation_dispositions => prior.payload().reconciliation_dispositions.dispositions,
                     .reconciliation_signals => prior.payload().reconciliation_signals.prior.dispositions,
-                    .reconciliation_roles => prior.payload().reconciliation_roles.prior.dispositions,
                     else => &.{},
                 }) catch |operation_error| return operation_error;
             if (result == .valid) if (transition) |receipt| {

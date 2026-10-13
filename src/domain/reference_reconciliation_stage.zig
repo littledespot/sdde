@@ -3,13 +3,30 @@ const std = @import("std");
 const r = @import("reference_reconciliation.zig");
 const packets = @import("model_input_packet.zig");
 const json = @import("model_candidate_json.zig");
-pub const Stage = enum { dispositions, signals, roles, conflicts };
-pub const Prior = union(Stage) { dispositions: r.Input, signals: r.CheckedDispositions, roles: r.CheckedSignals, conflicts: r.CheckedSignals };
+pub const Stage = enum { dispositions, signals, conflicts };
+pub const Prior = union(Stage) { dispositions: r.Input, signals: r.CheckedDispositions, conflicts: r.CheckedSignals };
+/// Current native groups retain their repair occurrence IDs until canonical IDs
+/// are allocated. This projection carries no authoring support decision.
+pub const Group = struct { signal_id: r.SignalSelectionId, value: r.ValidatedSignal };
+pub const Facts = struct {
+    dispositions: []const r.ClaimDisposition,
+    signals: []const Group,
+    conflict_groups: []const @import("reference_conflict_groups.zig").CatalogueEntry,
+};
+pub fn groups(a: std.mem.Allocator, source: r.diagnostic.Source, signals: []const r.ValidatedSignal) r.Error![]const Group {
+    const result = try a.alloc(Group, signals.len);
+    errdefer a.free(result);
+    for (signals, result, 0..) |signal, *group, index| group.* = .{
+        .signal_id = .{ .ordinal = (source.signals.at(index, signals.len) catch return error.InvalidReferenceReconciliation).ordinal },
+        .value = signal,
+    };
+    return result;
+}
 pub fn input(prior: Prior) r.Input {
     return switch (prior) {
         .dispositions => |value| value,
         .signals => |value| value.input,
-        .roles, .conflicts => |value| value.prior.input,
+        .conflicts => |value| value.prior.input,
     };
 }
 pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, registry: @import("passive_literals.zig").Registry) @import("reference_model_input.zig").ReconciliationError!*packets.Packet {
@@ -24,27 +41,23 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     defer arena.deinit();
     const scratch = arena.allocator();
     const signal_values: []const r.ValidatedSignal = switch (prior) {
-        .roles, .conflicts => |v| v.signals,
+        .conflicts => |v| v.signals,
         else => &.{},
     };
-    var groups: std.ArrayList(@import("reference_role_assignment.zig").Group) = .empty;
     const group_source: r.diagnostic.Source = switch (prior) {
-        .roles, .conflicts => |v| v.prior.source,
+        .conflicts => |v| v.prior.source,
         else => .{},
     };
-    for (try @import("reference_role_assignment.zig").groups(scratch, group_source, signal_values)) |group| {
-        if (prior == .roles and !try @import("reference_support.zig").eligibleSelection(prior.roles.prior.dispositions, group.value.claim_ids)) continue;
-        try groups.append(scratch, group);
-    }
+    const accepted_groups = try groups(scratch, group_source, signal_values);
     const conflict_groups: []const @import("reference_conflict_groups.zig").Group = switch (prior) {
-        .roles, .conflicts => |v| v.prior.proposal.conflict_groups,
+        .conflicts => |v| v.prior.proposal.conflict_groups,
         else => &.{},
     };
     const conflict_catalogue = try @import("reference_conflict_groups.zig").catalogue(scratch, conflict_groups);
     const accepted = switch (prior) {
         .dispositions => try json.encode(r.PartitionId, scratch, current.partition.id),
         .signals => |value| try json.encode(@TypeOf(.{ .dispositions = value.dispositions, .signals = value.proposal.signals }), scratch, .{ .dispositions = value.dispositions, .signals = value.proposal.signals }),
-        .roles, .conflicts => |value| try json.encode(@import("reference_role_assignment.zig").Facts, scratch, .{ .dispositions = value.prior.dispositions, .signals = groups.items, .conflict_groups = conflict_catalogue }),
+        .conflicts => |value| try json.encode(Facts, scratch, .{ .dispositions = value.prior.dispositions, .signals = accepted_groups, .conflict_groups = conflict_catalogue }),
     };
     const values = std.json.parseFromSlice(std.json.Value, scratch, accepted, .{}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
     const with_facts = try packets.withJsonContext(a, selected, "accepted", values.value);
@@ -57,25 +70,9 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     if (prior == .signals) return inherited;
     defer packets.release(inherited);
     if (prior == .dispositions) return @import("reference_model_input.zig").withDispositionChoices(a, inherited, current.partition.group.claim_ids, null, true);
-    if (prior == .roles) return restrictRolePacket(a, inherited, prior.roles.prior.dispositions, groups.items);
     const ids = try scratch.alloc(i64, conflict_catalogue.len);
     for (ids, conflict_catalogue) |*id, group| id.* = group.group_id.ordinal;
     return packets.withIntegerChoices(a, inherited, &.{.{ .target = .{ .path = &.{ .{ .property = "conflicts" }, .{ .items = {} }, .{ .property = "group_id" } } }, .definition = result.resultDefinition(), .allowed = ids }});
-}
-/// Production and diagnostic replay share the same eligible support projection.
-pub fn restrictRolePacket(a: std.mem.Allocator, base: *const packets.Packet, dispositions: []const r.ClaimDisposition, offered: []const @import("reference_role_assignment.zig").Group) @import("reference_model_input.zig").ReconciliationError!*packets.Packet {
-    var ids: std.ArrayList(i64) = .empty;
-    defer ids.deinit(a);
-    for (offered) |group| if (try @import("reference_support.zig").eligibleSelection(dispositions, group.value.claim_ids)) try ids.append(a, group.signal_id.ordinal);
-    if (ids.items.len == 0) {
-        const schema = @import("model_result_schema.zig");
-        const excluded = try a.alloc(schema.ExcludedVariant, base.excludedVariants().len + 1);
-        defer a.free(excluded);
-        @memcpy(excluded[0..base.excludedVariants().len], base.excludedVariants());
-        excluded[excluded.len - 1] = .{ .kind = "supported" };
-        return packets.withExcludedVariants(a, base, excluded);
-    }
-    return packets.withIntegerChoices(a, base, &.{.{ .target = .{ .tagged = .{ .kind = "supported", .field = "signal_ids" } }, .definition = base.resultDefinition(), .allowed = ids.items }});
 }
 pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet, body: []const u8, origin: @import("model_candidate_origin.zig").Origin) r.Error!r.Parsed {
     const current = input(prior);
@@ -88,7 +85,7 @@ pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet,
     var result: r.Parsed = switch (prior) {
         .dispositions => .{ .input = current, .proposal = .{ .global = .{ .claim_dispositions = &.{}, .signals = &.{}, .conflicts = &.{} } } },
         .signals => |value| .{ .phase = value.phase, .source = value.source, .input = value.input, .proposal = .{ .global = value.proposal } },
-        .roles, .conflicts => |value| .{ .phase = value.prior.phase, .source = value.prior.source, .input = value.prior.input, .proposal = .{ .global = value.prior.proposal } },
+        .conflicts => |value| .{ .phase = value.prior.phase, .source = value.prior.source, .input = value.prior.input, .proposal = .{ .global = value.prior.proposal } },
     };
     const value = json.decodeSelected(Response, a, stage, body) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
     switch (value) {
@@ -100,11 +97,7 @@ pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet,
         .signals => |v| {
             result.proposal.global.signals = try @import("reference_reconciliation_projection.zig").signals(a, prior.signals, v.signals);
             for (prior.signals.proposal.signals.len..result.proposal.global.signals.len) |index| result.source.signals = result.source.signals.inserting(a, index, index) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
-            result.phase = if (result.proposal.global.conflicts.len > 0) .signals_with_conflicts else .signals;
-        },
-        .roles => |v| {
-            result.proposal.global.role_decisions = v.role_decisions;
-            result.phase = if (result.phase == .signals_with_conflicts) .complete else .roles;
+            result.phase = if (result.proposal.global.conflicts.len > 0) .complete else .signals;
         },
         .conflicts => |v| {
             result.proposal.global.conflicts = try @import("reference_conflict_groups.zig").explain(a, prior.conflicts.prior.proposal.conflict_groups, v.conflicts);
@@ -114,10 +107,10 @@ pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet,
     var fields: std.ArrayList(r.diagnostic.FieldOrigin) = .empty;
     const unit: r.diagnostic.Unit = switch (stage) {
         .dispositions => .dispositions,
-        .signals, .roles => .signals,
+        .signals => .signals,
         .conflicts => .conflicts,
     };
-    const field: r.diagnostic.Field = if (stage == .roles) .relationship else .record;
+    const field: r.diagnostic.Field = .record;
     for (result.source.fields) |old| {
         if (std.meta.eql(old.unit, unit) and old.field == field) continue;
         if (stage == .signals and old.unit == .signal) continue;
@@ -131,7 +124,7 @@ pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet,
     result.source.fields = try fields.toOwnedSlice(a);
     return result;
 }
-pub const Response = union(Stage) { dispositions: @import("reference_conflict_groups.zig").Selection, signals: struct { signals: []const @import("reference_reconciliation_projection.zig").SemanticSignal }, roles: struct { role_decisions: r.RoleDecisions }, conflicts: struct { conflicts: []const @import("reference_conflict_groups.zig").Explanation } };
+pub const Response = union(Stage) { dispositions: @import("reference_conflict_groups.zig").Selection, signals: struct { signals: []const @import("reference_reconciliation_projection.zig").SemanticSignal }, conflicts: struct { conflicts: []const @import("reference_conflict_groups.zig").Explanation } };
 
 fn definition(stage: Stage) []const u8 {
     return switch (stage) {
@@ -144,7 +137,7 @@ fn slotId(a: std.mem.Allocator, prior: Prior) std.mem.Allocator.Error![]const u8
     return std.fmt.allocPrint(a, "reconciliation-{d}-{s}-r{d}-{s}", .{ input(prior).partition.id.ordinal, @tagName(std.meta.activeTag(prior)), switch (prior) {
         .dispositions => @as(u64, 1),
         .signals => |v| v.source.revision,
-        .roles, .conflicts => |v| v.prior.source.revision,
+        .conflicts => |v| v.prior.source.revision,
     }, std.fmt.bytesToHex(digest.bytes, .lower) });
 }
 
@@ -152,7 +145,6 @@ fn accepts(prior: Prior) bool {
     return switch (prior) {
         .dispositions => |v| v.purpose == .global,
         .signals => |v| v.phase == .dispositions,
-        .roles => |v| v.prior.phase == .signals or v.prior.phase == .signals_with_conflicts,
-        .conflicts => |v| v.prior.phase == .roles,
+        .conflicts => |v| v.prior.phase == .signals,
     };
 }

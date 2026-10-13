@@ -7,7 +7,6 @@ test {
     _ = @import("call/capture_test.zig");
     _ = @import("call/report_test.zig");
     _ = @import("diagnostic_binding_test.zig");
-    _ = @import("roles/tests.zig");
 }
 
 const case_bytes =

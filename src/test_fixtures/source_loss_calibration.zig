@@ -15,7 +15,6 @@ const packets = @import("../domain/model_input_packet.zig");
 const cases_root = "test/calibration/source-loss-attribution/bound-preservation/obligation";
 const root = "test/calibration/source-loss-attribution/bound-preservation/citation-completeness";
 const output = ".zig-cache/source-loss-citation-completeness";
-const prior_root = "test/calibration/source-loss-attribution/bound-preservation/native-scope";
 const Arm = enum { baseline, candidate };
 pub const Case = struct {
     id: []const u8,
@@ -25,7 +24,10 @@ pub const Case = struct {
     description: []const u8,
     missing: []const u8,
     missing_obligation: []const u8,
-    mode: enum { candidate, signal, second_role },
+    mode: enum { candidate, signal },
+    grouping: enum { combined, per_claim, per_source },
+    /// Scripted authoring selection over this fixture's explicitly built groups.
+    source_group_ids: []const u32,
     verdicts: []const comparison.Verdict,
     expected: []const u8,
     target: ?enum { description, primary_user_story } = null,
@@ -38,14 +40,33 @@ pub fn run() !void {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const retained = try codec.decode([]const Case, a, try read(a, cases_root ++ "/cases.json"));
-    const controls = try codec.decode([]const Case, a, try read(a, root ++ "/citation.controls.json"));
+    const retained = try codec.decode([]const Case, a, try read(a, cases_root ++ "/cases.associated.json"));
+    const controls = try codec.decode([]const Case, a, try read(a, root ++ "/citation.controls.associated.json"));
     const cases = try a.alloc(Case, retained.len + controls.len);
     @memcpy(cases[0..retained.len], retained);
     @memcpy(cases[retained.len..], controls);
     var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schema = try parser.compiler().compile(a, try read(a, "design/workflows/spec/support.schema.json"));
-    try runCitationCompleteness(a, schema, cases, retained.len);
+    try currentAssociationChecks(a, cases[0]);
+    try runCitationCompleteness(a, schema, cases);
+}
+
+/// Current calibration fixtures cross the same closed association boundary as
+/// production; historical unassociated payloads cannot acquire native lineage.
+fn currentAssociationChecks(a: std.mem.Allocator, example: Case) !void {
+    var legacy = try std.json.parseFromSliceLeaky(std.json.Value, a, try codec.encode(Case, a, example), .{});
+    try std.testing.expect(legacy.object.orderedRemove("source_group_ids"));
+    try std.testing.expectError(error.InvalidJsonDocument, codec.decode(Case, a, try std.json.Stringify.valueAlloc(a, legacy, .{})));
+    const prepared = try prepareContext(a, example);
+    defer prepared.passive.deinit();
+    const field = prepared.inputs.brief.?.description;
+    const p = @import("../domain/specification_provenance.zig");
+    const records = @import("../domain/reference_support.zig").records(prepared.context.references);
+    const current = try p.validateAssociation(.canonical, a, prepared.context.inputs, records, field.source_group_ids, field.provenance, .content);
+    defer a.free(current);
+    try std.testing.expectEqualDeep(field.source_group_ids, current);
+    try std.testing.expectError(error.InvalidSpecification, p.validateAssociation(.canonical, a, prepared.context.inputs, records, &.{.{ .ordinal = 999 }}, field.provenance, .content));
+    try std.testing.expectError(error.InvalidSpecification, p.validateAssociation(.canonical, a, prepared.context.inputs, records, &.{}, field.provenance, .content));
 }
 
 pub fn read(a: std.mem.Allocator, path: []const u8) ![]const u8 {
@@ -71,10 +92,17 @@ pub fn exportBodyAt(a: std.mem.Allocator, directory: []const u8, schema: *const 
 
 /// Shared diagnostic projection through the production restriction and provider
 /// encoder. Neither a packet builder nor a dispatch/admission authority.
-pub fn renderBody(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, packet: *const packets.Packet, body: []const u8, prompt: []const u8) !struct { edit: []const u8, request: []const u8 } {
+pub const RenderedRequest = struct { edit: []const u8, request: []const u8 };
+pub fn renderBody(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, packet: *const packets.Packet, body: []const u8, prompt: []const u8) !RenderedRequest {
+    return renderContent(a, schema, packet, &.{ .{ .guidance = prompt }, .{ .user = body } });
+}
+
+/// Preserve every production-visible guidance block for diagnostic exports.
+/// The caller supplies current native packet metadata; no send is authorized.
+pub fn renderContent(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, packet: *const packets.Packet, content: []const @import("../domain/llm_provider_operation.zig").ModelVisibleContent) !RenderedRequest {
     const restricted = try @import("../domain/model_result_schema.zig").restrict(a, schema.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
     defer restricted.release();
-    const bytes = try std.json.Stringify.valueAlloc(a, .{ .content = .{ .{ .guidance = prompt }, .{ .user = body } }, .schema = restricted.selected().modelBytes() }, .{});
+    const bytes = try std.json.Stringify.valueAlloc(a, .{ .content = content, .schema = restricted.selected().modelBytes() }, .{});
     return .{ .edit = bytes, .request = try encodeEdit(a, try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{})) };
 }
 
@@ -233,25 +261,36 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
         for (item.claim.content.model.business.value.segments) |segment| try combined.appendSlice(a, segment.literal.value);
         try combined.append(a, ' ');
     };
-    if (example.mode == .second_role) {
-        for (proposed.signals) |signal| try groups.append(a, signal);
+    if (example.grouping == .per_claim) {
+        for (proposed.signals) |signal| if (signal.content == .model) try groups.append(a, signal);
+    } else if (example.grouping == .per_source) {
+        // This mock topology has one explicit group per supplied source. It
+        // never becomes a production claims-to-group selection algorithm.
+        for (sources.corpus.sources) |source| {
+            var members: std.ArrayList(r.ClaimId) = .empty;
+            var meaning: std.ArrayList(u8) = .empty;
+            for (global.items) |item| if (std.meta.eql(item.source_id, source.id) and item.claim.content == .model) {
+                try members.append(a, item.claim.id);
+                for (item.claim.content.model.business.value.segments) |segment| try meaning.appendSlice(a, segment.literal.value);
+                try meaning.append(a, ' ');
+            };
+            if (members.items.len == 0) return error.MissingCalibrationSource;
+            try groups.append(a, .{ .claim_ids = members.items, .content = .{ .model = .{ .business = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = meaning.items } }}) } } } });
+        }
     } else {
         try groups.append(a, .{ .claim_ids = business.items, .content = .{ .model = .{ .business = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = example.signal_text orelse (if (example.mode == .signal) example.description else combined.items) } }}) } } } });
-        for (proposed.signals) |signal| if (signal.content == .preserved_token) try groups.append(a, signal);
     }
+    for (proposed.signals) |signal| if (signal.content == .preserved_token) try groups.append(a, signal);
     proposed.signals = groups.items;
-    var roles: std.ArrayList(r.RoleAssignment) = .empty;
-    for (proposed.signals, 1..) |signal, ordinal| if (signal.content == .model) {
-        try roles.append(a, .{ .signal_id = .{ .ordinal = @intCast(ordinal) }, .generation_roles = if (example.mode == .second_role and ordinal == 1) &.{.records} else std.enums.values(r.GenerationRole) });
-    };
-    proposed.role_decisions = try refs.roleDecisions(a, roles.items);
     const finished = (try refs.finish(a, global, proposed, context)).valid;
     const provenance_context: @import("../domain/specification_provenance.zig").Context = .{ .inputs = sources, .references = finished, .registry = context.registry, .current = context.current };
     const records = @import("../domain/reference_support.zig").records(finished);
-    const assigned = try @import("../domain/specification_source_binding.zig").roleClaimIds(a, records, if (example.target == .primary_user_story) .primary_user_story else .description);
-    const attribution = try @import("../domain/specification_provenance.zig").select(a, provenance_context, .{ .claim_ids = assigned, .clarification_response_ids = &.{} });
+    const ids_selected = try a.alloc(r.SignalId, example.source_group_ids.len);
+    for (example.source_group_ids, ids_selected) |id, *selected| selected.* = .{ .ordinal = id };
+    const assigned = try @import("../domain/specification_source_binding.zig").resolveGroups(a, records, sources, ids_selected, .content);
+    const attribution = try @import("../domain/specification_provenance.zig").select(a, provenance_context, assigned.selection);
     const spec = @import("../domain/specification.zig");
-    const value: spec.AttributedValue = .{ .value = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = example.description } }}) }, .provenance = attribution };
+    const value: spec.AttributedValue = .{ .value = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = example.description } }}) }, .source_group_ids = assigned.source_group_ids, .provenance = attribution };
     var brief: spec.Brief = .{ .title = value, .description = value, .primary_goal = value };
     var candidate: ?spec.IdentifiedContent = null;
     if (example.candidate_file) |path| {
@@ -262,6 +301,18 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
     }
     const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished, candidate, if (example.mode == .signal) null else brief);
     return .{ .inputs = inputs, .context = provenance_context, .passive = passive };
+}
+
+/// A diagnostic prefix cannot invent an authored association. Absent canonical
+/// fields remain explicitly inconclusive; these mock siblings are not live proof.
+pub fn mockPrefix(a: std.mem.Allocator, rules: @import("../domain/specification_support_evidence.zig").Requirements) ![]const u8 {
+    const model = @import("../domain/specification_support_model.zig");
+    const positive = rules.rule(.supported, .{ .unlocalized = .{} });
+    const bound = if (positive.fixedClaims()) |claims| claims.len != 0 or (rules.source_preservation and positive.eligible_source_ids.len != 0) else false;
+    return codec.encode(model.Value, a, if (bound)
+        .{ .supported = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK Bound prior source review for isolated diagnostic preparation; no semantic evidence." } }
+    else
+        .{ .inconclusive = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK Unauthored prior subject; no source association or semantic proof is invented." } });
 }
 
 fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
@@ -282,7 +333,7 @@ fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
     for (findings[0..index], ledger.requirements[0..index]) |*entry, required| {
         const rules = try @import("../domain/specification_support_evidence.zig").requirements(a, inputs, sources, required.seed.id);
         // Wire ordinals use model_candidate_json, not canonical wrapper objects.
-        const selected = try codec.encode(@import("../domain/specification_support_model.zig").Value, a, .{ .supported = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK Prior source review accepted for isolated handoff preparation." } });
+        const selected = try mockPrefix(a, rules);
         entry.value = try @import("../domain/specification_support_model.zig").decode(a, selected, rules);
     }
     findings[index].value.kind = .candidate_omission;
@@ -300,9 +351,9 @@ fn prepare(a: std.mem.Allocator, example: Case) !Prepared {
 fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
     var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const compiled = try parser.compiler().compile(a, edit.object.get("schema").?.string);
-    const content = edit.object.get("content").?.array.items;
+    const content = try @import("../domain/strict_json.zig").decode([]const @import("../domain/llm_provider_operation.zig").ModelVisibleContent, a, try std.json.Stringify.valueAlloc(a, edit.object.get("content").?, .{}), .{ .maximum_depth = 64 });
     return @import("../adapters/provider/bedrock_request.zig").encodeText(a, .{
-        .content = &.{ .{ .guidance = content[0].object.get("guidance").?.string }, .{ .user = content[1].object.get("user").?.string } },
+        .content = content,
         .schema = .{ .native = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .bedrock) } },
         .schema_name = "sdde_model_envelope_v1",
         .temperature = .fixed,
@@ -441,10 +492,10 @@ fn isolatedPacket(a: std.mem.Allocator, packet: *const packets.Packet, id: compa
     return packets.withRestrictions(a, packet, packet.excludedVariants(), choices);
 }
 
-fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, cases: []const Case, retained_count: usize) !void {
+fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, cases: []const Case) !void {
     try std.Io.Dir.cwd().createDirPath(std.testing.io, output);
     const prompt = try read(a, "design/workflows/spec/support-loss.prompt.md");
-    for (cases, 0..) |example, case_index| {
+    for (cases) |example| {
         const prepared = try prepare(a, example);
         defer prepared.passive.deinit();
         const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);
@@ -472,15 +523,6 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
             for (std.enums.values(Arm), 0..) |arm, arm_index| {
                 const name = try std.fmt.allocPrint(a, "{s}-{d}", .{ @tagName(arm), view.id.ordinal });
                 try exportBodyAt(a, output, schema, example.id, name, isolated, body, if (arm == .baseline) try read(a, root ++ "/baseline.prompt.md") else prompt);
-                if (arm == .baseline and case_index < retained_count) {
-                    // Prior panels remain immutable; both arms now use the same
-                    // native-owned response contract and differ only in guidance.
-                    for ([_][]const u8{ "edit.json", "request.json" }) |kind| {
-                        const prior = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.candidate-{d}.{s}", .{ prior_root, example.id, view.id.ordinal, kind }));
-                        const current = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.{s}", .{ output, example.id, name, kind }));
-                        try temperature_policy.expectProjection(a, kind, prior, current);
-                    }
-                }
                 const request_bytes = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}.request.json", .{ output, example.id, name }));
                 request[arm_index] = .{ .comparison_id = view.id.ordinal, .request_sha256 = try sha256(a, request_bytes) };
             }
@@ -514,16 +556,6 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
         }
     }
     try prepareHandoffControls(a, schema);
-    for (cases) |example| {
-        const prepared = try prepare(a, example);
-        defer prepared.passive.deinit();
-        const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);
-        try frozenCitationCompleteness(a, example.id, "packet.json");
-        for ([_][]const u8{ "review.edit.json", "review.request.json" }) |suffix| try frozenCitationCompleteness(a, example.id, suffix);
-        for (assigned.comparisons) |view| for ([_][]const u8{ "baseline", "candidate" }) |arm| for ([_][]const u8{ "edit.json", "request.json" }) |kind| {
-            try frozenCitationCompleteness(a, example.id, try std.fmt.allocPrint(a, "{s}-{d}.{s}", .{ arm, view.id.ordinal, kind }));
-        };
-    }
 }
 
 fn prepareHandoffControls(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema) !void {
@@ -533,7 +565,7 @@ fn prepareHandoffControls(a: std.mem.Allocator, schema: *const @import("../domai
         question: ?[]const u8,
         fixture: Case,
     };
-    const controls = try codec.decode([]const Control, a, try read(a, prior_root ++ "/handoff.controls.json"));
+    const controls = try codec.decode([]const Control, a, try read(a, root ++ "/handoff.controls.associated.json"));
     for (controls) |control| {
         const prepared = try prepare(a, control.fixture);
         defer prepared.passive.deinit();
@@ -556,14 +588,7 @@ fn prepareHandoffControls(a: std.mem.Allocator, schema: *const @import("../domai
         for (1..3) |repetition| {
             try consumeReviewReceipt(a, schema, control.fixture.id, repetition, prepared, packet);
         }
-        for ([_][]const u8{ "review.edit.json", "review.request.json" }) |suffix| try frozenCitationCompleteness(a, control.fixture.id, suffix);
     }
-}
-
-fn frozenCitationCompleteness(a: std.mem.Allocator, id: []const u8, suffix: []const u8) !void {
-    const exported = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, id, suffix }));
-    const frozen = try read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ root, id, suffix }));
-    try temperature_policy.expectProjection(a, suffix, frozen, exported);
 }
 
 fn reviewReceiptChecks(a: std.mem.Allocator, id: []const u8, prepared: Prepared, packet: *const packets.Packet, response: []const u8) !void {

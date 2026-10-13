@@ -28,27 +28,34 @@ pub const Need = Responses(.model).Need;
 pub const Content = Responses(.model).Content;
 pub const Response = Responses(.model).Response;
 pub const CanonicalResponse = Responses(.canonical).Response;
-pub const Checked = struct { unit: Unit, response: CanonicalResponse, origins: candidate.Origins = .{}, last_repair: ?@import("atomic_repair.zig").Merge = null };
+pub const RecordAssignment = struct {
+    reference_state: @import("reference_identity.zig").StateId,
+    group_index: usize,
+    source_group_id: @import("reference_reconciliation.zig").SignalId,
+    references: @import("atomic_repair.zig").Snapshot,
+};
+pub const Checked = struct { unit: Unit, response: CanonicalResponse, origins: candidate.Origins = .{}, last_repair: ?@import("atomic_repair.zig").Merge = null, record_assignment: ?RecordAssignment = null };
 const candidate = @import("specification_candidate.zig");
 pub const Validation = union(enum) { valid: Checked, invalid: candidate.Issue };
 
-/// Compact model result, without the native IR's content wrapper.
+/// Initial authoring owns its supporting-group choice; repair remains value-only.
+pub const AuthoringValue = struct { value: spec.BusinessValue, signal_ids: []const @import("reference_reconciliation.zig").SignalId };
 pub const ModelResponse = union(enum) {
-    brief: spec.Wire.Brief,
-    primary_user_story: spec.Wire.AttributedValue,
-    entities: spec.Wire.ApplicabilityProposal,
+    brief: struct { title: AuthoringValue, description: AuthoringValue, primary_goal: AuthoringValue },
+    primary_user_story: AuthoringValue,
+    entities: struct { disposition: spec.Applicability, basis: AuthoringValue },
     records: struct { records: []const spec.Wire.RecordProposal },
-    clarification: struct { reason: NeedReason, question: spec.Wire.AttributedValue, record_kind: ?spec.Kind = null },
+    clarification: struct { reason: NeedReason, question: AuthoringValue, record_kind: ?spec.Kind = null },
     inconclusive: Inconclusive,
 
     pub fn from(allocator: std.mem.Allocator, response: Response) std.mem.Allocator.Error!ModelResponse {
         return switch (response) {
-            .clarification => |need| .{ .clarification = .{ .reason = need.reason, .question = .{ .value = need.question.value }, .record_kind = need.record_kind } },
+            .clarification => |need| .{ .clarification = .{ .reason = need.reason, .question = wireValue(need.question), .record_kind = need.record_kind } },
             .inconclusive => |failure| .{ .inconclusive = failure },
             .content => |content| switch (content) {
-                .brief => |brief| .{ .brief = .{ .title = .{ .value = brief.title.value }, .description = .{ .value = brief.description.value }, .primary_goal = .{ .value = brief.primary_goal.value } } },
-                .primary_user_story => |story| .{ .primary_user_story = .{ .value = story.value } },
-                .entities => |entities| .{ .entities = .{ .disposition = entities.disposition, .basis = .{ .value = entities.basis.value } } },
+                .brief => |brief| .{ .brief = .{ .title = wireValue(brief.title), .description = wireValue(brief.description), .primary_goal = wireValue(brief.primary_goal) } },
+                .primary_user_story => |story| .{ .primary_user_story = wireValue(story) },
+                .entities => |entities| .{ .entities = .{ .disposition = entities.disposition, .basis = wireValue(entities.basis) } },
                 .records => |records| blk: {
                     const projected = try allocator.alloc(spec.Wire.RecordProposal, records.len);
                     for (records, projected) |record, *wire| wire.* = .{ .content = record.content };
@@ -58,38 +65,37 @@ pub const ModelResponse = union(enum) {
         };
     }
 };
-
-pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, bound: @import("specification_source_binding.zig").Bound) Error!Response {
-    const response = @import("model_candidate_json.zig").decode(ModelResponse, allocator, bytes) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.InvalidJsonDocument => error.InvalidSpecificationUnit,
-    };
-    return switch (response) {
-        .clarification => |need| .{ .clarification = .{ .reason = need.reason, .question = .{ .value = need.question.value, .provenance = try questionSelection(allocator, bound) }, .record_kind = need.record_kind } },
-        .inconclusive => |failure| .{ .inconclusive = failure },
-        .brief => |brief| if (bound == .brief) .{ .content = .{ .brief = .{
-            .title = .{ .value = brief.title.value, .provenance = bound.brief.title },
-            .description = .{ .value = brief.description.value, .provenance = bound.brief.description },
-            .primary_goal = .{ .value = brief.primary_goal.value, .provenance = bound.brief.primary_goal },
-        } } } else error.InvalidSpecificationUnit,
-        .primary_user_story => |story| if (bound == .primary_user_story) .{ .content = .{ .primary_user_story = .{ .value = story.value, .provenance = bound.primary_user_story } } } else error.InvalidSpecificationUnit,
-        .entities => |entities| if (bound == .entities) .{ .content = .{ .entities = .{ .disposition = entities.disposition, .basis = .{ .value = entities.basis.value, .provenance = bound.entities } } } } else error.InvalidSpecificationUnit,
-        .records => |records| blk: {
-            if (bound != .records) return error.InvalidSpecificationUnit;
-            const selected = try allocator.alloc(spec.Model.RecordProposal, records.records.len);
-            for (records.records, selected) |record, *value| value.* = .{ .content = record.content, .provenance = bound.records.selection };
-            break :blk .{ .content = .{ .records = selected } };
-        },
-    };
+fn wireValue(value: spec.Values(.model).AttributedValue) AuthoringValue {
+    return .{ .value = value.value, .signal_ids = value.source_group_ids };
 }
-
-fn questionSelection(a: std.mem.Allocator, bound: @import("specification_source_binding.zig").Bound) Error!spec.Selection {
-    return switch (bound) {
-        .brief => |brief| .{ .claim_ids = try @import("reference_support.zig").lineage(a, brief.title.claim_ids, try @import("reference_support.zig").lineage(a, brief.description.claim_ids, brief.primary_goal.claim_ids)), .clarification_response_ids = &.{} },
+pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, bound: @import("specification_source_binding.zig").Bound) Error!Response {
+    const response = @import("model_candidate_json.zig").decode(ModelResponse, allocator, bytes) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
+    const available = switch (bound) {
+        .brief => |value| value,
         .primary_user_story => |value| value,
         .entities => |value| value,
-        .records => |value| value.selection,
+        .records => |value| value.catalogue,
     };
+    return switch (response) {
+        .clarification => |need| clarification: {
+            if (bound == .records and (need.question.signal_ids.len != 1 or need.question.signal_ids[0].ordinal != bound.records.signal.ordinal)) return error.InvalidSpecificationUnit;
+            break :clarification .{ .clarification = .{ .reason = need.reason, .question = try associated(allocator, available, need.question, .question), .record_kind = need.record_kind } };
+        },
+        .inconclusive => |failure| .{ .inconclusive = failure },
+        .brief => |brief| if (bound == .brief) .{ .content = .{ .brief = .{ .title = try associated(allocator, available, brief.title, .content), .description = try associated(allocator, available, brief.description, .content), .primary_goal = try associated(allocator, available, brief.primary_goal, .content) } } } else error.InvalidSpecificationUnit,
+        .primary_user_story => |story| if (bound == .primary_user_story) .{ .content = .{ .primary_user_story = try associated(allocator, available, story, .content) } } else error.InvalidSpecificationUnit,
+        .entities => |entities| if (bound == .entities) .{ .content = .{ .entities = .{ .disposition = entities.disposition, .basis = try associated(allocator, available, entities.basis, .content) } } } else error.InvalidSpecificationUnit,
+        .records => |batch| if (bound == .records) records: {
+            const records = try allocator.alloc(spec.Values(.model).RecordProposal, batch.records.len);
+            const ids = try allocator.dupe(@import("reference_reconciliation.zig").SignalId, &.{bound.records.signal});
+            for (batch.records, records) |wire, *record| record.* = .{ .content = wire.content, .source_group_ids = ids, .provenance = bound.records.selection };
+            break :records .{ .content = .{ .records = records } };
+        } else error.InvalidSpecificationUnit,
+    };
+}
+fn associated(a: std.mem.Allocator, available: @import("specification_source_binding.zig").Catalogue, value: AuthoringValue, mode: @import("specification_source_binding.zig").Mode) Error!spec.Values(.model).AttributedValue {
+    const selected = @import("specification_source_binding.zig").resolveGroups(a, available.records, available.inputs, value.signal_ids, mode) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
+    return .{ .value = value.value, .source_group_ids = selected.source_group_ids, .provenance = selected.selection };
 }
 
 pub fn validate(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: Response) Error!Validation {
@@ -111,21 +117,21 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
             break :need .{ .clarification = .{
                 .reason = need.reason,
                 .record_kind = need.record_kind,
-                .question = provenance.inspectAttributed(boundary, allocator, validator, context, need.question, &inspection) catch |err| return rejected(unit, .clarification_question, null, inspection.text_issue, err),
+                .question = inspectAuthored(boundary, allocator, validator, context, need.question, .question, &inspection) catch |err| return rejected(unit, .clarification_question, null, inspection.text_issue, err),
             } };
         },
         .content => |content| blk: {
             if (@intFromEnum(std.meta.activeTag(unit)) != @intFromEnum(std.meta.activeTag(content))) return .{ .invalid = .{ .unit = unit, .field = .unit, .rule = .unit_kind, .observed = null, .blocked = .unit_kind } };
             break :blk .{ .content = switch (content) {
                 .brief => |brief| .{ .brief = .{
-                    .title = provenance.inspectAttributed(boundary, allocator, validator, context, brief.title, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .title, inspection, err),
-                    .description = provenance.inspectAttributed(boundary, allocator, validator, context, brief.description, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .description, inspection, err),
-                    .primary_goal = provenance.inspectAttributed(boundary, allocator, validator, context, brief.primary_goal, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .primary_goal, inspection, err),
+                    .title = inspectAuthored(boundary, allocator, validator, context, brief.title, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .title, inspection, err),
+                    .description = inspectAuthored(boundary, allocator, validator, context, brief.description, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .description, inspection, err),
+                    .primary_goal = inspectAuthored(boundary, allocator, validator, context, brief.primary_goal, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .primary_goal, inspection, err),
                 } },
-                .primary_user_story => |story| .{ .primary_user_story = provenance.inspectAttributed(boundary, allocator, validator, context, story, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .story, inspection, err) },
+                .primary_user_story => |story| .{ .primary_user_story = inspectAuthored(boundary, allocator, validator, context, story, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .story, inspection, err) },
                 .entities => |entities| .{ .entities = .{
                     .disposition = entities.disposition,
-                    .basis = provenance.inspectAttributed(boundary, allocator, validator, context, entities.basis, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .entity_basis, inspection, err),
+                    .basis = inspectAuthored(boundary, allocator, validator, context, entities.basis, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .entity_basis, inspection, err),
                 } },
                 .records => |records| records: {
                     const checked = try allocator.alloc(spec.RecordProposal, records.len);
@@ -142,6 +148,14 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
     return .{ .valid = .{ .unit = unit, .response = result } };
 }
 
+// Every authored value retains an explicit group occurrence. General provenance
+// utilities may still inspect exact-only values outside an authoring unit.
+fn inspectAuthored(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, value: spec.Values(boundary).AttributedValue, mode: @import("specification_source_binding.zig").Mode, inspection: *provenance.Inspection) provenance.Error!spec.AttributedValue {
+    inspection.* = .{};
+    if (value.source_group_ids.len == 0) return error.InvalidSpecification;
+    return provenance.inspectAttributedFor(boundary, allocator, validator, context, value, mode, inspection);
+}
+
 /// Equality over normalized typed content, never a second rendered text source.
 pub fn equalContent(allocator: std.mem.Allocator, a: spec.Content(spec.BusinessValue), b: spec.Content(spec.BusinessValue)) std.mem.Allocator.Error!bool {
     const left = try std.json.Stringify.valueAlloc(allocator, a, .{});
@@ -154,7 +168,7 @@ pub fn equalContent(allocator: std.mem.Allocator, a: spec.Content(spec.BusinessV
 /// The same duplicate rule applies inside a batch and against earlier batches.
 pub fn duplicateRecordIssue(allocator: std.mem.Allocator, prior: spec.RecordProposal, current: spec.RecordProposal, index: usize, observed: ?candidate.Replacement) Error!?candidate.Issue {
     if (!try equalContent(allocator, prior.content, current.content)) return null;
-    return .{ .unit = .records, .field = .{ .target = .{ .record = index } }, .rule = .duplicate_record, .observed = observed, .blocked = if (try equalEvidence(allocator, prior.provenance, current.provenance)) null else .competing_records };
+    return .{ .unit = .records, .field = .{ .target = .{ .record = index } }, .rule = .duplicate_record, .observed = observed, .blocked = if (sameGroups(prior.source_group_ids, current.source_group_ids) and try equalEvidence(allocator, prior.provenance, current.provenance)) null else .competing_records };
 }
 
 fn rejected(unit: Unit, field: candidate.Field, observed: ?candidate.Replacement, text_issue: ?@import("typed_text.zig").Issue, err: provenance.Error) Error!Validation {
@@ -176,6 +190,11 @@ fn rejected(unit: Unit, field: candidate.Field, observed: ?candidate.Replacement
     } } };
 }
 
+fn sameGroups(left: []const @import("reference_reconciliation.zig").SignalId, right: []const @import("reference_reconciliation.zig").SignalId) bool {
+    if (left.len != right.len) return false;
+    for (left, right) |expected, actual| if (expected.ordinal != actual.ordinal) return false;
+    return true;
+}
 fn equalEvidence(a: std.mem.Allocator, left: spec.Provenance, right: spec.Provenance) std.mem.Allocator.Error!bool {
     const lhs = try std.json.Stringify.valueAlloc(a, left, .{});
     defer a.free(lhs);

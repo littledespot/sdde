@@ -45,8 +45,8 @@ reassessment remains a separate unapproved decision in FIX_002.
 
 **ADR 0022 reference handoff amendment (approved 6 October 2026):** use native
 occurrence-bound selections and group catalogues in initial and repaired
-reconciliation. Signal changes retire dependent roles; disposition changes retire
-affected signals while preserving independent groups. Rebuild through the same
+reconciliation. Signal changes retire dependent authored associations; disposition
+changes retire affected signals while preserving independent groups. Rebuild through the same
 validated phases before canonical identity assignment and full-candidate checks.
 Mandatory exact-token content is reconstructed from the authorized source claim,
 without a model call. Summary ordering and retry occurrence identity are separate;
@@ -61,10 +61,18 @@ dependencies, rather than borrowing a broader initial authoring selection.
 Completed specification units use the authorized repair target and current review
 evidence; their packets do not reuse a consumed authoring assignment. Pending
 authoring still binds and validates its current source group.
-Record omission insertion must retain one accepted group's complete ordered
-selection under ADR 0020, using the same binding check as canonical readback.
-Aggregate evidence from several groups cannot authorize an invented association
-or a cross-group insertion; it remains an unsafe candidate repair.
+Initial attributed authoring selects complete accepted group occurrences together
+with content under ADR 0020. Fixed repairs retain required canonical
+`source_group_ids`; their wire responses stay value/content-only. Value-only repair
+cannot change group IDs, explicit `S`, effective evidence bounds or siblings.
+A lost obligation outside that association has an explicit unresolved-association
+outcome and blocks; this amendment adds no membership-changing rebuild permission.
+It cannot blame extraction, grouping or the removed presentation-role producer.
+Record omission insertion must bind one current accepted group occurrence and its
+complete ordered selection through the same resolver as canonical readback.
+Equal claim membership does not identify the group occurrence. Missing, ambiguous
+or foreign occurrence authority blocks; aggregate evidence from several groups
+cannot authorize an invented association or cross-group insertion.
 
 An omission must identify nonempty authorized sources at review admission, even
 when its subject also fixes claim evidence. Loss comparison retains that admitted
@@ -130,10 +138,11 @@ or classification culprit merely because meaning is missing.
 
 Attribution is separate from atomic permission. Derived upstream locations supply
 the existing diagnostic claim sets and must pass the existing target, old-value,
-revision and dependency checks. Known role or summary defects retain explicit
-unsupported-repair identities and cannot fall back to another producer or candidate.
+revision and dependency checks. Known authored-association or summary defects
+retain explicit unsupported-repair identities and cannot fall back to another
+producer or candidate.
 Unresolved attribution grants no upstream rebuilding; independently authorized
-candidate-local checks remain available. No new exact-reference, role, summary,
+candidate-local checks remain available. No new exact-reference, association-membership, summary,
 entity-decision, retry or verdict-reassessment permission is added.
 
 Collection, correction, authorization and readback use this one comparison
@@ -293,6 +302,45 @@ runner owns request retirement, per-assignment and native-defect retry allowance
 and global actual-token accounting; successful independent work does not reset an
 unresolved target or replenish the finite budget.
 
+**Within-execution review retention (task-authorized Phase 6 amendment,
+11 October 2026).** Candidate-local repairs still retire current support and
+authority projections. An execution-private receipt reservoir may preserve clean
+admitted `supported`/`not_applicable` source assignments as historical evidence.
+It cannot satisfy a gate. Reconstruct the complete current assignment through
+the existing packet owner and check the [§12.6 request witness](12-model-boundary.md#126-semantic-review),
+original sources, canonical source producer, native subjects/requiredness and
+applicability. Equal field bytes, aliases, ordinals or reference-state strings
+alone do not authorize reuse. Fresh native admission appends the entire assigned
+group in ordinary collector order, with its original finding values and actual
+origins, and builds current revision-bound authority. An empty restart prefix
+contains no finding and cannot complete a review.
+
+Original review scope and native occurrence identities survive candidate-local
+restarts; reassessing a changed subject cannot replenish its repair allowance.
+Update historical snapshots after every admitted new or retained assignment and
+loss-localization update or native finding repair. A changed value/origin retires its older receipt. Missing,
+foreign, stale or invalid receipts provide no coverage; changed assignments take
+the ordinary model path. Supported detail/evidence repairs and protocol-corrected
+assignments are conservatively reassessed unless their additional complete
+dependency witness is represented. Source omissions and their revision-bound
+preservation comparisons are not reused. Loss localization, verdict prohibition
+and repair attribution retain their existing contracts.
+
+Upstream source/reconciliation producer changes prevent receipt reuse even when
+an equal reference-state string survives. Full-candidate collection/entity context
+changes require reassessment; policy context remains broad and is reassessed.
+Receipts retain their immutable input/request/result owners until execution
+teardown. They are native bookkeeping, never serialized review authority,
+checkpoints or cross-run caches. Fresh invocations start with no receipts.
+Impacted semantic review and complete native coverage, authority, policy and
+publication validation still run. Mechanical reuse establishes unchanged
+dependencies and admission, not the truth of the original semantic judgment.
+The pure operation consumes only the finite unchanged collector prefix, rebuilding
+each assignment after its predecessor is admitted. Membership must strictly grow
+within the current native population. A miss returns to ordinary model preparation;
+only a complete accepted source collection with no pending localization takes the
+completion transition. No extra retry allowance or unguarded workflow loop applies.
+
 Source-ID selection repairs project the diagnostic's native eligibility rule
 through the shared [§12.2 schema restrictions](12-model-boundary.md#122-initial-guidance-packet).
 Reference selection/disposition and grouped omission repairs likewise use their
@@ -306,11 +354,11 @@ canonical `provenance.claim_ids` from the bound source group or selected
 diagnostic producer before old-value/revision and full-candidate checks.
 Source-ID or detail corrections remain in their existing selected repair
 families; source-omission detail correction uses the coupled explanation and
-obligation shape in §22.1, and cannot change the verdict. The original source-bound
-assignment, explicit `S`, effective evidence bound and siblings stay pinned by
-the existing atomic authorization. A value-only replacement cannot expand them;
-changing the source obligation requires upstream reconciliation and
-regeneration. Malformed or corrupt stored evidence is rejected before
+obligation shape in §22.1, and cannot change the verdict. The original source-group occurrence association, explicit `S`, effective evidence
+bound and siblings stay pinned by the existing atomic authorization. A value-only replacement cannot expand them;
+changing authored group membership requires separately authorized authored-unit
+rebuilding; none is added by this amendment. Genuine evidenced upstream loss
+retains its existing producer repair path. Malformed or corrupt stored evidence is rejected before
 model-response reconstruction. Unbound authority is an engine block, not a
 model repair or user clarification.
 

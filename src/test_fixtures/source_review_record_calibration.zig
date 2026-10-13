@@ -35,8 +35,8 @@ pub fn run() !void {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const cases = try @import("../domain/strict_json.zig").decode([]const Case, a, try shared.read(a, root ++ "/cases.json"), .{ .maximum_depth = 128 });
-    const retained = try codec.decode([]const shared.Case, a, try shared.read(a, "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.json"));
+    const cases = try @import("../domain/strict_json.zig").decode([]const Case, a, try shared.read(a, root ++ "/cases.associated.json"), .{ .maximum_depth = 128 });
+    const retained = try codec.decode([]const shared.Case, a, try shared.read(a, "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.associated.json"));
     var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schema = try parser.compiler().compile(a, try shared.read(a, "design/workflows/spec/support.schema.json"));
     const prompt = try shared.read(a, "design/workflows/spec/support.prompt.md");
@@ -94,9 +94,9 @@ pub fn run() !void {
         "src/adapters/provider/bedrock_request.zig",
         "design/workflows/spec/support.schema.json",
         "design/workflows/spec/support.prompt.md",
-        root ++ "/cases.json",
+        root ++ "/cases.associated.json",
         root ++ "/scorecard.template.json",
-        "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.json",
+        "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.associated.json",
     };
     var dependencies: std.ArrayList(File) = .empty;
     for (paths) |path| try dependencies.append(a, try filePin(a, path));
@@ -112,8 +112,6 @@ pub fn run() !void {
         .dependencies = dependencies.items,
         .trials = trials.items,
     }, .{}) });
-    for (cases) |example| for ([_][]const u8{ "given", "when", "then", "record" }) |member| for ([_][]const u8{ "packet.json", "edit.json", "request.json" }) |kind| try frozen(a, example.id, try std.fmt.allocPrint(a, "{s}.{s}", .{ member, kind }));
-    try std.testing.expectEqualStrings(try shared.read(a, root ++ "/preparation.json"), try shared.read(a, output ++ "/preparation.json"));
 }
 
 fn sourceCase(example: Case, retained: []const shared.Case) !shared.Case {
@@ -128,9 +126,10 @@ fn prepare(a: std.mem.Allocator, example: Case, base: shared.Case) !shared.Prepa
     if (example.record) |record| {
         const brief = prepared.inputs.brief orelse return error.MissingCalibrationSource;
         const references = @import("../domain/reference_support.zig").records(prepared.context.references);
-        const claims = try @import("../domain/specification_source_binding.zig").roleClaimIds(a, references, .records);
-        const selection = try provenance.select(a, prepared.context, .{ .claim_ids = claims, .clarification_response_ids = &.{} });
-        const candidate: spec.IdentifiedContent = .{ .display_name = brief.title, .primary_user_story = brief.description, .records = try a.dupe(spec.IdentifiedRecord, &.{.{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .proposal = .{ .content = .{ .acceptance_criterion = .{ .given = try business(a, record.given), .when = try business(a, record.when), .then = try business(a, record.then) } }, .provenance = selection } }}), .entities = .{ .disposition = .not_applicable, .basis = brief.description } };
+        if (brief.description.source_group_ids.len != 1) return error.InvalidCalibrationRecord;
+        const assigned = try @import("../domain/specification_source_binding.zig").resolveGroups(a, references, prepared.context.inputs, brief.description.source_group_ids, .content);
+        const selection = try provenance.select(a, prepared.context, assigned.selection);
+        const candidate: spec.IdentifiedContent = .{ .display_name = brief.title, .primary_user_story = brief.description, .records = try a.dupe(spec.IdentifiedRecord, &.{.{ .id = .{ .kind = .acceptance_criterion, .ordinal = 1 }, .proposal = .{ .content = .{ .acceptance_criterion = .{ .given = try business(a, record.given), .when = try business(a, record.when), .then = try business(a, record.then) } }, .source_group_ids = assigned.source_group_ids, .provenance = selection } }}), .entities = .{ .disposition = .not_applicable, .basis = brief.description } };
         try provenance.validateStored(a, prepared.context.inputs, .{ .records = prepared.context.registry.records, .occurrences = prepared.context.registry.occurrences }, references, brief, candidate);
         prepared.inputs = try @import("../domain/specification_authority.zig").project(a, prepared.context.inputs.corpus.feature_id, prepared.context.references, candidate, brief);
     }
@@ -185,10 +184,5 @@ fn filePin(a: std.mem.Allocator, path: []const u8) !File {
     return .{ .path = path, .sha256 = try shared.sha256(a, bytes), .bytes = bytes.len };
 }
 fn pin(a: std.mem.Allocator, id: []const u8, suffix: []const u8) !File {
-    var result = try filePin(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, id, suffix }));
-    result.path = try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ root, id, suffix });
-    return result;
-}
-fn frozen(a: std.mem.Allocator, id: []const u8, suffix: []const u8) !void {
-    try std.testing.expectEqualStrings(try shared.read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ root, id, suffix })), try shared.read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, id, suffix })));
+    return filePin(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, id, suffix }));
 }

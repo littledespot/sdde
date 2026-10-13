@@ -1149,19 +1149,11 @@ test "configured source preservation reviews before generation and repairs throu
     try testSpecificationWorkflows(.source_preservation);
 }
 
-test "configured role assessment corrects an omitted decision with its original request and schema" {
-    try testSpecificationWorkflows(.role_decision_recovery);
-}
-
-test "configured role assessment exhausts repeated omitted decisions without authoring" {
-    try testSpecificationWorkflows(.role_decision_exhaustion);
-}
-
 test "configured native summary reuse advances a fresh validated plan after upstream regeneration" {
     try testSpecificationWorkflows(.reuse_regeneration);
 }
 
-test "configured story omission repairs only its value and publishes after dependent review" {
+test "configured story omission retains unaffected review origins and publishes after complete dependent review" {
     try testSpecificationWorkflows(.story_recovery);
 }
 
@@ -1181,7 +1173,7 @@ test "configured acceptance criterion batch localizes separate omissions and rep
     try testSpecificationWorkflows(.record_reviews);
 }
 
-fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation, role_decision_recovery, role_decision_exhaustion, reuse_regeneration, story_recovery, story_invalid, story_recurrence, finding_controls, record_reviews }) !void {
+fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservation, reuse_regeneration, story_recovery, story_invalid, story_recurrence, finding_controls, record_reviews }) !void {
     const io = std.testing.io;
     const allocator = std.testing.allocator;
     const faults = [_]@import("../../src/test_fixtures/spec_generation_driver.zig").Fault{
@@ -1247,8 +1239,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
     const principle_faults = std.meta.tags(@import("../../src/test_fixtures/spec_generation_responses.zig").PrincipleFault);
     const timing = @import("../../src/test_fixtures/scenario_timing.zig");
     const membership_start = principle_start + principle_faults.len * 2;
-    const role_decision_start = membership_start + 8;
-    const preservation_start = role_decision_start + 2;
+    const preservation_start = membership_start + 8;
     const story_start = preservation_start + 3;
     const finding_start = story_start + 6;
     const finding_controls = std.meta.tags(@import("../../src/test_fixtures/spec_generation_responses.zig").LossControl);
@@ -1258,8 +1249,6 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
     const case_range_begin: usize = switch (workflow_cases) {
         .existing => 0,
         .source_preservation => preservation_start,
-        .role_decision_recovery => role_decision_start,
-        .role_decision_exhaustion => role_decision_start + 1,
         .reuse_regeneration => preservation_start + 1,
         .story_recovery => story_start,
         .story_invalid => story_start + 2,
@@ -1268,10 +1257,8 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         .record_reviews => record_start,
     };
     const case_range_end: usize = switch (workflow_cases) {
-        .existing => role_decision_start,
+        .existing => preservation_start,
         .source_preservation => story_start,
-        .role_decision_recovery => role_decision_start + 1,
-        .role_decision_exhaustion => preservation_start,
         .reuse_regeneration => preservation_start + 2,
         .story_recovery => story_start + 2,
         .story_invalid => story_start + 4,
@@ -1286,8 +1273,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         const principle_fault = if (scenario >= principle_start and scenario < membership_start) principle_faults[(scenario - principle_start) % principle_faults.len] else null;
         const applicability = if (scenario >= applicability_start and scenario < principle_start) applicability_cases[(scenario - applicability_start) % applicability_cases.len] else null;
         const other_applicability = scenario >= applicability_start + applicability_cases.len;
-        const membership_scenario = scenario >= membership_start and scenario < role_decision_start;
-        const role_decision_scenario = scenario >= role_decision_start and scenario < preservation_start;
+        const membership_scenario = scenario >= membership_start and scenario < preservation_start;
         const preservation_scenario = scenario >= preservation_start and scenario < story_start;
         const story_scenario = scenario >= story_start and scenario < finding_start;
         const finding_control = if (scenario >= finding_start and scenario < record_start) finding_controls[scenario - finding_start] else null;
@@ -1350,7 +1336,6 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         if (source_repair_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (source_repairs[scenario - source_repair_start] == .partial) "MOCK librarian renews an eligible loan and sees the new return deadline.\n" else "A librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n" });
         if (reconciliation_scenario) switch (reconciliation_faults[scenario - reconciliation_start]) {
             .occupied_summary, .occupied_signals, .misbound_summary => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Display `Loan renewed!`.\n" }),
-            .unassigned_roles => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "MOCK borrower renews an eligible loan and sees its new deadline.\n" }),
             .misbound_signals => try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "On startup display `Hello, World!` and the current UTC date and time.\n" }),
             .occupied_conflict => {
                 try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "Renew the loan.\n" });
@@ -1376,7 +1361,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         const configured_definition = if (two_summary_requests) try std.mem.replaceOwned(u8, allocator, definition, "group-size: 8", "group-size: 2") else definition;
         defer if (two_summary_requests) allocator.free(configured_definition);
         try project.dir.writeFile(io, .{ .sub_path = "engine/workflows/preflight.workflow.yaml", .data = configured_definition });
-        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-roles.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "story.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "principle.prompt.md", "support.schema.json", "repair.prompt.md" }) |name| {
+        inline for (.{ "protocol.prompt.md", "extraction-content.prompt.md", "extraction.context.json", "extraction-classifications.prompt.md", "extraction.composition.json", "extraction.schema.json", "reconciliation.prompt.md", "reconciliation.schema.json", "reconciliation-summary.composition.json", "reconciliation-dispositions.prompt.md", "reconciliation-signals.prompt.md", "reconciliation-conflicts.prompt.md", "generation.prompt.md", "story.prompt.md", "generation.context.json", "entities.prompt.md", "records.prompt.md", "generation.schema.json", "support.prompt.md", "support-loss.prompt.md", "principle.prompt.md", "support.schema.json", "repair.prompt.md" }) |name| {
             const bytes = try std.Io.Dir.cwd().readFileAlloc(io, "design/workflows/spec/" ++ name, allocator, .limited(1_048_576));
             defer allocator.free(bytes);
             // A finer required-object selector must survive the native extraction
@@ -1425,8 +1410,10 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         var services = try @import("../../src/model_request_workflow_test.zig").providerServices(allocator, null, &.{ "spec_generation", "repair" }, false);
         defer services.deinit();
         const graph = boot.ready.workflows.registry().resolve(.{ .bytes = "spec-generation" }).?;
+        if (scenario == 0) try verifyAuthoringDiagnosticParent(io, allocator, project.dir, graph, boot.ready.roots.registry().llmProviderConfig());
         var runner = @import("../../src/application/workflow_pipeline_runner.zig").Runner.init(allocator, .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{ "--feature", "chosen", "--reference", "first" } }, .graph = graph }, &native.registry, boot.ready.logs.barrier(), .{}, &services);
-        defer runner.deinit();
+        var runner_active = true;
+        defer if (runner_active) runner.deinit();
         runner.publication_finalizer = logging.finalizer();
         var clock: @import("../../src/provider_authorization_test_fixture.zig").TestClock = .{};
         runner.provider_clock = clock.port();
@@ -1477,7 +1464,6 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             if (selected_fault.shape == .alternating_missing) driver.measurement_prefix = ".zig-cache/r37-recovery";
         }
         driver.principle_conflict = scenario == 1;
-        if (role_decision_scenario) driver.role_decision_fault = if (scenario == role_decision_start) .recover else .exhaust;
         driver.principle_fault = principle_fault;
         if (scenario < principle_start + principle_faults.len) {
             if (principle_fault) |mode| driver.measurement_prefix = switch (mode) {
@@ -1587,16 +1573,14 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         }
         if (global_scenario) try @import("../../src/test_fixtures/global_protocol_sequence.zig").verify(&driver, result);
         if (summary_scenario) try @import("../../src/test_fixtures/summary_protocol_sequence.zig").verify(&driver, result);
-        if (role_decision_scenario) try driver.verifyRoleDecisionSequence(result);
         const retained_repaired_source = reconciliation_scenario and (driver.reconciliation_fault == .cycle or driver.reconciliation_fault == .permuted_disposition);
         const repaired_signal_coverage = driver.reconciliation_fault == .signal_coverage and driver.reconciliation_protocol_fault != .foreign_content_always;
         const review_scope_attack = fault != null and (fault.?.shape == .review_dropped or fault.?.shape == .review_changed);
-        const missing_roles = driver.reconciliation_fault == .missing_entity_role or driver.reconciliation_fault == .unassigned_roles;
-        const expected: workflow.OutcomeTag = if (finding_control) |control| (if (control == .denied_role) .invalid else .ok) else if (story_scenario) (if (driver.story_omission == .recover) .ok else .failed) else if (missing_roles) .blocked else if (membership_scenario) (if (driver.failed_repair) .failed else .ok) else if (principle_fault == .repeated or principle_fault == .alternating) .failed else if (applicability) |mode| switch (mode) {
+        const expected: workflow.OutcomeTag = if (finding_control) |control| (if (control == .unbound_association) .invalid else .ok) else if (story_scenario) (if (driver.story_omission == .recover) .ok else .failed) else if (membership_scenario) (if (driver.failed_repair) .failed else .ok) else if (principle_fault == .repeated or principle_fault == .alternating) .failed else if (applicability) |mode| switch (mode) {
             .no_entities, .entities => .ok,
             .unjustified, .missing_decision, .missing_text => .needs_user,
             .inconclusive => .invalid,
-        } else if (source_repair_scenario) (if (driver.source_loss == .classification) .invalid else if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (review_scope_attack or driver.role_decision_fault == .exhaust or driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_correction or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
+        } else if (source_repair_scenario) (if (driver.source_loss == .classification) .invalid else if (driver.source_loss == .false_conflict_questions) .failed else if (driver.source_loss == .unchanged or driver.source_loss == .unchanged_conflict) .failed else .ok) else if (candidate_omission or extraction_omission or driver.support_fault == .inconclusive or (fault != null and fault.?.shape == .inconclusive)) .invalid else if (review_scope_attack or driver.global_sequence == .exhaust or driver.summary_sequence == .exhaust or driver.disposition_sequence == .exhaust or driver.support_fault == .question_exhaust or driver.support_fault == .question_native_exhaust or driver.support_fault == .question_mixed_exhaust or driver.support_fault == .question_evidence_exhaust or driver.support_fault == .question_evidence_alternating or driver.evidence_fault == .empty_correction or driver.reconciliation_fault == .occupied_conflict or driver.reconciliation_protocol_fault == .foreign_content_always or scenario == protocol_selection_scenario or scenario == 2 or scenario == 6 or repeated_scenario or driver.reconciliation_repair_fault == .unchanged_text or driver.failed_text_repair or driver.failed_classification_repair or driver.failed_citation_repair or (fault != null and (fault.?.repetition == .persistent or fault.?.repetition == .recover_then_exhaust))) .failed else if (driver.source_gaps or driver.evidence_fault == .recover or scenario == 3 or scenario == 10 or driver.generation_gap or driver.support_fault == .missing_detail or driver.support_fault == .question_recover or driver.support_fault == .question_evidence_recover or driver.reconciliation_fault == .conflict_coverage or driver.reconciliation_fault == .conflict_text or driver.reconciliation_fault == .permuted_conflict_disposition) .needs_user else if (scenario == 7) .blocked else .ok;
         if (expected != result.executionStatus().?) std.debug.print("scenario {d}: {any}; operation: {s}; candidate: {any}\n", .{ scenario, result, driver.rejected_operation orelse "none", try @import("../../src/application/candidate_validation_diagnostics.zig").read(&.{ .slots = runner.envelope.slots }) });
         try std.testing.expectEqual(expected, result.executionStatus().?);
         if (scenario == 0) {
@@ -1629,7 +1613,6 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 var historical: usize = 0;
                 for (records.signals) |signal| if (!try refs.eligibleSelection(records.dispositions, signal.value.claim_ids)) {
                     historical += 1;
-                    try std.testing.expectEqual(@as(usize, 0), signal.value.generation_roles.len);
                 };
                 try std.testing.expect(historical > 0);
             }
@@ -1775,7 +1758,6 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             defer readback.deinit();
             const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
             _ = try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource());
-            try std.testing.expectEqual(@as(usize, 803), graph.authority.steps.len);
         }
         if (applicability) |mode| {
             const samples = @import("../../src/test_fixtures/spec_generation_responses.zig");
@@ -2112,44 +2094,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             // Empty selections fail protocol admission. Persistent foreign
             // conflict handles exhaust without entering native reconciliation.
             const occupied = driver.reconciliation_fault == .occupied_conflict;
-            if (missing_roles) {
-                try std.testing.expect(result == .execution and result.execution == .blocked);
-                try std.testing.expect(diagnostic != null and diagnostic.? == .authoring_roles);
-                const gap = diagnostic.?.authoring_roles;
-                try std.testing.expectEqual(@as(usize, if (driver.reconciliation_fault == .missing_entity_role) 1 else std.meta.tags(@import("../../src/domain/reference_reconciliation.zig").GenerationRole).len), gap.missing_roles.len);
-                try std.testing.expect(std.mem.indexOfScalar(@import("../../src/domain/reference_reconciliation.zig").GenerationRole, gap.missing_roles, .entity_basis) != null);
-                try std.testing.expectEqual(@as(usize, 0), driver.generation_calls);
-                try std.testing.expectEqual(@as(usize, 0), driver.initial_source_review_calls);
-                try std.testing.expectEqual(@as(usize, 0), driver.candidate_review_calls);
-                try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
-                try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_merges);
-                try std.testing.expect(runner.repair_retry.currentPermit() == null);
-                const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-                try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
-                try std.testing.expectError(error.InvalidCandidatePayload, @import("../../src/application/specification_workflow.zig").readSession(&view));
-                const accounted = (try @import("../../src/application/reference_extraction_workflow.zig").read(&view, @import("../../src/application/reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted)).payload().reconciliation_accounted;
-                const prior = accounted.records.assignments.checked.prior.prior;
-                try std.testing.expectEqualDeep(prior.source.at(.signals, .relationship).?, gap.origin.?);
-                try std.testing.expectEqualDeep(prior.input.progress.plan.layout.items.state_id, gap.state_id);
-                try std.testing.expectEqual(prior.source.revision, gap.revision);
-                try std.testing.expectEqual(prior.input.partition.id.ordinal, gap.partition_id.ordinal);
-                try std.testing.expect(gap.eligible_signals.len != 0);
-                const calls = runner.tokenLedger().accounted_operations.items;
-                const identities = try @import("../../src/application/pipeline_values.zig").read(&view, @import("../../src/application/model_request_workflow.zig").ledger_schema, @import("../../src/domain/model_request_identity.zig").ModelRequestIdentityLedger);
-                var producer_found = false;
-                var role_attempts: usize = 0;
-                for (calls) |call| {
-                    if (gap.origin.?.matches(identities, call.id)) producer_found = true;
-                    const owner = call.id.model_request_id.immutable_unit_owner_id;
-                    if (owner == .reference_global and std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, "-roles-") != null) {
-                        role_attempts += 1;
-                        try std.testing.expectEqual(@as(u32, 1), call.id.model_attempt_ordinal.value);
-                    }
-                }
-                try std.testing.expect(producer_found);
-                try std.testing.expectEqual(@as(usize, 1), role_attempts);
-                try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
-            } else if (occupied) {
+            if (occupied) {
                 try std.testing.expect(diagnostic == null);
                 try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
                 try std.testing.expectEqual(@as(usize, 0), driver.reconciliation_repair_calls);
@@ -2192,8 +2137,8 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 const accounted = try @import("../../src/application/reference_extraction_workflow.zig").read(&.{ .slots = runner.envelope.slots }, @import("../../src/application/reference_reconciliation_workflow.zig").accounted_schema, .reconciliation_accounted);
                 try std.testing.expectEqual(.complete, accounted.payload().reconciliation_accounted.outcome);
                 try std.testing.expectEqual(@as(u64, 2), accounted.payload().reconciliation_accounted.records.assignments.checked.prior.prior.source.revision);
-                // Rebuilt role choices use retained groups; historical groups
-                // remain evidence without authorizing feature content.
+                // Rebuilt catalogues retain current complete groups; historical
+                // groups remain evidence without authorizing feature content.
                 try std.testing.expectEqual(workflow.OutcomeTag.ok, result.executionStatus().?);
                 try std.testing.expect(runner.envelope.slots[@intFromEnum(pipeline.DataKey.required_authority_inputs)] != null);
             }
@@ -2243,7 +2188,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         if (protocol_content_scenario) {
             try std.testing.expectEqual(@as(usize, 2), driver.reconciliation_repair_calls);
             // A forbidden native-content response consumes a correction; only
-            // the accepted semantic response may merge and rebuild roles.
+            // the accepted semantic response may merge and rebuild the source catalogue.
             try std.testing.expectEqual(@as(usize, if (driver.reconciliation_protocol_fault == .foreign_content_once) 1 else 0), driver.reconciliation_merges);
             var attempts: usize = 0;
             var request: ?*const @import("../../src/domain/model_request_identity.zig").ModelRequestId = null;
@@ -2435,7 +2380,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             }
         }
         if (scenario == 0) {
-            try std.testing.expectEqual(@as(usize, 4), driver.generation_calls);
+            try expectAuthoringCatalogueCalls(&runner, driver.generation_calls);
             try std.testing.expectEqual(@as(usize, 0), driver.initial_source_review_calls);
             try std.testing.expect(driver.candidate_review_calls != 0);
         }
@@ -2574,7 +2519,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
             try std.testing.expect(driver.loss_calls > 0);
             try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(.candidate));
             try std.testing.expectEqual(@as(usize, 0), driver.source_repair_calls);
-            try std.testing.expectEqual(@as(usize, 4), driver.generation_calls);
+            try expectAuthoringCatalogueCalls(&runner, driver.generation_calls);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
             // Repaired output must traverse full authority, rendering and stored
@@ -2591,6 +2536,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 const persisted = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
                 try std.testing.expectEqual(.all_resolved, persisted.review.result.continuation);
                 try std.testing.expectEqualDeep(session.units[1].?.response.content.primary_user_story, persisted.content.primary_user_story);
+                try verifyRetainedStoryReviews(allocator, &runner, driver.candidate_review_calls, persisted);
                 const context = try @import("../../src/application/specification_workflow.zig").readContext(&view);
                 const rendered_story = try @import("../../src/domain/specification_projection.zig").scalar(readback.allocator(), context, persisted.content.primary_user_story);
                 const obligation = if ((scenario - story_start) % 2 == 0) "current UTC date and time" else "new return deadline";
@@ -2620,17 +2566,30 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                     try std.testing.expect(driver.omission_merges > 1);
                     try std.testing.expect(driver.candidate_review_calls > driver.omission_merges);
                     try std.testing.expectEqualDeep(driver.omission_keys[0].?, session.units[1].?.last_repair.?.retry.?.key);
+                    const inputs = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/required_authority_workflow.zig").inputs_schema, .inputs);
+                    const story: @import("../../src/domain/required_authority.zig").Id = .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .primary_user_story };
+                    const slot = try @import("../../src/domain/specification_support.zig").reviewSlot(allocator, inputs, story);
+                    defer allocator.free(slot);
+                    var story_requests: usize = 0;
+                    for (runner.tokenLedger().accounted_operations.items) |operation| {
+                        const request = operation.id.model_request_id;
+                        if (request.purpose != .semantic_review or operation.id.model_attempt_ordinal.value != 1) continue;
+                        if (std.mem.eql(u8, request.immutable_unit_owner_id.semantic_review.review_slot_id.bytes, slot)) story_requests += 1;
+                    }
+                    // Negative evidence is reassessed on every repaired candidate;
+                    // receipt retention cannot resolve an unchanged omission.
+                    try std.testing.expectEqual(driver.omission_merges + 1, story_requests);
                 }
             }
         }
         if (finding_control) |control| {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
             try std.testing.expectEqual(@as(usize, 1), driver.loss_calls);
-            try std.testing.expectEqual(@as(usize, 4), driver.generation_calls);
+            try expectAuthoringCatalogueCalls(&runner, driver.generation_calls);
             try std.testing.expectEqual(@as(usize, 0), driver.source_repair_calls + driver.support_repair_calls);
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
-            if (control != .denied_role) {
+            if (control != .unbound_association) {
                 // Unresolved attribution grants no upstream rebuilding, while
                 // independently authorized exact candidate-local checks remain
                 // available. A false finding can likewise reach this owner;
@@ -2654,7 +2613,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expectEqual(.all_resolved, persisted.review.result.continuation);
                 try std.testing.expectEqualDeep(published_candidate.primary_user_story, persisted.content.primary_user_story);
             } else {
-                try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(.unsupported_role));
+                try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(.source_association));
                 try std.testing.expectEqual(@as(usize, 0), driver.omission_repair_calls + driver.omission_merges + driver.omission_resolutions);
                 const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
                 try std.testing.expect(session.units[1] != null);
@@ -2670,7 +2629,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 // Typed attribution is retained even though this producer has
                 // no accepted recovery permission. It cannot create a model
                 // repair request or a publication candidate.
-                try std.testing.expectEqual(.primary_user_story, finding.loss.unsupported_role);
+                try std.testing.expectEqualDeep(@import("../../src/domain/required_authority.zig").Id{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .primary_user_story }, finding.loss.source_association);
                 const denied = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_omission_repair_workflow.zig").schema, .omission_rejected);
                 try std.testing.expect(!view.contains(.source_omission_repair));
                 try std.testing.expectEqual(@as(usize, 1), denied.targets.len);
@@ -2737,34 +2696,29 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         }
         if (driver.candidate_omissions) |omissions| {
             const count: usize = if (omissions == .functional) 1 else 2;
-            // Re-review after repairing one record can reassess another still
-            // missing obligation; every admitted loss must remain candidate-local.
-            try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(.candidate));
-            try std.testing.expect(driver.loss_calls >= count);
-            try std.testing.expectEqual(@as(usize, 0), driver.source_repair_calls);
-            try std.testing.expectEqual(count, driver.omission_repair_calls);
-            try std.testing.expectEqual(count, driver.omission_merges);
-            try std.testing.expectEqual(count, driver.omission_resolutions);
+            // An empty authored family has no admitted supporting occurrence.
+            // Its offered catalogue cannot silently become insertion authority.
+            try std.testing.expectEqual(driver.loss_calls, driver.admitted_losses.get(.source_association));
+            try std.testing.expectEqual(count, driver.loss_calls);
+            try std.testing.expectEqual(@as(usize, 0), driver.source_repair_calls + driver.omission_repair_calls + driver.omission_merges + driver.omission_resolutions);
             try std.testing.expect(runner.repair_retry.currentPermit() == null);
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
-            const session = try @import("../../src/application/specification_workflow.zig").readSession(&view);
-            for ([_]@import("../../src/domain/specification.zig").Kind{ .functional_requirement, .acceptance_criterion }) |kind| {
-                var found = false;
-                for (session.units[@import("../../src/domain/specification_session.zig").records_index].?.response.content.records) |record| found = found or record.content == kind;
-                try std.testing.expect(found);
+            try std.testing.expectEqualStrings("authorize-specification-omission-repair", driver.rejected_operation.?);
+            const denied = try @import("../../src/application/specification_values.zig").storage.read(&view, @import("../../src/application/specification_omission_repair_workflow.zig").schema, .omission_rejected);
+            try std.testing.expectEqual(count, denied.targets.len);
+            for (denied.targets) |target| {
+                try std.testing.expectEqual(.unsupported_owner, target.reason);
+                try std.testing.expect(target.owner.? == .source_association);
+                try std.testing.expectEqualDeep(target.requirement, target.owner.?.source_association);
+                try std.testing.expect(target.requirement.unit == .feature);
+                try std.testing.expect(target.requirement.slot == .functional_requirements or target.requirement.slot == .acceptance_criteria);
+                try std.testing.expect(target.finding_origin != null and target.comparison_origin != null);
             }
-            const authority_result = try @import("../../src/application/required_authority_values.zig").read(&view, @import("../../src/application/required_authority_workflow.zig").result_schema, .result);
-            try std.testing.expectEqual(.all_resolved, authority_result.continuation);
-            for (authority_result.entries) |entry| try std.testing.expect(entry.candidate_defect == null);
+            try std.testing.expect(!view.contains(.source_omission_repair) and !view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+            try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
             try std.testing.expectEqual(driver.calls, runner.tokenLedger().accounted_operations.items.len);
             try std.testing.expectEqual(@as(u128, driver.calls) * (fake.invocation_plan.complete.input_tokens + fake.invocation_plan.complete.output_tokens), runner.tokenLedger().committed());
-            var readback: std.heap.ArenaAllocator = .init(allocator);
-            defer readback.deinit();
-            const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
-            const persisted = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
-            try std.testing.expectEqual(.all_resolved, persisted.review.result.continuation);
-            try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(persisted.content, .functional_requirement));
-            try std.testing.expect(@import("../../src/domain/specification.zig").hasRecords(persisted.content, .acceptance_criterion));
             const corrected_initial_review = scenario == omission_scenario + 2;
             try std.testing.expectEqual(@as(usize, @intFromBool(corrected_initial_review)), driver.fault_calls);
             if (corrected_initial_review) {
@@ -2867,6 +2821,8 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 defer next_runner.deinit();
                 var next_driver: @import("../../src/test_fixtures/spec_generation_driver.zig").Driver = .{ .runner = &next_runner, .fake = &fake };
                 const rejected = next_driver.run();
+                if (rejected != .execution_rejected or rejected.execution_rejected != .operation_failed) std.debug.print("stale extraction contract rerun: outcome={s}, result={s}, operation={s}, calls={d}\n", .{ @tagName(rejected.executionStatus().?), @tagName(rejected), next_driver.rejected_operation orelse "none", next_driver.calls });
+                try std.testing.expect(rejected == .execution_rejected and rejected.execution_rejected == .operation_failed);
                 try std.testing.expectEqual(error.REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE, rejected.execution_rejected.operation_failed);
                 try std.testing.expectEqualStrings("REFERENCE_EXTRACTION_CONTRACT_UNAVAILABLE", rejected.execution_rejected.diagnostic());
                 try std.testing.expectEqual(@as(usize, 0), next_driver.calls);
@@ -2885,8 +2841,209 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expectEqual(@import("../../src/domain/workflow_gate.zig").Rejection.stale_authority, runner.envelope.checkGate(@import("../../src/application/required_authority_workflow.zig").gate_contract).?);
             }
         } else if (expected != .needs_user) try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
+        if (workflow_cases == .story_recovery) try verifyReviewHistoryOwnerRelease(allocator, &runner, &runner_active);
         cost.passed();
     }
+}
+
+// Offline authorization preflight for the Phase 5 diagnostic launcher. Resolve
+// the authentic extraction-parent preparation through the current compiled
+// graph and production provider bootstrap; no request is dispatched.
+fn verifyAuthoringDiagnosticParent(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, graph: *const workflow_compilation.CompiledWorkflow, provider_path: *const bootstrap_root_registry.LLMProviderConfigCapability) !void {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const repository = std.Io.Dir.cwd();
+    const config_bytes = try repository.readFileAlloc(io, "test/e2e/wf-001-hello-world/.sddtoolkit.json", a, .limited(1_048_576));
+    var configuration = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, config_bytes);
+    defer configuration.deinit();
+    const provider_bytes = try repository.readFileAlloc(io, "test/e2e/config/.sddproviders.json", a, .limited(1_048_576));
+    // This integration fixture explicitly configures this provider path; the
+    // production bootstrap below still opens it through the validated capability.
+    try project.writeFile(io, .{ .sub_path = ".sddproviders.json", .data = provider_bytes });
+    var assembly = model_provider_bootstrap.Assembly.init(io, a, project, .{}, &@import("../../src/composition/provider_model_contracts.zig").registry);
+    const selected: workflow_execution.SelectedWorkflow = .{ .invocation = .{ .workflow_id = graph.authority.workflow_id, .arguments = &.{} }, .graph = graph };
+    var outcome = assembly.bind().invoke(&selected, &configuration.config.models, provider_path);
+    defer outcome.deinit();
+    try std.testing.expect(outcome == .ready);
+    const step = for (graph.authority.steps) |*current| {
+        if (std.mem.eql(u8, current.id.bytes, "g7-extract-content")) break current;
+    } else return error.MissingDiagnosticParentStep;
+    try std.testing.expectEqualStrings("prepare-model-request", step.operation_id.bytes);
+    try std.testing.expectEqualStrings("spec_generation", step.model.?.slot.bytes);
+    const binding = try (@import("../../src/actions/provider/resolve_provider_model_binding.zig").Action{}).execute(graph, step.id, outcome.ready.registry(), outcome.ready.allowlist());
+    const configured = configuration.config.models.slots.map.get(binding.slot_id.bytes).?;
+    try std.testing.expectEqualStrings(configured.provider, binding.registry_entry.provider.bytes);
+    try std.testing.expectEqualStrings(configured.model, binding.registry_entry.model.bytes);
+    try std.testing.expect(@import("../../src/domain/request_debugger.zig").sameOptional(configured.reasoningEffort, binding.reasoning_effort));
+    try std.testing.expectEqual(configured.maxOutputTokens, if (binding.controls.max_output_tokens) |value| value.value else null);
+    var digest: [32]u8 = undefined;
+    std.crypto.hash.sha2.Sha256.hash(graph.source.?.content, &digest, .{});
+    const observed = .{
+        .version = "authoring-diagnostic-parent-preflight/v1",
+        .workflow = graph.authority.workflow_id.bytes,
+        .workflow_version = graph.authority.workflow_version,
+        .workflow_sha256 = std.fmt.bytesToHex(digest, .lower),
+        .request_step = step.id.bytes,
+        .operation = step.operation_id.bytes,
+        .slot = binding.slot_id.bytes,
+        .provider = binding.registry_entry.provider.bytes,
+        .model = binding.registry_entry.model.bytes,
+        .provider_config = binding.registry_entry.config,
+        .reasoning_effort = binding.reasoning_effort,
+        .response_mode = binding.registry_entry.responseMode(),
+        .controls = binding.controls,
+        .dispatched_calls = @as(u32, 0),
+    };
+    try repository.createDirPath(io, ".zig-cache/authoring-associations");
+    try repository.writeFile(io, .{ .sub_path = ".zig-cache/authoring-associations/parent-preflight.json", .data = try std.json.Stringify.valueAlloc(a, observed, .{ .whitespace = .indent_2 }) });
+}
+
+fn expectAuthoringCatalogueCalls(runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, actual: usize) !void {
+    const context = try @import("../../src/application/specification_workflow.zig").readContext(&.{ .slots = runner.envelope.slots });
+    const groups = try @import("../../src/domain/specification_source_binding.zig").recordCount(@import("../../src/domain/reference_support.zig").records(context.references));
+    // The three singleton tasks and every retained complete group are dispatched
+    // once, including groups whose content-only record result is empty.
+    try std.testing.expectEqual(3 + groups, actual);
+}
+
+fn verifyRetainedStoryReviews(allocator: std.mem.Allocator, runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, calls: usize, persisted: @import("../../src/domain/specification_state.zig").State) !void {
+    const authority = @import("../../src/domain/required_authority.zig");
+    const source = @import("../../src/domain/specification_support.zig").Source;
+    const identity = @import("../../src/domain/model_request_identity.zig");
+    const Origin = @import("../../src/domain/model_candidate_origin.zig").Origin;
+    const owned = @import("../../src/application/required_authority_values.zig");
+    const values = @import("../../src/application/pipeline_values.zig");
+    const requests = @import("../../src/application/model_request_workflow.zig");
+    const review = @import("../../src/application/specification_support_workflow.zig");
+    const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+    const inputs = try owned.read(&view, @import("../../src/application/required_authority_workflow.zig").inputs_schema, .inputs);
+    const context = try @import("../../src/application/specification_workflow.zig").readContext(&view);
+    const history = try owned.read(&view, review.history_schema, .review_history);
+    const identities = try values.read(&view, requests.ledger_schema, identity.ModelRequestIdentityLedger);
+    // The retained path has no provider attempt or newly assigned request ID.
+    try std.testing.expectEqual(runner.tokenLedger().accounted_operations.items.len, identities.recordCount());
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ledger = try authority.build(a, inputs);
+    try std.testing.expectEqual(ledger.requirements.len, inputs.review_origins.len);
+    try std.testing.expectEqual(ledger.requirements.len, inputs.evidence.len);
+    try std.testing.expectEqualDeep(inputs.evidence, persisted.review.evidence);
+    try source.validateStored(a, inputs, context.inputs);
+    var assignments: usize = 0;
+    var refreshed: usize = 0;
+    var retained: usize = 0;
+    var index: usize = 0;
+    while (index < ledger.requirements.len) {
+        const id = ledger.requirements[index].seed.id;
+        const scope = source.assignmentScope(inputs, id);
+        const subjects = if (scope == .record) try source.assignmentSubjects(a, inputs, id) else try a.dupe(authority.Id, &.{id});
+        const packet = try source.packetFor(allocator, inputs, context, scope);
+        defer @import("../../src/domain/model_input_packet.zig").release(packet);
+        const subject = try @import("../../src/domain/specification_review_subject.zig").project(a, inputs, context, id);
+        // Broad assignments received the edited story as context. Focused fields
+        // and unchanged record batches retain their complete original requests.
+        const changed = switch (subject) {
+            .candidate_field => |field| field.slot == .primary_user_story,
+            .collection, .entity_applicability, .candidate_support => true,
+            .source_preservation, .reference_signal => false,
+        };
+        var first: ?Origin = null;
+        var last: ?Origin = null;
+        var actual_calls: usize = 0;
+        for (runner.tokenLedger().accounted_operations.items) |operation| {
+            const request = operation.id.model_request_id;
+            if (request.purpose != .semantic_review or !identity.unitOwnerEql(request.immutable_unit_owner_id, packet.unit())) continue;
+            try std.testing.expectEqual(@as(u32, 1), operation.id.model_attempt_ordinal.value);
+            try std.testing.expect(request.stage_run_epoch_id.eql(identities.stageRunEpochId()));
+            try std.testing.expectEqual(.accepted, identities.record(request).?.terminal_reason.?);
+            const origin = Origin.from(identities, operation.id).?;
+            if (first == null) first = origin;
+            last = origin;
+            actual_calls += 1;
+        }
+        try std.testing.expectEqual(@as(usize, if (changed) 2 else 1), actual_calls);
+        for (subjects, index..) |assigned, ordinal| {
+            try std.testing.expectEqualDeep(assigned, inputs.evidence[ordinal].requirement);
+            try std.testing.expectEqual(.model_assisted, inputs.evidence[ordinal].method);
+            try std.testing.expectEqualDeep(last.?, inputs.review_origins[ordinal].?);
+            if (!changed) {
+                try std.testing.expectEqualDeep(first.?, inputs.review_origins[ordinal].?);
+                const receipt = for (history.receipts) |receipt| {
+                    if (!std.meta.eql(receipt.origin, first.?)) continue;
+                    const contains = for (receipt.subjects) |seed| {
+                        if (std.meta.eql(seed.id, assigned)) break true;
+                    } else false;
+                    if (!contains) continue;
+                    break receipt;
+                } else return error.MissingRetainedReviewReceipt;
+                try std.testing.expect(receipt.request.id().stage_run_epoch_id.eql(identities.stageRunEpochId()));
+                try std.testing.expectEqualStrings(packet.body(), receipt.request.packet().?.body());
+            }
+        }
+        if (changed) refreshed += 1 else retained += 1;
+        assignments += 1;
+        index += subjects.len;
+    }
+    try std.testing.expect(retained > 0 and refreshed > 0);
+    try std.testing.expectEqual(assignments + refreshed, calls);
+    try std.testing.expect(calls < 2 * assignments);
+}
+
+fn verifyReviewHistoryOwnerRelease(allocator: std.mem.Allocator, runner: *@import("../../src/application/workflow_pipeline_runner.zig").Runner, runner_active: *bool) !void {
+    const owned = @import("../../src/application/required_authority_values.zig");
+    const values = @import("../../src/application/pipeline_values.zig");
+    const review = @import("../../src/application/specification_support_workflow.zig");
+    const retention = @import("../../src/domain/specification_review_retention.zig");
+    const snapshot = @import("../../src/domain/atomic_repair.zig").snapshot;
+    const Observation = struct { origin: @import("../../src/domain/model_candidate_origin.zig").Origin, packet: []const u8, schema: []const u8, subjects: @import("../../src/domain/atomic_repair.zig").Snapshot, applicability: @import("../../src/domain/atomic_repair.zig").Snapshot, findings: @import("../../src/domain/atomic_repair.zig").Snapshot };
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const retained = try values.retain(runner.envelope.slots[@intFromEnum(review.history_schema.key)].?);
+    defer values.destroy(retained);
+    var view: @import("../../src/domain/pipeline_data.zig").View = .{};
+    view.slots[@intFromEnum(review.history_schema.key)] = retained;
+    const before = try owned.read(&view, review.history_schema, .review_history);
+    try std.testing.expect(before.receipts.len > 0);
+    const epoch = before.scope.?.epoch;
+    const scope = try snapshotReviewHistoryScope(a, before.scope.?);
+    const observed = try a.alloc(Observation, before.receipts.len);
+    for (before.receipts, observed) |receipt, *saved| saved.* = .{
+        .origin = receipt.origin,
+        .packet = try a.dupe(u8, receipt.request.packet().?.body()),
+        .schema = try a.dupe(u8, receipt.request.prepared().?.response_schema.modelBytes()),
+        .subjects = try snapshot([]const @import("../../src/domain/required_authority.zig").Seed, a, receipt.subjects),
+        .applicability = try snapshot([]const @import("../../src/domain/specification_support.zig").Source.Applicability, a, receipt.applicability),
+        .findings = try snapshot([]const @import("../../src/domain/specification_support.zig").Source.Finding, a, receipt.findings),
+    };
+    // Release request accounting and current/historical envelope placements,
+    // including accepted request/proof values and review results. Only the
+    // retained history keeps its original borrowed receipts alive.
+    runner.deinit();
+    runner_active.* = false;
+    const after: retention.History = try owned.read(&view, review.history_schema, .review_history);
+    try std.testing.expectEqual(observed.len, after.receipts.len);
+    try std.testing.expect(epoch.eql(after.scope.?.epoch));
+    try std.testing.expect(epoch.eql(after.scope.?.origin_request.?.stage_run_epoch_id));
+    try std.testing.expectEqualDeep(scope, try snapshotReviewHistoryScope(a, after.scope.?));
+    for (after.receipts, observed) |receipt, saved| {
+        try std.testing.expectEqualDeep(saved.origin, receipt.origin);
+        try std.testing.expectEqualStrings(saved.packet, receipt.request.packet().?.body());
+        try std.testing.expectEqualStrings(saved.schema, receipt.request.prepared().?.response_schema.modelBytes());
+        try std.testing.expectEqualDeep(saved.subjects, try snapshot([]const @import("../../src/domain/required_authority.zig").Seed, a, receipt.subjects));
+        try std.testing.expectEqualDeep(saved.applicability, try snapshot([]const @import("../../src/domain/specification_support.zig").Source.Applicability, a, receipt.applicability));
+        try std.testing.expectEqualDeep(saved.findings, try snapshot([]const @import("../../src/domain/specification_support.zig").Source.Finding, a, receipt.findings));
+    }
+}
+
+fn snapshotReviewHistoryScope(allocator: std.mem.Allocator, scope: @import("../../src/domain/specification_review_retention.zig").Scope) !@import("../../src/domain/atomic_repair.zig").Snapshot {
+    const request = scope.origin_request orelse return error.MissingReviewOriginRequest;
+    try std.testing.expectEqual(.semantic_review, std.meta.activeTag(request.purpose));
+    // Execution identity is intentionally opaque and checked with eql separately.
+    const data = .{ scope.feature, scope.reference, scope.reference_records, scope.input_revision, scope.sources, scope.candidate, scope.occurrences, request.immutable_unit_owner_id, request.model_operation_id, request.purpose.semantic_review, request.request_ordinal };
+    return @import("../../src/domain/atomic_repair.zig").snapshot(@TypeOf(data), allocator, data);
 }
 
 fn sourceReviewAssignments(allocator: std.mem.Allocator, inputs: @import("../../src/domain/required_authority.zig").Inputs, candidate: @import("../../src/domain/specification_support.zig").Source.Candidate) !usize {

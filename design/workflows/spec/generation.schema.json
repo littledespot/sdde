@@ -76,7 +76,7 @@
           "$ref": "#/$defs/clarification_reason"
         },
         "question": {
-          "$ref": "#/$defs/attributed_value"
+          "$ref": "#/$defs/authoring_value"
         }
       },
       "required": [
@@ -93,13 +93,13 @@
           "const": "brief"
         },
         "title": {
-          "$ref": "#/$defs/attributed_value"
+          "$ref": "#/$defs/authoring_value"
         },
         "description": {
-          "$ref": "#/$defs/attributed_value"
+          "$ref": "#/$defs/authoring_value"
         },
         "primary_goal": {
-          "$ref": "#/$defs/attributed_value"
+          "$ref": "#/$defs/authoring_value"
         }
       },
       "required": [
@@ -131,10 +131,19 @@
         },
         "value": {
           "$ref": "#/$defs/business_value"
+        },
+        "signal_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ordinal"
+          },
+          "minItems": 1,
+          "maxItems": 4294967295
         }
       },
       "required": [
         "kind",
+        "signal_ids",
         "value"
       ],
       "additionalProperties": false
@@ -165,7 +174,7 @@
           ]
         },
         "basis": {
-          "$ref": "#/$defs/attributed_value"
+          "$ref": "#/$defs/authoring_value"
         }
       },
       "required": [
@@ -464,7 +473,7 @@
           "$ref": "#/$defs/clarification_reason"
         },
         "question": {
-          "$ref": "#/$defs/attributed_value"
+          "$ref": "#/$defs/authoring_value"
         },
         "record_kind": {
           "enum": [
@@ -569,6 +578,27 @@
         }
       },
       "required": [
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "authoring_value": {
+      "type": "object",
+      "properties": {
+        "signal_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ordinal"
+          },
+          "minItems": 1,
+          "maxItems": 4294967295
+        },
+        "value": {
+          "$ref": "#/$defs/business_value"
+        }
+      },
+      "required": [
+        "signal_ids",
         "value"
       ],
       "additionalProperties": false

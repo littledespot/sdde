@@ -6,6 +6,10 @@ Its selected duties use explicit focused `.finding` packets; the separate record
 panel prepares the new grouped transport comparison. The refresh does not alter
 scored historical requests, receipts, results or their original temperature.
 
+Phase 6 refreshes the offline preparation's native collector dependency pin.
+Packet, edit and provider-request bytes are unchanged. Execution-local retention
+does not qualify this handoff or authorize a live send.
+
 This directory is **offline qualification preparation**, with no live outputs,
 dispatch authority, semantic quality result or E2E claim. The production arm uses
 the current `Source.packetFor` input, support prompt, native response restrictions

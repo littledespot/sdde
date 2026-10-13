@@ -21,7 +21,7 @@ pub const View = struct { id: Id, purpose: []const u8, members: []const Member }
 pub const Reference = union(enum) { source_premise, deficient_subject, comparison: Id };
 pub const Owner = union(enum) {
     existing: loss.Location,
-    role_assignment: r.GenerationRole,
+    source_association: authority.Id,
     summary: r.SummaryId,
 };
 /// Consecutive boundaries share the exact same view, not merely claim IDs or
@@ -155,7 +155,7 @@ pub fn location(attribution: Attribution) loss.Location {
         .unresolved => .{ .unlocalized = .{} },
         .established => |owner| switch (owner) {
             .existing => |value| value,
-            .role_assignment => |role| .{ .unsupported_role = role },
+            .source_association => |requirement| .{ .source_association = requirement },
             .summary => |id| .{ .unsupported_summary = id },
         },
     };

@@ -451,18 +451,6 @@
       ],
       "additionalProperties": false
     },
-    "roles_assignment": {
-      "type": "object",
-      "properties": {
-        "role_decisions": {
-          "$ref": "#/$defs/role_decisions"
-        }
-      },
-      "required": [
-        "role_decisions"
-      ],
-      "additionalProperties": false
-    },
     "conflicts_assignment": {
       "type": "object",
       "properties": {
@@ -499,75 +487,6 @@
         "additionalProperties": false
       },
       "maxItems": 4294967295
-    },
-    "role_decision": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "supported"
-            },
-            "signal_ids": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/ordinal"
-              },
-              "minItems": 1,
-              "maxItems": 4294967295
-            }
-          },
-          "required": [
-            "kind",
-            "signal_ids"
-          ],
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "unsupported"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "additionalProperties": false
-        }
-      ]
-    },
-    "role_decisions": {
-      "type": "object",
-      "properties": {
-        "title": {
-          "$ref": "#/$defs/role_decision"
-        },
-        "description": {
-          "$ref": "#/$defs/role_decision"
-        },
-        "primary_goal": {
-          "$ref": "#/$defs/role_decision"
-        },
-        "primary_user_story": {
-          "$ref": "#/$defs/role_decision"
-        },
-        "entity_basis": {
-          "$ref": "#/$defs/role_decision"
-        },
-        "records": {
-          "$ref": "#/$defs/role_decision"
-        }
-      },
-      "required": [
-        "title",
-        "description",
-        "primary_goal",
-        "primary_user_story",
-        "entity_basis",
-        "records"
-      ],
-      "additionalProperties": false
     },
     "semantic_dispositions": {
       "type": "array",

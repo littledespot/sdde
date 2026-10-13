@@ -46,7 +46,9 @@ pub fn Contract(comptime purpose: Purpose) type {
             origins: []const ?Origin,
             last_repair: ?@import("atomic_repair.zig").Merge = null,
             occurrences: @import("repair_occurrences.zig").Set = .{},
+            occurrence_history: []const Occurrence = &.{},
         };
+        pub const Occurrence = struct { subject: a.Id, occurrence: @import("repair_occurrences.zig").Id };
         pub const Issue = enum {
             invalid_json,
             unknown_requirement,
@@ -393,7 +395,25 @@ pub fn Contract(comptime purpose: Purpose) type {
                 else => err,
             };
             if (added == .rejected) return .{ .rejected = .{ .candidate = null, .rejection = added.rejected } };
-            const findings = added.findings;
+            return appendAdmitted(allocator, inputs, context, prior, packet, added.findings, origin);
+        }
+
+        /// Current assignment membership and ordinary full admission are shared
+        /// by model collection and execution-local retained native findings.
+        pub fn appendAdmitted(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, prior: ?Collection, packet: *const packets.Packet, findings: []const Finding, origin: ?Origin) Error!Collection {
+            const id = try nextSubject(allocator, inputs, prior);
+            const grouped = purpose == .source and packet.resultDefinition() != null and std.mem.eql(u8, packet.resultDefinition().?.bytes, "record_findings");
+            const expected = try packetFor(allocator, inputs, context, if (purpose == .source and grouped) .{ .record = id } else .{ .finding = id });
+            defer packets.release(expected);
+            try checkPacket(expected, packet);
+            const previous: ?Candidate = if (prior) |result| result.pending else null;
+            const length: usize = if (previous) |candidate| candidate.review.entries.len else 0;
+            const ledger = try a.build(allocator, inputs);
+            const assigned = if (purpose == .source and grouped) try assignmentSubjects(allocator, inputs, id) else try allocator.dupe(a.Id, &.{id});
+            if (findings.len != assigned.len) return error.InvalidRequiredAuthority;
+            for (findings, assigned, length..) |finding, subject, index| {
+                if (finding.requirement_ordinal != index + 1 or !std.meta.eql(ledger.requirements[index].seed.id, subject)) return error.InvalidRequiredAuthority;
+            }
             const entries = try allocator.alloc(Finding, length + findings.len);
             const origins = try allocator.alloc(?Origin, entries.len);
             if (previous) |candidate| {
@@ -403,10 +423,21 @@ pub fn Contract(comptime purpose: Purpose) type {
             @memcpy(entries[length..], findings);
             @memset(origins[length..], origin);
             var occurrences = if (previous) |old| old.occurrences else @import("repair_occurrences.zig").Set{};
-            for (length..entries.len) |index| occurrences = occurrences.inserting(allocator, index, index) catch |err| switch (err) {
-                error.OutOfMemory => return error.OutOfMemory,
-                error.InvalidRepairOccurrence => return error.InvalidRequiredAuthority,
-            };
+            for (length..entries.len) |index| {
+                occurrences = occurrences.inserting(allocator, index, index) catch |err| switch (err) {
+                    error.OutOfMemory => return error.OutOfMemory,
+                    error.InvalidRepairOccurrence => return error.InvalidRequiredAuthority,
+                };
+                if (previous) |old| for (old.occurrence_history) |retained| {
+                    if (!std.meta.eql(retained.subject, ledger.requirements[index].seed.id)) continue;
+                    if (retained.occurrence.ordinal == 0 or retained.occurrence.ordinal >= occurrences.next_ordinal) return error.InvalidRequiredAuthority;
+                    for (occurrences.values[0..index]) |present| if (std.meta.eql(present, retained.occurrence)) return error.InvalidRequiredAuthority;
+                    const stable = try allocator.dupe(@import("repair_occurrences.zig").Id, occurrences.values);
+                    stable[index] = retained.occurrence;
+                    occurrences.values = stable;
+                    break;
+                };
+            }
             const candidate: Candidate = .{
                 .review = .{ .entries = entries },
                 .revision = if (previous) |old| std.math.add(u64, old.revision, 1) catch return error.InvalidRequiredAuthority else 1,
@@ -415,6 +446,8 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .origin = if (previous) |old| old.origin else origin,
                 .origins = origins,
                 .occurrences = occurrences,
+                .occurrence_history = if (previous) |old| old.occurrence_history else &.{},
+                .last_repair = if (previous) |old| old.last_repair else null,
                 .omission_conflict_claims = if (previous) |old| old.omission_conflict_claims else if (purpose == .source) context.references.records.assignments.checked.prior.prior.source.omission_conflict_claims else &.{},
             };
             return validateWorking(allocator, inputs, context.inputs, candidate);
@@ -472,7 +505,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             if (!candidate.working) return error.InvalidRequiredAuthority;
             const count = candidate.review.entries.len;
             const ledger = try a.build(allocator, inputs);
-            if (count == 0 or count > ledger.requirements.len) return error.InvalidRequiredAuthority;
+            if (count > ledger.requirements.len) return error.InvalidRequiredAuthority;
             for (candidate.review.entries, 0..) |finding, index| if (finding.requirement_ordinal != index + 1) return error.InvalidRequiredAuthority;
             const complete = try validate(allocator, inputs, sources, candidate);
             if (complete == .accepted) return complete;

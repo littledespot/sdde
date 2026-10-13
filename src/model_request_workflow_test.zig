@@ -8116,6 +8116,196 @@ test "packet result selection binds one immutable named schema and fails before 
     try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
 }
 
+const retention_result_schema =
+    \\{"$defs":{"answer":{"type":"object","properties":{"answer":{"type":"string","maxLength":100},"source_ids":{"type":"array","minItems":1,"maxItems":3,"items":{"type":"integer","minimum":1,"maximum":9}},"value":{"oneOf":[{"type":"string","maxLength":40},{"type":"object","properties":{"kind":{"const":"reference"},"id":{"type":"integer","minimum":1,"maximum":9}},"required":["kind","id"],"additionalProperties":false}]}},"required":["answer","source_ids","value"],"additionalProperties":false},"other":{"type":"object","properties":{"answer":{"type":"string","maxLength":100}},"required":["answer"],"additionalProperties":false}},"$ref":"#/$defs/answer"}
+;
+
+fn retentionPacket(allocator: std.mem.Allocator, body: []const u8, definition: []const u8, allowed: []const i64, excluded: bool) !*@import("domain/model_input_packet.zig").Packet {
+    const packets = @import("domain/model_input_packet.zig");
+    const base = try packets.create(allocator, body, .{ .semantic_review = .{
+        .parent_unit_owner_id = .{ .specification_unit = .{ .reference_state_id = .{ .bytes = "reference-current" }, .feature_id = .{ .bytes = "feature" }, .unit_slot_id = .{ .bytes = "support" } } },
+        .review_slot_id = .{ .bytes = "assigned-record" },
+    } }, .{ .semantic_review = .{ .bytes = "assigned-record" } }, .{ .bytes = definition });
+    defer packets.release(base);
+    return packets.withRestrictions(allocator, base, if (excluded) &.{.{ .kind = "reference" }} else &.{}, &.{.{
+        .target = .{ .path = &.{.{ .property = "source_ids" }} },
+        .definition = .{ .bytes = "answer" },
+        .allowed = allowed,
+    }});
+}
+
+fn retentionResource(graph: *const compilation.CompiledWorkflow, id: workflow.WorkflowResourceId) !compilation.CompiledResource {
+    for (graph.authority.resources) |resource| if (std.mem.eql(u8, resource.id.bytes, id.bytes)) return resource;
+    return error.TestUnexpectedResult;
+}
+
+fn retentionSelection(graph: *const compilation.CompiledWorkflow, request: *const handoff.Request, packet: *const @import("domain/model_input_packet.zig").Packet) !handoff.Selection {
+    const resources = request.sourceResources();
+    return .{
+        .binding = request.binding().*,
+        .prompt = try retentionResource(graph, resources.prompt),
+        .context = if (resources.context) |id| try retentionResource(graph, id) else null,
+        .protocol_prompt = if (resources.protocol_prompt) |id| try retentionResource(graph, id) else null,
+        .result = try retentionResource(graph, resources.result),
+        .input = .{ .packet = packet },
+        .result_selection = .input,
+    };
+}
+
+fn retentionAllocationCase(allocator: std.mem.Allocator, selected: handoff.Selection, ledger: *const identity.ModelRequestIdentityLedger, request: *const handoff.Request, origin: model_origin) !void {
+    try std.testing.expect(try selected.acceptsRetained(allocator, ledger, request, origin));
+}
+
+test "retained semantic assignments require complete current packet request binding and accepted origin" {
+    const packets = @import("domain/model_input_packet.zig");
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const a = fixture.arena.allocator();
+    var source = try withStaticContext(a, try protocolRetryYaml(&fixture));
+    source = try std.mem.replaceOwned(u8, a, source, ", input: input.txt", "");
+    source = try std.mem.replaceOwned(u8, a, source, ", input: input }", ", result-selection: input }");
+    const graph = try fixture.compileResources(source, retention_result_schema, false, null, context_bytes);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    const body = "{\"subject\":\"Renew eligible loans.\",\"siblings\":[\"No overdue loans.\"],\"sources\":[\"Renew eligible loans.\"]}";
+    const packet = try retentionPacket(std.testing.allocator, body, "answer", &.{1}, true);
+    runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fake.invocation_plan.complete.content = "{\"answer\":\"supported\",\"source_ids\":[1],\"value\":\"supported\"}";
+    try prepareProtocolAttempt(&runner, false);
+    const request = try currentRequest(&runner);
+    const rebuilt = try retentionPacket(std.testing.allocator, body, "answer", &.{1}, true);
+    defer packets.release(rebuilt);
+    const selected = try retentionSelection(graph, request, rebuilt);
+    const origin: model_origin = .{ .request = (try requestLedger(&runner)).indexOf(request.id()).?, .attempt = .{ .value = 1 } };
+    try std.testing.expect(!try selected.acceptsRetained(std.testing.allocator, try requestLedger(&runner), request, origin));
+    for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode", "validate-payload", "close-request" }) |step|
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+    const ledger = try requestLedger(&runner);
+    const records_before = ledger.recordCount();
+    try std.testing.expect(try selected.acceptsRetained(std.testing.allocator, ledger, request, origin));
+    var admission_step = selected;
+    admission_step.binding.operation_id.workflow_step_id = .{ .bytes = "reuse-current-assignment" };
+    try std.testing.expect(try admission_step.acceptsRetained(std.testing.allocator, ledger, request, origin));
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, retentionAllocationCase, .{ selected, ledger, request, origin });
+    try std.testing.expectEqual(records_before, ledger.recordCount());
+    try std.testing.expectEqual(@as(usize, 1), fake.invocation_call_count);
+    for ([_][]const u8{
+        "{\"subject\":\"Renew any loan.\",\"siblings\":[\"No overdue loans.\"],\"sources\":[\"Renew eligible loans.\"]}",
+        "{\"subject\":\"Renew eligible loans.\",\"siblings\":[\"Overdue loans allowed.\"],\"sources\":[\"Renew eligible loans.\"]}",
+        "{\"subject\":\"Renew eligible loans.\",\"siblings\":[\"No overdue loans.\"],\"sources\":[\"Never renew loans.\"]}",
+    }) |changed_body| {
+        const changed = try retentionPacket(std.testing.allocator, changed_body, "answer", &.{1}, true);
+        defer packets.release(changed);
+        var replay = selected;
+        replay.input = .{ .packet = changed };
+        try std.testing.expect(!try replay.acceptsRetained(std.testing.allocator, ledger, request, origin));
+    }
+    for ([_]bool{ false, true }) |change_choices| {
+        const changed = try retentionPacket(std.testing.allocator, body, "answer", if (change_choices) &.{2} else &.{1}, change_choices);
+        defer packets.release(changed);
+        var replay = selected;
+        replay.input = .{ .packet = changed };
+        try std.testing.expect(!try replay.acceptsRetained(std.testing.allocator, ledger, request, origin));
+    }
+    const other = try retentionPacket(std.testing.allocator, body, "other", &.{1}, true);
+    defer packets.release(other);
+    var other_selection = selected;
+    other_selection.input = .{ .packet = other };
+    try std.testing.expect(!try other_selection.acceptsRetained(std.testing.allocator, ledger, request, origin));
+    for ([_]bool{ false, true }) |change_purpose| {
+        var unit = rebuilt.unit();
+        if (!change_purpose) unit.semantic_review.parent_unit_owner_id.specification_unit.feature_id = .{ .bytes = "foreign-feature" };
+        const changed_base = try packets.create(std.testing.allocator, body, unit, if (change_purpose) .{ .semantic_review = .{ .bytes = "foreign-purpose" } } else rebuilt.purpose(), rebuilt.resultDefinition());
+        defer packets.release(changed_base);
+        const changed = try packets.withRestrictions(std.testing.allocator, changed_base, rebuilt.excludedVariants(), rebuilt.integerChoices());
+        defer packets.release(changed);
+        var replay = selected;
+        replay.input = .{ .packet = changed };
+        try std.testing.expect(!try replay.acceptsRetained(std.testing.allocator, ledger, request, origin));
+    }
+    const changed_schema_bytes = try std.mem.replaceOwned(u8, a, retention_result_schema, "\"maxLength\":100", "\"maxLength\":99");
+    const changed_graph = try fixture.compileResources(source, changed_schema_bytes, false, null, context_bytes);
+    var changed_schema = selected;
+    changed_schema.result = try retentionResource(changed_graph, request.sourceResources().result);
+    try std.testing.expect(!try changed_schema.acceptsRetained(std.testing.allocator, ledger, request, origin));
+    for (0..12) |change| {
+        var replay = selected;
+        switch (change) {
+            0 => replay.prompt.content = .{ .prompt = "Different purpose." },
+            1 => replay.context.?.content = .{ .prompt = "Different applicability guidance." },
+            2 => replay.protocol_prompt.?.content = .{ .prompt = "Different correction guidance." },
+            3 => replay.binding.controls.temperature = if (selected.binding.controls.temperature == null) .fixed else null,
+            4 => replay.binding.reasoning_effort = "low",
+            5 => replay.binding.slot_id = .{ .bytes = "foreign-slot" },
+            6 => replay.binding.operation_id.workflow_id = .{ .bytes = "foreign-workflow" },
+            7 => replay.result.id = .{ .bytes = "foreign-result" },
+            8 => replay.result_selection = .resource,
+            9 => replay.input = .{ .resource = .{ .id = .{ .bytes = "resource-input" }, .content = .{ .data = body } } },
+            10 => replay.binding.operation_id.workflow_version += 1,
+            11 => replay.binding.controls.max_output_tokens = .{ .value = 100 },
+            else => unreachable,
+        }
+        try std.testing.expect(!try replay.acceptsRetained(std.testing.allocator, ledger, request, origin));
+    }
+    var foreign_entry = selected.binding.registry_entry.*;
+    foreign_entry.model = .{ .bytes = "foreign-model" };
+    var foreign_binding = selected;
+    foreign_binding.binding.registry_entry = &foreign_entry;
+    try std.testing.expect(!try foreign_binding.acceptsRetained(std.testing.allocator, ledger, request, origin));
+    for ([_]model_origin{
+        .{ .request = .{ .value = origin.request.value + 1 }, .attempt = origin.attempt },
+        .{ .request = origin.request, .attempt = .{ .value = 2 } },
+        .{ .request = origin.request, .attempt = origin.attempt, .kind = .input_token_count },
+    }) |foreign_origin| try std.testing.expect(!try selected.acceptsRetained(std.testing.allocator, ledger, request, foreign_origin));
+    var fresh = fixture.runner(graph, std.testing.allocator);
+    defer fresh.deinit();
+    try std.testing.expectEqual(.ok, fresh.bindings().invokeInvocation().outcome);
+    try std.testing.expectEqual(.ok, fresh.bindings().invokeStep(.{ .bytes = "initialize" }).outcome);
+    try std.testing.expect(!try selected.acceptsRetained(std.testing.allocator, try requestLedger(&fresh), request, origin));
+}
+
+test "retained semantic assignments preserve the actual accepted correction attempt" {
+    const packets = @import("domain/model_input_packet.zig");
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const a = fixture.arena.allocator();
+    var source = try protocolRetryYaml(&fixture);
+    source = try std.mem.replaceOwned(u8, a, source, ", input: input.txt", "");
+    source = try std.mem.replaceOwned(u8, a, source, ", input: input }", ", result-selection: input }");
+    const graph = try fixture.compileWithAssets(source, retention_result_schema, false);
+    var runner = fixture.runner(graph, std.testing.allocator);
+    defer runner.deinit();
+    const packet = try retentionPacket(std.testing.allocator, "{\"subject\":\"Display UTC time.\"}", "answer", &.{1}, true);
+    runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
+    var fake = invocationProvider(&runner, std.testing.allocator);
+    fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+    fake.invocation_plan.complete.content = "{";
+    try prepareProtocolAttempt(&runner, false);
+    const original = (try currentRequest(&runner)).id();
+    try rejectProtocolResponse(&runner, false);
+    try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+    try prepareProtocolAttempt(&runner, true);
+    fake.invocation_plan.complete.content = "{\"answer\":\"supported\",\"source_ids\":[1],\"value\":\"supported\"}";
+    for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode", "validate-payload", "close-request" }) |step|
+        try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+    const request = try currentRequest(&runner);
+    try std.testing.expect(request.id() == original);
+    const ledger = try requestLedger(&runner);
+    const rebuilt = try retentionPacket(std.testing.allocator, "{\"subject\":\"Display UTC time.\"}", "answer", &.{1}, true);
+    defer packets.release(rebuilt);
+    const selected = try retentionSelection(graph, request, rebuilt);
+    const origin: model_origin = .{ .request = ledger.indexOf(request.id()).?, .attempt = .{ .value = 2 } };
+    try std.testing.expect(try selected.acceptsRetained(std.testing.allocator, ledger, request, origin));
+    var rejected_origin = origin;
+    rejected_origin.attempt.value = 1;
+    try std.testing.expect(!try selected.acceptsRetained(std.testing.allocator, ledger, request, rejected_origin));
+    try std.testing.expectEqual(@as(usize, 2), fake.invocation_call_count);
+}
+
 fn restoreCapturedSources(a: std.mem.Allocator, fragments: []const ModelCaptureSink.prompt.SanitizedPromptFragment) ![]@import("domain/request_debugger.zig").Call {
     const format = @import("domain/feature_log_format.zig");
     var rows: std.ArrayList(u8) = .empty;
@@ -8173,7 +8363,7 @@ test "detailed and consolidated requests bind native exclusions to the same cano
     }
 }
 
-test "protocol correction retains native singleton authority and rejects echoed determined handles" {
+test "protocol correction retains singleton authority and assembly requirements and rejects echoed determined handles" {
     const packets = @import("domain/model_input_packet.zig");
     const schema_source =
         \\{"type":"object","properties":{"value":{"type":"array","minItems":1,"maxItems":4,"items":{"oneOf":[{"type":"string","maxLength":80},{"type":"object","properties":{"kind":{"const":"exact_copy"},"claim_id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","claim_id"],"additionalProperties":false}]}}},"required":["value"],"additionalProperties":false}
@@ -8189,7 +8379,14 @@ test "protocol correction retains native singleton authority and rejects echoed 
     defer runner.deinit();
     const base = try packets.create(std.testing.allocator, "{\"reference\":\"MOCK literal\"}", .workflow_step, .initial_generation, null);
     defer packets.release(base);
-    const packet = try @import("domain/reference_model_input.zig").withTextChoices(std.testing.allocator, base, &.{}, &.{73});
+    const requirements = .{
+        .scope = @as(enum { assembled_specification }, .assembled_specification),
+        .required_families = @import("domain/specification.zig").assemblyRequiredRecordFamilies(.required),
+    };
+    const contextual = try packets.withContext(@TypeOf(requirements), std.testing.allocator, base, "record_requirements", requirements);
+    defer packets.release(contextual);
+    const packet = try @import("domain/reference_model_input.zig").withTextChoices(std.testing.allocator, contextual, &.{}, &.{73});
+    const original_input = try a.dupe(u8, packet.body());
     runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
     var fake = invocationProvider(&runner, std.testing.allocator);
     fixture.native.invoke_model.action = .{ .provider = fake.interface() };
@@ -8206,6 +8403,7 @@ test "protocol correction retains native singleton authority and rejects echoed 
     const correction = try currentRequest(&runner);
     try std.testing.expect(correction.id() == original_id);
     try std.testing.expect(correction.packet() == packet);
+    try std.testing.expectEqualStrings(original_input, correction.prepared().?.content[1].user);
     try std.testing.expect(correction.prepared().?.response_schema == original_schema);
     try prepareProtocolAttempt(&runner, true);
     fake.invocation_plan.complete.content = "{\"value\":[\"MOCK meaning \",{\"kind\":\"exact_copy\"}]}";

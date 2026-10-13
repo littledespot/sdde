@@ -67,14 +67,6 @@ pub const Driver = struct {
     global_sequence: ?@import("global_protocol_sequence.zig").Mode = null,
     summary_sequence: ?@import("summary_protocol_sequence.zig").Mode = null,
     reconciliation_protocol_fault: ?enum { envelope_once, envelope_then_json, foreign_content_once, foreign_content_always } = null,
-    role_decision_fault: ?enum { recover, exhaust } = null,
-    role_decision_calls: usize = 0,
-    role_decision_original: ?struct {
-        request: *const @import("../domain/model_request_identity.zig").ModelRequestId,
-        schema: *const @import("../domain/model_result_schema.zig").Schema,
-        content_digest: [32]u8,
-        schema_digest: [32]u8,
-    } = null,
     reconciliation_repair_calls: usize = 0,
     reconciliation_merges: usize = 0,
     unchanged_reconciliation_merges: usize = 0,
@@ -147,13 +139,13 @@ pub const Driver = struct {
             const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
             const parsed = try @import("../application/reference_extraction_workflow.zig").read(&view, reconciliation.parsed_schema, .reconciliation_parsed);
             try std.testing.expectEqual(.dispositions, parsed.payload().reconciliation_parsed.phase);
-            for ([_]data.Schema{ reconciliation.dispositions_schema, reconciliation.signals_schema, reconciliation.roles_schema, reconciliation.conflicts_schema, reconciliation.accounted_schema }) |schema| {
+            for ([_]data.Schema{ reconciliation.dispositions_schema, reconciliation.signals_schema, reconciliation.conflicts_schema, reconciliation.accounted_schema }) |schema| {
                 try std.testing.expect(!view.contains(schema.key));
             }
             for (ledger.accounted_operations.items) |operation| {
                 const owner = operation.id.model_request_id.immutable_unit_owner_id;
                 if (operation.id.model_request_id.purpose != .initial_generation or owner != .reference_global) continue;
-                for ([_][]const u8{ "-signals-", "-roles-", "-conflicts-" }) |stage| {
+                for ([_][]const u8{ "-signals-", "-conflicts-" }) |stage| {
                     try std.testing.expect(std.mem.indexOf(u8, owner.reference_global.unit_slot_id.bytes, stage) == null);
                 }
             }
@@ -174,51 +166,6 @@ pub const Driver = struct {
             try std.testing.expect(accepted.payload().reconciliation_accounted.records.assignments.checked.prior.prior.source.pending_repair == null);
             try std.testing.expect(self.runner.repair_retry.currentPermit() == null);
             try std.testing.expect(view.contains(.published_workflow_output));
-        }
-    }
-    pub fn verifyRoleDecisionSequence(self: *Driver, result: @import("../domain/run_outcome.zig").Outcome) !void {
-        const exhausted = self.role_decision_fault == .exhaust;
-        const attempts: usize = if (exhausted) 3 else 2;
-        try std.testing.expectEqual(attempts, self.role_decision_calls);
-        try std.testing.expectEqual(@as(usize, 0), self.reconciliation_repair_calls);
-        try std.testing.expectEqual(@as(usize, 0), self.reconciliation_merges);
-        const ledger = self.runner.tokenLedger();
-        try std.testing.expectEqual(self.calls, ledger.accounted_operations.items.len);
-        try std.testing.expectEqual(@as(u128, self.calls) * (self.fake.invocation_plan.complete.input_tokens + self.fake.invocation_plan.complete.output_tokens), ledger.committed());
-        const original = self.role_decision_original.?;
-        var matched: usize = 0;
-        for (ledger.accounted_operations.items) |operation| if (operation.id.model_request_id == original.request) {
-            matched += 1;
-            try std.testing.expectEqual(@as(u32, @intCast(matched)), operation.id.model_attempt_ordinal.value);
-            try std.testing.expect(operation.id.model_request_id.purpose == .initial_generation);
-            try std.testing.expect(operation.id.model_request_id.immutable_unit_owner_id == .reference_global);
-        };
-        try std.testing.expectEqual(attempts, matched);
-        const view: data.View = .{ .slots = self.runner.envelope.slots };
-        const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
-        if (exhausted) {
-            try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
-            try std.testing.expectEqual(@as(u32, 2), result.execution_rejected.retry_limit.limit.value);
-            try std.testing.expectEqual(@as(u64, 3), result.execution_rejected.retry_limit.completed_executions);
-            try std.testing.expectEqual(@as(usize, 0), self.generation_calls);
-            for ([_]data.Schema{ reconciliation.roles_schema, reconciliation.conflicts_schema, reconciliation.accounted_schema }) |schema| try std.testing.expect(!view.contains(schema.key));
-            const parsed = (try @import("../application/reference_extraction_workflow.zig").read(&view, reconciliation.parsed_schema, .reconciliation_parsed)).payload().reconciliation_parsed;
-            try std.testing.expectEqual(.signals, parsed.phase);
-            try std.testing.expect(parsed.proposal.global.role_decisions == null);
-            try std.testing.expect((try @import("../application/candidate_validation_diagnostics.zig").read(&view)) == null);
-            try std.testing.expect(!view.contains(.clarification_needs) and !view.contains(.published_workflow_output));
-        } else {
-            try std.testing.expectEqual(.ok, result.executionStatus().?);
-            try std.testing.expect(self.generation_calls != 0 and view.contains(.published_workflow_output));
-            const accepted = (try @import("../application/reference_extraction_workflow.zig").read(&view, reconciliation.accounted_schema, .reconciliation_accounted)).payload().reconciliation_accounted;
-            const origin = accepted.records.assignments.checked.prior.prior.source.at(.signals, .relationship).?;
-            try std.testing.expectEqual(@as(u32, 2), origin.attempt.value);
-            const identities = try @import("../application/pipeline_values.zig").read(&view, requests.ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
-            var producer_found = false;
-            for (ledger.accounted_operations.items) |operation| if (operation.id.model_request_id == original.request and operation.id.model_attempt_ordinal.value == 2) {
-                producer_found = origin.matches(identities, operation.id);
-            };
-            try std.testing.expect(producer_found);
         }
     }
     fn selected(_: *anyopaque) @import("../application/workflow_engine_child_bindings.zig").SelectionStepOutcome {
@@ -283,9 +230,6 @@ pub const Driver = struct {
             const content = current_request.prepared().?.content;
             std.testing.expectEqual(base.len + @as(usize, if (attempt > 1) (if (self.fake.invocation_plan.complete.content_diagnostic == .missing_final_text) 2 else 3) else 0), content.len) catch unreachable;
             std.testing.expectEqualDeep(base, content[0..base.len]) catch unreachable;
-            if (self.role_decision_fault != null and current_request.packet() != null and current_request.packet().?.resultDefinition() != null and std.mem.eql(u8, current_request.packet().?.resultDefinition().?.bytes, "roles_assignment")) {
-                self.fake.invocation_plan.complete.content = self.roleDecisionResponse(arena.allocator(), current_request, base, body, attempt) catch unreachable;
-            }
             if (std.mem.eql(u8, current_request.prepared().?.result_schema_id.bytes, "extraction-schema")) {
                 const prose = if (current_request.part()) |part| std.mem.eql(u8, part.plan.parts()[part.part].id.bytes, "content") else true;
                 if (prose) {
@@ -411,7 +355,10 @@ pub const Driver = struct {
                         std.testing.expectEqualStrings("/provenance", correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("path").?.string) catch unreachable;
                         const fields = expected.get("shape").?.object.get("fields").?.object;
                         for ([_][]const u8{ "title", "description", "primary_goal" }) |field| {
-                            std.testing.expectEqualStrings("{\"type\":\"object\",\"required\":[\"value\"]}", std.json.Stringify.valueAlloc(arena.allocator(), fields.get(field).?, .{}) catch unreachable) catch unreachable;
+                            // Initial authoring owns its source association;
+                            // fixed-value repair remains a separate value-only
+                            // contract and cannot choose another group.
+                            std.testing.expectEqualStrings("{\"type\":\"object\",\"required\":[\"signal_ids\",\"value\"]}", std.json.Stringify.valueAlloc(arena.allocator(), fields.get(field).?, .{}) catch unreachable) catch unreachable;
                         }
                         const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
                         std.testing.expectEqualStrings(corrupt(arena.allocator(), body, fault.shape, attempt) catch unreachable, prior.value.rejected_response) catch unreachable;
@@ -495,7 +442,10 @@ pub const Driver = struct {
         };
         const accounted_before = self.runner.tokenLedger().accounted_operations.items.len;
         const result = self.runner.bindings().invokeStep(id);
-        if (result == .rejected) for (self.runner.selected.graph.authority.steps) |entry| {
+        // A native candidate rejection is an applied invalid outcome, whereas
+        // operational failure is Applied.rejected. Observe both at the same
+        // operation boundary without changing the production transition.
+        if (result == .rejected or result.status() == .invalid) for (self.runner.selected.graph.authority.steps) |entry| {
             if (std.mem.eql(u8, entry.id.bytes, id.bytes)) self.rejected_operation = entry.operation_id.bytes;
         };
         if (before_merge.contains(.source_omission_repair) and (result.status() == .ok or result.status() == .more)) for (self.runner.selected.graph.authority.steps) |entry| {
@@ -535,7 +485,7 @@ pub const Driver = struct {
             for (@import("../actions/reference/build_reference_reconciliation_summary.zig").Action.contract.invalidates) |key| std.testing.expect(!view.contains(key)) catch unreachable;
         };
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "collect-specification-support-loss")) {
-            const admitted = assertLossAdmission(arena.allocator(), &before_merge, &.{ .slots = self.runner.envelope.slots }) catch unreachable;
+            const admitted = assertLossAdmission(arena.allocator(), &before_merge, &.{ .slots = self.runner.envelope.slots }) catch |err| std.debug.panic("scripted loss admission rejected: {s}; source_loss={any}, candidate_omissions={any}, story_omission={any}, loss_control={any}", .{ @errorName(err), self.source_loss, self.candidate_omissions, self.story_omission, self.loss_control });
             self.admitted_losses.getPtr(std.meta.activeTag(admitted.location)).* += 1;
             if (admitted.uncertain) self.uncertain_loss_calls += 1;
             if (self.record_review == .two_omissions) {
@@ -650,36 +600,6 @@ pub const Driver = struct {
             else => {},
         };
         return result;
-    }
-    fn roleDecisionResponse(self: *Driver, a: std.mem.Allocator, request: *const @import("../domain/model_request_handoff.zig").Request, base: []const @import("../domain/llm_provider_operation.zig").ModelVisibleContent, body: []const u8, attempt: u32) ![]const u8 {
-        const prepared = request.prepared().?;
-        const original_content = try std.json.Stringify.valueAlloc(a, base, .{});
-        var content_digest: [32]u8 = undefined;
-        var schema_digest: [32]u8 = undefined;
-        std.crypto.hash.sha2.Sha256.hash(original_content, &content_digest, .{});
-        std.crypto.hash.sha2.Sha256.hash(prepared.response_schema.modelBytes(), &schema_digest, .{});
-        if (self.role_decision_original) |original| {
-            try std.testing.expect(original.request == request.id());
-            try std.testing.expect(original.schema == prepared.response_schema);
-            try std.testing.expectEqualSlices(u8, &original.content_digest, &content_digest);
-            try std.testing.expectEqualSlices(u8, &original.schema_digest, &schema_digest);
-        } else self.role_decision_original = .{ .request = request.id(), .schema = prepared.response_schema, .content_digest = content_digest, .schema_digest = schema_digest };
-        self.role_decision_calls += 1;
-        try std.testing.expectEqual(@as(u32, @intCast(self.role_decision_calls)), attempt);
-        var parsed = try std.json.parseFromSlice(std.json.Value, a, body, .{});
-        const decisions = parsed.value.object.getPtr("role_decisions").?;
-        try std.testing.expect(decisions.object.orderedRemove("records"));
-        const omitted = try std.json.Stringify.valueAlloc(a, parsed.value, .{});
-        if (attempt > 1) {
-            const contents = prepared.content;
-            const previous = try std.json.parseFromSlice(std.json.Value, a, contents[contents.len - 1].bytes(), .{});
-            try std.testing.expectEqualStrings(omitted, previous.value.object.get("rejected_response").?.string);
-            const correction = try std.json.parseFromSlice(std.json.Value, a, contents[contents.len - 2].bytes(), .{});
-            const diagnostic = correction.value.object.get("diagnostic").?.object.get("schema").?.object;
-            try std.testing.expectEqualStrings("missing_required_property", diagnostic.get("reason").?.string);
-            try std.testing.expectEqualStrings("/role_decisions/records", diagnostic.get("path").?.string);
-        }
-        return if (self.role_decision_fault == .exhaust or attempt == 1) omitted else body;
     }
 };
 

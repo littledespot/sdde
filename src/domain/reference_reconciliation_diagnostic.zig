@@ -32,7 +32,7 @@ pub const Source = struct {
     }
 };
 pub const Unit = union(enum) { summary, statement: usize, dispositions, disposition: usize, signals, signal: usize, conflicts, conflict: usize };
-pub const Rule = enum { membership, claim_selection, content, cardinality, duplicate_disposition, relationship, cycle, signal_coverage, duplicate_signal, role_assignment, conflict_coverage, duplicate_conflict, typed_text };
+pub const Rule = enum { membership, claim_selection, content, cardinality, duplicate_disposition, relationship, cycle, signal_coverage, duplicate_signal, conflict_coverage, duplicate_conflict, typed_text };
 pub const Constraint = enum {
     unique_nonzero,
     nonempty_unique_allowed_claims,
@@ -51,12 +51,11 @@ pub const Constraint = enum {
     unique_members,
     retained_claim_covered,
     token_projected,
-    supported_role_assignment,
     conflict_claim_covered,
     conflict_pair_covered,
 
     /// Presentation scope only; every merged candidate still runs all validators.
-    pub const Assignment = enum { summary, dispositions, signals, roles, conflicts };
+    pub const Assignment = enum { summary, dispositions, signals, conflicts };
     pub const Scope = union(enum) { all, selection: enum { statement, signal, conflict }, content: ContentKind, disposition: enum { rules, choices }, summary, conflict_detail, assignment: Assignment };
     pub fn appliesTo(self: Constraint, purpose: @FieldType(r.Input, "purpose"), scope: Scope) bool {
         const in_purpose = switch (self) {
@@ -83,7 +82,6 @@ pub const Constraint = enum {
                     .nonempty_unique_allowed_claims, .matching_claim_content, .nonconflicting_claims, .unique_members, .retained_claim_covered, .token_projected => true,
                     else => false,
                 },
-                .roles => self == .supported_role_assignment,
                 .conflicts => switch (self) {
                     .unique_members, .conflict_claim_covered, .conflict_pair_covered => true,
                     else => false,
@@ -133,7 +131,6 @@ pub const Constraint = enum {
             .unique_members => "Do not repeat an identical member set for the same projection kind.",
             .retained_claim_covered => "Every retained claim must appear in a signal.",
             .token_projected => "Native code projects every nonconflicting preserved token, including after supersession.",
-            .supported_role_assignment => "Assess every registered role exactly once. Return supported with nonempty unique signal_ids from accepted.signals, or unsupported without IDs. Every claim in a selected authoring group must be retained; groups and roles may support each other many-to-many.",
             .conflict_claim_covered => "Every conflicting claim must appear in a conflict.",
             .conflict_pair_covered => "Explain every accepted conflict group; native code attaches its membership.",
         };
@@ -183,7 +180,6 @@ pub fn reject(comptime T: type, input: r.Input, source: Source, unit: Unit, issu
     return .{ .invalid = .{ .state_id = input.progress.plan.layout.items.state_id, .partition_id = input.partition.id, .revision = source.revision, .origin = source.at(unit, fieldFor(unit, issue.rule)), .unit = unit, .issue = issue } };
 }
 pub fn fieldFor(unit: Unit, rule: Rule) Field {
-    if (rule == .role_assignment) return .relationship;
     if (rule == .relationship and (unit == .signal or unit == .conflict)) return .selections;
     return switch (rule) {
         .claim_selection => .selections,

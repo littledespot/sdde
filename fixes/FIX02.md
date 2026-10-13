@@ -72,7 +72,7 @@ review gates, shared repair slot and absence of fallback remain intact.
 
 | Owning boundary | Current source and rollout responsibility |
 | --- | --- |
-| Workflow routing | [spec.workflow.yaml](../design/workflows/spec.workflow.yaml): `review-support.model` and `review-support.loss-model` currently select `spec_generation`; change these shared request origins after Phase 0. |
+| Workflow routing | [spec.workflow.yaml](../design/workflows/spec.workflow.yaml): `assess-support.model` and `review-source-support.loss-model` currently select `spec_generation`; change these shared request origins after Phase 0. Keep the pure `review-source-support.reuse` selection consistent with the assessment binding. |
 | Configuration shape | [configuration schema](../design/schemas/sddtoolkit-config.schema.json), [native config](../src/domain/config.zig) and [config service](../src/application/sddtoolkit_config_service.zig): named slots already exist. Reuse the single reader and native `ModelsConfig`; no hardcoded slot enum or second reader. |
 | Binding and capability validation | [repository model allowlist](../src/domain/repository_model_allowlist.zig), [provider contracts](../src/domain/llm_provider_contracts.zig) and [binding action](../src/actions/provider/resolve_provider_model_binding.zig): retain exact catalogue resolution and supported-control checks. |
 | Request and correction lifecycle | [request preparation](../src/domain/model_request_preparation.zig), [request identity](../src/domain/model_request_identity.zig) and [lifecycle](../src/domain/workflow_model_request_lifecycle.zig): preserve the originating binding through consumers and protocol correction. |
@@ -109,7 +109,7 @@ recovery acceptance remain open.
    repair uses `repair`; protocol corrections retain their originating binding.
    Referenced slots are required across the selected compiled graph, including
    statically declared optional branches. Unrelated workflows need no new slot.
-2. Inventory every expanded caller of `review-support`, request consumer,
+2. Inventory every expanded caller of `assess-support` and `review-source-support`, request consumer,
    correction/repair path, failure transition, configured example and fixture.
    Record existing call placement, retry limits, prompts and schemas so routing
    work cannot quietly change them. Do not classify calls by a word such as
@@ -144,9 +144,11 @@ to complete this phase.
 | Authorized content or assessment-evidence repair | `repair` | Existing repair authorization only; evidence correction cannot reopen a retained verdict. |
 | Schema, identity, citation, coverage and permission checks | No model | Existing deterministic owners. |
 
-Change only the slot selections on `review-support.model` and
-`review-support.loss-model`. Their callers inherit those selections. Preserve
-`review-support.repair` and all generation bindings. Keep source review
+Change only the model slot selections on `assess-support.model` and
+`review-source-support.loss-model`. Their callers inherit those selections.
+Update the pure `review-source-support.reuse` selection to match the assessment
+binding; it performs no model call. Preserve `assess-support.repair` and all
+generation bindings. Keep source review
 enable/disable behavior, call placement, prompts, schemas, transitions and retry
 allowances unchanged for this routing candidate.
 

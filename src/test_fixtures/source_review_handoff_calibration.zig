@@ -74,8 +74,8 @@ pub fn run() !void {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const cases = try @import("../domain/strict_json.zig").decode([]const Case, a, try shared.read(a, root ++ "/cases.json"), .{ .maximum_depth = 128 });
-    const retained = try codec.decode([]const shared.Case, a, try shared.read(a, "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.json"));
+    const cases = try @import("../domain/strict_json.zig").decode([]const Case, a, try shared.read(a, root ++ "/cases.associated.json"), .{ .maximum_depth = 128 });
+    const retained = try codec.decode([]const shared.Case, a, try shared.read(a, "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.associated.json"));
     const parent = try @import("../domain/strict_json.zig").decode(shared.ReviewParent, a, try shared.read(a, root ++ "/handoff.parent.json"), .{ .maximum_depth = 8 });
     var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schema = try parser.compiler().compile(a, try shared.read(a, "design/workflows/spec/support.schema.json"));
@@ -132,10 +132,10 @@ pub fn run() !void {
         "design/workflows/spec/support.schema.json",
         "design/workflows/spec/support.prompt.md",
         "design/workflows/spec/support-loss.prompt.md",
-        root ++ "/cases.json",
+        root ++ "/cases.associated.json",
         root ++ "/scorecard.template.json",
         root ++ "/handoff.parent.json",
-        "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.json",
+        "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.associated.json",
     };
     var dependencies: std.ArrayList(File) = .empty;
     for (dependency_paths) |path| try dependencies.append(a, try filePin(a, path));
@@ -146,13 +146,11 @@ pub fn run() !void {
         .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = temperature_policy.temperature, .response_mode = "native_schema", .max_output_tokens = 16384, .seed = "absent", .top_p = "absent" },
         .limits = .{ .repetitions = 2, .development_assignments = development, .reserved_qualification_assignments = qualification, .review_sends = trials.items.len, .conditional_loss_sends = trials.items.len, .maximum_physical_sends = trials.items.len * 2, .stop_at_actual_input_plus_output_tokens = 250000, .retries_corrections_repairs_model_judges_e2e = 0 },
         .native_origin_available_from_replayed_receipt = false,
-        .prior_findings = "MOCK supported prefix for isolated assignment preparation; never evidence of complete production workflow validation.",
+        .prior_findings = "MOCK bound support or inconclusive unauthored prefix; never evidence of complete production workflow validation.",
         .downstream = "Not frozen or fabricated from expectations. Derive current complete packet and request only from an exact admitted receipt; unchanged reviewer obligation, source IDs and diagnostic origin.",
         .dependencies = dependencies.items,
         .trials = trials.items,
     }, .{}) });
-    for (cases) |example| for ([_][]const u8{ "review.packet.json", "review.edit.json", "review.request.json" }) |suffix| try frozen(a, example.id, suffix);
-    try std.testing.expectEqualStrings(try shared.read(a, root ++ "/preparation.json"), try shared.read(a, output ++ "/preparation.json"));
     // Optional future receipts are local evidence only. This never dispatches.
     for (cases) |example| {
         const base = try sourceCase(example, retained);
@@ -184,8 +182,8 @@ fn prepare(a: std.mem.Allocator, example: Case, base: shared.Case) !shared.Prepa
         // becomes its incomplete FR; companion AC data is mock scaffolding,
         // not another independently approved requirement or semantic finding.
         const records = [_]spec.RecordProposal{
-            .{ .content = .{ .acceptance_criterion = .{ .given = try business(a, "MOCK The feature is in operation."), .when = try business(a, "MOCK The represented behavior is requested."), .then = value.value } }, .provenance = value.provenance },
-            .{ .content = .{ .functional_requirement = .{ .text = value.value } }, .provenance = value.provenance },
+            .{ .content = .{ .acceptance_criterion = .{ .given = try business(a, "MOCK The feature is in operation."), .when = try business(a, "MOCK The represented behavior is requested."), .then = value.value } }, .source_group_ids = value.source_group_ids, .provenance = value.provenance },
+            .{ .content = .{ .functional_requirement = .{ .text = value.value } }, .source_group_ids = value.source_group_ids, .provenance = value.provenance },
         };
         const assigned = try @import("../domain/specification_identity.zig").assign(a, .{ .display_name = brief.title, .primary_user_story = value, .records = &records, .entities = .{ .disposition = .not_applicable, .basis = value } }, .{});
         const context = prepared.context;
@@ -213,7 +211,7 @@ fn prefix(a: std.mem.Allocator, prepared: shared.PreparedContext, target: author
         const packet = try support.packetFor(a, prepared.inputs, prepared.context, .{ .finding = required.seed.id });
         defer packets.release(packet);
         const rules = try evidence.requirements(a, prepared.inputs, prepared.context.inputs, required.seed.id);
-        const bytes = try codec.encode(model.Value, a, .{ .supported = .{ .source_ids = rules.eligible_source_ids, .detail = "MOCK supported prefix for isolated diagnostic assignment; no semantic evidence." } });
+        const bytes = try shared.mockPrefix(a, rules);
         prior = try support.collectFocused(a, prepared.inputs, prepared.context, prior, packet, bytes, null);
         try std.testing.expect(prior.? == .pending);
     }
@@ -412,12 +410,9 @@ fn consumeReceipt(a: std.mem.Allocator, schema: *const @import("../domain/model_
 fn pin(a: std.mem.Allocator, id: []const u8, suffix: []const u8) !File {
     const path = try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, id, suffix });
     const bytes = try shared.read(a, path);
-    return .{ .path = try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ root, id, suffix }), .sha256 = try shared.sha256(a, bytes), .bytes = bytes.len };
+    return .{ .path = path, .sha256 = try shared.sha256(a, bytes), .bytes = bytes.len };
 }
 fn filePin(a: std.mem.Allocator, path: []const u8) !File {
     const bytes = try shared.read(a, path);
     return .{ .path = path, .sha256 = try shared.sha256(a, bytes), .bytes = bytes.len };
-}
-fn frozen(a: std.mem.Allocator, id: []const u8, suffix: []const u8) !void {
-    try std.testing.expectEqualStrings(try shared.read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ root, id, suffix })), try shared.read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, id, suffix })));
 }

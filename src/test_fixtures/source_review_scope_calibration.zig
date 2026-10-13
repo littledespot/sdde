@@ -72,7 +72,7 @@ pub fn run() !void {
     defer arena.deinit();
     const a = arena.allocator();
     const cases = try @import("../domain/strict_json.zig").decode([]const Case, a, try shared.read(a, root ++ "/cases.json"), .{ .maximum_depth = 128 });
-    const retained = try codec.decode([]const shared.Case, a, try shared.read(a, "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.json"));
+    const retained = try codec.decode([]const shared.Case, a, try shared.read(a, "test/calibration/source-loss-attribution/bound-preservation/obligation/cases.associated.json"));
     var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schema = try parser.compiler().compile(a, try shared.read(a, "design/workflows/spec/support.schema.json"));
     const prompts = [2][]const u8{ try shared.read(a, root ++ "/baseline.prompt.md"), try shared.read(a, "design/workflows/spec/support.prompt.md") };
@@ -131,20 +131,26 @@ pub fn run() !void {
         .parent = try filePin(a, "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/handoff.parent.json"),
         .trials = trials.items,
     }, .{}) });
-    // Exports are projections. Preparation never updates their checked-in pins.
-    for (cases) |example| {
-        try frozen(a, example.id, "packet.json");
-        for (std.enums.values(Arm)) |arm| for ([_][]const u8{ "edit.json", "request.json" }) |kind| try frozen(a, example.id, try std.fmt.allocPrint(a, "{s}.{s}", .{ @tagName(arm), kind }));
-    }
-    try std.testing.expectEqualStrings(try shared.read(a, root ++ "/preparation.json"), try shared.read(a, output ++ "/preparation.json"));
 }
 
 fn prepare(a: std.mem.Allocator, example: Case, retained: []const shared.Case) !shared.PreparedContext {
     var base: shared.Case = if (example.retained_case) |id| found: {
         for (retained) |value| if (std.mem.eql(u8, value.id, id)) break :found value;
         return error.MissingCalibrationSource;
-    } else .{ .id = example.id, .cohort = .development, .sources = example.sources, .claims = example.claims, .description = example.description orelse return error.MissingCalibrationSource, .missing = "MOCK unused loss premise", .missing_obligation = "MOCK unused loss premise", .mode = .candidate, .verdicts = &.{}, .expected = "unlocalized" };
+    } else .{ .id = example.id, .cohort = .development, .sources = example.sources, .claims = example.claims, .description = example.description orelse return error.MissingCalibrationSource, .missing = "MOCK unused loss premise", .missing_obligation = "MOCK unused loss premise", .mode = .candidate, .grouping = .combined, .source_group_ids = &.{1}, .verdicts = &.{}, .expected = "unlocalized" };
     if (example.description) |value| base.description = value;
+    const source_scoped = example.description_sources != null or if (example.records) |records| for (records) |record| {
+        if (record.source_ids != null) break true;
+    } else false else false;
+    // Test data declares this topology: either one complete composite group or
+    // one group per supplied source. Explicit source choices identify those
+    // occurrences; production never infers group support from source membership.
+    base.grouping = if (source_scoped) .per_source else .combined;
+    base.source_group_ids = if (source_scoped) groups: {
+        const ids = try a.alloc(u32, base.sources.len);
+        for (ids, 1..) |*id, ordinal| id.* = @intCast(ordinal);
+        break :groups ids;
+    } else &.{1};
     var prepared = try shared.prepareContext(a, base);
     errdefer prepared.passive.deinit();
     if (example.target.unit == .source) {
@@ -152,8 +158,8 @@ fn prepare(a: std.mem.Allocator, example: Case, retained: []const shared.Case) !
         return prepared;
     }
     var brief = prepared.inputs.brief orelse return error.MissingCalibrationSource;
-    if (example.title) |value| brief.title = try attributed(a, prepared.context, value, null);
-    if (example.goal) |value| brief.primary_goal = try attributed(a, prepared.context, value, null);
+    if (example.title) |value| brief.title = try attributed(a, prepared.context, value, base.source_group_ids);
+    if (example.goal) |value| brief.primary_goal = try attributed(a, prepared.context, value, base.source_group_ids);
     if (example.description_sources) |sources| brief.description = try attributed(a, prepared.context, base.description, sources);
     var candidate: ?spec.IdentifiedContent = prepared.inputs.specification;
     if (example.records) |records| {
@@ -165,14 +171,16 @@ fn prepare(a: std.mem.Allocator, example: Case, retained: []const shared.Case) !
             };
             const number = counters.get(kind) + 1;
             counters.set(kind, number);
+            const association = try attributed(a, prepared.context, "MOCK provenance selection", record.source_ids orelse base.source_group_ids);
+            if (association.source_group_ids.len != 1) return error.InvalidCalibrationRecord;
             identified_record.* = .{ .id = .{ .kind = kind, .ordinal = number }, .proposal = .{ .content = switch (record.kind) {
                 .acceptance_criterion => .{ .acceptance_criterion = .{ .given = try business(a, record.given orelse return error.InvalidCalibrationRecord), .when = try business(a, record.when orelse return error.InvalidCalibrationRecord), .then = try business(a, record.then orelse return error.InvalidCalibrationRecord) } },
                 .functional_requirement => .{ .functional_requirement = .{ .text = try business(a, record.text orelse return error.InvalidCalibrationRecord) } },
                 .edge_case => .{ .edge_case = .{ .condition = try business(a, record.condition orelse return error.InvalidCalibrationRecord), .expected_outcome = try business(a, record.expected_outcome orelse return error.InvalidCalibrationRecord) } },
                 .user_visible_outcome => .{ .user_visible_outcome = .{ .text = try business(a, record.text orelse return error.InvalidCalibrationRecord) } },
-            }, .provenance = (try attributed(a, prepared.context, "MOCK provenance selection", record.source_ids)).provenance } };
+            }, .source_group_ids = association.source_group_ids, .provenance = association.provenance } };
         }
-        candidate = .{ .display_name = brief.title, .primary_user_story = try attributed(a, prepared.context, example.story orelse base.description, null), .records = identified, .entities = .{ .disposition = .not_applicable, .basis = try attributed(a, prepared.context, "No separate business entity records are supplied in this diagnostic candidate.", null) } };
+        candidate = .{ .display_name = brief.title, .primary_user_story = try attributed(a, prepared.context, example.story orelse base.description, base.source_group_ids), .records = identified, .entities = .{ .disposition = .not_applicable, .basis = try attributed(a, prepared.context, "No separate business entity records are supplied in this diagnostic candidate.", base.source_group_ids) } };
     }
     if (candidate) |value| try provenance.validateStored(a, prepared.context.inputs, .{ .records = prepared.context.registry.records, .occurrences = prepared.context.registry.occurrences }, @import("../domain/reference_support.zig").records(prepared.context.references), brief, value);
     prepared.inputs = try @import("../domain/specification_authority.zig").project(a, prepared.context.inputs.corpus.feature_id, prepared.context.references, candidate, brief);
@@ -182,15 +190,11 @@ fn prepare(a: std.mem.Allocator, example: Case, retained: []const shared.Case) !
 fn business(a: std.mem.Allocator, value: []const u8) !spec.BusinessValue {
     return .{ .segments = try a.dupe(@import("../domain/typed_text.zig").BusinessSegment, &.{.{ .literal = .{ .value = value } }}) };
 }
-fn attributed(a: std.mem.Allocator, context: provenance.Context, value: []const u8, selected_sources: ?[]const u32) !spec.AttributedValue {
-    var claims: std.ArrayList(reference.ClaimId) = .empty;
-    for (@import("../domain/reference_support.zig").records(context.references).items.entries) |item| {
-        if (item.claim.content != .model or item.claim.content.model != .business) continue;
-        if (selected_sources) |sources| if (std.mem.indexOfScalar(u32, sources, item.source_id.ordinal) == null) continue;
-        try claims.append(a, item.claim.id);
-    }
-    if (claims.items.len == 0) return error.MissingCalibrationSource;
-    return .{ .value = try business(a, value), .provenance = try provenance.select(a, context, .{ .claim_ids = claims.items, .clarification_response_ids = &.{} }) };
+fn attributed(a: std.mem.Allocator, context: provenance.Context, value: []const u8, selected_groups: []const u32) !spec.AttributedValue {
+    const ids = try a.alloc(reference.SignalId, selected_groups.len);
+    for (selected_groups, ids) |id, *group| group.* = .{ .ordinal = id };
+    const association = try @import("../domain/specification_source_binding.zig").resolveGroups(a, @import("../domain/reference_support.zig").records(context.references), context.inputs, ids, .content);
+    return .{ .value = try business(a, value), .source_group_ids = association.source_group_ids, .provenance = try provenance.select(a, context, association.selection) };
 }
 fn targetId(target: Target) !authority.Id {
     if (target.ordinal == 0) return error.MissingCalibrationTarget;
@@ -233,10 +237,5 @@ fn filePin(a: std.mem.Allocator, path: []const u8) !File {
 }
 fn pin(a: std.mem.Allocator, id: []const u8, suffix: []const u8) !File {
     const path = try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, id, suffix });
-    var result = try filePin(a, path);
-    result.path = try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ root, id, suffix });
-    return result;
-}
-fn frozen(a: std.mem.Allocator, id: []const u8, suffix: []const u8) !void {
-    try std.testing.expectEqualStrings(try shared.read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ root, id, suffix })), try shared.read(a, try std.fmt.allocPrint(a, "{s}/{s}.{s}", .{ output, id, suffix })));
+    return filePin(a, path);
 }

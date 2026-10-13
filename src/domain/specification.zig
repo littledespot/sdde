@@ -4,7 +4,7 @@ const std = @import("std");
 const text = @import("typed_text.zig");
 const reference = @import("reference_extraction.zig");
 
-pub const version = "specification/v2";
+pub const version = "specification/v3";
 pub const Error = error{InvalidSpecification};
 pub const Kind = enum {
     acceptance_criterion,
@@ -49,6 +49,18 @@ pub const Kind = enum {
 /// Mandatory business-content families; optional section presence never changes
 /// this contract. Semantic support and completeness remain authority obligations.
 pub const required_record_families = [_]Kind{ .acceptance_criterion, .functional_requirement };
+const entity_required_record_families = required_record_families ++ [_]Kind{.entity};
+
+/// Structural mapping permission; semantic support still requires review.
+pub fn permitsPositiveMapping(content: reference.ClaimContent) bool {
+    return switch (content) {
+        .preserved_token => true,
+        .model => |model| switch (model) {
+            .open_question => false,
+            .business, .scope_guard, .design, .technical, .validation, .implementation_assumption => true,
+        },
+    };
+}
 pub fn requiresRecords(kind: Kind) bool {
     return std.mem.indexOfScalar(Kind, &required_record_families, kind) != null;
 }
@@ -99,9 +111,9 @@ pub fn Values(comptime boundary: Boundary) type {
     return struct {
         const Self = @This();
         pub const Evidence = if (boundary == .model) Selection else Provenance;
-        pub const AttributedValue = struct { value: BusinessValue, provenance: Evidence };
+        pub const AttributedValue = struct { value: BusinessValue, source_group_ids: []const @import("reference_reconciliation.zig").SignalId = &.{}, provenance: Evidence };
         pub const Brief = struct { title: Self.AttributedValue, description: Self.AttributedValue, primary_goal: Self.AttributedValue };
-        pub const RecordProposal = struct { content: Content(BusinessValue), provenance: Evidence };
+        pub const RecordProposal = struct { content: Content(BusinessValue), source_group_ids: []const @import("reference_reconciliation.zig").SignalId = &.{}, provenance: Evidence };
         pub const ApplicabilityProposal = struct { disposition: Applicability, basis: Self.AttributedValue };
     };
 }
@@ -110,9 +122,7 @@ pub const Model = Values(.model);
 /// reconstructed in the native candidate; no wire value can carry provenance.
 pub const Wire = struct {
     pub const AttributedValue = struct { value: BusinessValue };
-    pub const Brief = struct { title: Wire.AttributedValue, description: Wire.AttributedValue, primary_goal: Wire.AttributedValue };
     pub const RecordProposal = struct { content: Content(BusinessValue) };
-    pub const ApplicabilityProposal = struct { disposition: Applicability, basis: Wire.AttributedValue };
 };
 pub const AttributedValue = Values(.canonical).AttributedValue;
 pub const Brief = Values(.canonical).Brief;
@@ -138,6 +148,11 @@ pub const RecordProposal = Values(.canonical).RecordProposal;
 pub const Applicability = enum { required, not_applicable };
 pub fn entityMembershipSatisfied(disposition: Applicability, entity_count: usize) bool {
     return (disposition == .required) == (entity_count != 0);
+}
+/// Assembly guidance projects the same family and membership policy enforced
+/// by native validation; it does not require every source group to emit records.
+pub fn assemblyRequiredRecordFamilies(disposition: Applicability) []const Kind {
+    return if (entityMembershipSatisfied(disposition, 0)) &required_record_families else &entity_required_record_families;
 }
 pub const ApplicabilityProposal = Values(.canonical).ApplicabilityProposal;
 pub const ContentProposal = struct {

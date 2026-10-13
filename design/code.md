@@ -695,16 +695,21 @@ ClarificationOwnershipRegistry {
 
 ## 7. Specification IR
 
-This sample describes `specification/v2` under
-[ADR 0020](decisions/0020-derived-exact-reference-lineage.md). Exact segments
-select a preserved-token claim. Canonical `claim_ids` hold explicit selection;
-the effective claims and citations are derived from that selection plus exact
-segments. Earlier shapes have no reader.
+This illustrative sample describes canonical `specification/v3` under
+[ADR 0020](decisions/0020-derived-exact-reference-lineage.md). Initial narrative
+responses select current whole groups through `signal_ids`; record responses
+inherit their one native-assigned group. Native admission stores canonical
+`source_group_ids` and derives explicit `claim_ids` from those complete groups.
+Exact segments select preserved-token occurrences; effective claims and citations
+derive from explicit selection plus exact segments. Fixed repairs preserve the
+association and return content only. Earlier shapes have no reader.
 
 ```text
+InitialAuthoredValue { value: BusinessValue, signal_ids[] }
+InitialRecordProposal { content: RecordContent }
 Provenance { claim_ids[], citation_ids[], clarification_response_ids[] }
-AttributedValue { value: BusinessValue, provenance: Provenance }
-RecordProposal { content: RecordContent, provenance: Provenance }
+AttributedValue { value: BusinessValue, source_group_ids[], provenance: Provenance }
+RecordProposal { content: RecordContent, source_group_ids[], provenance: Provenance }
 
 ContentProposal {
   display_name: AttributedValue,
@@ -736,7 +741,8 @@ IdentifiedContent {
 Native [content contract](../src/domain/specification.zig) interpretation:
 
 - Tagged unions encode as single-key objects, e.g.
-  `{"functional_requirement":{"text":...}}`; title/story keep fixed provenance keys.
+  `{"functional_requirement":{"text":...}}`; canonical values retain their
+  native-admitted associations and provenance.
 - `BusinessValue` holds ordered prose, passive-ID and `exact_copy` token/citation segments.
   Requirement wording carries modality; there is no separate modality field.
 - Parsing yields a candidate. H-008/H-010/H-012 must assemble and validate current

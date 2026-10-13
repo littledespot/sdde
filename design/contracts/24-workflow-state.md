@@ -27,10 +27,20 @@ Readback resolves current compiled authority and rejects missing or changed bind
 before model calls; it never executes persisted contract bytes.
 
 The coordinated [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md)
-cutover uses `specification/v2`; the explicit source-obligation handoff advances
+cutover originally used `specification/v2`; the explicit source-obligation handoff advances
 the state to `specification-state/v11`. The native-owned assessed-collection
-amendment advances it to `specification-state/v12`, removing model-returned member
-subsets while retaining complete native collections. Completed readback
+amendment advanced it to `specification-state/v12`, removing model-returned member
+subsets while retaining complete native collections. The approved FIX03 Phase 5
+authored-association cutover now uses `specification/v3` and
+`specification-state/v13`, for completed and clarification-pending states alike.
+It removes persisted presentation roles and stores required `source_group_ids`
+inside attributed values and shared-provenance records, without changing general
+`Selection`/`Provenance` or adding a parallel association registry. Readback resolves
+those exact current captured group occurrences, preserves complete member order
+and legitimate overlap, then recomputes explicit support and lineage. Missing,
+foreign, inactive, stale or inconsistent associations reject; equal claim lists
+or equal displayed bytes cannot replace an occurrence. Stored projection errors
+cannot be repaired by silently substituting a fresh union. Completed readback
 validates captured reconciliation groups and per-unit associations against the
 reference ledger, resolves stored explicit support and exact occurrence handles,
 then recomputes effective claims, citations and source links. It rejects
@@ -49,6 +59,13 @@ reader. Changed authority invalidates affected descendants through the
 existing stage rules below.
 
 It contains no content hashes or fingerprints. Preset IDs/versions and artifact paths are metadata, not freshness proofs.
+
+The [Phase 6 review receipts](22-repair.md#224-repair-request-and-response) exist
+only in one execution's native owners. They are not part of
+`specification-state/v13` and are not restored by state readback. Loading ordinary
+published review evidence cannot manufacture an accepted call origin or a reusable
+receipt. Candidate-local re-admission does not resume an earlier execution;
+every fresh invocation starts at `start` with empty review history.
 
 ### 24.2 Stage transition state machine
 

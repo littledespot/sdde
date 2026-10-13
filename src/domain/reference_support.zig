@@ -8,8 +8,8 @@ pub const Records = struct {
     conflicts: []const r.Conflict,
 };
 
-/// Positive business support for generation roles and their consumers. Historical
-/// and diagnostic evidence remains available independently of this eligibility.
+/// Eligibility for positive authored source selections. Historical and
+/// diagnostic evidence remains available independently of this native check.
 pub fn eligibleClaim(disposition: ?r.Disposition) bool {
     return disposition != null and disposition.? == .retained;
 }

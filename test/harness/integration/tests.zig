@@ -153,6 +153,7 @@ test "shipped workflow conforms to native registrations and rejects contract dri
                 invalid_graph.authority.steps = steps;
                 var changed_part = false;
                 for (steps) |*step| {
+                    if (fault == .missing_schema and !@import("../../../src/domain/workflow_model.zig").assignsRequest(step.produces, step.replaces)) continue;
                     const parameters = try a.dupe(@import("../../../src/domain/workflow_compilation.zig").CompiledParameter, step.parameters);
                     for (parameters, 0..) |*parameter, parameter_index| {
                         if (!std.mem.eql(u8, parameter.id.bytes, if (fault == .missing_schema) "result-schema" else "composition-part")) continue;
@@ -1219,21 +1220,21 @@ test "reports preserve native extraction reconciliation authoring coverage speci
         var current = (try @import("../../../src/domain/specification_session.zig").initialize(scratch, .{ .bytes = "chosen" }, context)).ready;
         current.completed = 1;
         const action = @import("../../../src/actions/specification/validate_specification_unit.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
-        const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .primary_user_story = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "A reservation is confirmed." } }} }, .provenance = .{ .claim_ids = &.{.{ .ordinal = 999 }}, .clarification_response_ids = &.{} } } } } })).invalid;
+        const groups = try @import("../../../src/domain/specification_source_binding.zig").catalogue(scratch, @import("../../../src/domain/reference_support.zig").records(accounted), .content);
+        try std.testing.expect(groups.len > 0);
+        const spec = (try action.execute(scratch, current, context, .{ .origins = .{ .initial = origin }, .response = .{ .content = .{ .primary_user_story = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "A reservation is confirmed." } }} }, .source_group_ids = &.{groups[0].signal_id}, .provenance = .{ .claim_ids = &.{.{ .ordinal = 999 }}, .clarification_response_ids = &.{} } } } } })).invalid;
         retained[1] = try (Diagnostic{ .specification = spec }).copy(a);
         const extraction_action = @import("../../../src/actions/reference/validate_reference_extraction_text.zig").Action{ .validator = @import("../../../src/test_fixtures/reference_text.zig").validator };
         const lexical = (try extraction_action.execute(scratch, context.registry, context.current, input.inputs, .{ .entries = &.{.{ .scope = .{ .state_id = input.inputs.corpus.state_id, .chunk_id = input.inputs.chunks.entries[0].id }, .origin = origin, .token_classifications = &.{}, .outcome = .{ .no_feature_claim = .{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} } } }} })).invalid;
         retained[2] = try (Diagnostic{ .extraction_text = lexical }).copy(a);
         var partial = context;
-        const signals = try scratch.dupe(@import("../../../src/domain/reference_reconciliation.zig").Signal, accounted.records.signals);
-        for (signals) |*signal| signal.value.generation_roles = &.{};
-        partial.references.records.signals = signals;
-        partial.references.records.assignments.checked.prior.prior.source.fields = &.{.{ .unit = .signals, .field = .relationship, .origin = origin }};
+        partial.references.records.signals = &.{};
+        partial.references.records.assignments.checked.prior.prior.source.fields = &.{.{ .unit = .signals, .field = .record, .origin = origin }};
         const gap = (try @import("../../../src/domain/specification_session.zig").initialize(scratch, .{ .bytes = "chosen" }, partial)).blocked;
-        retained[6] = try (Diagnostic{ .authoring_roles = gap }).copy(a);
+        retained[6] = try (Diagnostic{ .source_catalogue = gap }).copy(a);
     }
     for (retained) |diagnostic| {
-        const report: c.Report = .{ .started_at_utc = "", .status = if (diagnostic == .authoring_roles) .workflow_blocked else .workflow_failed, .workflow_outcome = if (diagnostic == .authoring_roles) .blocked else .invalid, .terminal_step = "native-validation", .candidate_error = diagnostic };
+        const report: c.Report = .{ .started_at_utc = "", .status = if (diagnostic == .source_catalogue) .workflow_blocked else .workflow_failed, .workflow_outcome = if (diagnostic == .source_catalogue) .blocked else .invalid, .terminal_step = "native-validation", .candidate_error = diagnostic };
         const decoded = try @import("../contracts.zig").decode(c.Report, a, try std.json.Stringify.valueAlloc(a, report, .{}));
         try std.testing.expectEqualDeep(report, decoded);
         try std.testing.expectEqualDeep(origin, decoded.candidate_error.?.origin().?);
@@ -1438,7 +1439,7 @@ test "omission rejection reports retain separate target finding and comparison o
         var scratch: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer scratch.deinit();
         const targets = try scratch.allocator().dupe(repair.TargetAssessment, &.{
-            .{ .requirement = .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .primary_user_story }, .reason = .unsupported_owner, .owner = .{ .unsupported_role = .primary_user_story }, .target_origin = .{ .request = .{ .value = 9 }, .attempt = .{ .value = 1 } }, .finding_origin = .{ .request = .{ .value = 15 }, .attempt = .{ .value = 1 } }, .comparison_origin = .{ .request = .{ .value = 16 }, .attempt = .{ .value = 2 } } },
+            .{ .requirement = .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .primary_user_story }, .reason = .unsupported_owner, .owner = .{ .source_association = .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .primary_user_story } }, .target_origin = .{ .request = .{ .value = 9 }, .attempt = .{ .value = 1 } }, .finding_origin = .{ .request = .{ .value = 15 }, .attempt = .{ .value = 1 } }, .comparison_origin = .{ .request = .{ .value = 16 }, .attempt = .{ .value = 2 } } },
             .{ .requirement = .{ .kind = .feature_intent, .unit = .{ .feature = .singleton }, .slot = .description }, .reason = .claim_evidence_mismatch, .owner = .{ .candidate = .{} } },
         });
         break :captured try (Diagnostic{ .omission_authorization = .{ .reason = .UnsafeSpecificationOmissionRepair, .revision = 2, .outstanding_requirements = &.{}, .review_origin = null, .targets = targets } }).copy(a);

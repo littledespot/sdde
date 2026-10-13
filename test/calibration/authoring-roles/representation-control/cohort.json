@@ -1,0 +1,754 @@
+{
+  "schema": "role-calibration/v1",
+  "label_status": "proposed",
+  "reviewer": null,
+  "cases": [
+    {
+      "id": "captured-four-negative-latest",
+      "family": "captured-startup",
+      "split": "development",
+      "input": {
+        "captured": {
+          "feature": "zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world",
+          "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+          "call": "request-6-inference-1"
+        }
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Proposed independent source assessment: retained business signal 1 supplies successful startup, startup greeting and UTC date/time output. It supports all six registered purposes, including a derived feature name, system actor and entity-applicability decision; copied-token signal 2 alone supplies no behavior. The observed positive or negative response does not determine these labels. These correlated captures are known regression cases, not held-out confirmation."
+    },
+    {
+      "id": "captured-four-negative-preceding",
+      "family": "captured-startup",
+      "split": "development",
+      "input": {
+        "captured": {
+          "feature": "zig-out/e2e-spec/2026-10-11T07-42-49Z-f175464cdecd52a67240fef474b7a3a0/project/specs/hello-world",
+          "run": "RUN-d9038e02f38db84cc14443480c6d0662",
+          "call": "request-6-inference-1"
+        }
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Proposed independent source assessment: retained business signal 1 supplies successful startup, startup greeting and UTC date/time output. It supports all six registered purposes, including a derived feature name, system actor and entity-applicability decision; copied-token signal 2 alone supplies no behavior. The observed positive or negative response does not determine these labels. These correlated captures are known regression cases, not held-out confirmation."
+    },
+    {
+      "id": "captured-supported-control",
+      "family": "captured-startup",
+      "split": "development",
+      "input": {
+        "captured": {
+          "feature": "zig-out/e2e-spec/2026-10-11T07-03-52Z-1b37c292a96b5055e6cf7d3f3b85e5dc/project/specs/hello-world",
+          "run": "RUN-97279dcdf824fc2622d889dcaf595f5b",
+          "call": "request-6-inference-1"
+        }
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Proposed independent source assessment: retained business signal 1 supplies successful startup, startup greeting and UTC date/time output. It supports all six registered purposes, including a derived feature name, system actor and entity-applicability decision; copied-token signal 2 alone supplies no behavior. The observed positive or negative response does not determine these labels. These correlated captures are known regression cases, not held-out confirmation."
+    },
+    {
+      "id": "startup-whole-chunk",
+      "family": "startup-representation",
+      "split": "development",
+      "input": {
+        "controlled": [
+          {
+            "text": "MOCK The application must start successfully.\nMOCK When started, the application must display `MOCK Hello, World!`.\nMOCK The application must also output the current date and time in UTC.\n",
+            "kind": "business",
+            "representation": "whole_chunk"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Proposed Successful startup, startup greeting and UTC output survive in one complete business signal. A system actor and behavior are supplied; no prewritten title, persona or story is required. Entity applicability is assessable without an explicit declaration that entities are absent. This pair uses byte-identical sources and the same complete signal content; only claim representation and its native evidence edges differ. Labels assess semantic support, not a preferred claim count."
+    },
+    {
+      "id": "startup-separate-lines",
+      "family": "startup-representation",
+      "split": "development",
+      "input": {
+        "controlled": [
+          {
+            "text": "MOCK The application must start successfully.\nMOCK When started, the application must display `MOCK Hello, World!`.\nMOCK The application must also output the current date and time in UTC.\n",
+            "kind": "business",
+            "representation": "separate_lines"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Proposed Successful startup, startup greeting and UTC output survive in one complete business signal. A system actor and behavior are supplied; no prewritten title, persona or story is required. Entity applicability is assessable without an explicit declaration that entities are absent. This pair uses byte-identical sources and the same complete signal content; only claim representation and its native evidence edges differ. Labels assess semantic support, not a preferred claim count."
+    },
+    {
+      "id": "lamp-whole-chunk",
+      "family": "lamp-representation",
+      "split": "development",
+      "input": {
+        "controlled": [
+          {
+            "text": "MOCK A technician presses the lamp-test button.\nMOCK After the button is pressed, the warning lamp must flash.\nMOCK The flash confirms that the lamp works.\n",
+            "kind": "business",
+            "representation": "whole_chunk"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Proposed The technician, trigger, required visible result and intended benefit support all six purposes. A display-only behavior can support an entity-applicability decision without requiring business entities. No copied output token or supplied title is needed. This pair uses byte-identical sources and the same complete signal content; only claim representation and its native evidence edges differ. Labels assess semantic support, not a preferred claim count."
+    },
+    {
+      "id": "lamp-separate-lines",
+      "family": "lamp-representation",
+      "split": "development",
+      "input": {
+        "controlled": [
+          {
+            "text": "MOCK A technician presses the lamp-test button.\nMOCK After the button is pressed, the warning lamp must flash.\nMOCK The flash confirms that the lamp works.\n",
+            "kind": "business",
+            "representation": "separate_lines"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Proposed The technician, trigger, required visible result and intended benefit support all six purposes. A display-only behavior can support an entity-applicability decision without requiring business entities. No copied output token or supplied title is needed. This pair uses byte-identical sources and the same complete signal content; only claim representation and its native evidence edges differ. Labels assess semantic support, not a preferred claim count."
+    },
+    {
+      "id": "parcel-whole-chunk",
+      "family": "parcel-representation",
+      "split": "development",
+      "input": {
+        "controlled": [
+          {
+            "text": "MOCK A recipient opens the parcel tracker.\nMOCK The tracker must show the parcel delivery status and its delivery events.\nMOCK Every delivery event must remain linked to its parcel so the recipient can follow progress.\n",
+            "kind": "business",
+            "representation": "whole_chunk"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Proposed The recipient, opening trigger, observable delivery status and intended benefit support all six purposes. The parcel/event requirement supplies genuine entity and relationship evidence. All three obligations remain jointly supported by the same business signal. This pair uses byte-identical sources and the same complete signal content; only claim representation and its native evidence edges differ. Labels assess semantic support, not a preferred claim count."
+    },
+    {
+      "id": "parcel-separate-lines",
+      "family": "parcel-representation",
+      "split": "development",
+      "input": {
+        "controlled": [
+          {
+            "text": "MOCK A recipient opens the parcel tracker.\nMOCK The tracker must show the parcel delivery status and its delivery events.\nMOCK Every delivery event must remain linked to its parcel so the recipient can follow progress.\n",
+            "kind": "business",
+            "representation": "separate_lines"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Proposed The recipient, opening trigger, observable delivery status and intended benefit support all six purposes. The parcel/event requirement supplies genuine entity and relationship evidence. All three obligations remain jointly supported by the same business signal. This pair uses byte-identical sources and the same complete signal content; only claim representation and its native evidence edges differ. Labels assess semantic support, not a preferred claim count."
+    },
+    {
+      "id": "implementation-only-insufficient",
+      "family": "insufficient-implementation",
+      "split": "development",
+      "input": {
+        "controlled": [
+          {
+            "text": "MOCK The retired runtime experiment used Java and a relational database.\nMOCK No current product behavior, actor, result or business relationship is specified.\n",
+            "kind": "technical",
+            "representation": "whole_chunk"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "description",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "primary_goal",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "primary_user_story",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "entity_basis",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "records",
+          "required": false,
+          "allowed_signal_ids": []
+        }
+      ],
+      "rationale": "Proposed genuine insufficient-support control: implementation research supplies no current feature requirement. Empty allowed sets forbid invented positive selections and do not reward forcing all roles supported. This case is not permission to publish a feature without behavioral authority."
+    },
+    {
+      "id": "constraint-only-partial-support",
+      "family": "insufficient-interaction",
+      "split": "development",
+      "input": {
+        "controlled": [
+          {
+            "text": "MOCK An inventory balance must never be negative.\n",
+            "kind": "business",
+            "representation": "whole_chunk"
+          }
+        ]
+      },
+      "labels": [
+        {
+          "role": "title",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "description",
+          "required": false,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_goal",
+          "required": false,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "primary_user_story",
+          "required": false,
+          "allowed_signal_ids": []
+        },
+        {
+          "role": "entity_basis",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        },
+        {
+          "role": "records",
+          "required": true,
+          "allowed_signal_ids": [
+            {
+              "ordinal": 1
+            }
+          ]
+        }
+      ],
+      "rationale": "Proposed partial-role control: the supplied business constraint supports a rule title, business data assessment and rule/prohibited-behavior records. A triggering interaction and actor are absent, so the story cannot be invented. Description and benefit are ambiguous and therefore optional, with the only business signal permitted as support. No all-positive target is imposed."
+    }
+  ]
+}

@@ -65,7 +65,7 @@ pub fn project(a: std.mem.Allocator, records: Records, context: Context) r.Error
     defer a.free(producers);
     for (producers) |location| {
         const output: @FieldType(Producer, "output") = switch (location) {
-            .unlocalized, .candidate, .unsupported_role, .unsupported_summary => continue,
+            .unlocalized, .candidate, .source_association, .unsupported_summary => continue,
             .extraction_claim => |id| value: {
                 for (extraction) |chunk| if (chunk.chunk_id.eql(id)) break :value .{ .extraction = .{
                     .result = .{
@@ -192,7 +192,7 @@ pub const SupportingProducer = struct {
             token_classifications: []const Classification,
         },
         token_classification: Classification,
-        signal: struct { inputs: []const ClaimMeaning, content: evidence.Meaning, roles: []const r.GenerationRole },
+        signal: struct { inputs: []const ClaimMeaning, content: evidence.Meaning },
         disposition: struct { input: ClaimMeaning, related: []const ClaimMeaning, disposition: r.Disposition },
         conflict: struct { inputs: []const ClaimMeaning, content: ConflictMeaning },
     },
@@ -227,9 +227,6 @@ pub fn comparisonSupport(a: std.mem.Allocator, records: Records, context: Contex
             .signal => |value| .{ .signal = .{
                 .inputs = try meanings(a, value.claims.claims),
                 .content = value.result.value.content,
-                .roles = for (records.signals) |signal| {
-                    if (std.meta.eql(signal.id, value.result.id)) break signal.value.generation_roles;
-                } else return error.InvalidReferenceReconciliation,
             } },
             .disposition => |value| blk: {
                 const related = try a.alloc(ClaimMeaning, value.result.related_claim_ids.len);

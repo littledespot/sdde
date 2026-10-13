@@ -267,6 +267,21 @@ control. OpenAI rubric evaluation remains outside this amendment.
 - Its findings are labeled `model_assisted`, retain source citations, and never masquerade as
   deterministic evidence.
 
+**Task-authorized Phase 6 amendment (11 October 2026):** an explicit pure native
+transition may re-admit an execution-local source-review assignment when its
+complete assessment dependencies are unchanged. The original terminal accepted
+request, epoch and actual inference origin remain the witness; reuse creates no
+request, attempt, provider receipt or token charge. Compare the native unit and
+purpose, full packet and restrictions, selected schema, compiled guidance/context
+and provider/model/slot/settings. The pure admission step may have a different
+workflow-step ID; workflow identity/version and the original producing request
+association remain fixed. No other binding difference is equivalent by implication.
+Current native subject, requiredness, applicability and evidence admission still
+apply. Eligibility and conservative exclusions are defined once in
+[§22.4](22-repair.md#224-repair-request-and-response); resource-only requests and
+JSON-composition parts have no review-retention contract. This is assessment
+reuse, not provider caching or deterministic semantic proof.
+
 ### 12.7 Workflow-defined model operations
 
 - The engine ships no model-route registry.
@@ -825,8 +840,9 @@ assessment response under [§22.1](22-repair.md). The derived location must agre
 with re-admission against current canonical facts. Non-omission and principle
 findings carry no comparison. The response supplies judgments, original-source
 spans and explanations; its comparison ID binds the entire native collection.
-`specification-state/v12` rejects earlier snapshot
-contracts without supplying missing bindings. ADR 0020 governs exact lineage.
+The current `specification-state/v13` contract in [§24.1](24-workflow-state.md#241-workflow-state)
+retains these native collections and authored associations, rejecting earlier
+snapshot contracts without supplying missing bindings. ADR 0020 governs exact lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
 **Source-review response contract (28 September 2026):** the model chooses a

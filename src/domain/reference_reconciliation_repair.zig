@@ -476,9 +476,7 @@ fn apply(a: std.mem.Allocator, parsed: r.Parsed, target: Target, replacement: ?R
                 result.phase = .dispositions;
             },
             .signal_selection, .signal_content, .signal, .insert_signal => {
-                global.role_decisions = null;
-                result.source.fields = try retireRoles(a, result.source.fields);
-                result.phase = if (parsed.phase == .complete or parsed.phase == .signals_with_conflicts) .signals_with_conflicts else .signals;
+                result.phase = if (parsed.phase == .complete) .complete else .signals;
             },
             else => {},
         };
@@ -692,18 +690,7 @@ fn retireSignals(a: std.mem.Allocator, parsed: r.Parsed, claims: []const r.Claim
         _ = values.orderedRemove(index);
     }
     result.proposal.global.signals = try values.toOwnedSlice(a);
-    result.proposal.global.role_decisions = null;
-    result.source.fields = try retireRoles(a, result.source.fields);
     return result;
-}
-
-fn retireRoles(a: std.mem.Allocator, fields: []const d.FieldOrigin) Error![]const d.FieldOrigin {
-    var result: std.ArrayList(d.FieldOrigin) = .empty;
-    for (fields) |field| {
-        if (field.unit == .signals and field.field == .relationship) continue;
-        try result.append(a, field);
-    }
-    return result.toOwnedSlice(a);
 }
 
 pub const Omission = struct {

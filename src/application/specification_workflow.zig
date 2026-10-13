@@ -32,6 +32,7 @@ pub const SourceReadiness = struct {
 pub const Initialize = struct {
     pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .authority, .subject = .accounted_reference_reconciliation, .evidence = .specification_generation_session, .result = .specification_generation_session } };
     pub const Action = @import("../actions/specification/initialize_specification_generation.zig").Action;
+    pub const iteration: @import("../domain/workflow_iteration.zig").Descriptor = .{ .kind = .initialize, .scope = .accounted_reference_reconciliation, .progress = .specification_generation_session };
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -46,7 +47,10 @@ pub const Initialize = struct {
             .ready => |current| .{ .session = current },
             .blocked => |gap| .{ .binding_rejected = gap },
         };
-        return publish(self.allocator, session_schema, owner, if (result == .ready) .ok else .blocked);
+        const progress = if (result == .ready) try session.iterationProgress(result.ready) else null;
+        var output = try publish(self.allocator, session_schema, owner, if (result == .ready) .ok else .blocked);
+        if (progress) |ready| output.iteration = .{ .limit = ready.limit, .before = 0, .after = ready.position };
+        return output;
     }
 };
 pub const Check = struct {
@@ -127,6 +131,7 @@ pub const Validate = struct {
 };
 pub const Advance = struct {
     pub const Action = @import("../actions/specification/advance_specification_generation.zig").Action;
+    pub const iteration: @import("../domain/workflow_iteration.zig").Descriptor = .{ .kind = .advance, .scope = .accounted_reference_reconciliation, .progress = .specification_generation_session };
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -134,11 +139,13 @@ pub const Advance = struct {
         const checked = owned.read(&input.step.data, checked_schema, .checked) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
+        const before = try session.iterationProgress(try readSession(&input.step.data));
         owner.payload = .{ .session = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), checked) catch |operation_error| return operation_error };
+        const after = try session.iterationProgress(owner.payload.session);
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(session_schema.key)] = values.adopt(self.allocator, session_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
-        return .{ .outcome = .ok, .delta = delta };
+        return .{ .outcome = .ok, .delta = delta, .iteration = .{ .limit = after.limit, .before = before.position, .after = after.position } };
     }
 };
 pub const Assemble = struct {

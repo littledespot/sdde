@@ -183,7 +183,78 @@ pub const Selection = struct {
     pub fn bind(self: Selection, allocator: std.mem.Allocator, assignment: identity.Assignment) Error!*Request {
         return assign(allocator, assignment.owner, assignment.model_request_id, self);
     }
+
+    /// Compare one actual accepted semantic assignment with its current native
+    /// selection. The pure admission step may differ from the producing inference
+    /// step; its workflow/version and complete semantic selection must agree.
+    /// This creates no request or origin; the caller still owns current finding
+    /// admission. Composed and resource inputs have no retention contract here.
+    pub fn acceptsRetained(self: Selection, allocator: std.mem.Allocator, ledger: *const identity.ModelRequestIdentityLedger, request: *const Request, origin: @import("model_candidate_origin.zig").Origin) Error!bool {
+        const prior = storage(request);
+        const current = self.input orelse return false;
+        const old = prior.input orelse return false;
+        if (self.composition != null or prior.composition != null or current != .packet or old != .packet or
+            current.packet.purpose() != .semantic_review or old.packet.purpose() != .semantic_review or
+            self.result_selection != .input or prior.result_definition == null or prior.phase != .prepared or
+            current.packet.repairPermit() != null or current.packet.repairOrigin() != null or
+            old.packet.repairPermit() != null or old.packet.repairOrigin() != null) return false;
+        if (!ledger.stageRunEpochId().eql(request.id().stage_run_epoch_id) or origin.kind != .inference) return false;
+        const record = ledger.record(request.id()) orelse return false;
+        if (record.status != .terminal or record.terminal_reason != .accepted or
+            origin.request.value != (ledger.indexOf(request.id()) orelse return false).value) return false;
+        const accepted_attempt: u32 = if (request.protocolCorrection()) |previous|
+            std.math.add(u32, previous.model_attempt_ordinal.value, 1) catch return false
+        else
+            1;
+        var comparable_binding = self.binding.bindingId();
+        comparable_binding.operation_id.workflow_step_id = prior.binding.operation_id.workflow_step_id;
+        if (origin.attempt.value != accepted_attempt or !self.binding.operation_id.isValid() or
+            self.binding.registry_entry != prior.binding.registry_entry or
+            !comparable_binding.eql(prior.binding.bindingId())) return false;
+        _ = identity.validateBinding(ledger, ledger.revision(), request.id(), self.unit(), prior.binding.operation_id, self.purpose()) catch return false;
+        if (!resourceEql(self.prompt, prior.prompt) or !optionalResourceEql(self.context, prior.context) or
+            !optionalResourceEql(self.protocol_prompt, prior.protocol_prompt) or
+            self.result.content != .result_schema or !std.mem.eql(u8, self.result.id.bytes, prior.result.id.bytes) or
+            !optionalBytesEql(self.result.source_path, prior.result.source_path)) return false;
+        const definition = current.packet.resultDefinition() orelse return false;
+        if (!std.mem.eql(u8, definition.bytes, prior.result_definition.?.bytes) or
+            !std.mem.eql(u8, current.packet.body(), old.packet.body())) return false;
+        const canonical = self.result.content.result_schema.select(definition) orelse return false;
+        if (canonical != prior.result.content.result_schema) return false;
+        const Restrictions = struct {
+            excluded: []const @import("model_result_schema.zig").ExcludedVariant,
+            choices: []const @import("model_result_schema.zig").IntegerChoice,
+        };
+        const codec = @import("canonical_json.zig");
+        const current_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = current.packet.excludedVariants(), .choices = current.packet.integerChoices() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+        defer allocator.free(current_restrictions);
+        const old_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = old.packet.excludedVariants(), .choices = old.packet.integerChoices() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+        defer allocator.free(old_restrictions);
+        if (!std.mem.eql(u8, current_restrictions, old_restrictions)) return false;
+        const effective = if (current.packet.excludedVariants().len != 0 or current.packet.integerChoices().len != 0)
+            @import("model_result_schema.zig").restrict(allocator, canonical, current.packet.excludedVariants(), current.packet.integerChoices()) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false
+        else
+            null;
+        defer if (effective) |restricted| restricted.release();
+        const expected_schema = if (effective) |restricted| restricted.selected() else canonical;
+        return std.mem.eql(u8, expected_schema.modelBytes(), prior.phase.prepared.request.response_schema.modelBytes());
+    }
 };
+
+fn optionalBytesEql(left: ?[]const u8, right: ?[]const u8) bool {
+    if (left == null or right == null) return left == null and right == null;
+    return std.mem.eql(u8, left.?, right.?);
+}
+
+fn resourceEql(left: compilation.CompiledResource, right: compilation.CompiledResource) bool {
+    return left.kind() == right.kind() and std.mem.eql(u8, left.id.bytes, right.id.bytes) and
+        optionalBytesEql(left.source_path, right.source_path) and std.mem.eql(u8, left.bytes(), right.bytes());
+}
+
+fn optionalResourceEql(left: ?compilation.CompiledResource, right: ?compilation.CompiledResource) bool {
+    if (left == null or right == null) return left == null and right == null;
+    return resourceEql(left.?, right.?);
+}
 
 pub const Prepared = struct {
     owner: *identity.Owner,

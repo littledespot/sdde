@@ -1,0 +1,1989 @@
+{
+  "status": "completed_diagnostic_failed_qualification",
+  "assessment": "Manual original-source and field-purpose judgments by implementation agents with independent review; not deterministic semantic proof",
+  "completed_utc": "2026-10-13T05:31:12.380530+00:00",
+  "frozen_plan": "zig-out/assembly-requirements-comparison/freeze.json",
+  "frozen_plan_sha256": "a116873a995e2080ca7d9a5aa6eb1148c2887f0d35c88db99946ab8dd36c3659",
+  "settings": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0.1,
+    "response_mode": "native_schema",
+    "max_output_tokens": 16384,
+    "seed": "absent",
+    "top_p": "absent"
+  },
+  "authorization": "User explicitly requested the prepared 42-call live comparison",
+  "limits": {
+    "cases": 5,
+    "logical_trials": 30,
+    "repetitions": 2,
+    "physical_sends": 42,
+    "stop_at_actual_input_plus_output_tokens": 200000,
+    "retries_corrections_repairs_model_judges_review_calls_e2e": 0
+  },
+  "execution": {
+    "status": "completed",
+    "prepared_physical_sends": 42,
+    "received_exchanges": 42,
+    "input_tokens": 85378,
+    "output_tokens": 77320,
+    "accounted_actual_tokens": 162698,
+    "stopped_reason": null,
+    "not_sent": 0,
+    "new_workflow_origins_minted": 0,
+    "corrections_repairs_model_judges_review_e2e_calls": 0
+  },
+  "arms": {
+    "baseline": {
+      "physical_calls": 14,
+      "input_tokens": 28318,
+      "output_tokens": 6182,
+      "schema_valid_responses": 14,
+      "output_limit_stops": 0,
+      "replay_elapsed_ns": 20923883498,
+      "native_admitted_collections": 3,
+      "native_rejections": {
+        "duplicate_record": 1,
+        "entity_membership": 6
+      },
+      "qualified_known_checks": 2,
+      "admitted_with_ownership_uncertainty": 1,
+      "total_tokens": 34500,
+      "logical_collection_trials": 10,
+      "required_entity_collection_trials": 6,
+      "required_entity_complete_family_presence": 0,
+      "required_entity_incomplete_collections": 0,
+      "required_entity_native_admitted_collections": 0
+    },
+    "family": {
+      "physical_calls": 14,
+      "input_tokens": 28334,
+      "output_tokens": 40462,
+      "schema_valid_responses": 12,
+      "output_limit_stops": 2,
+      "replay_elapsed_ns": 114429091710,
+      "native_admitted_collections": 7,
+      "native_rejections": {
+        "ProviderNonCandidateResponse": 2,
+        "duplicate_record": 1
+      },
+      "qualified_known_checks": 2,
+      "admitted_with_ownership_uncertainty": 1,
+      "total_tokens": 68796,
+      "logical_collection_trials": 10,
+      "required_entity_collection_trials": 6,
+      "required_entity_complete_family_presence": 4,
+      "required_entity_incomplete_collections": 2,
+      "required_entity_native_admitted_collections": 3
+    },
+    "ownership": {
+      "physical_calls": 14,
+      "input_tokens": 28726,
+      "output_tokens": 30676,
+      "schema_valid_responses": 13,
+      "output_limit_stops": 1,
+      "replay_elapsed_ns": 103179848543,
+      "native_admitted_collections": 7,
+      "native_rejections": {
+        "duplicate_record": 2,
+        "ProviderNonCandidateResponse": 1
+      },
+      "qualified_known_checks": 4,
+      "admitted_with_ownership_uncertainty": 1,
+      "total_tokens": 59402,
+      "logical_collection_trials": 10,
+      "required_entity_collection_trials": 6,
+      "required_entity_complete_family_presence": 5,
+      "required_entity_incomplete_collections": 1,
+      "required_entity_native_admitted_collections": 4
+    }
+  },
+  "trials": [
+    {
+      "trial_id": "startup-display-baseline-records-1",
+      "case_id": "startup-display",
+      "arm": "baseline",
+      "repetition": 1,
+      "native_status": "rejected",
+      "native_rejection": "duplicate_record",
+      "native_issue": {
+        "detail": null,
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "target": {
+            "record": 1
+          }
+        },
+        "rule": "duplicate_record",
+        "observed": null,
+        "blocked": "competing_records",
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": null,
+        "native_error": null
+      },
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "uncertain",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "pass",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Source-backed startup, greeting and UTC meaning survive. Token-only same-source ownership remains uncertain; no forced empty batch or category-based rejection is inferred.",
+      "actual_calls": 2,
+      "input_tokens": 4424,
+      "output_tokens": 258,
+      "replay_elapsed_ns": 2148199625,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "360d49fec599f3c1d196e0e8f1e4e555"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "071b38a7776ac6ccb56f2cf09100db86"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 1,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/01-startup-display-baseline-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/01-startup-display-baseline-records-1-records-1.response.json",
+          "request_sha256": "3c37179bad15fe66eb0757d586a3a5096c29a21eb0b7eb39ec122bb1831a5426",
+          "provider_stop": null
+        },
+        {
+          "ordinal": 2,
+          "group": "records-2",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/02-startup-display-baseline-records-1-records-2.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/02-startup-display-baseline-records-1-records-2.response.json",
+          "request_sha256": "7926395a340645f79f12b5b74a4677a40d70c4e733dcb33e238b88fd22029e46",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "startup-display-baseline-records-2",
+      "case_id": "startup-display",
+      "arm": "baseline",
+      "repetition": 2,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "uncertain_ownership",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "uncertain",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "pass",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Source-backed startup, greeting and UTC meaning survive. Token-only same-source ownership remains uncertain; no forced empty batch or category-based rejection is inferred.",
+      "actual_calls": 2,
+      "input_tokens": 4424,
+      "output_tokens": 267,
+      "replay_elapsed_ns": 1800368250,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "3a3dec8fdb3fb6864423aeb580851127"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "f75bea23f5698b02b9ce657371db3e17"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 11,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/11-startup-display-baseline-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/11-startup-display-baseline-records-2-records-1.response.json",
+          "request_sha256": "3c37179bad15fe66eb0757d586a3a5096c29a21eb0b7eb39ec122bb1831a5426",
+          "provider_stop": null
+        },
+        {
+          "ordinal": 12,
+          "group": "records-2",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/12-startup-display-baseline-records-2-records-2.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/12-startup-display-baseline-records-2-records-2.response.json",
+          "request_sha256": "7926395a340645f79f12b5b74a4677a40d70c4e733dcb33e238b88fd22029e46",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "startup-display-family-records-1",
+      "case_id": "startup-display",
+      "arm": "family",
+      "repetition": 1,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "failed_semantic",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "weak",
+        "field_purpose": "fail",
+        "group_ownership": "uncertain",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "pass",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Business group displays greeting/UTC on launch, leaving successful startup implicit. Token group inserts the greeting alone as given, when, then and FR; the literal is correct but field purposes fail independently of ownership ambiguity.",
+      "actual_calls": 2,
+      "input_tokens": 4424,
+      "output_tokens": 219,
+      "replay_elapsed_ns": 1685140042,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "7703aa17ee947bf0825d863584d0d892"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "7e9ae04505bd7c62f4f850bd46bd1827"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 3,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/03-startup-display-family-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/03-startup-display-family-records-1-records-1.response.json",
+          "request_sha256": "3c37179bad15fe66eb0757d586a3a5096c29a21eb0b7eb39ec122bb1831a5426",
+          "provider_stop": null
+        },
+        {
+          "ordinal": 4,
+          "group": "records-2",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/04-startup-display-family-records-1-records-2.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/04-startup-display-family-records-1-records-2.response.json",
+          "request_sha256": "7926395a340645f79f12b5b74a4677a40d70c4e733dcb33e238b88fd22029e46",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "startup-display-family-records-2",
+      "case_id": "startup-display",
+      "arm": "family",
+      "repetition": 2,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "uncertain_ownership",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "uncertain",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "pass",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Source-backed startup, greeting and UTC meaning survive. Token-only same-source ownership remains uncertain; no forced empty batch or category-based rejection is inferred.",
+      "actual_calls": 2,
+      "input_tokens": 4424,
+      "output_tokens": 255,
+      "replay_elapsed_ns": 1856303918,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "4c4551f8a32eec4ee8d8d3a8ab2378b3"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "6dafd5a5f8d157a10ef126904bd571d9"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 9,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/09-startup-display-family-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/09-startup-display-family-records-2-records-1.response.json",
+          "request_sha256": "3c37179bad15fe66eb0757d586a3a5096c29a21eb0b7eb39ec122bb1831a5426",
+          "provider_stop": null
+        },
+        {
+          "ordinal": 10,
+          "group": "records-2",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/10-startup-display-family-records-2-records-2.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/10-startup-display-family-records-2-records-2.response.json",
+          "request_sha256": "7926395a340645f79f12b5b74a4677a40d70c4e733dcb33e238b88fd22029e46",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "startup-display-ownership-records-1",
+      "case_id": "startup-display",
+      "arm": "ownership",
+      "repetition": 1,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "uncertain_ownership",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "uncertain",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "pass",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Source-backed startup, greeting and UTC meaning survive. Token-only same-source ownership remains uncertain; no forced empty batch or category-based rejection is inferred.",
+      "actual_calls": 2,
+      "input_tokens": 4480,
+      "output_tokens": 258,
+      "replay_elapsed_ns": 1868114792,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "4de8f72644a6545a4f257454e3d85e0f"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "7a18f35607d3fdfc58717e309b30b084"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 5,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/05-startup-display-ownership-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/05-startup-display-ownership-records-1-records-1.response.json",
+          "request_sha256": "85ab18094fed6dcd46f5d4ce40bff30229c3870b710d88bbee3045bd339c46f0",
+          "provider_stop": null
+        },
+        {
+          "ordinal": 6,
+          "group": "records-2",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/06-startup-display-ownership-records-1-records-2.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/06-startup-display-ownership-records-1-records-2.response.json",
+          "request_sha256": "8d6ed388dcae83b89d6b628bbc1d219e11ec47566956a96909424548f0f182f1",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "startup-display-ownership-records-2",
+      "case_id": "startup-display",
+      "arm": "ownership",
+      "repetition": 2,
+      "native_status": "rejected",
+      "native_rejection": "duplicate_record",
+      "native_issue": {
+        "detail": null,
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "target": {
+            "record": 1
+          }
+        },
+        "rule": "duplicate_record",
+        "observed": null,
+        "blocked": "competing_records",
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": null,
+        "native_error": null
+      },
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "uncertain",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "pass",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Source-backed startup, greeting and UTC meaning survive. Token-only same-source ownership remains uncertain; no forced empty batch or category-based rejection is inferred.",
+      "actual_calls": 2,
+      "input_tokens": 4480,
+      "output_tokens": 260,
+      "replay_elapsed_ns": 1780991125,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "cd0e689caf28a81df0ed6b13eb14a568"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "32a7c5707da6312a392db93ff2dd4a8d"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 7,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/07-startup-display-ownership-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/07-startup-display-ownership-records-2-records-1.response.json",
+          "request_sha256": "85ab18094fed6dcd46f5d4ce40bff30229c3870b710d88bbee3045bd339c46f0",
+          "provider_stop": null
+        },
+        {
+          "ordinal": 8,
+          "group": "records-2",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/08-startup-display-ownership-records-2-records-2.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/08-startup-display-ownership-records-2-records-2.response.json",
+          "request_sha256": "8d6ed388dcae83b89d6b628bbc1d219e11ec47566956a96909424548f0f182f1",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "equipment-joint-support-baseline-records-1",
+      "case_id": "equipment-joint-support",
+      "arm": "baseline",
+      "repetition": 1,
+      "native_status": "rejected",
+      "native_rejection": "entity_membership",
+      "native_issue": {
+        "detail": "The fixed entity decision requires at least one entity record; none was supplied.",
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "unit": {}
+        },
+        "rule": "entity_membership",
+        "observed": null,
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": {
+          "disposition": "required",
+          "entity_count": 0
+        },
+        "native_error": null
+      },
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "fail",
+        "assigned_obligation_meaning": "weak",
+        "field_purpose": "pass",
+        "group_ownership": "fail",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "No entity. Group 1 AC/FR centres failed-inspection availability instead of assigned identifier/result retention. Identifier retention is only implicit in sample setup; E123/PASS/FAIL alone are legitimate illustrative data.",
+      "actual_calls": 2,
+      "input_tokens": 4040,
+      "output_tokens": 286,
+      "replay_elapsed_ns": 1953133833,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "33f612e3716a95c3df34805882321f55"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "c46629472c242fec279eda7da232dffe"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 13,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/13-equipment-joint-support-baseline-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/13-equipment-joint-support-baseline-records-1-records-1.response.json",
+          "request_sha256": "086f841dab3b3cc880447ffbc3657e0c19bd7774a00f9911f1c7120607b41d94",
+          "provider_stop": null
+        },
+        {
+          "ordinal": 14,
+          "group": "records-2",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/14-equipment-joint-support-baseline-records-1-records-2.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/14-equipment-joint-support-baseline-records-1-records-2.response.json",
+          "request_sha256": "1ce013431c14b33968880125d2c4c9d04857a714581a040b0ab3d23ffbfbdf86",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "equipment-joint-support-baseline-records-2",
+      "case_id": "equipment-joint-support",
+      "arm": "baseline",
+      "repetition": 2,
+      "native_status": "rejected",
+      "native_rejection": "entity_membership",
+      "native_issue": {
+        "detail": "The fixed entity decision requires at least one entity record; none was supplied.",
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "unit": {}
+        },
+        "rule": "entity_membership",
+        "observed": null,
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": {
+          "disposition": "required",
+          "entity_count": 0
+        },
+        "native_error": null
+      },
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "fail",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "fail",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "No entity. Joint records retain retention and until-success behavior, but group 1 acceptance tests another source group's availability duty.",
+      "actual_calls": 2,
+      "input_tokens": 4040,
+      "output_tokens": 295,
+      "replay_elapsed_ns": 2049894333,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "f59d56593b5d64ab4e7bd554ae768a33"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "cea9db91507200789ab6ed9ae56a82d8"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 23,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/23-equipment-joint-support-baseline-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/23-equipment-joint-support-baseline-records-2-records-1.response.json",
+          "request_sha256": "086f841dab3b3cc880447ffbc3657e0c19bd7774a00f9911f1c7120607b41d94",
+          "provider_stop": null
+        },
+        {
+          "ordinal": 24,
+          "group": "records-2",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/24-equipment-joint-support-baseline-records-2-records-2.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/24-equipment-joint-support-baseline-records-2-records-2.response.json",
+          "request_sha256": "1ce013431c14b33968880125d2c4c9d04857a714581a040b0ab3d23ffbfbdf86",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "equipment-joint-support-family-records-1",
+      "case_id": "equipment-joint-support",
+      "arm": "family",
+      "repetition": 1,
+      "native_status": "rejected",
+      "native_rejection": "ProviderNonCandidateResponse",
+      "native_issue": null,
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "incomplete",
+        "assigned_obligation_meaning": "incomplete",
+        "field_purpose": "incomplete",
+        "group_ownership": "fail",
+        "unsupported_additions": "fail",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Group 1 hits output limit during unsupported audit/compliance/security/governance entity proliferation; partial content mixes the other group's duty. Partial entities do not establish completed family coverage.",
+      "actual_calls": 2,
+      "input_tokens": 4044,
+      "output_tokens": 16617,
+      "replay_elapsed_ns": 47468328501,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "230b1e016ca4aa03336a7da5b2eec70b"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "dc29aa740afbabda6b8567db7b3a217e"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 15,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/15-equipment-joint-support-family-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/15-equipment-joint-support-family-records-1-records-1.response.json",
+          "request_sha256": "85d7819f1c4c61375174a0e0393fc49c0ccb6e63d38c0551e84dd417d2feedd8",
+          "provider_stop": "output_limit"
+        },
+        {
+          "ordinal": 16,
+          "group": "records-2",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/16-equipment-joint-support-family-records-1-records-2.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/16-equipment-joint-support-family-records-1-records-2.response.json",
+          "request_sha256": "2cabb18027cfaa2802cd652fe92ce96e876e6e18e59aa478a1c4d69b7c7cb5f8",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "equipment-joint-support-family-records-2",
+      "case_id": "equipment-joint-support",
+      "arm": "family",
+      "repetition": 2,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "failed_semantic",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "fail",
+        "unsupported_additions": "fail",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Whole collection retains required behavior and an entity. Group 1 authors independent group 2 availability; group 2 FR states group 1 retention, and its AC requires unsupplied inspection-date recording.",
+      "actual_calls": 2,
+      "input_tokens": 4044,
+      "output_tokens": 507,
+      "replay_elapsed_ns": 3032338417,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "f5d3b54eed397bc9e4a4ced5d0ad52b6"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "819277c0ce2e4c6ee64a99c660964c74"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 21,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/21-equipment-joint-support-family-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/21-equipment-joint-support-family-records-2-records-1.response.json",
+          "request_sha256": "85d7819f1c4c61375174a0e0393fc49c0ccb6e63d38c0551e84dd417d2feedd8",
+          "provider_stop": null
+        },
+        {
+          "ordinal": 22,
+          "group": "records-2",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/22-equipment-joint-support-family-records-2-records-2.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/22-equipment-joint-support-family-records-2-records-2.response.json",
+          "request_sha256": "2cabb18027cfaa2802cd652fe92ce96e876e6e18e59aa478a1c4d69b7c7cb5f8",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "equipment-joint-support-ownership-records-1",
+      "case_id": "equipment-joint-support",
+      "arm": "ownership",
+      "repetition": 1,
+      "native_status": "rejected",
+      "native_rejection": "ProviderNonCandidateResponse",
+      "native_issue": null,
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "incomplete",
+        "assigned_obligation_meaning": "incomplete",
+        "field_purpose": "incomplete",
+        "group_ownership": "fail",
+        "unsupported_additions": "fail",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Group 1 still substitutes availability for retention; group 2 hits output limit while expanding inspection/log/technical entities.",
+      "actual_calls": 2,
+      "input_tokens": 4100,
+      "output_tokens": 16576,
+      "replay_elapsed_ns": 53140631583,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "590035cf094cde05fcef632a7a6ded0c"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "a2ded252593be4d7b0e8db5962ea5101"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 17,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/17-equipment-joint-support-ownership-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/17-equipment-joint-support-ownership-records-1-records-1.response.json",
+          "request_sha256": "7a51f175b97fa9f1fa18cb3bcf5fb710c4ee2ee5c5278f7fda5d09bc9da0dda6",
+          "provider_stop": null
+        },
+        {
+          "ordinal": 18,
+          "group": "records-2",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/18-equipment-joint-support-ownership-records-1-records-2.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/18-equipment-joint-support-ownership-records-1-records-2.response.json",
+          "request_sha256": "df0c1dd651ce5bf90f2681efe1bf59487c2bf2f2105cab14b65e0ea59d52c54c",
+          "provider_stop": "output_limit"
+        }
+      ]
+    },
+    {
+      "trial_id": "equipment-joint-support-ownership-records-2",
+      "case_id": "equipment-joint-support",
+      "arm": "ownership",
+      "repetition": 2,
+      "native_status": "rejected",
+      "native_rejection": "duplicate_record",
+      "native_issue": {
+        "detail": null,
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "target": {
+            "record": 78
+          }
+        },
+        "rule": "duplicate_record",
+        "observed": {
+          "record": {
+            "content": {
+              "entity": {
+                "name": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "Equipment Register Data Governance Audit"
+                      }
+                    }
+                  ]
+                },
+                "business_meaning": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "Audit of governance."
+                      }
+                    }
+                  ]
+                },
+                "relationships": [
+                  {
+                    "segments": [
+                      {
+                        "literal": {
+                          "value": "Equipment Register"
+                        }
+                      },
+                      {
+                        "literal": {
+                          "value": "audited"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "segments": [
+                      {
+                        "literal": {
+                          "value": "Inspection Result"
+                        }
+                      },
+                      {
+                        "literal": {
+                          "value": "audited"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "segments": [
+                      {
+                        "literal": {
+                          "value": "Availability Status"
+                        }
+                      },
+                      {
+                        "literal": {
+                          "value": "audited"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "source_group_ids": [
+              {
+                "ordinal": 1
+              }
+            ],
+            "provenance": {
+              "claim_ids": [
+                {
+                  "ordinal": 1
+                }
+              ],
+              "clarification_response_ids": []
+            }
+          }
+        },
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": null,
+        "native_error": null
+      },
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "fail",
+        "group_ownership": "fail",
+        "unsupported_additions": "fail",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Whole behavioral FRs retain retention and until-success. Complete outputs proliferate 145 and 98 entities, including 19 and 16 ellipsis placeholders, with unsupported timestamps, APIs, event processors and governance. Native duplicate rejection remains separate.",
+      "actual_calls": 2,
+      "input_tokens": 4100,
+      "output_tokens": 12569,
+      "replay_elapsed_ns": 38991778667,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "f6602df4c234723199ba577b56264746"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "55de5991962c0f1b8a7f0ecf3a6a466f"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 19,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/19-equipment-joint-support-ownership-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/19-equipment-joint-support-ownership-records-2-records-1.response.json",
+          "request_sha256": "7a51f175b97fa9f1fa18cb3bcf5fb710c4ee2ee5c5278f7fda5d09bc9da0dda6",
+          "provider_stop": null
+        },
+        {
+          "ordinal": 20,
+          "group": "records-2",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/20-equipment-joint-support-ownership-records-2-records-2.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/20-equipment-joint-support-ownership-records-2-records-2.response.json",
+          "request_sha256": "df0c1dd651ce5bf90f2681efe1bf59487c2bf2f2105cab14b65e0ea59d52c54c",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "renewal-information-gap-baseline-records-1",
+      "case_id": "renewal-information-gap",
+      "arm": "baseline",
+      "repetition": 1,
+      "native_status": "rejected",
+      "native_rejection": "entity_membership",
+      "native_issue": {
+        "detail": "The fixed entity decision requires at least one entity record; none was supplied.",
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "unit": {}
+        },
+        "rule": "entity_membership",
+        "observed": null,
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": {
+          "disposition": "required",
+          "entity_count": 0
+        },
+        "native_error": null
+      },
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "fail",
+        "assigned_obligation_meaning": "weak",
+        "field_purpose": "pass",
+        "group_ownership": "pass",
+        "unsupported_additions": "weak",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "pass"
+      },
+      "notes": "No entity. Eligible extension and explicitly undefined duration survive; tracking is mostly implicit. Eligibility checking is a reasonable operationalization; future configurability is speculative. A clarification is not compulsory merely to draft known behavior.",
+      "actual_calls": 1,
+      "input_tokens": 2004,
+      "output_tokens": 159,
+      "replay_elapsed_ns": 1020405291,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "26ba0392b53bbd021b82b645fc524af5"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 25,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/25-renewal-information-gap-baseline-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/25-renewal-information-gap-baseline-records-1-records-1.response.json",
+          "request_sha256": "f8518316f8b88f93ba2aada99a68a6a1fc517a3780315383908cdf0d5f4b394d",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "renewal-information-gap-baseline-records-2",
+      "case_id": "renewal-information-gap",
+      "arm": "baseline",
+      "repetition": 2,
+      "native_status": "rejected",
+      "native_rejection": "entity_membership",
+      "native_issue": {
+        "detail": "The fixed entity decision requires at least one entity record; none was supplied.",
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "unit": {}
+        },
+        "rule": "entity_membership",
+        "observed": null,
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": {
+          "disposition": "required",
+          "entity_count": 0
+        },
+        "native_error": null
+      },
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "fail",
+        "assigned_obligation_meaning": "weak",
+        "field_purpose": "weak",
+        "group_ownership": "pass",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "pass"
+      },
+      "notes": "No entity. FR retains eligibility, extension and undecided duration; AC writes a new deadline without an eligibility guard, while the guard survives elsewhere in the collection.",
+      "actual_calls": 1,
+      "input_tokens": 2004,
+      "output_tokens": 145,
+      "replay_elapsed_ns": 846189666,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "72fd9e6796db7b70d8f85bd24d418f72"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 30,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/30-renewal-information-gap-baseline-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/30-renewal-information-gap-baseline-records-2-records-1.response.json",
+          "request_sha256": "f8518316f8b88f93ba2aada99a68a6a1fc517a3780315383908cdf0d5f4b394d",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "renewal-information-gap-family-records-1",
+      "case_id": "renewal-information-gap",
+      "arm": "family",
+      "repetition": 1,
+      "native_status": "rejected",
+      "native_rejection": "ProviderNonCandidateResponse",
+      "native_issue": null,
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "incomplete",
+        "assigned_obligation_meaning": "incomplete",
+        "field_purpose": "incomplete",
+        "group_ownership": "not_assessable",
+        "unsupported_additions": "fail",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "incomplete"
+      },
+      "notes": "Output limit during expanding loan-record/policy/entity hierarchy. Partial entity content cannot establish completed coverage or faithful uncertainty handling.",
+      "actual_calls": 1,
+      "input_tokens": 2006,
+      "output_tokens": 16384,
+      "replay_elapsed_ns": 41909128916,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "47c32138c96ad8f445d73585d40268d4"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 26,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/26-renewal-information-gap-family-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/26-renewal-information-gap-family-records-1-records-1.response.json",
+          "request_sha256": "84083a2b704240303c8781adfe9ab5648e6383da0696d78682200aeeefc390d9",
+          "provider_stop": "output_limit"
+        }
+      ]
+    },
+    {
+      "trial_id": "renewal-information-gap-family-records-2",
+      "case_id": "renewal-information-gap",
+      "arm": "family",
+      "repetition": 2,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "failed_semantic",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "fail",
+        "field_purpose": "fail",
+        "group_ownership": "pass",
+        "unsupported_additions": "fail",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "fail"
+      },
+      "notes": "Entity present, but active/not-returned substitutes for supplied eligibility and the known undecided-duration fact disappears. No arbitrary number of days or false clarification was returned.",
+      "actual_calls": 1,
+      "input_tokens": 2006,
+      "output_tokens": 176,
+      "replay_elapsed_ns": 1126137167,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "0629fabb2c95035e70bd9bd1b6d9ef43"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 29,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/29-renewal-information-gap-family-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/29-renewal-information-gap-family-records-2-records-1.response.json",
+          "request_sha256": "84083a2b704240303c8781adfe9ab5648e6383da0696d78682200aeeefc390d9",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "renewal-information-gap-ownership-records-1",
+      "case_id": "renewal-information-gap",
+      "arm": "ownership",
+      "repetition": 1,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "failed_semantic",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "weak",
+        "field_purpose": "weak",
+        "group_ownership": "pass",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "fail"
+      },
+      "notes": "FR preserves eligible extension globally; AC applies a new deadline without its eligibility guard. Tracking is implicit and assigned undecided duration is omitted. Failure is lost known uncertainty/weak AC, not absence of a question.",
+      "actual_calls": 1,
+      "input_tokens": 2034,
+      "output_tokens": 152,
+      "replay_elapsed_ns": 1120160709,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "2a1c3ea393f853a7f000edbbf349b8f9"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 27,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/27-renewal-information-gap-ownership-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/27-renewal-information-gap-ownership-records-1-records-1.response.json",
+          "request_sha256": "91b1d497f09806f81e4ebec1a0196ce3ee802559b1e65268eb07fa203230cb98",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "renewal-information-gap-ownership-records-2",
+      "case_id": "renewal-information-gap",
+      "arm": "ownership",
+      "repetition": 2,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "failed_semantic",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "weak",
+        "field_purpose": "weak",
+        "group_ownership": "pass",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "fail"
+      },
+      "notes": "Eligible renewal FR and new-deadline AC jointly suggest extension, so extension is not labelled wholly absent. AC lacks eligibility and the supplied undecided-duration fact disappears; no numeric duration is invented.",
+      "actual_calls": 1,
+      "input_tokens": 2034,
+      "output_tokens": 157,
+      "replay_elapsed_ns": 928252458,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "f109ff2e1bcf686d1b9c7d4e88a8e6db"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 28,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/28-renewal-information-gap-ownership-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/28-renewal-information-gap-ownership-records-2-records-1.response.json",
+          "request_sha256": "91b1d497f09806f81e4ebec1a0196ce3ee802559b1e65268eb07fa203230cb98",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "warehouse-location-baseline-records-1",
+      "case_id": "warehouse-location",
+      "arm": "baseline",
+      "repetition": 1,
+      "native_status": "rejected",
+      "native_rejection": "entity_membership",
+      "native_issue": {
+        "detail": "The fixed entity decision requires at least one entity record; none was supplied.",
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "unit": {}
+        },
+        "rule": "entity_membership",
+        "observed": null,
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": {
+          "disposition": "required",
+          "entity_count": 0
+        },
+        "native_error": null
+      },
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "fail",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "pass",
+        "unsupported_additions": "fail",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Retention FR survives but entity is absent; authorization, audit logging and query timestamps are added without source support.",
+      "actual_calls": 1,
+      "input_tokens": 1945,
+      "output_tokens": 214,
+      "replay_elapsed_ns": 1233588666,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "d3dbc6d1a723ac08fc168bf58e6aaecf"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 31,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/31-warehouse-location-baseline-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/31-warehouse-location-baseline-records-1-records-1.response.json",
+          "request_sha256": "ffa6f186d3cabc0b7aee4bd17978991c8de33f187f2c62d4988daedfca5c7713",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "warehouse-location-baseline-records-2",
+      "case_id": "warehouse-location",
+      "arm": "baseline",
+      "repetition": 2,
+      "native_status": "rejected",
+      "native_rejection": "entity_membership",
+      "native_issue": {
+        "detail": "The fixed entity decision requires at least one entity record; none was supplied.",
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "unit": {}
+        },
+        "rule": "entity_membership",
+        "observed": null,
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": {
+          "disposition": "required",
+          "entity_count": 0
+        },
+        "native_error": null
+      },
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "fail",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "fail",
+        "group_ownership": "pass",
+        "unsupported_additions": "fail",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Retention FR survives but entity is absent. Repetitive corruption/maintenance prerequisites, result steps in when, immutability/error bans and ellipsis expansion fail purpose/support.",
+      "actual_calls": 1,
+      "input_tokens": 1945,
+      "output_tokens": 4281,
+      "replay_elapsed_ns": 7865182709,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "76bc93d8aa0efa62d6354f7d022a7309"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 36,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/36-warehouse-location-baseline-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/36-warehouse-location-baseline-records-2-records-1.response.json",
+          "request_sha256": "ffa6f186d3cabc0b7aee4bd17978991c8de33f187f2c62d4988daedfca5c7713",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "warehouse-location-family-records-1",
+      "case_id": "warehouse-location",
+      "arm": "family",
+      "repetition": 1,
+      "native_status": "rejected",
+      "native_rejection": "duplicate_record",
+      "native_issue": {
+        "detail": null,
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "target": {
+            "record": 53
+          }
+        },
+        "rule": "duplicate_record",
+        "observed": {
+          "record": {
+            "content": {
+              "entity": {
+                "name": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "WarehouseRegisterEntryRecordEntryRecordEntryRecordEntryRecordEntryRecord"
+                      }
+                    }
+                  ]
+                },
+                "business_meaning": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "Record of an entry record within a record of an entry record within a record of an entry record within a record of an entry in the warehouse register"
+                      }
+                    }
+                  ]
+                },
+                "relationships": [
+                  {
+                    "segments": [
+                      {
+                        "literal": {
+                          "value": "WarehouseRegisterEntryRecordEntryRecordEntryRecordEntryRecordEntry"
+                        }
+                      },
+                      {
+                        "literal": {
+                          "value": "contains"
+                        }
+                      },
+                      {
+                        "literal": {
+                          "value": "ParcelIdentifier"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "segments": [
+                      {
+                        "literal": {
+                          "value": "WarehouseRegisterEntryRecordEntryRecordEntryRecordEntryRecordEntry"
+                        }
+                      },
+                      {
+                        "literal": {
+                          "value": "contains"
+                        }
+                      },
+                      {
+                        "literal": {
+                          "value": "StorageLocation"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "source_group_ids": [
+              {
+                "ordinal": 1
+              }
+            ],
+            "provenance": {
+              "claim_ids": [
+                {
+                  "ordinal": 1
+                }
+              ],
+              "clarification_response_ids": []
+            }
+          }
+        },
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": null,
+        "native_error": null
+      },
+      "qualification": "failed_native",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "fail",
+        "group_ownership": "pass",
+        "unsupported_additions": "fail",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Retention and parcel/location relation survive, but 86 entity records include 17 ellipsis placeholders and unsupported nested register-wrapper proliferation. Native duplicate rejection is independent.",
+      "actual_calls": 1,
+      "input_tokens": 1947,
+      "output_tokens": 5858,
+      "replay_elapsed_ns": 14482744833,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "0342a9ea06dce1cf5b522c0e956d7bb3"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 32,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/32-warehouse-location-family-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/32-warehouse-location-family-records-1-records-1.response.json",
+          "request_sha256": "db482c99fcae4f855f304e91ebfb325ade267c9f60f7590e91b372a10289cbc2",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "warehouse-location-family-records-2",
+      "case_id": "warehouse-location",
+      "arm": "family",
+      "repetition": 2,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "passed_scoped_checks",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "pass",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Concise Parcel/location entity, retention FR and observable storage/readback AC satisfy scoped checks. Readback can demonstrate retained association; no specific implementation is mandated.",
+      "actual_calls": 1,
+      "input_tokens": 1947,
+      "output_tokens": 180,
+      "replay_elapsed_ns": 1377630375,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "8571f7d39a7a91774f2805431a88d01b"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 35,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/35-warehouse-location-family-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/35-warehouse-location-family-records-2-records-1.response.json",
+          "request_sha256": "db482c99fcae4f855f304e91ebfb325ade267c9f60f7590e91b372a10289cbc2",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "warehouse-location-ownership-records-1",
+      "case_id": "warehouse-location",
+      "arm": "ownership",
+      "repetition": 1,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "passed_scoped_checks",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "pass",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Relevant Parcel/location entity and retention FR. AC observes already-retained association by readback, supported by supplied locate-parcel context; this is not automatically an invented production interface.",
+      "actual_calls": 1,
+      "input_tokens": 1975,
+      "output_tokens": 179,
+      "replay_elapsed_ns": 1579614750,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "9a019e7e2a3c41ffcab1bf252f51787c"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 33,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/33-warehouse-location-ownership-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/33-warehouse-location-ownership-records-1-records-1.response.json",
+          "request_sha256": "1dbb99e78a1a3b045b9f72e06da2202c6bca02b83a1204ab61d51c8202156dd7",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "warehouse-location-ownership-records-2",
+      "case_id": "warehouse-location",
+      "arm": "ownership",
+      "repetition": 2,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "passed_scoped_checks",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "pass",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Relevant Parcel and StorageLocation entities, identifier/location retention and an observable AC. Example parcel/location values illustrate a scenario, not new fixed requirements.",
+      "actual_calls": 1,
+      "input_tokens": 1975,
+      "output_tokens": 298,
+      "replay_elapsed_ns": 2059372625,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "d5f94aff19cdafe1a2f04b3387b8187d"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 34,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/34-warehouse-location-ownership-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/34-warehouse-location-ownership-records-2-records-1.response.json",
+          "request_sha256": "1dbb99e78a1a3b045b9f72e06da2202c6bca02b83a1204ab61d51c8202156dd7",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "completion-notification-baseline-records-1",
+      "case_id": "completion-notification",
+      "arm": "baseline",
+      "repetition": 1,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "passed_scoped_checks",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "pass",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Successful completion remains the trigger for displaying notification; no entity or persistence is invented.",
+      "actual_calls": 1,
+      "input_tokens": 1746,
+      "output_tokens": 137,
+      "replay_elapsed_ns": 1025300000,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "89f6042ea1a9ada940cbd9a84456b4a1"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 37,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/37-completion-notification-baseline-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/37-completion-notification-baseline-records-1-records-1.response.json",
+          "request_sha256": "31c5ed932769a87461dc4320fa1ce2be09c172d128d0cacd231755c46ab0f366",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "completion-notification-baseline-records-2",
+      "case_id": "completion-notification",
+      "arm": "baseline",
+      "repetition": 2,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "passed_scoped_checks",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "pass",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Successful completion remains the trigger for displaying notification; no entity or persistence is invented.",
+      "actual_calls": 1,
+      "input_tokens": 1746,
+      "output_tokens": 140,
+      "replay_elapsed_ns": 981621125,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "04570b55633f0a0fa7c3c763fa78aa1f"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 42,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/42-completion-notification-baseline-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/42-completion-notification-baseline-records-2-records-1.response.json",
+          "request_sha256": "31c5ed932769a87461dc4320fa1ce2be09c172d128d0cacd231755c46ab0f366",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "completion-notification-family-records-1",
+      "case_id": "completion-notification",
+      "arm": "family",
+      "repetition": 1,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "failed_semantic",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "fail",
+        "group_ownership": "pass",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "FR retains the duty, but given already says the operation completed successfully and when repeats that completion; the before-trigger field purpose fails.",
+      "actual_calls": 1,
+      "input_tokens": 1746,
+      "output_tokens": 129,
+      "replay_elapsed_ns": 698649125,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "f90c12288cb7f8e024924bf5816922f1"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 38,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/38-completion-notification-family-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/38-completion-notification-family-records-1-records-1.response.json",
+          "request_sha256": "31c5ed932769a87461dc4320fa1ce2be09c172d128d0cacd231755c46ab0f366",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "completion-notification-family-records-2",
+      "case_id": "completion-notification",
+      "arm": "family",
+      "repetition": 2,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "passed_scoped_checks",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "pass",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Successful completion remains the trigger for displaying notification; no entity or persistence is invented.",
+      "actual_calls": 1,
+      "input_tokens": 1746,
+      "output_tokens": 137,
+      "replay_elapsed_ns": 792690416,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "de2ea4883c45a08fcaa6c873d6e6cb05"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 41,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/41-completion-notification-family-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/41-completion-notification-family-records-2-records-1.response.json",
+          "request_sha256": "31c5ed932769a87461dc4320fa1ce2be09c172d128d0cacd231755c46ab0f366",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "completion-notification-ownership-records-1",
+      "case_id": "completion-notification",
+      "arm": "ownership",
+      "repetition": 1,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "passed_scoped_checks",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "pass",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Successful completion remains the trigger for displaying notification; no entity or persistence is invented. Expected success in given is gratuitous, but does not establish a materially narrower trigger rule.",
+      "actual_calls": 1,
+      "input_tokens": 1774,
+      "output_tokens": 113,
+      "replay_elapsed_ns": 867809250,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "d5b8e4e3b1b783ec18b9fa9a36dbb65c"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 39,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/39-completion-notification-ownership-records-1-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/39-completion-notification-ownership-records-1-records-1.response.json",
+          "request_sha256": "659d21251c969833796ae4bf1b3825596e08dd8a0799fb44e066332c4960dd43",
+          "provider_stop": null
+        }
+      ]
+    },
+    {
+      "trial_id": "completion-notification-ownership-records-2",
+      "case_id": "completion-notification",
+      "arm": "ownership",
+      "repetition": 2,
+      "native_status": "admitted_content",
+      "native_rejection": null,
+      "native_issue": null,
+      "qualification": "passed_scoped_checks",
+      "judgments": {
+        "required_family_presence": "pass",
+        "assigned_obligation_meaning": "pass",
+        "field_purpose": "pass",
+        "group_ownership": "pass",
+        "unsupported_additions": "pass",
+        "exact_literal_occurrences": "not_applicable",
+        "genuine_gap_fidelity": "not_applicable"
+      },
+      "notes": "Successful completion remains the trigger for displaying notification; no entity or persistence is invented. Expected success in given is gratuitous, but does not establish a materially narrower trigger rule.",
+      "actual_calls": 1,
+      "input_tokens": 1774,
+      "output_tokens": 114,
+      "replay_elapsed_ns": 843122584,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-14dfe24948dcbf2bf49453cf30ad1621",
+          "id": "e04dfaaa0d6e6a690f9ccd32a87c5122"
+        }
+      ],
+      "evidence": [
+        {
+          "ordinal": 40,
+          "group": "records-1",
+          "request": "zig-out/assembly-requirements-comparison/live-archives/40-completion-notification-ownership-records-2-records-1.request.json",
+          "response": "zig-out/assembly-requirements-comparison/live-archives/40-completion-notification-ownership-records-2-records-1.response.json",
+          "request_sha256": "659d21251c969833796ae4bf1b3825596e08dd8a0799fb44e066332c4960dd43",
+          "provider_stop": null
+        }
+      ]
+    }
+  ],
+  "factor_comparisons": [
+    "baseline/family: conditional entity requirement only",
+    "family/ownership: shared source guidance only; same family receipts reused"
+  ],
+  "overall_gates": {
+    "family": "failed",
+    "ownership": "failed",
+    "actual_upstream_handoff": "not_tested",
+    "whole_workflow_publication": "not_tested",
+    "rubric_quality": "not_tested"
+  },
+  "limitations": [
+    "Five development cases, two repetitions; controlled MOCK preceding context.",
+    "Startup token-only source ownership remains uncertain.",
+    "No retries, repairs, model judges, live source reviewers or E2E calls.",
+    "Byte-identical no-entity baseline/family controls vary; individual changes in output cannot all be attributed to conditional entity presentation.",
+    "No judgement labels or diagnostic origins confer native workflow authority."
+  ],
+  "verification": {
+    "collector_command": "zig build test-specification-generation --summary all -j2",
+    "tests_passed": 320,
+    "steps_passed": 3,
+    "exit_code": 0,
+    "native_report": "zig-out/assembly-requirements-comparison/native-admission.json"
+  }
+}

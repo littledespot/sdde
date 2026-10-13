@@ -207,7 +207,7 @@ pub fn authorizeOmission(a: std.mem.Allocator, validator: @import("typed_text.zi
             assessment.reason = .upstream_owner;
             continue;
         }
-        if (assessment.owner.? == .unsupported_role or assessment.owner.? == .unsupported_summary) {
+        if (assessment.owner.? == .source_association or assessment.owner.? == .unsupported_summary) {
             assessment.reason = .unsupported_owner;
             continue;
         }
@@ -220,8 +220,8 @@ pub fn authorizeOmission(a: std.mem.Allocator, validator: @import("typed_text.zi
             continue;
         };
         if (target.part == .record) {
-            _ = @import("specification_source_binding.zig").recordForClaims(a, @import("reference_support.zig").records(context.references), context.inputs, evidence.review.?.provenance.claim_ids) catch |err| switch (err) {
-                error.InvalidSpecificationBinding => {
+            _ = authoredRecordSelection(a, support, context.inputs, evidence) catch |err| switch (err) {
+                error.InvalidSpecificationBinding, error.InvalidSpecificationCoverageRepair => {
                     assessment.reason = .incompatible_record_binding;
                     continue;
                 },
@@ -333,9 +333,10 @@ pub fn parseOmission(a: std.mem.Allocator, authorization: Authorization, input: 
     return switch (kind) {
         .value => .{ .value = try codec.decode(g.spec.BusinessValue, a, canonical) },
         .record => blk: {
-            const selected = authorization.rule.omission.review orelse return error.InvalidSpecificationCoverageRepair;
             const wire = try codec.decode(g.spec.Wire.RecordProposal, a, canonical);
-            break :blk .{ .record = .{ .content = wire.content, .provenance = .{ .claim_ids = selected.provenance.claim_ids, .clarification_response_ids = selected.provenance.clarification_response_ids } } };
+            const support = authorization.dependencies.support orelse return error.InvalidSpecificationCoverageRepair;
+            const bound = try authoredRecordSelection(a, support, authorization.dependencies.references.text.inputs, authorization.rule.omission);
+            break :blk .{ .record = .{ .content = wire.content, .source_group_ids = try a.dupe(r.SignalId, &.{bound.group}), .provenance = bound.selection } };
         },
     };
 }
@@ -377,6 +378,9 @@ fn mergeChecked(a: std.mem.Allocator, validator: @import("typed_text.zig").Valid
         .record => |index| record: {
             if (authorization.rule != .omission or replacement != .record or response.content != .records or index != response.content.records.len) return error.InvalidSpecificationCoverageRepair;
             if (std.meta.activeTag(replacement.record.content) != try omissionRecordKind(authorization.rule.omission.requirement)) return error.InvalidSpecificationCoverageRepair;
+            const support = facts.support orelse return error.InvalidSpecificationCoverageRepair;
+            const bound = try authoredRecordSelection(a, support, context.inputs, authorization.rule.omission);
+            if (replacement.record.source_group_ids.len != 1 or replacement.record.source_group_ids[0].ordinal != bound.group.ordinal) return error.InvalidSpecificationCoverageRepair;
             try r.sameSet(r.ClaimId, authorization.rule.omission.review.?.provenance.claim_ids, replacement.record.provenance.claim_ids);
             const added = try p.checkRecord(.model, a, validator, context, replacement.record);
             const records = try a.alloc(g.spec.RecordProposal, index + 1);
@@ -395,6 +399,19 @@ fn mergeChecked(a: std.mem.Allocator, validator: @import("typed_text.zig").Valid
         .requirement => next.omission_target_bound = permit.maximum_targets,
     }
     return next;
+}
+
+/// Insertion retains one explicitly authored current group. Claim equality is a
+/// precondition, never a search for a convenient group in the eligible catalogue.
+fn authoredRecordSelection(a: std.mem.Allocator, support: Support, sources: r.evidence.Inputs, evidence: authority.Evidence) Error!struct { group: r.SignalId, selection: g.spec.Selection } {
+    const review = evidence.review orelse return error.InvalidSpecificationCoverageRepair;
+    const ids = try @import("source_omission_binding.zig").authoredGroupIds(a, support.inputs, evidence.requirement);
+    defer a.free(ids);
+    if (ids.len != 1) return error.InvalidSpecificationCoverageRepair;
+    const records = support.inputs.references orelse return error.InvalidSpecificationCoverageRepair;
+    const bound = try @import("specification_source_binding.zig").recordForGroup(a, records, sources, ids[0]);
+    r.sameSet(r.ClaimId, bound.records.selection.claim_ids, review.provenance.claim_ids) catch return error.InvalidSpecificationCoverageRepair;
+    return .{ .group = ids[0], .selection = bound.records.selection };
 }
 
 fn effectiveTarget(a: std.mem.Allocator, checked: g.Checked, subject: candidates.Subject, field: candidates.ValueField) Error![]const r.ClaimId {

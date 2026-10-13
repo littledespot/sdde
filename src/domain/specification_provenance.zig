@@ -33,8 +33,8 @@ pub fn items(context: Context) Error!r.Items {
     return result;
 }
 
-/// A draft needs at least one possible positive evidence selection. This is
-/// structural readiness, not a judgment that the source supports every field.
+/// Authoring needs retained reference evidence. Positive support and question
+/// eligibility remain separate checks, not a judgment of every field's meaning.
 pub fn generationReady(references: r.Accounted) bool {
     if (references.outcome != .complete) return false;
     for (references.records.assignments.checked.prior.prior.dispositions) |disposition| {
@@ -243,10 +243,16 @@ fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Con
 /// live validators with its real toolchain, never reconstructed by a reader.
 pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @import("passive_literals.zig").Captured, references: @import("reference_support.zig").Records, brief: spec.Brief, candidate: spec.IdentifiedContent) Error!void {
     for ([_]spec.AttributedValue{ brief.title, brief.description, brief.primary_goal, candidate.display_name, candidate.primary_user_story, candidate.entities.basis }) |attributed| {
+        if (attributed.source_group_ids.len == 0) return error.InvalidSpecification;
+        const groups = try validateAssociation(.canonical, a, inputs, references, attributed.source_group_ids, attributed.provenance, .content);
+        defer a.free(groups);
         const resolved = try resolveUnitRecords(.canonical, a, inputs, references, attributed.provenance, &.{attributed.value});
         try storedValue(inputs, passive, resolved, attributed.value);
     }
     for (candidate.records) |record| {
+        if (record.proposal.source_group_ids.len != 1) return error.InvalidSpecification;
+        const groups = try validateAssociation(.canonical, a, inputs, references, record.proposal.source_group_ids, record.proposal.provenance, .content);
+        defer a.free(groups);
         const values = try recordValues(a, record.proposal.content);
         const resolved = try resolveUnitRecords(.canonical, a, inputs, references, record.proposal.provenance, values);
         switch (record.proposal.content) {
@@ -269,17 +275,41 @@ fn storedValue(inputs: evidence.Inputs, passive: @import("passive_literals.zig")
     };
 }
 
+/// Associations are occurrences, never reconstructed from matching claim sets.
+pub fn validateAssociation(comptime boundary: spec.Boundary, a: std.mem.Allocator, inputs: evidence.Inputs, references: refs.Records, ids: []const r.SignalId, provenance: spec.Values(boundary).Evidence, mode: @import("specification_source_binding.zig").Mode) Error![]const r.SignalId {
+    if (ids.len == 0) {
+        if (provenance.claim_ids.len != 0) return error.InvalidSpecification;
+        return &.{};
+    }
+    const selected = @import("specification_source_binding.zig").resolveGroups(a, references, inputs, ids, mode) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecification;
+    defer a.free(selected.selection.claim_ids);
+    errdefer a.free(selected.source_group_ids);
+    if (selected.selection.claim_ids.len != provenance.claim_ids.len) return error.InvalidSpecification;
+    for (selected.selection.claim_ids, provenance.claim_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecification;
+    if (boundary == .canonical) {
+        for (selected.source_group_ids, ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecification;
+    }
+    return selected.source_group_ids;
+}
 pub fn inspectAttributed(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, inspection: *Inspection) Error!spec.AttributedValue {
+    return inspectAttributedFor(boundary, allocator, validator, context, candidate, .content, inspection);
+}
+pub fn inspectAttributedFor(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, mode: @import("specification_source_binding.zig").Mode, inspection: *Inspection) Error!spec.AttributedValue {
     inspection.* = .{};
-    const resolved = try resolveUnitRecords(boundary, allocator, context.inputs, @import("reference_support.zig").records(context.references), candidate.provenance, &.{candidate.value});
+    const groups = try validateAssociation(boundary, allocator, context.inputs, refs.records(context.references), candidate.source_group_ids, candidate.provenance, mode);
+    errdefer allocator.free(groups);
+    const resolved = try resolveUnitRecords(boundary, allocator, context.inputs, refs.records(context.references), candidate.provenance, &.{candidate.value});
     inspection.part = .{ .value = .value };
-    return .{ .value = try valueIn(allocator, validator, context, resolved, candidate.value, inspection), .provenance = resolved.provenance };
+    return .{ .value = try valueIn(allocator, validator, context, resolved, candidate.value, inspection), .source_group_ids = groups, .provenance = resolved.provenance };
 }
 
 pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).RecordProposal, inspection: *Inspection) Error!spec.RecordProposal {
     inspection.* = .{};
-    const resolved = try resolveUnitRecords(boundary, allocator, context.inputs, @import("reference_support.zig").records(context.references), candidate.provenance, try recordValues(allocator, candidate.content));
-    var result: spec.RecordProposal = .{ .content = candidate.content, .provenance = resolved.provenance };
+    if (candidate.source_group_ids.len != 1) return error.InvalidSpecification;
+    const groups = try validateAssociation(boundary, allocator, context.inputs, refs.records(context.references), candidate.source_group_ids, candidate.provenance, .content);
+    errdefer allocator.free(groups);
+    const resolved = try resolveUnitRecords(boundary, allocator, context.inputs, refs.records(context.references), candidate.provenance, try recordValues(allocator, candidate.content));
+    var result: spec.RecordProposal = .{ .content = candidate.content, .source_group_ids = groups, .provenance = resolved.provenance };
     switch (candidate.content) {
         inline else => |fields, kind| {
             var normalized = fields;

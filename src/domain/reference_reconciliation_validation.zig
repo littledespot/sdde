@@ -103,7 +103,7 @@ pub fn checkSignal(a: std.mem.Allocator, validator: r.text.Validator, context: T
         .invalid => |issue| return .{ .invalid = issue },
     };
     if (!signalSelectionAvailable(prior.proposal.signals[0..index], index, proposed.claim_ids)) return .{ .invalid = .{ .rule = .duplicate_signal, .observed = .{ .claims = proposed.claim_ids }, .expected = .{ .constraint = .unique_members } } };
-    return .{ .valid = .{ .claim_ids = proposed.claim_ids, .citation_ids = try r.citationUnion(a, items, proposed.claim_ids), .content = accepted, .generation_roles = &.{} } };
+    return .{ .valid = .{ .claim_ids = proposed.claim_ids, .citation_ids = try r.citationUnion(a, items, proposed.claim_ids), .content = accepted } };
 }
 
 pub fn checkConflict(a: std.mem.Allocator, validator: r.text.Validator, context: TextContext, prior: r.CheckedDispositions, index: usize) r.Error!d.Check(r.ValidatedConflict) {
@@ -567,28 +567,4 @@ pub fn checkSignals(allocator: std.mem.Allocator, validator: r.text.Validator, p
     }
     if (try signalCoverage(allocator, items, prior.dispositions, prior.proposal.signals)) |issue| return d.reject(r.CheckedSignals, prior.input, prior.source, .signals, issue);
     return .{ .valid = .{ .prior = prior, .signals = signals } };
-}
-
-pub fn checkRoles(allocator: std.mem.Allocator, prior: r.CheckedSignals) r.Error!d.Result(r.CheckedSignals) {
-    const source = prior.prior.source;
-    const input_value = prior.prior.input;
-    const decisions = prior.prior.proposal.role_decisions orelse return error.InvalidReferenceReconciliation;
-    if (prior.prior.phase == .dispositions or prior.prior.phase == .signals or prior.prior.phase == .signals_with_conflicts) return error.InvalidReferenceReconciliation;
-    const roles = @import("reference_role_assignment.zig");
-    const offered = try roles.groups(allocator, source, prior.signals);
-    defer allocator.free(offered);
-    const assignments = switch (try roles.admit(allocator, prior.prior.dispositions, offered, decisions)) {
-        .valid => |values| values,
-        .invalid => |issue| return d.reject(r.CheckedSignals, input_value, source, .signals, issue),
-    };
-    defer allocator.free(assignments);
-    var transferred = false;
-    defer if (!transferred) for (assignments) |assignment| allocator.free(assignment.generation_roles);
-    const signals = try allocator.dupe(r.ValidatedSignal, prior.signals);
-    for (signals) |*signal| signal.generation_roles = &.{};
-    for (assignments) |assignment| for (offered, signals) |group, *signal| {
-        if (group.signal_id.ordinal == assignment.signal_id.ordinal) signal.generation_roles = assignment.generation_roles;
-    };
-    transferred = true;
-    return .{ .valid = .{ .prior = prior.prior, .signals = signals } };
 }

@@ -1,0 +1,88 @@
+{
+  "status": "unscored_preparation",
+  "cases": [
+    {
+      "case_id": "startup-display",
+      "baseline": {
+        "repetitions": []
+      },
+      "family": {
+        "repetitions": []
+      },
+      "ownership": {
+        "repetitions": []
+      }
+    },
+    {
+      "case_id": "equipment-joint-support",
+      "baseline": {
+        "repetitions": []
+      },
+      "family": {
+        "repetitions": []
+      },
+      "ownership": {
+        "repetitions": []
+      }
+    },
+    {
+      "case_id": "renewal-information-gap",
+      "baseline": {
+        "repetitions": []
+      },
+      "family": {
+        "repetitions": []
+      },
+      "ownership": {
+        "repetitions": []
+      }
+    },
+    {
+      "case_id": "warehouse-location",
+      "baseline": {
+        "repetitions": []
+      },
+      "family": {
+        "repetitions": []
+      },
+      "ownership": {
+        "repetitions": []
+      }
+    },
+    {
+      "case_id": "completion-notification",
+      "baseline": {
+        "repetitions": []
+      },
+      "family": {
+        "repetitions": []
+      },
+      "ownership": {
+        "repetitions": []
+      }
+    }
+  ],
+  "metrics": [
+    "completion",
+    "native_unit_admission",
+    "native_collection_assembly",
+    "required_family_presence",
+    "assigned_group_obligation_preservation",
+    "ownership_ambiguity",
+    "field_purpose",
+    "unsupported_additions",
+    "exact_literal_occurrences",
+    "clarification_fidelity",
+    "actual_calls",
+    "input_tokens",
+    "output_tokens",
+    "timing"
+  ],
+  "quality_gate": "Required family presence is assessed across the complete actual record collection. An optional empty group is permitted; IDs and valid JSON do not establish meaning. All required-entity collections must supply meaningful entity records with admitted source ownership; no-entity controls must not invent entities. Meaning must not regress against original sources. Genuine renewal duration uncertainty is assessed separately, never scored as finished content.",
+  "production_promotion": "requires_frozen_approved_live_evidence",
+  "paired_factors": [
+    "baseline/family: conditional_required_entity_family_only",
+    "family/ownership: shared_sources_guidance_only"
+  ],
+  "comparisons": "Score adjacent pairs separately, reusing the same family-arm observations without extra sends. The combined baseline/ownership contrast cannot attribute change to either factor."
+}

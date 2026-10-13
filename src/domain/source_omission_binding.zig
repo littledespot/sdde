@@ -88,22 +88,16 @@ pub fn build(a: std.mem.Allocator, inputs: authority.Inputs, source_inputs: r.ev
     var target_owner: ?comparison.Owner = null;
     switch (target.unit) {
         .feature => {
-            const role: r.GenerationRole = switch (target.slot) {
-                .display_name => .title,
-                .description => .description,
-                .primary_goal => .primary_goal,
-                .primary_user_story => .primary_user_story,
-                .entities => .entity_basis,
-                .acceptance_criteria, .functional_requirements, .scenario_coverage => .records,
-                else => return error.InvalidRequiredAuthority,
-            };
-            try builder.append(try bindings.roleClaimIds(a, records, role), .{ .role_assignment = role });
+            const group_ids = try authoredGroupIds(a, inputs, target);
+            const chosen: []const r.ClaimId = if (group_ids.len == 0) &.{} else (try bindings.selectGroups(a, records, source_inputs, group_ids, .content)).claim_ids;
+            try builder.append(chosen, .{ .source_association = target });
             if (inputs.brief != null or inputs.specification != null) target_owner = .{ .existing = .{ .candidate = .{} } };
         },
         .record => {
             const selected = try @import("specification_authority.zig").recordField(inputs, target) orelse return error.InvalidRequiredAuthority;
-            const bound = try bindings.recordForClaims(a, records, source_inputs, selected.record.proposal.provenance.claim_ids);
-            try builder.append(bound.records.selection.claim_ids, .{ .role_assignment = .records });
+            if (selected.record.proposal.source_group_ids.len != 1) return error.InvalidRequiredAuthority;
+            const bound = try bindings.recordForGroup(a, records, source_inputs, selected.record.proposal.source_group_ids[0]);
+            try builder.append(bound.records.selection.claim_ids, .{ .source_association = target });
             target_owner = .{ .existing = .{ .candidate = .{} } };
         },
         .signal => |id| {
@@ -134,6 +128,32 @@ pub fn build(a: std.mem.Allocator, inputs: authority.Inputs, source_inputs: r.ev
         .comparisons = builder.views.items,
         .boundaries = builder.boundaries.items,
     };
+}
+
+/// Current authored association for the exact review subject. A collection
+/// aggregates only its existing members; eligibility never fills missing groups.
+pub fn authoredGroupIds(a: std.mem.Allocator, inputs: authority.Inputs, target: authority.Id) authority.Error![]const r.SignalId {
+    const owner = @import("specification_authority.zig");
+    if (owner.featureField(inputs, target)) |field| return a.dupe(r.SignalId, field.source_group_ids);
+    if (target.unit == .record) {
+        const field = try owner.recordField(inputs, target) orelse return error.InvalidRequiredAuthority;
+        return a.dupe(r.SignalId, field.record.proposal.source_group_ids);
+    }
+    if (target.unit != .feature) return error.InvalidRequiredAuthority;
+    switch (target.slot) {
+        .display_name, .description, .primary_goal, .primary_user_story => return a.alloc(r.SignalId, 0),
+        .entities, .acceptance_criteria, .functional_requirements, .scenario_coverage => {},
+        else => return error.InvalidRequiredAuthority,
+    }
+    const content = inputs.specification orelse return a.alloc(r.SignalId, 0);
+    if (target.slot == .entities) return a.dupe(r.SignalId, content.entities.basis.source_group_ids);
+    var groups: std.ArrayList(r.SignalId) = .empty;
+    errdefer groups.deinit(a);
+    for (content.records) |record| {
+        if (!try owner.collectionContains(target.slot, std.meta.activeTag(record.proposal.content))) continue;
+        for (record.proposal.source_group_ids) |id| if (!r.contains(r.SignalId, groups.items, id)) try groups.append(a, id);
+    }
+    return groups.toOwnedSlice(a);
 }
 
 const ComparisonBuilder = struct {

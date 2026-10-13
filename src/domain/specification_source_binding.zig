@@ -1,36 +1,30 @@
-//! Spec authoring assignments over validated reference signals. Signal roles
-//! are semantic choices; this module only resolves their recorded occurrences.
+//! Native associations between authored values and complete current source groups.
+//! Selection is model-assisted; membership and derived evidence are native facts.
 const std = @import("std");
 const r = @import("reference_reconciliation.zig");
 const refs = @import("reference_support.zig");
 const spec = @import("specification.zig");
 const evidence = @import("reference_evidence.zig");
-
 pub const Error = r.Error || spec.Error || error{InvalidSpecificationBinding};
-pub const MissingRoles = std.enums.EnumSet(r.GenerationRole);
+pub const Mode = enum { content, question };
+pub const Catalogue = struct { records: refs.Records, inputs: evidence.Inputs };
 pub const EligibleSignal = struct { signal_id: r.SignalId, claim_ids: []const r.ClaimId };
-/// An observed binding gap, never authority to assign a role or retry a model.
+pub const Association = struct { source_group_ids: []const r.SignalId, selection: spec.Selection };
 pub const Rejection = struct {
     state_id: evidence.identity.StateId,
     partition_id: r.PartitionId,
     revision: u64,
     origin: ?@import("model_candidate_origin.zig").Origin,
-    missing_roles: []const r.GenerationRole,
+    reason: enum { empty_catalogue } = .empty_catalogue,
     eligible_signals: []const EligibleSignal,
 };
 pub const Unit = union(enum) { brief, primary_user_story, entities, records };
-pub const Bound = union(enum) {
-    brief: struct { title: spec.Selection, description: spec.Selection, primary_goal: spec.Selection },
-    primary_user_story: spec.Selection,
-    entities: spec.Selection,
-    records: struct { signal: r.SignalId, selection: spec.Selection },
-};
-
-/// Presentation of the already bound source selection. Resolve its meaning next
-/// to the purpose; this borrowed projection never changes native support.
+pub const RecordBound = struct { signal: r.SignalId, selection: spec.Selection, catalogue: Catalogue };
+pub const Bound = union(enum) { brief: Catalogue, primary_user_story: Catalogue, entities: Catalogue, records: RecordBound };
 pub const GuidanceMode = enum { authoring, repair };
 const Requirement = @import("model_evidence.zig").Requirement;
-pub const FieldGuidance = struct { purpose: ?[]const u8 = null, requirements: []const Requirement };
+pub const FieldGuidance = struct { purpose: ?[]const u8 = null };
+pub const GroupGuidance = struct { signal_id: r.SignalId, requirements: []const Requirement };
 pub const Guidance = union(enum) {
     brief: struct { title: FieldGuidance, description: FieldGuidance, primary_goal: FieldGuidance },
     primary_user_story: FieldGuidance,
@@ -40,186 +34,133 @@ pub const Guidance = union(enum) {
 
 pub fn guidance(a: std.mem.Allocator, bound: Bound, mode: GuidanceMode, requirements: []const Requirement, record_kinds: []const spec.Kind) Error!Guidance {
     return switch (bound) {
-        .brief => |value| .{ .brief = .{
-            .title = try fieldGuidance(a, .title, value.title, mode, requirements),
-            .description = try fieldGuidance(a, .description, value.description, mode, requirements),
-            .primary_goal = try fieldGuidance(a, .primary_goal, value.primary_goal, mode, requirements),
-        } },
-        .primary_user_story => |value| .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, value, mode, requirements) },
-        .entities => |value| .{ .entities = try fieldGuidance(a, .entity_basis, value, mode, requirements) },
+        .brief => .{ .brief = .{ .title = try fieldGuidance(a, .display_name, mode), .description = try fieldGuidance(a, .description, mode), .primary_goal = try fieldGuidance(a, .primary_goal, mode) } },
+        .primary_user_story => .{ .primary_user_story = try fieldGuidance(a, .primary_user_story, mode) },
+        .entities => .{ .entities = try fieldGuidance(a, .entities, mode) },
         .records => |value| .{ .records = .{
-            .purpose = if (mode == .authoring) @import("required_authority_description.zig").recordsFor(a, record_kinds) catch |err| switch (err) {
-                error.OutOfMemory => return error.OutOfMemory,
-                error.InvalidRequiredAuthority => return error.InvalidSpecificationBinding,
-            } else null,
+            .purpose = if (mode == .authoring) @import("required_authority_description.zig").recordsFor(a, record_kinds) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationBinding else null,
             .signal = value.signal,
             .requirements = try assignedRequirements(a, value.selection, requirements),
         } },
     };
 }
-
-fn fieldGuidance(a: std.mem.Allocator, role: r.GenerationRole, selected: spec.Selection, mode: GuidanceMode, requirements: []const Requirement) Error!FieldGuidance {
-    return .{ .purpose = try presentedPurpose(a, role, mode), .requirements = try assignedRequirements(a, selected, requirements) };
+fn fieldGuidance(a: std.mem.Allocator, slot: @import("required_authority.zig").Slot, mode: GuidanceMode) Error!FieldGuidance {
+    return .{ .purpose = if (mode == .authoring) @import("required_authority_description.zig").task(a, .{ .kind = if (slot == .entities) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationBinding else null };
 }
 fn assignedRequirements(a: std.mem.Allocator, selected: spec.Selection, requirements: []const Requirement) Error![]const Requirement {
     const result = try a.alloc(Requirement, selected.claim_ids.len);
     errdefer a.free(result);
-    for (selected.claim_ids, result) |id, *copy| {
-        copy.* = for (requirements) |requirement| {
-            if (id.ordinal == requirement.claim_id.ordinal) break requirement;
-        } else return error.InvalidSpecificationBinding;
+    for (selected.claim_ids, result) |id, *copy| copy.* = for (requirements) |requirement| {
+        if (id.ordinal == requirement.claim_id.ordinal) break requirement;
+    } else return error.InvalidSpecificationBinding;
+    return result;
+}
+pub fn groupGuidance(a: std.mem.Allocator, records: refs.Records, requirements: []const Requirement) Error![]const GroupGuidance {
+    const available = try catalogue(a, records, .question);
+    defer a.free(available);
+    const result = try a.alloc(GroupGuidance, available.len);
+    errdefer a.free(result);
+    var completed: usize = 0;
+    errdefer for (result[0..completed]) |entry| a.free(entry.requirements);
+    for (available, result) |group, *copy| {
+        copy.* = .{ .signal_id = group.signal_id, .requirements = try assignedRequirements(a, .{ .claim_ids = group.claim_ids, .clarification_response_ids = &.{} }, requirements) };
+        completed += 1;
     }
     return result;
 }
 pub fn assigns(value: Guidance, id: r.ClaimId) bool {
-    switch (value) {
-        .brief => |fields| inline for (std.meta.fields(@TypeOf(fields))) |field| {
-            for (@field(fields, field.name).requirements) |requirement| if (id.ordinal == requirement.claim_id.ordinal) return true;
-        },
-        inline else => |field| for (field.requirements) |requirement| if (id.ordinal == requirement.claim_id.ordinal) return true,
-    }
+    if (value == .records) for (value.records.requirements) |requirement| if (id.ordinal == requirement.claim_id.ordinal) return true;
     return false;
 }
-fn presentedPurpose(a: std.mem.Allocator, role: r.GenerationRole, mode: GuidanceMode) Error!?[]const u8 {
-    return switch (mode) {
-        .authoring => try rolePurpose(a, role),
-        .repair => null,
-    };
-}
-fn rolePurpose(a: std.mem.Allocator, role: r.GenerationRole) Error![]const u8 {
-    return role.purpose(a) catch |err| switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        error.InvalidRequiredAuthority => error.InvalidSpecificationBinding,
-    };
-}
-
-fn hasRole(signal: r.Signal, role: r.GenerationRole) bool {
-    return std.mem.indexOfScalar(r.GenerationRole, signal.value.generation_roles, role) != null;
-}
-
-fn activeSignal(records: refs.Records, signal: r.Signal) Error!bool {
+fn activeSignal(records: refs.Records, signal: r.Signal, mode: Mode) Error!bool {
     if (signal.value.claim_ids.len == 0) return error.InvalidSpecificationBinding;
-    return refs.eligibleSelection(records.dispositions, signal.value.claim_ids) catch return error.InvalidSpecificationBinding;
-}
-
-fn checked(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, claims: []const r.ClaimId) Error!spec.Selection {
-    if (claims.len == 0) return error.InvalidSpecificationBinding;
-    const selected = refs.select(a, records.items, inputs, claims) catch |err| return switch (err) {
-        error.OutOfMemory => error.OutOfMemory,
-        else => error.InvalidSpecificationBinding,
+    try r.unique(r.ClaimId, signal.value.claim_ids);
+    if (!(refs.eligibleSelection(records.dispositions, signal.value.claim_ids) catch return error.InvalidSpecificationBinding)) return false;
+    if (mode == .content) for (signal.value.claim_ids) |id| {
+        if (!spec.permitsPositiveMapping((try r.item(records.items, id)).claim.content)) return false;
     };
-    defer a.free(selected.citation_ids);
-    defer a.free(selected.scopes);
-    if (!(refs.eligibleSelection(records.dispositions, selected.claim_ids) catch return error.InvalidSpecificationBinding)) return error.InvalidSpecificationBinding;
-    return .{ .claim_ids = selected.claim_ids, .clarification_response_ids = &.{} };
+    return true;
 }
-
-/// Recorded role membership, including an empty assignment. This is evidence,
-/// not authorization to author; roleClaims applies the nonempty admission.
-pub fn roleClaimIds(a: std.mem.Allocator, records: refs.Records, role: r.GenerationRole) Error![]const r.ClaimId {
+pub fn catalogue(a: std.mem.Allocator, records: refs.Records, mode: Mode) Error![]const EligibleSignal {
+    var result: std.ArrayList(EligibleSignal) = .empty;
+    errdefer result.deinit(a);
+    for (records.signals, 0..) |signal, index| {
+        for (records.signals[0..index]) |prior| if (prior.id.ordinal == signal.id.ordinal) return error.InvalidSpecificationBinding;
+        if (try activeSignal(records, signal, mode)) try result.append(a, .{ .signal_id = signal.id, .claim_ids = signal.value.claim_ids });
+    }
+    return result.toOwnedSlice(a);
+}
+pub fn resolveGroups(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, ids: []const r.SignalId, mode: Mode) Error!Association {
+    if (ids.len == 0 or !records.items.state_id.eql(inputs.corpus.state_id)) return error.InvalidSpecificationBinding;
+    try r.unique(r.SignalId, ids);
+    var groups: std.ArrayList(r.SignalId) = .empty;
+    errdefer groups.deinit(a);
     var claims: std.ArrayList(r.ClaimId) = .empty;
     errdefer claims.deinit(a);
-    for (records.signals) |signal| {
-        if (!hasRole(signal, role) or !try activeSignal(records, signal)) continue;
-        for (signal.value.claim_ids) |id| if (!r.contains(r.ClaimId, claims.items, id)) try claims.append(a, id);
-    }
-    return claims.toOwnedSlice(a);
+    const available = try catalogue(a, records, mode);
+    defer a.free(available);
+    // Accepted occurrence order owns the canonical projection, not model order.
+    for (available) |group| if (r.contains(r.SignalId, ids, group.signal_id)) {
+        try groups.append(a, group.signal_id);
+        for (group.claim_ids) |id| if (!r.contains(r.ClaimId, claims.items, id)) try claims.append(a, id);
+    };
+    if (groups.items.len != ids.len) return error.InvalidSpecificationBinding;
+    const selected = refs.select(a, records.items, inputs, claims.items) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationBinding;
+    defer a.free(selected.citation_ids);
+    defer a.free(selected.scopes);
+    const owned_claims = try claims.toOwnedSlice(a);
+    errdefer a.free(owned_claims);
+    return .{ .source_group_ids = try groups.toOwnedSlice(a), .selection = .{ .claim_ids = owned_claims, .clarification_response_ids = &.{} } };
 }
-
-pub fn roleClaims(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, role: r.GenerationRole) Error!spec.Selection {
-    const claims = try roleClaimIds(a, records, role);
-    errdefer a.free(claims);
-    return checked(a, records, inputs, claims);
+pub fn selectGroups(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, ids: []const r.SignalId, mode: Mode) Error!spec.Selection {
+    const resolved = try resolveGroups(a, records, inputs, ids, mode);
+    a.free(resolved.source_group_ids);
+    return resolved.selection;
 }
-
 pub fn recordCount(records: refs.Records) Error!usize {
     var count: usize = 0;
-    for (records.signals) |signal| if (hasRole(signal, .records)) {
-        if (try activeSignal(records, signal)) count += 1;
+    for (records.signals) |signal| if (try activeSignal(records, signal, .question)) {
+        count += 1;
     };
     return count;
 }
-
 pub fn record(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, index: usize) Error!Bound {
     var cursor: usize = 0;
     for (records.signals) |signal| {
-        if (!hasRole(signal, .records) or !try activeSignal(records, signal)) continue;
-        if (cursor == index) return .{ .records = .{ .signal = signal.id, .selection = try checked(a, records, inputs, signal.value.claim_ids) } };
+        if (!try activeSignal(records, signal, .question)) continue;
+        if (cursor == index) {
+            const association = try resolveGroups(a, records, inputs, &.{signal.id}, .question);
+            defer a.free(association.source_group_ids);
+            return .{ .records = .{ .signal = signal.id, .selection = association.selection, .catalogue = .{ .records = records, .inputs = inputs } } };
+        }
         cursor += 1;
     }
     return error.InvalidSpecificationBinding;
 }
-
-/// A canonical record retains exactly one accepted group's ordered selection.
-/// An aggregate role selection does not authorize a new cross-group record.
-pub fn recordForClaims(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, claims: []const r.ClaimId) Error!Bound {
-    matching: for (0..try recordCount(records)) |index| {
-        const bound = try record(a, records, inputs, index);
-        const selected = bound.records.selection.claim_ids;
-        if (claims.len != selected.len) continue;
-        for (claims, selected) |left, right| if (left.ordinal != right.ordinal) continue :matching;
-        return bound;
-    }
-    return error.InvalidSpecificationBinding;
+pub fn recordForGroup(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, id: r.SignalId) Error!Bound {
+    const selected = try resolveGroups(a, records, inputs, &.{id}, .question);
+    defer a.free(selected.source_group_ids);
+    return .{ .records = .{ .signal = id, .selection = selected.selection, .catalogue = .{ .records = records, .inputs = inputs } } };
 }
-
 pub fn forUnit(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, unit: Unit, record_index: usize) Error!Bound {
+    const available: Catalogue = .{ .records = records, .inputs = inputs };
     return switch (unit) {
-        .brief => .{ .brief = .{
-            .title = try roleClaims(a, records, inputs, .title),
-            .description = try roleClaims(a, records, inputs, .description),
-            .primary_goal = try roleClaims(a, records, inputs, .primary_goal),
-        } },
-        .primary_user_story => .{ .primary_user_story = try roleClaims(a, records, inputs, .primary_user_story) },
-        .entities => .{ .entities = try roleClaims(a, records, inputs, .entity_basis) },
+        .brief => .{ .brief = available },
+        .primary_user_story => .{ .primary_user_story = available },
+        .entities => .{ .entities = available },
         .records => record(a, records, inputs, record_index),
     };
 }
-
-/// The single native coverage check for authoring and canonical readback.
-/// Invalid evidence is an error; a valid but incomplete assignment is a gap.
-pub fn missingRoles(records: refs.Records, inputs: evidence.Inputs) Error!MissingRoles {
-    if (!records.items.state_id.eql(inputs.corpus.state_id)) return error.InvalidSpecificationBinding;
-    var covered: MissingRoles = .initEmpty();
-    for (records.signals) |signal| {
-        if (signal.value.generation_roles.len == 0) continue;
-        if (signal.value.claim_ids.len == 0) return error.InvalidSpecificationBinding;
-        try r.unique(r.ClaimId, signal.value.claim_ids);
-        if (!try activeSignal(records, signal)) continue;
-        for (signal.value.claim_ids) |id| {
-            const item = try r.item(records.items, id);
-            _ = evidence.resolve(inputs, .{ .state_id = records.items.state_id, .chunk_id = item.claim.chunk_id }) catch return error.InvalidSpecificationBinding;
-        }
-        for (signal.value.generation_roles) |role| covered.insert(role);
-    }
-    return covered.complement();
-}
-
-/// Persisted authority requires complete coverage; it cannot retain a gap.
 pub fn validate(records: refs.Records, inputs: evidence.Inputs) Error!void {
-    if ((try missingRoles(records, inputs)).count() != 0) return error.InvalidSpecificationBinding;
+    if (!records.items.state_id.eql(inputs.corpus.state_id) or try recordCount(records) == 0) return error.InvalidSpecificationBinding;
+    for (records.signals) |signal| if (try activeSignal(records, signal, .question)) for (signal.value.claim_ids) |id| {
+        const item = try r.item(records.items, id);
+        _ = evidence.resolve(inputs, .{ .state_id = records.items.state_id, .chunk_id = item.claim.chunk_id }) catch return error.InvalidSpecificationBinding;
+    };
 }
-
-pub fn rejection(a: std.mem.Allocator, references: r.Accounted, missing: MissingRoles) Error!Rejection {
-    if (missing.count() == 0) return error.InvalidSpecificationBinding;
+pub fn rejection(a: std.mem.Allocator, references: r.Accounted) Error!Rejection {
     const records = refs.records(references);
+    if (try recordCount(records) != 0) return error.InvalidSpecificationBinding;
     const prior = references.records.assignments.checked.prior.prior;
-    const roles = try a.alloc(r.GenerationRole, missing.count());
-    errdefer a.free(roles);
-    var iterator = missing.iterator();
-    var index: usize = 0;
-    while (iterator.next()) |role| : (index += 1) roles[index] = role;
-    var eligible: std.ArrayList(EligibleSignal) = .empty;
-    errdefer eligible.deinit(a);
-    for (records.signals) |signal| if (try activeSignal(records, signal)) {
-        try eligible.append(a, .{ .signal_id = signal.id, .claim_ids = signal.value.claim_ids });
-    };
-    return .{
-        .state_id = records.items.state_id,
-        .partition_id = prior.input.partition.id,
-        .revision = prior.source.revision,
-        .origin = prior.source.at(.signals, .relationship),
-        .missing_roles = roles,
-        .eligible_signals = try eligible.toOwnedSlice(a),
-    };
+    return .{ .state_id = records.items.state_id, .partition_id = prior.input.partition.id, .revision = prior.source.revision, .origin = prior.source.at(.signals, .record), .eligible_signals = try catalogue(a, records, .question) };
 }

@@ -8,14 +8,25 @@
 mechanical safety, observability and connected recovery checks. Phase 2 is partially
 complete; its finding-taxonomy decision remains pending. Phase 4's bounded AC
 transport/lifecycle implementation and offline verification are complete; its
-semantic exit remains pending the Phase 11 live comparison. Phases 5–11 remain proposed and
-incomplete. The latest [post-Phase 4 run](#23-post-phase-4-live-run-11-october-070352-utc)
+semantic exit remains pending the Phase 11 live comparison. Phase 6's execution-local
+source-review retention is implemented; its verification record and live qualification
+boundary are below. Phase 5's coordinated replacement is implemented and verified
+offline. The controlled representation diagnostic and current-authoring
+qualification have received all **50 approved AWS responses**; their live semantic
+exit is not complete. The authoring observations include omitted entities,
+misassigned record meaning and unsupported behavior. Completion and schema validity
+have not established a reliable replacement.
+Phases 7–11 remain proposed and incomplete.
+The latest [07:50:47 run](#24-latest-live-run-11-october-075047-utc)
+blocked before authoring after four explicit false unsupported role decisions.
+Both harness reports retained its native outcome and fractional evaluator settings.
+The earlier [07:03:52 run](#23-post-phase-4-live-run-11-october-070352-utc)
 exercised batching, localization and two candidate repairs, then exhausted the
-workflow token budget before publication. It also exposed inconsistent field
-judgments and an independent report-serialization defect. Semantic improvement
-remains unproven; the earlier Phase 1 run's narrower limits remain historical.
+workflow token budget; its inconsistent field judgments remain separate evidence.
+No run establishes improved published-output quality.
 The [Phase 1 reporting follow-up](#23-post-phase-4-live-run-11-october-070352-utc)
-is now complete with offline verification; no new live qualification is claimed.
+is complete offline and its normal blocked-report persistence was exercised
+live; injected report-write and sync failures remain offline-only evidence.
 
 **Critical rereview:** the findings justify bounded investigations, but this is
 not an implementation-ready redesign. The final review confirms the retained
@@ -314,13 +325,100 @@ The independent Phase 2 taxonomy and
 Phase 6 reuse proposals retain their own authority and evidence gates.
 
 The [immediately preceding 04:39 run](../zig-out/e2e-spec/2026-10-11T04-39-13Z-533671a00b4e7f4b23d75ffa0abc291d/report.json)
-stopped at brief call 8 after 25,979 tokens. The latest run progressed through
+stopped at brief call 8 after 25,979 tokens. The 07:03:52 run progressed through
 review and repair, but still produced no usable output. Its low-reasoning
 GPT-OSS-20B requests use temperature **0.1**, versus **0** in that preceding run;
 code and prompts also changed. This is not a controlled comparison proving that
 batching or temperature caused either the improved completion or the incorrect
 judgment. No new live run was executed for this documentation review, and the
 frozen calibration panels remain unexecuted.
+
+### 2.4 Latest live run: 11 October 07:50:47 UTC
+
+Run `2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959` retained a valid
+[JSON report](../zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/report.json),
+[Markdown report](../zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/report.md)
+and complete build capture. Its base revision is
+`e9466229f13e9090fef7031db8f83ed513c22a49`, source SHA-256
+`dc3ecfff7f9997dafd429641a4abce6f8b1a043d5540f172f6851178c0a72387`.
+The captured reporting implementation, role admission, role purposes, source
+binding and generation initialization match the inspected current code.
+
+**Terminal result:** `workflow_blocked`, at event **213**,
+`g8-generate-initialize-specification`. The model responsible is physical **call 6**,
+request 6 / attempt 1 / `inference`,
+`g25-g8-validate-request-roles-prepare`; call 7 is only the last exchange.
+The report retains that distinction through `candidate_model_call` and the event's
+`candidate_source`. There is no recorded provider, JSON/schema, capture or report
+failure. No clarification, specification, successful state or rubric grade was
+published.
+
+All seven responses ended with `finish_reason: stop`. Native attempt usage and
+raw provider totals agree: **7,646 input + 947 output = 8,593 tokens**, within the
+**100,000-token workflow budget**. Actual requests use Bedrock
+`openai.gpt-oss-20b-1:0` in `ap-southeast-2`, low reasoning, temperature **0.1**,
+native schema and a **16,384** output allowance. The separately configured
+**150,000-token evaluator budget** was not used because no output reached grading.
+Lower token use than the 48-call run reflects earlier blocking, not useful savings.
+
+| Boundary | Retained evidence | Assessment |
+| --- | --- | --- |
+| Calls 1–5: extraction, summary, dispositions and signals | All three obligations survive in business signal 1: successful startup, greeting on startup and UTC date/time output. The greeting's exact token is retained separately. | There is no demonstrated upstream obligation loss explaining the block. A compound claim and adjacent fragment concatenation are presentation variance, not proof that the behavior disappeared. |
+| Call 6: authoring roles | `description` and `primary_goal` select signal 1; `title`, `primary_user_story`, `entity_basis` and `records` are explicitly `unsupported`. | The response contains all six required decisions. Completeness admission works, but the four negative decisions are inconsistent with the supplied role purposes and source-backed behavior. |
+| Call 7: conflicts | Returns an empty conflict collection and is admitted. | It does not cause the missing-role diagnostic. |
+| Event 213: generation initialization | Native coverage reports the four missing role assignments and blocks authoring. | Correct enforcement of the current R10 gate; no semantic retry or repair was performed. |
+
+**Why this is a semantic false block:** the
+[call 6 packet](../zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/evidence/generation/call-000006/context.json)
+explicitly permits deriving a title without a supplied title, using the source's
+system as the story actor without a prewritten narrative, and deciding entity
+applicability without an explicit declaration of absence. Required application
+behavior and its startup trigger support applicable records; every record family
+need not be present. This is a case-level assessment against the supplied purposes,
+not native semantic proof or a new rule requiring every role to be positive.
+The structured response supplies no explanation for its unsupported decisions.
+[Role admission](../src/domain/reference_reconciliation_validation.zig#L572)
+correctly converts only supported selections into bindings;
+[coverage](../src/domain/specification_source_binding.zig#L181) and
+[initialization](../src/domain/specification_session.zig#L37) then enforce those
+bindings. Weakening either check would hide the false-negative judgment.
+
+**Cross-run limit:** call 1's request is byte-identical to the 07:03:52 run:
+11,399 bytes, SHA-256
+`fc3e87a02aaa33e5e33bf2ebcd43b7884c06d2c37e3d72a5cb060110d49041d3`.
+That run extracted three separate business claims; this run extracted one claim
+with three fragments. All three behavioral obligations remain represented.
+The role purposes and governing admission/binding code are unchanged, but the
+later role request's claim/citation representation differs. The earlier role
+response supported all six purposes. This supports investigating sensitivity to
+meaning-equivalent representation; it does not prove grouping caused the false
+negatives or that the reporting fix changed model behavior. The
+`Hello World Application` heading is not itself a behavioral requirement and is
+not counted as a missing obligation.
+
+The immediately preceding
+[07:42:49 report](../zig-out/e2e-spec/2026-10-11T07-42-49Z-f175464cdecd52a67240fef474b7a3a0/report.json)
+also retained the same four missing roles after seven calls and **8,434 tokens**.
+These are two observed instances of this failure class, not a frozen controlled
+comparison or a semantic promotion result.
+
+**Reporting assessment:** both final reports preserve the blocked workflow,
+originating role call, exact token usage and evaluator temperature **0.1**. The
+latest captured saver and CLI match the completed follow-up. This exercises report
+persistence on a real blocked run; it does not exercise a live write/sync failure,
+completed publication or nested rubric-score serialization. Those paths retain
+their offline tests. Reporting improved; useful output did not.
+
+**Implications for next work:** add these captured false unsupported decisions
+to §5.2/Phase 5's prospective investigation. Establish role support and representation
+controls before any replacement binding proposal or live dispatch. The current
+complete-decision contract is implemented; its semantic negatives remain fallible.
+Keep the authority amendment and qualification requirements for replacing the
+gate. Phase 6's offline eligibility audit remains relevant to the earlier repeated
+review failure, but review reuse cannot address this pre-authoring block. This run
+did not reach Phase 2 source review, Phase 3 localization/recovery or Phase 4 AC
+batching and adds no qualification of those changes. No live test was launched
+for this document review; the prepared comparisons remain unexecuted.
 
 ## 3. Semantic diagnosis: the highest-priority quality gap
 
@@ -547,22 +645,27 @@ This track blocks clarification-dependent cases, not cases with no clarification
 invalidates support review and authority projections. The
 [workflow](../design/workflows/spec.workflow.yaml#L829) reassembles, checks coverage,
 then enters `review-candidate`; [initialization](../src/actions/specification/initialize_specification_review.zig)
-starts a fresh review. [Subject collection](../src/domain/specification_support.zig#L284)
-begins from the first requirement.
+starts current review admission from the first requirement. Before Phase 6,
+[subject collection](../src/domain/specification_support.zig) reassessed every
+applicable source assignment.
 
-All applicable source subjects are reassessed. Principle subjects follow only if
+Phase 6 now re-admits only demonstrably unchanged clean source assignments,
+then reassesses changed assignments and their dependent collections. Principle subjects follow only if
 source authority resolves and applicable principles exist; “every principle call
 always reruns” would overstate this behavior. New judgments on unchanged fields
 may introduce disagreements, but the code path alone does not prove how often
 that occurs or how much review can safely be reused.
 
-**Recommendation:** assess dependency-bound retention of unaffected review
-evidence. Reuse the existing authority/evidence owners, retain origin and finding,
-and revalidate complete current bindings. A collection's dependencies can include
+**Implemented bounded retention:** [the native receipt owner](../src/domain/specification_review_retention.zig)
+retains original findings and actual origins through existing immutable owners;
+[the explicit workflow operation](../src/application/specification_support_workflow.zig)
+reconstructs and revalidates complete current bindings. A collection's dependencies can include
 siblings, source associations, principles and answers; equal field text or subject
 ID is insufficient. Run affected semantic assessments and the complete native
-coverage/authority/publication gates. This needs an explicit invalidation contract,
-not an ad hoc cache or weakened final validation.
+coverage/authority/publication gates. The focused task amends
+[§22.4](../design/contracts/22-repair.md#224-repair-request-and-response) and
+[§12.6](../design/contracts/12-model-boundary.md#126-semantic-review); current
+review and authority projections are still invalidated on candidate repair.
 
 **Feasibility correction:** current dependencies substantially limit potential
 reuse. [Every principle assignment](../src/domain/specification_review_subject.zig#L59)
@@ -571,17 +674,23 @@ that supplied context. Source collection and entity subjects also include broad
 business context. No unchanged-dependency claim can be made from unchanged field
 text alone.
 
-The current collector is an append-only ordinal prefix, and
+The collector remains an append-only ordinal prefix, and
 [persisted review](../src/domain/specification_state.zig#L23) stores a global
 candidate revision, not a per-subject dependency witness and ordinary review-origin
 set. [Stored validation](../src/domain/specification_support.zig#L453) reconstructs
 ordinary review origins as null. Do not promise broad semantic-call savings or
 assume a ready-made reusable review cache exists.
 
-First measure reuse eligibility **within one execution** for genuinely unchanged
-focused source assignments. Prove the complete assignment, schema/purpose,
-evidence and model binding are unchanged and retain the original accepted call
-origin. Mixed old/new evidence needs explicit admission and invalidation rules.
+The [07:03:52 run](#23-post-phase-4-live-run-11-october-070352-utc) supplied
+measurable eligibility: seven complete source-request pairs were identical after
+the first FR repair, including one whole three-field AC assignment. Their repeated
+dispatches used 14,147 tokens. Four more captured repeats used 7,626 tokens during
+the next partial pass. These are observed repeated costs, not promised savings:
+retaining an earlier judgment can change the subsequent repair trajectory.
+Runtime reuse additionally checks native metadata, complete original sources,
+producer identity, applicability and the accepted request witness, which provider
+request bytes alone cannot establish. Mixed retained/new findings receive full
+current native admission and preserve original scope and repair occurrences.
 Narrowing principle context or persisting reusable receipts is separate, larger
 work; neither follows automatically from a source-review reuse result.
 
@@ -697,12 +806,180 @@ distinguishes omission from an explicit negative decision; it cannot make the
 negative decision correct. The observed false negatives expose false-blocking risk
 at this early gate; they do not prove that removing it improves whole workflows.
 
+The [latest production run](#24-latest-live-run-11-october-075047-utc) adds four
+explicit false unsupported decisions before authoring, despite retained behavioral
+support and the shared purpose definitions. Its first extraction request matches
+the 07:03:52 request, but its derived representation and later role request differ.
+Use this as a new captured failure for prospective role qualification; it does not
+prove a particular representation caused the block or qualify removal of the gate.
+
 **Recommendation:** experimentally compare the current gate with authoring from
 supported source obligations without a separate mandatory presentation-role
 classifier. This requires a shared authority amendment: define the replacement
 binding and evidence contract through authoring, review, repair and persistence.
 Do not remove R10 in one caller, force every role to `supported`, copy every claim
 into every field, or permit unsupported invention to achieve completion.
+
+#### 5.2.1 Phase 5 replacement contract — implemented candidate, qualification pending
+
+The user's 11 October follow-up authorizes this shared replacement and its named
+contract amendments. The coordinated local cutover removes the independent role
+producer; §17, §22, §24 and ADRs 0020/0022 now describe authored associations.
+Local implementation is a candidate awaiting semantic qualification. Neither
+removing the gate nor passing offline mechanics demonstrates better authored
+meaning or whole-workflow quality. The frozen 22-call retired-gate diagnostic and
+28-call current-authoring panel are separate measurements; their received outputs
+must not become a paired improvement estimate. Detailed verification and remaining qualification are
+recorded in the Phase 5 delivery record.
+
+**Decision:** couple source selection with the existing authoring assignments.
+Remove the independent presentation-role classifier; retain model-owned semantic
+selection, native occurrence admission and full source/required-output review.
+Keep the existing brief, story, entity-applicability and per-group record
+responsibilities. A larger catalogue is availability, not support. Do not force
+positive roles, attach all claims to every field or add six replacement classifiers.
+
+**Closed initial response and fixed repair response.** Reuse existing
+`BusinessValue`, content families, clarification reasons and inconclusive outcome:
+
+- An initial attributed value is `{signal_ids: nonempty unique group handles,
+  value: BusinessValue}`. Brief requires title, description and primary-goal
+  values; story requires its value; entities requires the existing disposition
+  and a selected, explained basis. Joint support may select several groups. The
+  model does not return a support-claim list, citations or provenance. Existing
+  `exact_copy.claim_id` occurrence selection remains permitted.
+- A record task receives exactly one native-bound group. Its response remains the
+  existing content-only `records` array; every returned record inherits that
+  group's complete ordered selection. It cannot return group handles, select
+  another group or create a cross-group record.
+- A clarification retains the existing missing/ambiguous/conflicting reason,
+  record-kind requirement and question, with the question using the initial
+  selected-group value shape. Native admission resolves only those selected
+  groups for question evidence and the existing citation/clarification projection.
+  A displayed source catalogue never becomes its default scope. Asking about a
+  genuine gap does not authorize a positive mapping of an open question into the
+  finished specification. Native shape/evidence checks are not proof that user
+  information is actually missing; the question remains an untrusted semantic
+  proposal subject to the existing clarification authority checks.
+- The existing explicit inconclusive result needs no fabricated positive selection.
+  An empty retained-group catalogue blocks native generation readiness before
+  authoring; content, question and record dispatch use that same current catalogue
+  with their mechanical branch restrictions. There is no separate completion
+  node. It cannot default to an empty success, unsupported verdict or invented
+  human gap.
+- Protocol correction retains the same selected initial schema, immutable catalogue,
+  origin ancestry and existing allowance. Value-only and authorized insertion
+  repairs retain content-only wire responses and their fixed native association;
+  they cannot echo or select new group IDs. There is no dual initial-response
+  reader or fallback to the removed classifier.
+
+**One canonical association.** Embed `source_group_ids` in each authored
+`AttributedValue` and shared-provenance `RecordProposal`; a record retains exactly
+one group. Keep these fields out of general `Selection`/`Provenance`, which also
+serve source-only and loss diagnostics. There is no parallel state-level binding
+registry. Selected group occurrences, bound to the captured reference state, are
+the association selection authority. Native `inspectAttributed`/`inspectRecord`
+resolve them in canonical catalogue order, preserve each complete group's member
+order, reject repeated handles and deduplicate legitimate overlaps into explicit
+`S`. The existing provenance resolver then derives `E` from actual exact segments
+in the complete owning field/record, `L = stableUnique(S + E)` and citations.
+Canonical `provenance.claim_ids` and citations are checked native projections,
+not independent association authorities. Source-only review evidence retains its
+claim/citation projections without a model-selected group association.
+Reject missing, foreign, ineligible, mixed-inactive or stale group associations.
+Equal bytes at distinct source occurrences do not substitute for occurrence IDs.
+Readback recomputes these projections and rejects inconsistent stored selections;
+it never repairs corrupt stored authority by replacing it with a fresh union.
+The question uses this same authored association, while fixed content-only repair
+preserves the complete association natively. This does not turn nonempty group
+selection into a universal new `S` floor outside initial authoring or retire
+separately authorized exact-only/evidence cases.
+
+**Eligibility and empty record output.** Use current retained whole-group
+eligibility, not a new native judgment about which category deserves a record.
+Keep original evidence visible and context meanings distinct. Catalogue membership
+does not assert positive content eligibility: reuse the existing coverage
+prohibition on positively mapping `open_question` claims when projecting/admitting
+positive authored associations. Question evidence may select those retained groups
+under its explicitly question-scoped rule. Readiness must not interpret an
+open-question group as either a supported field or an established user gap.
+Do not silently extend that prohibition to every design, technical or validation
+claim, which the current contract may map or retain as context. An offered group
+need not become a record: the existing record array admits zero records for a
+complete group, and the finite native cursor advances to the next assigned group.
+There is no model `no_records` verdict, renewed retry allowance or dropped
+assignment. After all groups, existing aggregate required AC/FR families, entity
+membership, business-claim mapping, exact-token coverage and full semantic review
+still apply. Empty output supplies no positive record coverage. A business
+obligation may survive in another admitted field or record; attached IDs alone do
+not establish that its meaning survived. This rule neither forces context-only
+records nor makes an empty/incomplete assembled specification publishable.
+
+**Pre-generation preservation and missing authority.** Reuse
+`source_preservation.project`'s original-source assignments over complete relevant
+producer collections. Before content exists, no feature field has an admitted
+association; remove the role-based expected-provenance fallback rather than
+inventing one from the offered catalogue. Optional preservation retains its
+existing policy, original-source scope and permitted verdicts. Native readiness
+requires current complete reconciled evidence and a nonempty retained catalogue;
+missing/stale authority remains engine-owned rejection/rework, not a user fact.
+Existing source-review discovery continues to assess original obligations,
+including meanings absent from extraction or the selected authored associations.
+This change does not resolve Phase 2's finding taxonomy or Phase 7's answer
+persistence/authentication decisions.
+
+**Mutation ownership and recovery.** Value-only repair preserves `source_group_ids`,
+explicit `S`, the existing effective evidence bounds, siblings, old value,
+revision, dependency snapshots and retry identity. A missing obligation not present
+in those fixed associations cannot be repaired by silently adding groups to prose.
+Changed association membership requires a separately authorized authored-unit
+rebuild with dependent invalidation; where that permission does not exist, expose
+an unresolved association-repair outcome and block. This replacement adds no
+association-membership repair permission. Do not reroute it to extraction,
+signal grouping or the removed role producer, and do not loop or replenish an
+allowance. Record insertion still requires one explicitly bound current accepted
+group's complete ordered selection. Replace claim-list matching with occurrence-based
+resolution: equal claim membership cannot select an occurrence or authorize an
+insertion. If the required occurrence is unavailable or ambiguous, block. Genuine
+upstream loss retains the existing evidenced upstream repair path. Changed sources/groups retire dependent catalogues, authored
+associations, review/attribution evidence and descendants with actual origins.
+
+The coordinated cutover covers these existing owners:
+
+| Boundary | Required change |
+| --- | --- |
+| Reconciliation | Remove role request/decisions/positive-role conversion from `reference_reconciliation_stage`, `reference_role_assignment` and `reference_reconciliation_validation`; retain dispositions, groups, conflicts and genuine producer origins. |
+| Authoring/admission/correction | `specification_session`, `specification_generation` and `specification_source_binding` share the selected initial response, native association conversion and fixed repair boundary. |
+| Review/attribution | `specification_support_evidence`, subject projection and `source_omission_binding`/`source_omission_comparison` resolve admitted associations and original producer inputs. Remove the superseded role-assignment/`unsupported_role` boundary without broadening repair permission. Policy review remains independent. |
+| Repair/invalidation | Existing candidate repair and dependency owners preserve fixed associations or reject unsupported membership changes; complete dependent and full-candidate validation still follows every authorized mutation. |
+| Persistence/readback | Store canonical associations with content and recompute them from the captured groups. Remove persisted presentation roles and bump the enclosing shared specification-state schema for both completed and clarification-pending states. `reference_snapshot` has no independent version tag; its changed closed shape is covered by that enclosing cutover. Bump the canonical specification content version if its serialized shape changes. Reject previous versions/fields; no migration, alias or dual reader. Clarification-pending state still records incomplete authority, never fabricated completed content or saved execution. |
+| Calibration/fixtures | Use the same current closed response decoder, occurrence admission and conversion. Historical captures keep their original contract and scores. Assessment labels never enter model input or workflow authority. |
+
+Amend [§17.3](../design/contracts/17-specify.md#173-llm-work),
+[ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md#authored-association-amendment-approved-11-october-2026),
+[ADR 0022](../design/decisions/0022-native-reference-phase-handoffs.md),
+[§22](../design/contracts/22-repair.md) and
+[§24.1](../design/contracts/24-workflow-state.md#241-workflow-state) together with
+implementation. The follow-up authorizes this bounded coordinated replacement;
+no separate user decision is needed for routine schema/type/version choices within
+it. It does not authorize new user-answer acceptance, general membership repair,
+retry policy or removal of publication safeguards.
+
+**Rejected alternatives:** gate-only deletion leaves no field association;
+forced positives and whole-catalogue bindings invent support; native category
+classification would move semantic authority into the engine; six independent
+classifiers increase fallible handoffs; a new empty-output verdict duplicates the
+existing record-array contract; compatibility readers create parallel authority.
+
+**Qualification boundary:** the prepared retained-gate representation diagnostic
+measures representation sensitivity, not this replacement. Offline tests must
+cover selected/shared groups, joint support, overlap, invalid/stale/mixed groups,
+question scopes, exact lineage, empty per-group output with aggregate failures,
+fixed repair, mutation invalidation, full completed/pending readback and negative
+version admission. A separately frozen replacement comparison must assess actual
+authored meanings against original sources, genuine insufficiency, unsupported
+additions, selections, admission, recovery and complete call/token cost. No current
+measurement justifies a semantic improvement or production-adoption claim.
 
 ### 5.3 Model selection is a measurement option, not a semantic guarantee
 
@@ -1123,8 +1400,8 @@ does not imply a persisted-schema change or a new recovery permission.
 | Phase 2 existing field/collection scope | **Selected.** §17.3 already distinguishes those duties. Clarifying them requires no new requiredness policy. Assigning an unrelated duty to a previously narrower field would require an explicit shared amendment. |
 | Phase 2 addition/contradiction/gap/mixed taxonomy | **Decision pending.** Demonstrate representability before changing tags, precedence or repair. A pure addition has no missing source obligation; do not manufacture one. This is not bundled into the first candidate. |
 | Phase 4 batching or granularity change | **Deferred during Phase 0; retain current findings.** Distinct duties remain necessary. The subsequent explicit Phase 4 task selects transport batching of one AC record's three existing findings, with the focused-review lifecycle amendment below. Per-finding origins, complete admission, correction, localization and persistence remain required; removing duties is not selected. |
-| Phase 5 presentation-role replacement | **Deferred; retain R10.** Replacement binding/missing-authority lifecycle needs §17/ADRs 0020 and 0022 amendment and prospective evidence. |
-| Phase 6 review retention | **Deferred; measure eligibility first.** Mixed retained/new admission, dependency witnesses and invalidation need a bounded contract. No receipt cache, narrower policy context or cross-run reuse is authorized. |
+| Phase 5 presentation-role replacement | **Deferred at Phase 0.** The later authorized §5.2.1 amendment implements the coordinated replacement candidate; semantic qualification remains pending. |
+| Phase 6 review retention | **Task-authorized bounded implementation.** Measured within-run repeat eligibility led to exact request/dependency witnesses and mixed native re-admission. No persisted cache or narrower policy context is authorized. Live usefulness remains a Phase 11 gate. |
 | Phase 1 indirect failure/capture diagnosis | **Complete.** The indirect path was reproduced and the capture cause isolated offline. Shared failure preservation, legitimate recovery, capture diagnostics and full verification are recorded in the [Phase 1 delivery record](#phase-1-delivery-record). |
 | Phase 7 clarification | **Deferred independent lane.** H-011 authentication and accepted-response persistence decisions precede fresh-answer authority. Exclude answer-backed success claims from this first panel. |
 | Phases 8–10 topology/model/hierarchy | **Unselected for this candidate.** Retain existing shared wiring/summary safeguards; any proposed model experiment remains separate under FIX02/ADR 0021. |
@@ -1430,6 +1707,11 @@ was retained; the final human/machine report was not. The reporting follow-up in
 [§2.3](#23-post-phase-4-live-run-11-october-070352-utc) addresses this gap at the
 harness owner and is complete offline; retain its separate verification and
 live-evidence limits before treating end-to-end failure reporting as qualified.
+The [07:50:47 run](#24-latest-live-run-11-october-075047-utc) subsequently exercised
+normal report persistence on an actual blocked workflow with fractional evaluator
+configuration and retained the correct originating model call. Injected reporting
+failures remain offline evidence, and this run did not reach candidate repair or
+publication.
 
 ### Phase 2 — Clarify source review and remove redundant input work
 
@@ -1854,21 +2136,343 @@ remain offline-only evidence; this run did not exercise them.
 
 **Scope:** §5.2; independent of batching and model configuration.
 
+**Status — 13 October 2026:** the coordinated replacement and complete offline
+verification are finished. The user approved the frozen 22-call historical panel,
+its proposed labels and the separate 28-call current-authoring panel. Both panels
+have received all 50 approved responses. Native and semantic assessment is complete;
+the current-authoring candidate failed its semantic qualification gates. The separate role call,
+role/prebinding state and role-coverage gate are retired under the authorized
+[§5.2.1](#521-phase-5-replacement-contract--implemented-candidate-qualification-pending)
+amendment. Native whole-group association admission and all aggregate required
+output, evidence, source-review and publication gates remain. The plan is not
+complete until its prospective semantic and product acceptance criteria pass.
+
+- Include the [latest pre-authoring block](#24-latest-live-run-11-october-075047-utc)
+  in the prospective evidence plan. Compare support judgments for equivalent
+  source obligations with compound and separate claim representations, keeping
+  model/provider controls fixed. Distinguish explicit false unsupported decisions,
+  incorrect selections and genuine insufficient support; no forced positive role
+  or production removal follows from this captured failure.
 - Specify the replacement source-obligation binding and missing-authority contract
-  across authoring, review, repair, invalidation and readback. Obtain the relevant
-  §17/ADR 0020 amendment before replacing the accepted role gate.
+  across authoring, review, repair, invalidation and readback. The authorized
+  §17/ADR 0020/ADR 0022 amendment accompanies the coordinated cutover.
 - Derive only mechanically established bindings natively; keep semantic support
   with the model. Preserve required output, source occurrences and uncertainty.
   Do not force unsupported roles positive or attach every claim to every field.
 - Prove admission and recovery mechanics, then compare false unsupported decisions,
   wrong selections, missing original obligations and downstream output quality.
 
-**Exit:** replacement is justified by prospective Phase 11 evidence, or the gate
-is retained. Removing R10 without replacement authority never meets this phase.
+**Exit:** the replacement satisfies prospective Phase 11 evidence. If qualification
+fails, revise the candidate under the same bounded contract review; do not weaken
+source or required-output gates. Gate removal alone never meets this phase.
+
+**Frozen preparation history (before replacement cutover):**
+
+| Item | Evidence / status |
+| --- | --- |
+| Audit production, correction, repair, invalidation and readback | Complete; §5.2.1 maps the current owners and necessary coordinated replacement. The audit found pre-generation review, question-evidence scope, omission attribution and record insertion dependencies beyond initialization. |
+| Preserve mechanical authority while investigating false negatives | Complete; no production gate, prompt, schema, canonical-state or model-setting change. No forced support or native semantic classifier. |
+| Prepare equivalent compound/separate claims | Complete; the existing development-only role harness accepts explicit whole-chunk/separate-line controlled representations, with the same original bytes and one complete semantic signal per source chunk. Production extraction/grouping admission still validates the premises. |
+| Retain captures and unrelated/insufficient controls | [11-case proposed cohort](../test/calibration/authoring-roles/representation-control/cohort.json): three historical captures, three equivalent representation pairs, implementation-only insufficient support and constraint-only partial support. Two repetitions produce 22 prepared requests, not 22 live outcomes. |
+| Freeze requests, settings, ancestry and gates | [Prepared panel](../test/calibration/authoring-roles/representation-control/README.md) and [manifest](../test/calibration/authoring-roles/representation-control/preparation.json). The latest captured Bedrock model/settings remain fixed; labels are proposed, never model-visible. Historical captures are correlated development observations, not paired or held-out treatments. |
+| Verify preparation mechanics | `zig build test-rubric-evaluator build-role-calibration --summary all -j2`: **182/182 tests, 5/5 steps passed**. One new owning-boundary regression checks same-source representation, complete groups/citations/tokens, native positive/negative/foreign selections, closed representation parsing and absence of label leakage. |
+| Complete offline verification | `zig build verify --summary all -j2`: **1,510/1,510 tests, 142/142 steps passed**, including lint, architecture, integration and packaged clean-environment smoke checks. [Verification log](../zig-out/phase5-verify-final.log). `git diff --check` passed. Existing role admission, R10 blocks, repair invalidation and readback tests remain enforced; these are mechanical evidence, not semantic replacement evidence. |
+| Prospective role-support assessment | The user explicitly approved the proposed labels and the 22 prepared calls on 13 October. Measure false unsupported decisions, wrong support, genuinely insufficient support, admission and actual resource use separately; do not infer authoring quality from role decisions. |
+| Resolve replacement contract | Complete as a concrete candidate in §5.2.1: initial selection-with-content, one association on each authored owner, question-specific scope, source-scoped preservation, empty per-group records with unchanged aggregate gates, fixed repair bounds and one completed/pending state cutover. No semantic improvement is inferred from this resolution. |
+| Replace accepted prebinding authority | Implemented as the coordinated candidate below. Semantic adoption remains unqualified. The frozen old diagnostic can still run from its pinned isolated executable; it does not constrain current production to retain a superseded reader. |
+| Actual output and whole-workflow acceptance | Phase 11; no live E2E or rubric result was produced by this implementation. |
+
+**Coordinated implementation delivery:**
+
+| Boundary | Implemented candidate |
+| --- | --- |
+| Reconciliation and workflow | Remove the role action/response/validator and persisted roles. Signals continue through the native conflict handoff. Retire the executable old-role harness; preserve its isolated, immutable 22-request baseline and historical results. |
+| Initial authoring and protocol correction | Brief/story/entity-basis values select current `signal_ids`; native code resolves complete group occurrences and stable `S`. Records keep one native-bound group and content-only wire responses. Shared schema projection narrows only selectable IDs; fixed value/record repair exposes no membership selector. |
+| Canonical association and readback | `source_group_ids` lives on each attributed owner and record, not in a parallel registry. Shared admission and persisted validation reject absent/foreign/stale groups, mismatched `S`, citations and corrupted lineage. Closed versions are `specification/v3` and `specification-state/v13`; older versions/fields are rejected without migration. |
+| Empty batches and current dependencies | Every finite record assignment retains a native dispatch witness, including zero records. Its occurrence, cursor, current reference state and existing dependency snapshot are rechecked; an empty batch cannot silently skip a group or survive changed producer evidence. Authoring uses the existing native finite-iteration contract for three narrative assignments and the complete group population; it does not borrow or enlarge retry limits. Aggregate required families, entity membership and coverage still run. |
+| Review, loss attribution and repair | Review uses actual field/collection associations. Pre-authoring preservation stays source-scoped. Loss in selected support is an explicit `source_association` outcome; absent support cannot authorize an upstream rebuild. Fixed repair preserves associations; insertion requires one actual authored group occurrence. |
+| Qualification | Both approved panels completed: 22 historical role calls and 28 current-authoring sends / 24 logical trials. Native authoring admission accepted 20 trials, while all six record collections failed material semantic or required-family gates. Historical role judgments remain contextual evidence, not a like-for-like authored-output baseline. Detailed results are below. |
+
+A native witness records which collection was assessed; it does not assert that
+an empty response was semantically correct. Likewise, nonempty selected groups
+and attached evidence do not establish that prose expresses the original
+obligations. These are separate measured acceptance criteria.
+
+#### Phase 5 verification and remaining exit — 13 October 2026
+
+The cutover covers production, protocol correction, fixed repair, upstream
+invalidation, source review/loss attribution, completed and clarification-pending
+readback, fixtures and packaging. It removes the retired role prompt, actions,
+response/state fields, validator and executable calibration entry point. Historical
+captures and the isolated pinned baseline remain diagnostic evidence only.
+The existing finite-iteration owner now bounds all narrative and record work;
+completed-unit repairs cannot reopen it or renew its allowance.
+Initial association admission and final coverage share the specification
+contract's mapping-permission predicate; they cannot independently change the
+existing prohibition on mapping an open question as positive content.
+
+Owning tests cover joint/overlapping support, foreign/repeated/inactive groups,
+question-specific eligibility, distinct source occurrences and exact lineage.
+They also exercise empty assignments, current dispatch/dependency witnesses,
+fixed-association repair, denied membership changes, aggregate failures and
+completed/pending readback with rejection of superseded versions. The independent
+wire fixtures require group selection for initial authoring and reject it for
+value-only repair. Packaging no longer copies the deleted role resource.
+
+Verification completed through repository-owned build steps:
+
+- `zig build test-reference-model-input test-reference-reconciliation test-specification-contract test-architecture --summary all -j2`:
+  **512/512 tests, 12/12 steps passed**.
+- `zig build test-specification-generation test-workflow-graph test-workflow-operation-registry test-architecture lint --summary all -j2`:
+  **711/711 tests, 20/20 steps passed**. Subsequent replay-preflight imports are
+  included in the complete verification below.
+- `zig build test-model-candidate-json --summary all -j2`:
+  **76/76 tests, 3/3 steps passed**.
+- `zig build test-specification-generation test-specification-contract test-architecture lint --summary all -j2`:
+  **473/473 tests, 11/11 steps passed** after the final shared-policy refactor.
+- `zig build verify --summary all -j2`: **1,489/1,489 tests, 137/137 steps passed**,
+  including **97/97 integration tests**, architecture/lint, diagnostic harness
+  checks and the packaged clean-environment smoke.
+  The complete check was rerun after the diagnostic singleton-construction
+  correction, with the same passing counts and all actual receipts rechecked.
+  [Final complete verification log](../zig-out/phase5-replacement-verify-final.log).
+- `zig build --summary all -j2`: **4/4 steps passed**, installing the current
+  native executable for the frozen diagnostic launcher.
+- `git diff --check`: passed.
+
+The replay preparation selects authentic retained extraction Call 1, rather than
+the removed role step. The canonical archive reader and existing replay provider
+rebuild its original body and all 28 modified authoring bodies with zero sends.
+The current production graph and provider-binding owner independently resolve
+that exact step, slot and controls. Ordinary offline tests remain independent of
+ignored live archives: absent external evidence marks launcher preparation
+unavailable, never fabricates a parent or supplies a successful live result.
+The frozen launch requires genuine-parent and current-authorization readiness.
+Actual replay receipts are re-admitted against their complete current assignments;
+missing, stale, foreign or duplicate receipts remain separate failed/incomplete
+observations, with unknown cost distinguished from zero cost.
+The [frozen authoring plan](../zig-out/phase5-authoring-associations/freeze.json)
+and [launch notes](../zig-out/phase5-authoring-associations/LAUNCH_NOTES.md) retain
+the verified native binary and private diagnostic context. Read-only bootstrap
+and archive inspection dispatched no inference and executed no workflow.
+
+**Live execution and assessment:** the user approved both panels and the proposed
+historical labels. All 28 current-authoring requests received responses, using
+38,370 input and 3,950 output tokens (42,320 total); there were no retries, repairs,
+model judges, source-review model calls or E2E runs. Each authentic replay, parent,
+provider body and setting matched its frozen request. The
+[dispatch record](../zig-out/phase5-authoring-associations/live-summary.json)
+retains every physical call; this is diagnostic execution, not workflow publication.
+
+Two preparation defects were identified before accepting assessment results.
+The historical launcher pinned the offline-only executable, whose HTTP adapter
+returned a local transport failure without sending to AWS. That original failure
+is retained. A live-capable build from the identical retained preparation/scoring
+sources reproduced all frozen request bodies, settings and ancestry before the
+22 approved AWS sends. No production classifier or compatibility reader was
+restored. The authoring receipt helper also omitted the production collector's
+`model_candidate_json.constructBound`
+step. Its initial rejection of kind-only singleton `exact_copy` fragments is not
+a production or model defect: the selected schema intentionally leaves that
+engine-owned identity to native construction. The corrected helper reuses that
+owner after selected-wire schema validation; an owning regression accepts the
+kind-only fragment with its native identity and rejects a model-echoed identity.
+All model-facing bytes and all 28 original receipts remained identical. The
+[explicit receiver recheck](../zig-out/phase5-authoring-associations/receiver-recheck/recheck.json)
+binds the original dispatch and corrected admission preparations; the original
+17/24 helper report remains preserved as superseded diagnostic evidence.
+Neither discovery authorizes changing a response or weakening admission.
+
+**Current native authoring result:** 20/24 logical trials passed native admission.
+The other four are the two equipment and two renewal record collections: each
+omits every entity record despite its supplied `required` decision. All six entity
+decisions themselves chose the correct disposition. No initial association was
+missing, foreign, repeated or mechanically ineligible. These checks establish
+current assignment/evidence mechanics; they do not establish semantic support for
+the emitted prose. The previously reported three `InvalidSpecificationUnit`
+rejections were receiver-construction defects and are excluded from candidate
+failure counts.
+
+**Historical role-classifier result:** all 22 exchanges completed, using 36,410
+input and 3,289 output tokens (39,699 total). Twenty-one answers passed admission;
+the other returned no final text and remains an unscored failed trial. Against
+the explicitly approved labels, 28/114 required-role observations were false
+`unsupported` decisions and 14/104 selected pairs were disallowed. Whole-chunk
+representation controls produced 16/36 false unsupported decisions, versus 0/36
+for separate-line controls; one separate-line startup repeat also selected six
+disallowed token-only support pairs. Four of ten fully admitted unchanged-repeat
+pairs changed semantic decisions. These small, correlated development cases expose
+representation sensitivity; they do not establish deterministic entailment or
+authored-output improvement. The [results and per-case table](../test/calibration/authoring-roles/representation-control/results.md)
+and [scorecard](../test/calibration/authoring-roles/representation-control/scorecard.json)
+retain the completion, selection and cost denominators separately.
+
+**Current semantic authoring result:** manual source and field-purpose assessment,
+with independent review, found **15 passing, eight failing and one weak logical
+trial**. All six record-collection trials failed a material gate. The two admitted
+startup collections illustrate the gap between admission and meaning: one puts
+successful startup in `given` before the startup trigger; the other puts only the
+greeting literal in its business acceptance-criterion fields and requirement text.
+Both equipment trials assign the separate availability obligation to a retention
+group's acceptance criterion. The renewal output loses eligibility in an AC; its
+second repeat also invents prerequisites and a processing prohibition. Startup
+story repeat two invents console technology and immediate output. All six entity
+decisions are correct, but four downstream collections omit the entity records
+they require. The weak renewal basis is an explanation-quality observation, not
+a wrong decision.
+
+The startup token-only batch's scope remains ambiguous: its packet also supplies
+the same complete original source and supporting business context. Do not declare
+that ownership question resolved by the current labels. Likewise, an absent literal
+in one record collection does not prove whole-specification exact-preservation
+failure when other owners may retain it. Field abstraction, a system-centered
+story and an unresolved duration do not themselves require rejection or an
+arbitrary clarification. These distinctions prevent qualification from becoming
+a new surface-form or fixture-specific authority.
+
+The [current-authoring results](../test/calibration/authoring-associations/results.md)
+and [scorecard](../test/calibration/authoring-associations/scorecard.json) keep
+completion, native admission, association meaning, field purpose, uncertainty and
+literal observations separate. Twenty admitted units produced 50 review packets
+from actual associations; no live reviewer assessed them. Controlled prior-unit
+seeds do not establish production handoff reliability. The task's cache run markers
+and receipts were archived after recheck so ordinary offline tests cannot silently
+reuse stale diagnostic state. Original responses, initial receiver failures and
+corrected admission evidence remain retained.
+
+**Remaining acceptance:** the implementation and approved diagnostic execution are
+complete, but Phase 5 is **not complete at its semantic exit**. This panel supplies
+no like-for-like authored-quality baseline and no publication, useful recovery or
+actual-output rubric evidence. The next bounded investigation belongs to shared
+record assignment: distinguish its owned source obligations from context, and
+establish why required entity output disappears despite a correct supplied decision.
+Resolve the token-only scope ambiguity against §17 before changing admission.
+Use the captured failures and unrelated requirements; do not force a prose template,
+attach every group, add redundant classifiers or weaken the existing gates.
+Whole-workflow acceptance remains the separately approved Phase 11 work.
+
+#### Phase 5 record-authoring follow-up — 13 October 2026
+
+**Implemented candidate:** the user authorized correcting the assembled-family
+projection and investigating ownership separately. The specification policy
+owner now projects AC/FR plus `entity` when its existing membership rule rejects
+entity absence. The session presents that list under `assembled_specification`.
+Native requiredness, the response schema, one-group associations, optional empty
+batches, aggregate admission and authorized repair scope are unchanged. No
+classifier, new model call type or parallel policy owner was added.
+
+The shared generation context now identifies `source_assignment.requirements` as
+the current record batch's duties. `context_requirements` and prior drafts help
+interpret those duties without substituting another group's obligation or changing
+fixed association/repair evidence. The original source still establishes conditions
+and the source-required use of exact values. A token-only group retains that cited
+context; its category does not establish semantic entailment, require an empty
+response or authorize every other source duty. The specific startup token-batch
+judgment remains a semantic observation, not a new deterministic rejection rule.
+No context restriction or category-based skip was introduced. Initial generation
+and protocol correction share the context; fixed repair keeps its existing target
+and omits aggregate authoring requirements.
+
+Existing owning tests were extended rather than duplicated: required/not-applicable
+family projection and schema eligibility, packet lifetime and restriction inheritance,
+early empty batches, final missing-entity rejection, final empty acceptance after an
+earlier entity, and protocol correction retaining the original assembled requirements.
+Existing fixed-repair and completed-omission tests continue to exclude broad assembly
+instructions. The targeted command
+`zig build test-specification-generation test-model-request-workflow test-specification-contract test-architecture lint --summary all -j2`
+passed **880/880 tests, 14/14 steps**. Complete verification and native packaging
+also passed through `zig build verify --summary all -j2`: **1,489/1,489 tests,
+137/137 steps**, including 97/97 integration tests, architecture/lint and the
+packaged clean-environment smoke. [Complete check log](../zig-out/assembly-requirements-verify.log).
+
+**Isolated prospective measurement:** the existing authoring calibration owner
+prepares [three arms](../test/calibration/authoring-associations/assembly-requirements/README.md):
+
+| Arm | Required-family presentation | Ownership guidance |
+| --- | --- | --- |
+| Baseline | Prior AC/FR presentation | Exact prior guidance |
+| Family | AC/FR plus conditional entity | Exact prior guidance |
+| Ownership | AC/FR plus conditional entity | Clarified shared guidance |
+
+Baseline versus Family changes only the conditional family entry. Family versus
+Ownership changes only the shared `sources` guidance. The middle arm is sent once
+and reused for both comparisons; comparing Baseline directly with Ownership would
+confound the two factors. Current native admission governs all three arms. The
+historical presentation and saved context are experimental controls, never production
+fallbacks or additional authorities.
+
+The five-case panel retains the three preceding cases and adds unrelated warehouse
+data and notification-only behavior. Two repetitions per arm produce **30 logical
+collections / 42 physical sends**, including every source group. Packet, evidence,
+schema, model controls and task remain fixed; no-entity Baseline/Family inputs are
+byte-identical. Assessment separates required-family omissions, field purpose,
+assigned meaning, ownership ambiguity, unsupported additions, genuine uncertainty,
+literal observations, native admission and actual cost. All cases are development
+evidence, and controlled prior-unit seeds do not qualify the production handoff.
+
+The [frozen manifest](../zig-out/assembly-requirements-comparison/freeze.json) and
+[launch notes](../zig-out/assembly-requirements-comparison/LAUNCH_NOTES.md) now pin
+all 42 requests, dependencies, assessment criteria and the installed native binary.
+`zig build --summary all -j2` passed **4/4 installation steps**. Credential-free
+native debugger bootstrap and authenticated read-only inspection passed with seven
+retained calls, the exact expected parent/provider binding, zero new replays and
+zero external inference or workflow calls. The server was stopped. The launcher
+enforces the 42-attempt allowance and a **200,000 actual-token stop**, without
+resending after unknown usage or uncertain delivery.
+
+**Approved live outcome:** the user explicitly requested this prepared comparison;
+all **42/42 calls** completed their exchanges, representing **30 logical collection
+trials**. The [results](../test/calibration/authoring-associations/assembly-requirements/results.md)
+and [scorecard](../test/calibration/authoring-associations/assembly-requirements/scorecard.json)
+separate native admission, family presence, authored meaning, ownership, uncertainty
+and actual cost. No retry, correction, repair, model judge, source-review call,
+workflow continuation or E2E invocation was added. The allowance is consumed and
+the native debugger has been stopped.
+
+| Metric | Baseline | Family | Ownership |
+| --- | ---: | ---: | ---: |
+| Completed, schema-valid responses | 14/14 | 12/14 | 13/14 |
+| Native-admitted collections | 3/10 | 7/10 | 7/10 |
+| Complete required-entity family presence | 0/6 | 4/6 | 5/6 |
+| Native-admitted required-entity collections | 0/6 | 3/6 | 4/6 |
+| Actual input/output tokens | 34,500 | 68,796 | 59,402 |
+
+Both candidates eliminate missing entities among completed required-entity outputs,
+but **neither passes qualification**. Family has two output-limit responses;
+Ownership has one. All three hit the provider's 16,384 output allowance while
+expanding entity hierarchies. Other completed outputs contain unsupported technical
+structures, repeated entities and ellipsis placeholders. Equipment still assigns
+another source group's duty to the retention batch; renewal loses the supplied
+undecided-duration fact and has weak or substituted eligibility conditions.
+Warehouse Ownership outputs improve in both repetitions. Startup token-only
+ownership remains explicitly uncertain; correct literal text does not cure a
+literal-only acceptance field. Duplicate records cause additional native rejection.
+These observations do not authorize skipping groups, forbidding supporting context,
+relaxing duplicate gates or classifying semantic support natively.
+
+Total usage is **85,378 input + 77,320 output = 162,698 actual tokens**, below the
+200,000 stop, with zero unsent or uncertain sends. Native receipt collection through
+`zig build test-specification-generation --summary all -j2` passed **320/320 tests,
+3/3 steps**, without more live calls. The [native report](../zig-out/assembly-requirements-comparison/native-admission.json)
+retains current admission judgments; the earlier full offline and packaged checks
+remain passed. The frozen plan and original exchanges remain unchanged.
+
+The family-presentation mechanics advanced admission and entity emission; this
+does not establish reliable authored meaning. Byte-identical no-entity controls
+also vary, so an individual regression cannot always be attributed to the changed
+family entry. These manual, independently reviewed judgments are development
+evidence using controlled prior context, not actual upstream-handoff, publication
+or rubric qualification. Phase 5 remains open: the shared entity/field-purpose
+and ownership failures need a supported next change before product acceptance.
 
 ### Phase 6 — Retain only demonstrably unaffected review evidence
 
 **Scope:** §4.2; conditional on measured within-execution reuse eligibility.
+
+**Implementation:** complete — 11 October 2026. The user-directed task approves
+the focused admission/invalidation amendment in §§12.6, 17.3, 22.4 and 24.1;
+the overall design remains Proposed. Live usefulness and semantic outcomes remain
+the separate Phase 11 exit.
 
 - Define complete dependency and origin witnesses using existing evidence owners.
   Preserve subject/purpose/schema/model bindings, original sources and all supplied
@@ -1884,6 +2488,59 @@ is retained. Removing R10 without replacement authority never meets this phase.
 dependencies. Broad principle-context narrowing and persisted reuse require
 separate decisions; they are not included by implication. Fresh invocations still
 start at `start`, and no execution checkpoint is introduced.
+
+**Delivery record:**
+
+- [Native history](../src/domain/specification_review_retention.zig) retains
+  complete clean source assignments and their actual accepted requests through
+  existing immutable owners. Original source metadata and producer identity,
+  native subjects/applicability, complete packets, restrictions, compiled resources,
+  schema and model settings must match. The pure admission step may differ from
+  the producing workflow step; no other request-binding difference is equivalent.
+- [Shared admission](../src/domain/specification_support.zig) appends each entire
+  assignment in canonical order and validates the complete current prefix. An
+  AC receipt contains all three findings. Mixed retained/new evidence receives
+  current revision-bound authority without synthetic origins or request IDs.
+  Original review scope and subject occurrences prevent renewed repair allowances.
+- [Explicit workflow transitions](../design/workflows/spec.workflow.yaml) keep
+  source reuse separate from policy's required model path. Both use the same
+  assessment/repair body. The pure operation consumes a finite unchanged prefix,
+  stops at the first miss, and completes only a fully admitted collection with no
+  pending localization. Single-use wrappers were folded into their callers;
+  the existing 32-subgraph bound and all retry limits remain unchanged.
+- Collectors, native finding repair and loss localization refresh history.
+  Changed findings retire their older receipts; source metadata renewal retires
+  the old reservoir. Rejected first assignments authenticate only historical
+  scope for recurrence, never reusable findings or current authority. Corrected
+  assignments, omissions/localization proofs, pre-generation source preservation
+  and policy findings remain conservatively reassessed. Broad candidate context
+  still forces dependent collection/entity reassessment.
+- History is an execution-control value, excluded from publication/readback.
+  Fresh execution has no receipts. The two unexecuted calibration preparations
+  were regenerated through their official offline fixture owners: only native
+  source dependency pins changed, with packet/edit/provider-request bytes identical.
+
+**Verification:**
+
+- `zig build test-specification-generation test-model-request-workflow --summary all -j2`:
+  **728/728 tests**, 6/6 steps.
+- `zig build test-required-authority test-workflow-repair-retry test-architecture --summary all -j2`:
+  **395/395 tests**, 9/9 steps.
+- `zig build test-integration --summary all -j2 --global-cache-dir .zig-cache/phase6-global`:
+  **100/100 tests**, 6/6 steps.
+- `zig build verify --summary all -j2`: **1,509/1,509 tests**, 142/142 steps,
+  including lint, integration, standalone offline startup checks and packaged
+  clean-environment smoke. `git diff --check` passed.
+
+Connected production-graph verification checks unrelated greeting/loan requirements,
+retained actual origins, changed/dependent reassessment, complete stored admission,
+negative-finding recurrence and ownership after full runner teardown. The exact
+expanded-graph fixture was updated from 803 to 788 steps; the schema-drift mutation
+now selects an actual request assignment using the existing native predicate.
+Rejection assertions, graph limits and retry allowances were preserved.
+No live dispatch occurred in this task; historical repeated costs are not
+prospective savings or output-quality proof. The latest role-selection block
+remains a separate Phase 5 concern.
 
 ### Phase 7 — Complete clarification recovery
 
@@ -2011,7 +2668,7 @@ change, and leave deferred recommendations visibly open.
 | Faithful discovery and actual handoff (§§3.1–3.3) | Phases 0, 2–3, 11 | Agreed scope, connected mechanics and actual semantic evidence |
 | Addition/omission/gap/uncertainty taxonomy (§3.4) | Phases 0, 2 | Shared contract decision; no forced new tag |
 | Clarification persistence, source resolution and authentication (§4.1) | Phase 7 | Separate prerequisite decisions and both recovery paths |
-| Within-run review retention (§4.2) | Phase 6 | Implement only with complete unchanged-dependency evidence |
+| Within-run review retention (§4.2) | Phase 6 | Implemented with complete unchanged-dependency evidence; live usefulness remains Phase 11 |
 | Broader principle context or persisted reuse (§4.2) | Phase 6 | Explicit separate decision or recorded deferral |
 | Exact-copy repair permissions (§4.3) | Phase 3 | Approved bounded extension, retain decision or visible deferral |
 | Review granularity (§5.1) | Phase 4 | Distinguish batching from changed authority requirements |

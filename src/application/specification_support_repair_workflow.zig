@@ -121,12 +121,17 @@ pub const Merge = struct {
             const state = try read(selected, &input.step.data);
             const context_value = try spec.readContext(&input.step.data);
             const permit = state.authorization.retry orelse return error.OperationExecutionFailed;
+            const history = try owned.read(&input.step.data, support.history_schema, .review_history);
+            const ledger = try values.read(&input.step.data, @import("model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
             const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
-            const result = self.action.execute(selected, owner.arena.allocator(), source, context_value, current.rejected.candidate.?, state) catch |native_failure| {
+            const merged = self.action.execute(selected, owner.arena.allocator(), source, context_value, current.rejected.candidate.?, state, history, ledger) catch |native_failure| {
                 owned.destroy(owner);
                 return native_failure;
             };
+            const result = merged.collection;
             var candidate = try support.publish(selected, self.allocator, owner, progress, result);
+            errdefer for (candidate.delta.data_replacements) |value| if (value) |allocation| values.destroy(allocation);
+            try support.attachHistory(self.allocator, input.step.data, &candidate, merged.history);
             candidate.delta.repair_transition = .{ .merged_validated = .{ .permit = permit, .revision_after = switch (result) {
                 .accepted => |value| value.candidate.revision,
                 .pending => |value| value.revision,

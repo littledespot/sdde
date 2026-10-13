@@ -8,7 +8,9 @@ pub const comparisons = @import("source_omission_comparison.zig");
 pub const Location = union(enum) {
     unlocalized: struct {},
     candidate: struct {},
-    unsupported_role: r.GenerationRole,
+    /// Source meaning survived upstream but was not selected for this exact
+    /// authored requirement. This is evidence for rework, not write permission.
+    source_association: authority.Id,
     unsupported_summary: r.SummaryId,
     extraction_claim: r.extraction.identity.ChunkId,
     token_classification: r.extraction.tokens.CandidateId,
@@ -27,7 +29,7 @@ pub const Location = union(enum) {
 /// Candidate loss and unresolved attribution grant no upstream repair target.
 pub fn isUpstream(location: Location) bool {
     return switch (location) {
-        .unlocalized, .candidate, .unsupported_role, .unsupported_summary => false,
+        .unlocalized, .candidate, .source_association, .unsupported_summary => false,
         .extraction_claim, .token_classification, .reconciliation_signal, .reconciliation_disposition, .reconciliation_conflict => true,
     };
 }
@@ -169,7 +171,7 @@ pub fn select(a: std.mem.Allocator, sources: r.evidence.Inputs, support: Support
         const finding = (try authority.supportedOmission(a, support.inputs, support.observations, support.result, entry.requirement)) orelse continue;
         try @import("specification_support_evidence.zig").validate(a, support.inputs, sources, finding);
         for (support.review.review.entries) |review| if (review.requirement_ordinal == finding.id.ordinal) {
-            if (review.value.loss == .unsupported_role or review.value.loss == .unsupported_summary) {
+            if (review.value.loss == .source_association or review.value.loss == .unsupported_summary) {
                 unsupported = true;
                 continue;
             }
@@ -187,7 +189,7 @@ pub fn select(a: std.mem.Allocator, sources: r.evidence.Inputs, support: Support
 /// that producer's output is eligible as positive business content.
 pub fn diagnosticClaims(records: @import("reference_support.zig").Records, location: Location) ?[]const r.ClaimId {
     return switch (location) {
-        .unlocalized, .candidate, .unsupported_role, .unsupported_summary => null,
+        .unlocalized, .candidate, .source_association, .unsupported_summary => null,
         .extraction_claim, .token_classification => &.{},
         .reconciliation_signal => |id| for (records.signals) |signal| {
             if (std.meta.eql(signal.id, id)) break signal.value.claim_ids;
@@ -216,7 +218,15 @@ pub fn validate(a: std.mem.Allocator, inputs: authority.Inputs, sources: r.evide
 }
 
 fn validateLocation(inputs: authority.Inputs, sources: r.evidence.Inputs, subject_id: authority.Id, finding: authority.Finding, review: authority.ReviewEvidence, location: Location) (authority.Error || r.Error)!void {
-    if (location == .unlocalized or location == .unsupported_role or location == .unsupported_summary) return;
+    if (location == .source_association) {
+        if (finding != .candidate_omission or !std.meta.eql(location.source_association, subject_id)) return error.InvalidRequiredAuthority;
+        switch (subject_id.unit) {
+            .feature, .record => {},
+            else => return error.InvalidRequiredAuthority,
+        }
+        return;
+    }
+    if (location == .unlocalized or location == .unsupported_summary) return;
     if (finding != .candidate_omission) return error.InvalidRequiredAuthority;
     if (location == .candidate) {
         // The evidence owner binds these claims to the current reviewed subject.
@@ -232,7 +242,7 @@ fn validateLocation(inputs: authority.Inputs, sources: r.evidence.Inputs, subjec
     if (review.source_ids.len == 0) return error.InvalidRequiredAuthority;
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
     switch (location) {
-        .unlocalized, .candidate, .unsupported_role, .unsupported_summary => unreachable,
+        .unlocalized, .candidate, .source_association, .unsupported_summary => unreachable,
         .extraction_claim => |id| {
             if (review.provenance.claim_ids.len != 0) return error.InvalidRequiredAuthority;
             const scope: r.evidence.Scope = .{ .state_id = records.items.state_id, .chunk_id = id };
@@ -320,6 +330,6 @@ const merge_context = [_]@import("pipeline.zig").DataKey{ .citable_reference_inp
 pub const extraction_requires = merge_context ++ [_]@import("pipeline.zig").DataKey{ .structured_token_candidates, .text_validated_reference_extraction };
 // Summary parsing consumes raw_reference_reconciliation before review. It is
 // already retired here, so the dependent set contains only surviving facts.
-pub const extraction_dependents = [_]@import("pipeline.zig").DataKey{ .validated_reference_selections, .preserved_token_identities, .prepared_reference_claims, .validated_reference_claims, .reference_claim_identities, .reference_extraction_ledger, .accounted_reference_extraction, .reference_reconciliation_items, .reference_reconciliation_layout, .reference_reconciliation_plan, .reference_reconciliation_progress, .reference_reconciliation_input, .parsed_reference_reconciliation, .validated_reference_dispositions, .validated_reference_signals, .validated_reference_roles, .validated_reference_conflicts, .reference_reconciliation_identities, .reference_reconciliation_records, .accounted_reference_reconciliation, .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate, .source_omission_repair };
+pub const extraction_dependents = [_]@import("pipeline.zig").DataKey{ .validated_reference_selections, .preserved_token_identities, .prepared_reference_claims, .validated_reference_claims, .reference_claim_identities, .reference_extraction_ledger, .accounted_reference_extraction, .reference_reconciliation_items, .reference_reconciliation_layout, .reference_reconciliation_plan, .reference_reconciliation_progress, .reference_reconciliation_input, .parsed_reference_reconciliation, .validated_reference_dispositions, .validated_reference_signals, .validated_reference_conflicts, .reference_reconciliation_identities, .reference_reconciliation_records, .accounted_reference_reconciliation, .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate, .source_omission_repair };
 pub const reconciliation_requires = merge_context ++ [_]@import("pipeline.zig").DataKey{.parsed_reference_reconciliation};
-pub const reconciliation_dependents = [_]@import("pipeline.zig").DataKey{ .validated_reference_dispositions, .validated_reference_signals, .validated_reference_roles, .validated_reference_conflicts, .reference_reconciliation_identities, .reference_reconciliation_records, .accounted_reference_reconciliation, .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate, .source_omission_repair };
+pub const reconciliation_dependents = [_]@import("pipeline.zig").DataKey{ .validated_reference_dispositions, .validated_reference_signals, .validated_reference_conflicts, .reference_reconciliation_identities, .reference_reconciliation_records, .accounted_reference_reconciliation, .specification_support_review, .required_authority_inputs, .required_authority_ledger, .required_authority_observations, .required_authority_result, .required_authority_gate, .source_omission_repair };

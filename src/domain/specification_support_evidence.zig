@@ -109,7 +109,7 @@ pub fn requirements(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.e
             else => .eligible_subset,
         },
         .supported_provenance = try expectedProvenance(allocator, inputs, sources, id),
-        .candidate_bound = inputs.specification != null or (inputs.brief != null and id.unit == .feature and (id.slot == .description or id.slot == .primary_goal)),
+        .candidate_bound = inputs.specification != null or @import("specification_authority.zig").featureField(inputs, id) != null,
         .source_preservation = id.unit == .source,
     };
 }
@@ -159,36 +159,11 @@ fn selection(value: spec.Provenance) spec.Selection {
     return .{ .claim_ids = value.claim_ids, .clarification_response_ids = value.clarification_response_ids };
 }
 pub fn expectedProvenance(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, id: a.Id) Error!?spec.Provenance {
-    // A brief-only title remains bound to reconciled title roles until the
-    // assembled candidate supplies display_name; displaying it grants no authority.
-    if (id.slot != .display_name or inputs.specification != null) {
-        if (@import("specification_authority.zig").featureField(inputs, id)) |value| return try effectiveAttributed(allocator, value);
-    }
+    // Actual admitted values own their source association even before complete
+    // assembly. Displaying the brief never promotes an eligible catalogue.
+    if (@import("specification_authority.zig").featureField(inputs, id)) |value| return try effectiveAttributed(allocator, value);
     if (inputs.specification) |content| if (try candidateProvenance(allocator, content, id)) |candidate| return candidate;
-    // Pre-generation source review uses the roles chosen and validated during
-    // reconciliation. The eligible catalogue alone cannot establish support.
-    if (id.unit == .feature) {
-        const role: ?r.GenerationRole = switch (id.slot) {
-            .display_name => .title,
-            .description => .description,
-            .primary_goal => .primary_goal,
-            .primary_user_story => .primary_user_story,
-            .entities => .entity_basis,
-            .acceptance_criteria, .functional_requirements, .scenario_coverage => .records,
-            else => null,
-        };
-        if (role) |selected| {
-            const records = inputs.references orelse return error.InvalidRequiredAuthority;
-            if (records.signals.len == 0) return null;
-            const chosen = @import("specification_source_binding.zig").roleClaims(allocator, records, sources, selected) catch |err| return switch (err) {
-                error.OutOfMemory => error.OutOfMemory,
-                error.InvalidSpecificationBinding => return null,
-                else => error.InvalidRequiredAuthority,
-            };
-            const resolved = refs.select(allocator, records.items, sources, chosen.claim_ids) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
-            return .{ .claim_ids = resolved.claim_ids, .citation_ids = resolved.citation_ids, .clarification_response_ids = &.{} };
-        }
-    }
+    _ = sources;
     return null;
 }
 

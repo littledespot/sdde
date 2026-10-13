@@ -5,6 +5,10 @@ coherent record request. Both arms retain the same native Given, When and Then
 requirements, field tasks, assessment scopes and evidence rules. The separate
 AC-collection requirement is unchanged. Source and policy review remain separate.
 
+Phase 6 refreshes the offline preparation's native collector/repair dependency
+pins. All packet, edit and provider-request bytes remain unchanged; no historical
+live result is relabelled and this refresh grants no dispatch approval.
+
 The six assignments contain five development cases and one reserved qualification
 case. The captured launch record retains its actual canonical candidate; it tests
 the reported temptation to demand consequent behavior from the Given field.

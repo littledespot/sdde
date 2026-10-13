@@ -3,6 +3,7 @@ const a = @import("../domain/required_authority.zig");
 pub const Payload = union(enum) {
     inputs: a.Inputs,
     support_initial,
+    review_history: @import("../domain/specification_review_retention.zig").History,
     support: @import("../domain/specification_support.zig").Source.Collection,
     principle_pending: @import("../domain/specification_review.zig").Pending,
     principle_support: @import("../domain/specification_review.zig").PolicyResult,

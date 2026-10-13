@@ -17,7 +17,7 @@ pub const Diagnostic = union(enum) {
     principle_review: @import("specification_support.zig").Contract(.principles).Rejection,
     specification: @import("specification_candidate.zig").Rejection,
     omission_authorization: @import("specification_coverage_repair.zig").AuthorizationRejection,
-    authoring_roles: @import("specification_source_binding.zig").Rejection,
+    source_catalogue: @import("specification_source_binding.zig").Rejection,
 
     pub fn code(self: Diagnostic) []const u8 {
         return switch (self) {
@@ -38,7 +38,7 @@ pub const Diagnostic = union(enum) {
             .support => |value| if (value.selected()) |selected| selected.origin else null,
             .principle_review => |value| if (value.selected()) |selected| selected.origin else null,
             .specification => |value| value.origin,
-            .authoring_roles => |value| value.origin,
+            .source_catalogue => |value| value.origin,
             .omission_authorization => null,
         };
     }
@@ -48,7 +48,7 @@ pub const Diagnostic = union(enum) {
     pub fn attribution(self: Diagnostic) Attribution {
         if (self.origin()) |value| return .{ .response = value };
         return switch (self) {
-            .coverage, .authoring_roles, .omission_authorization => .candidate,
+            .coverage, .source_catalogue, .omission_authorization => .candidate,
             .extraction_text,
             .reconciliation,
             .token_classifications,

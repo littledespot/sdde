@@ -23,15 +23,6 @@ test "reconciliation rejects the observed native union response and accepts the 
     try candidateCase("reconciliation", "summary", "{\"statements\":[{\"local_key\":1,\"claim_ids\":[1],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"Display the greeting.\"]}}}]}", .unknown_property, "/statements/0/local_key");
 }
 
-test "reconciliation roles require a complete closed decision table" {
-    const good =
-        \\{"role_decisions":{"title":{"kind":"supported","signal_ids":[1]},"description":{"kind":"unsupported"},"primary_goal":{"kind":"unsupported"},"primary_user_story":{"kind":"unsupported"},"entity_basis":{"kind":"unsupported"},"records":{"kind":"supported","signal_ids":[1]}}}
-    ;
-    try checkCandidate("reconciliation", "roles_assignment", good);
-    try candidateCase("reconciliation", "roles_assignment", "{\"role_assignments\":[]}", .unknown_property, "/role_assignments");
-    try candidateCase("reconciliation", "roles_assignment", "{\"role_decisions\":{}}", .missing_required_property, "/role_decisions/title");
-}
-
 test "compact model JSON keeps sibling objects intact and round trips native unions" {
     try roundTrip(std.testing.allocator);
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -83,7 +74,7 @@ const response_wire = struct {
     const nodes = "[\"Source meaning\",{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "},{\"kind\":\"source\",\"source_id\":" ++ id ++ "}]";
     const normalized = segments;
     const exact = "[{\"kind\":\"exact_copy\",\"claim_id\":" ++ id ++ "}]";
-    const attributed = "{\"value\":" ++ normalized ++ "}";
+    const attributed = "{\"signal_ids\":[" ++ id ++ "],\"value\":" ++ normalized ++ "}";
     const selection = "{\"first\":7,\"last\":9}";
     const classifications = "[{\"kind\":\"preserve\",\"preserve\":{\"token_candidate_id\":{\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":7},\"kind\":\"business_exact_string\"}},{\"kind\":\"irrelevant\",\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}]";
     const clarification = "{\"kind\":\"clarification\",\"reason\":\"ambiguous\",\"question\":" ++ attributed ++ "}";
@@ -116,7 +107,7 @@ test "independent wire cases cover every selected specification result and neste
     // Structural conformance is not a claim that these independently shaped
     // records satisfy the graph, source-join or semantic validators.
     try checkCandidate("generation", "brief", "{\"kind\":\"brief\",\"title\":" ++ response_wire.attributed ++ ",\"description\":" ++ response_wire.attributed ++ ",\"primary_goal\":" ++ response_wire.attributed ++ "}");
-    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.exact ++ "}");
+    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[" ++ response_wire.id ++ "],\"value\":" ++ response_wire.exact ++ "}");
     try checkCandidate("generation", "entities", "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"basis\":" ++ response_wire.attributed ++ "}");
     inline for (.{ "brief", "primary_user_story", "entities" }) |selection| try checkCandidate("generation", selection, response_wire.clarification);
     // Assignment-specific rules require the unit context: schema checks here,
@@ -271,7 +262,7 @@ test "required text and citation presence follows native rules in initial and se
     try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.exact ++ "}");
     try candidateSchemaCase("generation", "value", "{\"value\":[]}", .array_length, "/value");
     try candidateSchemaCase("generation", "value", "{\"value\":[\"\"]}", .string_length, "/value/0");
-    try candidateSchemaCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":[]}", .array_length, "/value");
+    try candidateSchemaCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":[]}", .array_length, "/value");
 
     const review_prefix = "{\"kind\":\"";
     const review_tail = "\",\"source_ids\":[],\"detail\":\"\"}";
@@ -313,7 +304,9 @@ test "provider schema projections retain expressible collection minima" {
 test "business values use one segment shape for prose and exact references" {
     const value = "[\"Display \",{\"kind\":\"exact_copy\",\"claim_id\":7},\" with UTC date/time.\"]";
     try checkCandidate("generation", "value", "{\"value\":" ++ value ++ "}");
-    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ value ++ "}");
+    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":" ++ value ++ "}");
+    try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ value ++ "}", .missing_required_property, "/signal_ids");
+    try candidateCase("generation", "value", "{\"signal_ids\":[7],\"value\":" ++ value ++ "}", .unknown_property, "/signal_ids");
     try candidateCase("generation", "value", "{\"value\":{\"kind\":\"exact_copy\",\"claim_id\":7}}", .type_mismatch, "/value");
     try candidateCase("generation", "value", "{\"value\":[{\"kind\":\"exact_copy\",\"token_id\":7,\"citation_id\":9}]}", .unknown_property, "/value/0/token_id");
 }
@@ -411,7 +404,7 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
     } else if (comptime std.mem.eql(u8, name, "reconciliation")) {
         const definition = selection.?;
         if (comptime std.mem.eql(u8, definition, "summary")) return nativeWire(@import("domain/reference_reconciliation_projection.zig").SemanticSummary, a, bytes);
-        inline for (.{ "dispositions", "signals", "roles", "conflicts" }) |phase| {
+        inline for (.{ "dispositions", "signals", "conflicts" }) |phase| {
             if (comptime std.mem.eql(u8, definition, phase ++ "_assignment")) return selectedWire(@import("domain/reference_reconciliation_stage.zig").Response, a, @field(@import("domain/reference_reconciliation_stage.zig").Stage, phase), bytes);
         }
         if (comptime std.mem.eql(u8, definition, "business_text")) return nativeWire(r.text.BusinessText, a, bytes);
@@ -442,7 +435,7 @@ test "final proposal schemas and native readers reject deterministic echoes and 
     inline for (.{ "member_claim_ids", "member_summary_ids" }) |field| {
         try candidateCase("reconciliation", "summary", "{\"statements\":[],\"" ++ field ++ "\":[]}", .unknown_property, "/" ++ field);
     }
-    try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.normalized ++ ",\"provenance\":" ++ echoed ++ "}", .unknown_property, "/provenance");
+    try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":" ++ response_wire.normalized ++ ",\"provenance\":" ++ echoed ++ "}", .unknown_property, "/provenance");
     try candidateCase("support", null, "{\"kind\":\"supported\",\"provenance\":" ++ echoed ++ ",\"source_ids\":[],\"detail\":\"\"}", .unknown_property, "/provenance");
     try candidateCase("reconciliation", "signals_assignment", "{\"signals\":[{\"claim_ids\":[7],\"citation_ids\":[],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"An observable result.\"]}}}]}", .unknown_property, "/signals/0/citation_ids");
     try candidateCase("reconciliation", "conflicts_assignment", "{\"conflicts\":[{\"group_id\":7,\"citation_ids\":[],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "}}]}", .unknown_property, "/conflicts/0/citation_ids");

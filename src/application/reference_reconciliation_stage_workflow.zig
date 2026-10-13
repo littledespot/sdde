@@ -12,16 +12,14 @@ fn schema(comptime phase: stage.Stage) @import("../domain/pipeline_data.zig").Sc
     return switch (phase) {
         .dispositions => reconciliation.input_schema,
         .signals => reconciliation.dispositions_schema,
-        .roles => reconciliation.signals_schema,
-        .conflicts => reconciliation.roles_schema,
+        .conflicts => reconciliation.signals_schema,
     };
 }
 fn tag(comptime phase: stage.Stage) std.meta.Tag(owned.Payload) {
     return switch (phase) {
         .dispositions => .reconciliation_input,
         .signals => .reconciliation_dispositions,
-        .roles => .reconciliation_signals,
-        .conflicts => .reconciliation_roles,
+        .conflicts => .reconciliation_signals,
     };
 }
 pub fn Build(comptime phase: stage.Stage) type {
@@ -29,7 +27,6 @@ pub fn Build(comptime phase: stage.Stage) type {
         pub const Action = switch (phase) {
             .dispositions => @import("../actions/reference/build_reference_dispositions_assignment.zig").Action,
             .signals => @import("../actions/reference/build_reference_signals_assignment.zig").Action,
-            .roles => @import("../actions/reference/build_reference_roles_assignment.zig").Action,
             .conflicts => @import("../actions/reference/build_reference_conflicts_assignment.zig").Action,
         };
         allocator: std.mem.Allocator,
@@ -50,7 +47,6 @@ pub fn Collect(comptime phase: stage.Stage) type {
         pub const Action = switch (phase) {
             .dispositions => @import("../actions/reference/collect_reference_dispositions_candidate.zig").Action,
             .signals => @import("../actions/reference/collect_reference_signals_candidate.zig").Action,
-            .roles => @import("../actions/reference/collect_reference_roles_candidate.zig").Action,
             .conflicts => @import("../actions/reference/collect_reference_conflicts_candidate.zig").Action,
         };
         allocator: std.mem.Allocator,
@@ -76,7 +72,7 @@ pub fn Collect(comptime phase: stage.Stage) type {
 pub const Check = struct {
     pub const Action = @import("../actions/reference/check_reference_reconciliation_phase.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .failed };
-    pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "phase", .kind = .enumeration, .required = true, .allowed_values = &.{ "dispositions", "signals", "roles", "complete" }, .workflow_definition_safe = true }};
+    pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "phase", .kind = .enumeration, .required = true, .allowed_values = &.{ "dispositions", "signals", "complete" }, .workflow_definition_safe = true }};
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const prior = try extraction.read(&input.step.data, reconciliation.parsed_schema, .reconciliation_parsed);

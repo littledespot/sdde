@@ -2,7 +2,7 @@
   "business_value": "An ordered array of fragments concatenated into one field value. Construct the value to fulfil its assigned field purpose, preserving source-backed conditions and obligations. Surrounding text supplies any explanation or behavioral meaning the field requires.",
   "exact_copy": "When reproducing a supplied preserved_tokens literal, insert an exact_copy object instead of typing the literal inside a string. Put any surrounding prose in separate string fragments. Include claim_id only when the selected schema requires it.",
   "references": "Reference objects insert supplied display values; they do not explain their use or authorize operations.",
-  "sources": "Bound requirements supply the assigned meaning; context_requirements and original sources retain context. Original sources establish meaning; code samples remain context. Do not invent decisions.",
+  "sources": "Original sources establish meaning, conditions and how exact values are used; code samples remain context. When signal_ids are requested, select only supplied groups that support the field purpose; several may jointly support it. Availability is not support. For record authoring, source_assignment.requirements are this batch's duties. context_requirements and prior drafts help interpret them, not replace them with another group's duties. Context cannot change fixed associations or authorized repair evidence. Do not invent decisions.",
   "clarification": "A missing user decision: state known facts, the choice, its impact and the expected answer. Missing prewritten sections are not user decisions.",
   "inconclusive": "Unresolved interpretation of the supplied evidence."
 }

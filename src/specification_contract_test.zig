@@ -255,6 +255,7 @@ fn parseAllocated(allocator: std.mem.Allocator) !void {
 fn proposal() spec.ContentProposal {
     const value: spec.AttributedValue = .{
         .value = .{ .segments = &.{.{ .literal = .{ .value = "Reference-grounded content" } }} },
+        .source_group_ids = &.{.{ .ordinal = 1 }},
         .provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} },
     };
     return .{ .display_name = value, .primary_user_story = value, .records = &.{}, .entities = .{ .disposition = .not_applicable, .basis = value } };

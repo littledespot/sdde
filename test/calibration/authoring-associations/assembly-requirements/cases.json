@@ -1,0 +1,161 @@
+{
+  "retained_case_ids": [
+    "startup-display",
+    "equipment-joint-support",
+    "renewal-information-gap"
+  ],
+  "controls": [
+    {
+      "id": "warehouse-location",
+      "fixture": {
+        "id": "warehouse-location",
+        "cohort": "development",
+        "sources": [
+          "MOCK A warehouse register must retain each parcel identifier and its storage location.\n"
+        ],
+        "claims": [
+          {
+            "source": 1,
+            "text": "MOCK A warehouse register must retain each parcel identifier and its storage location.",
+            "first": 1,
+            "last": 1
+          }
+        ],
+        "description": "MOCK Controlled seed used only for offline context construction.",
+        "missing": "",
+        "missing_obligation": "",
+        "mode": "candidate",
+        "grouping": "combined",
+        "source_group_ids": [
+          1
+        ],
+        "verdicts": [],
+        "expected": "",
+        "source_path": null,
+        "target": null,
+        "candidate_file": null,
+        "signal_text": null
+      },
+      "source_file": null,
+      "groups": [
+        1
+      ],
+      "seed": {
+        "title": "MOCK Parcel storage",
+        "description": "MOCK The warehouse register retains parcel identifiers and their storage locations.",
+        "primary_goal": "MOCK Locate parcels using retained storage locations.",
+        "story": "MOCK As a warehouse operator, I register parcel identifiers and locations so that parcels can be located.",
+        "entity_disposition": "required",
+        "entity_basis": "MOCK Parcels and their associated storage locations are business data that the register must retain.",
+        "given": "MOCK A parcel and its storage location are supplied.",
+        "when": "MOCK The parcel is registered.",
+        "then": "MOCK Its identifier and storage location are retained.",
+        "functional_requirement": "MOCK The warehouse register must retain each parcel identifier and storage location.",
+        "entity_name": "MOCK Parcel"
+      },
+      "expectation": {
+        "obligations": [
+          "retain each parcel identifier",
+          "retain its associated storage location"
+        ],
+        "support_examples": [
+          1
+        ],
+        "entity_decision": "required",
+        "literal": null,
+        "gap": null,
+        "forbidden": [
+          "invent a shipping workflow",
+          "invent parcel delivery status",
+          "storage location disconnected from parcel"
+        ]
+      },
+      "record_seeds": [
+        {
+          "group_id": 1,
+          "given": "MOCK A parcel and its storage location are supplied.",
+          "when": "MOCK The parcel is registered.",
+          "then": "MOCK Its identifier and storage location are retained.",
+          "functional_requirement": "MOCK The warehouse register must retain each parcel identifier and storage location.",
+          "entity_name": "MOCK Parcel"
+        }
+      ]
+    },
+    {
+      "id": "completion-notification",
+      "fixture": {
+        "id": "completion-notification",
+        "cohort": "development",
+        "sources": [
+          "MOCK When a requested operation completes successfully, the application must show a completion notification.\n"
+        ],
+        "claims": [
+          {
+            "source": 1,
+            "text": "MOCK When a requested operation completes successfully, the application must show a completion notification.",
+            "first": 1,
+            "last": 1
+          }
+        ],
+        "description": "MOCK Controlled seed used only for offline context construction.",
+        "missing": "",
+        "missing_obligation": "",
+        "mode": "candidate",
+        "grouping": "combined",
+        "source_group_ids": [
+          1
+        ],
+        "verdicts": [],
+        "expected": "",
+        "source_path": null,
+        "target": null,
+        "candidate_file": null,
+        "signal_text": null
+      },
+      "source_file": null,
+      "groups": [
+        1
+      ],
+      "seed": {
+        "title": "MOCK Completion notification",
+        "description": "MOCK After a requested operation completes successfully, the application shows a completion notification.",
+        "primary_goal": "MOCK Let users know their requested operation succeeded.",
+        "story": "MOCK As a user, I receive a completion notification when my requested operation succeeds so that I know it completed.",
+        "entity_disposition": "not_applicable",
+        "entity_basis": "MOCK The requirement describes notification behavior without requiring retained business entities or relationships.",
+        "given": "MOCK A user has requested an operation.",
+        "when": "MOCK The requested operation completes successfully.",
+        "then": "MOCK The application shows a completion notification.",
+        "functional_requirement": "MOCK The application must show a completion notification when a requested operation completes successfully.",
+        "entity_name": null
+      },
+      "expectation": {
+        "obligations": [
+          "successful completion is the trigger",
+          "show completion notification"
+        ],
+        "support_examples": [
+          1
+        ],
+        "entity_decision": "not_applicable",
+        "literal": null,
+        "gap": null,
+        "forbidden": [
+          "invent notification persistence",
+          "require entities",
+          "replace successful completion with mere operation request"
+        ]
+      },
+      "record_seeds": [
+        {
+          "group_id": 1,
+          "given": "MOCK A user has requested an operation.",
+          "when": "MOCK The requested operation completes successfully.",
+          "then": "MOCK The application shows a completion notification.",
+          "functional_requirement": "MOCK The application must show a completion notification when a requested operation completes successfully.",
+          "entity_name": null
+        }
+      ]
+    }
+  ]
+}
