@@ -22,8 +22,14 @@ pub const ReferenceNode = union(enum) {
     passive: PassiveReference,
     source: SourceReference,
 };
-pub const BusinessText = struct { segments: []const BusinessSegment };
-pub const ReferenceSemanticText = struct { nodes: []const ReferenceNode };
+pub const BusinessText = struct {
+    pub const model_text = "segments";
+    segments: []const BusinessSegment,
+};
+pub const ReferenceSemanticText = struct {
+    pub const model_text = "nodes";
+    nodes: []const ReferenceNode,
+};
 pub const ValidatedBusinessText = struct { value: BusinessText };
 pub const ValidatedReferenceSemanticText = struct { value: ReferenceSemanticText };
 pub fn equivalentBusiness(left: ValidatedBusinessText, right: ValidatedBusinessText) bool {

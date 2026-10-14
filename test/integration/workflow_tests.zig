@@ -1313,7 +1313,10 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         if (scenario <= 1 or scenario == 3) try project.dir.writeFile(io, .{ .sub_path = ".sdd/principles/core.md", .data = if (scenario == 1) "Delete loan receipts after thirty days.\n" else "Display time in UTC.\n" });
         if (scenario == 1 or (scenario >= 8 and scenario != 12)) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A librarian renews a loan.\n" ** 70 ++ "Display `Loan renewed!`.\n" });
         if (preservation_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == preservation_start + 2) "# Loan renewal\nRenew eligible loans and retain the deadline when renewal is refused.\n" else "# Startup display\nStart successfully and display the current UTC date and time.\n" });
-        if (membership_scenario and (scenario - membership_start) % 4 >= 2) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = "A borrower renews a loan and sees its return deadline. Display `Loan renewed!`.\n" });
+        if (membership_scenario) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if ((scenario - membership_start) % 4 >= 2)
+            "MOCK Track library loans and display their return deadlines.\n"
+        else
+            "MOCK Track customer invoices and display the outstanding balance.\n" });
         if (extraction_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == extraction_omission_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
         if (candidate_omission) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == omission_scenario) "A visitor sees the current UTC date and time on startup. Display `Hello, World!`.\n" else if (scenario == omission_scenario + 1) "A librarian renews a loan and sees the new return deadline. Display `Loan renewed!`.\n" else "A traveller confirms a booking and sees its arrival date. Display `Booking confirmed!`.\n" });
         if (source_gaps) try project.dir.writeFile(io, .{ .sub_path = "source-material/first/stories.md", .data = if (scenario == source_gap_start) "On startup display `Hello, World!` and the current UTC date and time.\n" else "After renewal display `Loan renewed!` and the new return deadline.\n" });
@@ -1555,6 +1558,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         }
         cost.enter(.execution);
         if (membership_scenario) {
+            // This positive/retry matrix has one business group: the admitted
+            // entity basis and writable batch own the same source occurrence.
+            // A separate literal group cannot borrow that insertion permission.
             driver.contradict_entities = true;
             if (scenario < membership_start + 2) driver.measurement_prefix = if (scenario == membership_start) ".zig-cache/membership-extra" else ".zig-cache/membership-missing";
             driver.failed_repair = scenario >= membership_start + 4;
@@ -1619,6 +1625,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         }
         if (membership_scenario) {
             const view: @import("../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+            const current = try @import("../../src/application/specification_workflow.zig").readSession(&view);
+            try std.testing.expectEqual(@as(usize, 1), current.record_group_count);
+            try std.testing.expectEqual(@as(usize, 1), current.units[2].?.response.content.entities.basis.source_group_ids.len);
             if (driver.failed_repair and !driver.entities_required) {
                 // The fixed not_applicable decision excludes entity records
                 // before native membership repair. A persistent contrary

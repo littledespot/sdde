@@ -20,15 +20,15 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 return .{ .requirement_ordinal = self.ordinal };
             }
         };
-        const Selection = if (purpose == .principles) struct { citations: []const @import("principle_registry.zig").Citation } else struct { provenance: @import("specification.zig").Selection, source_ids: []const @import("reference_identity.zig").SourceId };
+        const Selection = if (purpose == .principles) struct { citations: []const @import("principle_registry.zig").Citation } else struct { provenance: @import("specification.zig").Selection, source_ids: []const @import("reference_identity.zig").SourceId, authority_gap_source_ids: ?[]const @import("reference_identity.zig").SourceId = null };
         const Detail = if (purpose == .source) source_model.Detail else struct { detail: []const u8 };
         pub const Replacement = union(enum) { finding: review.Value, selection: Selection, detail: Detail };
         const Facts = struct { inputs: authority.Inputs, sources: evidence.Inputs, candidate: review.Candidate };
         const Rule = struct {
             rejection: review.Diagnostic,
             finding: ?review.Value,
-            pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, citation: ?@import("principle_assessment.zig").CitationRejection, detail_rule: ?@import("specification_support_evidence.zig").DetailRule.Guidance, finding: ?review.Value = null, decision: ?review.Decision = null, question_rule: ?[]const u8, obligation_rule: ?[]const u8, missing_obligation: ?[]const u8 } {
-                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .citation = if (purpose == .principles and self.rejection.evidence != null) self.rejection.evidence.?.citation else null, .detail_rule = if (self.rejection.issue.isText() and self.finding != null) @import("specification_support_evidence.zig").detailRule(review.decisionOf(self.finding.?).finding()).guidance() else null, .finding = if (self.rejection.issue.isText()) null else self.finding, .decision = if (self.rejection.issue.isText() and self.finding != null) review.decisionOf(self.finding.?) else null, .question_rule = if (purpose == .source and self.rejection.issue.isText() and self.finding != null) admission.questionGuidance(review.decisionOf(self.finding.?).finding()) else null, .obligation_rule = if (purpose == .source and self.rejection.issue.isText()) admission.obligation_instruction else null, .missing_obligation = if (purpose == .source and self.finding != null) self.finding.?.missing_obligation else null };
+            pub fn guidance(self: @This()) struct { issue: review.Issue, evidence_issue: ?admission.Issue, evidence_rule: ?admission.Rule.Guidance, citation: ?@import("principle_assessment.zig").CitationRejection, detail_rule: ?@import("specification_support_evidence.zig").DetailRule.Guidance, finding: ?review.Value = null, decision: ?review.Decision = null, question_rule: ?[]const u8, obligation_rule: ?[]const u8, missing_obligation: ?[]const u8, authority_gap_rule: ?[]const u8, authority_gap: ?authority.AuthorityGap } {
+                return .{ .issue = self.rejection.issue, .evidence_issue = if (self.rejection.evidence) |value| value.issue else null, .evidence_rule = if (self.rejection.evidence) |value| value.rule.guidance() else null, .citation = if (purpose == .principles and self.rejection.evidence != null) self.rejection.evidence.?.citation else null, .detail_rule = if (self.rejection.issue.isText() and self.finding != null) @import("specification_support_evidence.zig").detailRule(review.decisionOf(self.finding.?).finding()).guidance() else null, .finding = if (self.rejection.issue.isText()) null else self.finding, .decision = if (self.rejection.issue.isText() and self.finding != null) review.decisionOf(self.finding.?) else null, .question_rule = if (purpose == .source and self.rejection.issue.isText() and self.finding != null) admission.questionGuidance(review.decisionOf(self.finding.?).finding()) else null, .obligation_rule = if (purpose == .source and self.rejection.issue.isText()) admission.obligation_instruction else null, .missing_obligation = if (purpose == .source and self.finding != null) self.finding.?.missing_obligation else null, .authority_gap_rule = if (purpose == .source and self.finding != null and review.decisionOf(self.finding.?) == .candidate_invalid) admission.authority_gap_instruction else null, .authority_gap = if (purpose == .source and self.finding != null) self.finding.?.authority_gap else null };
             }
         };
         const atomic = shared.Contract(Target, Replacement, Facts, Rule);
@@ -131,8 +131,8 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             defer packets.release(base);
             const definition = switch (kind) {
                 .finding => base.resultDefinition().?.bytes,
-                .detail => if (purpose == .source and review.decisionOf(authorization.rule.finding.?) == .candidate_omission) "omission_detail" else if (purpose == .source and @import("specification_support_evidence.zig").questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
-                .selection => if (purpose == .principles) "principle_selection" else "selection",
+                .detail => if (purpose == .source and review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) "invalid_detail" else if (purpose == .source and review.decisionOf(authorization.rule.finding.?) == .candidate_omission) "omission_detail" else if (purpose == .source and @import("specification_support_evidence.zig").questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
+                .selection => if (purpose == .principles) "principle_selection" else if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) "invalid_selection" else "selection",
             };
             const prepared_input = try atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index]);
             if (purpose != .source or kind != .selection) return prepared_input;
@@ -141,7 +141,9 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             const ids = try a.alloc(i64, rule.eligible_source_ids.len);
             defer a.free(ids);
             for (ids, rule.eligible_source_ids) |*id, source| id.* = source.ordinal;
-            return packets.withIntegerChoices(a, prepared_input, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = definition }, .allowed = ids }});
+            const choices: @import("model_result_schema.zig").IntegerChoice = .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = definition }, .allowed = ids };
+            if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) return packets.withIntegerChoices(a, prepared_input, &.{ choices, .{ .target = .{ .path = &.{.{ .property = "authority_gap_source_ids" }} }, .definition = .{ .bytes = definition }, .allowed = ids } });
+            return packets.withIntegerChoices(a, prepared_input, &.{choices});
         }
         pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
             if (purpose == .principles) return atomic.parse(a, authorization, input, bytes);
@@ -153,10 +155,20 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 },
                 .selection => blk: {
                     const retained = authorization.rule.finding orelse return error.InvalidAtomicRepair;
+                    if (retained.kind == .candidate_invalid) {
+                        const selected = try @import("model_candidate_json.zig").decode(source_model.InvalidSelection, a, bytes);
+                        if ((retained.authority_gap == null) != (selected.authority_gap_source_ids == null)) return error.UnsafeSupportRepair;
+                        break :blk .{ .selection = .{ .provenance = retained.provenance, .source_ids = selected.source_ids, .authority_gap_source_ids = selected.authority_gap_source_ids } };
+                    }
                     const selected = try source_model.decodeSelection(a, bytes, retained.provenance.claim_ids);
                     break :blk .{ .selection = .{ .provenance = selected.provenance, .source_ids = selected.source_ids } };
                 },
-                .detail => .{ .detail = try source_model.decodeDetail(a, bytes, review.decisionOf(authorization.rule.finding orelse return error.InvalidAtomicRepair)) },
+                .detail => blk: {
+                    const retained = authorization.rule.finding orelse return error.InvalidAtomicRepair;
+                    const selected = try source_model.decodeDetail(a, bytes, review.decisionOf(retained));
+                    try checkDetail(retained, selected);
+                    break :blk .{ .detail = selected };
+                },
             };
         }
         pub fn merge(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, candidate: review.Candidate, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!review.Collection {
@@ -173,16 +185,20 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 var next = finding;
                 if (authorization.operation == .replace and index == target.index) switch (try atomic.copyReplacement(a, replacement.?)) {
                     .detail => |value| {
+                        try checkDetail(next.value, value);
                         next.value.detail = value.detail;
                         if (purpose == .source) {
                             next.value.missing_obligation = value.missing_obligation;
                             next.value.question = value.question;
+                            next.value.authority_gap = value.authority_gap;
                         }
                     },
                     .selection => |value| {
                         if (purpose == .principles) next.value.citations = value.citations else {
+                            if ((next.value.authority_gap == null) != (value.authority_gap_source_ids == null)) return error.UnsafeSupportRepair;
                             next.value.provenance = value.provenance;
                             next.value.source_ids = value.source_ids;
+                            if (next.value.authority_gap != null) next.value.authority_gap.?.source_ids = value.authority_gap_source_ids orelse return error.UnsafeSupportRepair;
                         }
                     },
                     .finding => return error.InvalidAtomicRepair,
@@ -214,12 +230,25 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             };
         }
 
+        fn checkDetail(retained: review.Value, selected: Detail) Error!void {
+            if (purpose != .source) return;
+            if (retained.kind != .candidate_invalid) {
+                if (selected.authority_gap != null) return error.UnsafeSupportRepair;
+                return;
+            }
+            if (selected.missing_obligation != null or selected.question != null or (retained.authority_gap == null) != (selected.authority_gap == null)) return error.UnsafeSupportRepair;
+            if (retained.authority_gap) |gap| {
+                if (selected.authority_gap.?.kind != gap.kind) return error.UnsafeSupportRepair;
+                @import("reference_reconciliation.zig").sameSet(@import("reference_identity.zig").SourceId, gap.source_ids, selected.authority_gap.?.source_ids) catch return error.UnsafeSupportRepair;
+            }
+        }
+
         fn detail(value: review.Value) Detail {
-            return if (purpose == .source) .{ .detail = value.detail, .missing_obligation = value.missing_obligation, .question = value.question } else .{ .detail = value.detail };
+            return if (purpose == .source) .{ .detail = value.detail, .missing_obligation = value.missing_obligation, .question = value.question, .authority_gap = value.authority_gap } else .{ .detail = value.detail };
         }
 
         fn selection(value: review.Value) Selection {
-            return if (purpose == .principles) .{ .citations = value.citations } else .{ .provenance = value.provenance, .source_ids = value.source_ids };
+            return if (purpose == .principles) .{ .citations = value.citations } else .{ .provenance = value.provenance, .source_ids = value.source_ids, .authority_gap_source_ids = if (value.authority_gap) |gap| gap.source_ids else null };
         }
     };
 }

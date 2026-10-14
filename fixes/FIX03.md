@@ -5,8 +5,9 @@
 **Initial review source revision:** `607f853555beb19a2fb7509dc15ac07737d53a56`.
 
 **Status:** Phases 0, 1 and 3 are complete at their offline exits: preparation,
-mechanical safety, observability and connected recovery checks. Phase 2 is partially
-complete; its finding-taxonomy decision remains pending. Phase 4's bounded AC
+mechanical safety, observability and connected recovery checks. The 14 October
+implementation request approves Phase 2's source-only invalid-content finding;
+its coordinated implementation and verification record appears below. Phase 4's bounded AC
 transport/lifecycle implementation and offline verification are complete; its
 semantic exit remains pending the Phase 11 live comparison. Phase 6's execution-local
 source-review retention is implemented; its verification record and live qualification
@@ -1889,6 +1890,79 @@ verified, retain this phase's **partial** status. The requirement to obtain a
 specific decision comes from Phase 2's second bullet and Phase 0's explicit pending
 disposition; [AGENTS.md](../AGENTS.md#project-authority) prohibits choosing an
 unapproved architecture amendment by local interpretation.
+
+#### Shared reliability follow-up — approved 14 October 2026
+
+The user explicitly requested implementation of the architectural recommendations
+following the withdrawal of the five wording/context remediations. This authorizes
+the concrete source-only finding proposal above, a shared simpler typed-text wire
+contract and native assembly/repair ownership corrections. The overall design
+remains Proposed. The preceding pending-decision statements are historical; the
+new finding is now approved through this request. No live dispatch is authorized
+by the implementation request.
+
+The bounded implementation uses existing owners:
+
+| Concern | Selected change | Authority and limit |
+| --- | --- | --- |
+| Meaningful diagnosis | Source `candidate_invalid` retains original sources and defect explanation, plus an explicit nullable source authority gap. | Shared codec, admission, required-authority reconciliation, correction and readback retain both parts. Pure additions cannot manufacture omissions or user questions. No new semantic repair permission. |
+| Model text | Ordinary prose is a string; explicit composition is a closed `{fragments:[...]}` object. | One declared conversion covers extracted business/semantic text, summary/signal text and specification content/repair. Native canonical arrays, exact occurrence identities and rendering remain unchanged. Superseded bare model arrays reject. |
+| Closed schema support | A nested string/object alternative with one object is distinguished by JSON type; multiple object branches require distinct tags. | Reuse the existing ADR 0006 disjoint-type profile in compilation, payload admission, projection and composition. No open objects, root scalar responses or guessed variants. |
+| Assembly facts | Current required, present and unmet structural families are native projections over admitted batch witnesses. | No earlier draft text enters the model request. Empty batches remain legitimate; presence is not semantic coverage. |
+| Aggregate repair ownership | Missing-entity insertion retains the admitted basis groups and current writable group in its diagnostic. | Only a single established basis group equal to the current writable group permits existing insertion. Earlier, multiple or unavailable owners block explicitly. No last-group assumption, cross-batch retarget, new association or renewed retry. |
+| Persistence | Enclosing completed/pending state advances to `specification-state/v14`. | Canonical specification content remains v3; old state/finding shapes reject without compatibility readers. |
+
+Production, protocol correction and authorized repair use the same contracts.
+Native tests prove construction, shape, currentness, operation permissions,
+lifetimes and byte-preserving conversion. They do not prove semantic judgment.
+
+**Authoring-boundary investigations remain experiments.** Compare one complete
+record collection with the current per-group pass first; a later alternative may
+use coherent semantic units with joint source support. A source catalogue is
+availability, not a semantic partition. Native code cannot infer coherent business
+units from category labels or words. Neither alternative is promoted by this
+implementation or by the earlier failed panels. Do not create six replacement
+classifiers or a second obligation ledger.
+
+Current authoring preparations use a fresh contract-specific directory,
+`.zig-cache/authoring-associations/v14-text/`; current loss/handoff preparation uses
+`.zig-cache/source-loss-citation-completeness-current-contract/`. Existing fixture
+owners construct all current packets and provider requests. Historical captures, pins and scores
+remain immutable and are not read as current receipts. Any renewed family control
+removes entity from both required and unmet family guidance; present candidate
+families are held constant. Renewed ownership controls differ only in source-purpose
+wording, using the current text guidance elsewhere. These new preparations cannot
+be described as repeated historical trials or grant new live-call approval.
+
+**Qualification:** measure native admission and authored meaning independently.
+Actual authoring must feed actual review, admitted diagnosis must feed authorized
+repair, and the result must pass canonical rendering, publication and rubric
+assessment. Track source conditions, obligation strength, unsupported additions,
+false allegations, genuine gaps, exact occurrences, completion and actual tokens.
+Fixed oracle obligations and MOCK predecessors remain component diagnostics only.
+Live comparisons require fresh bounded approval; prior withdrawn allowances are
+cancelled. Semantic improvement remains unproven until qualification.
+
+**Implementation status: complete at the offline exit — 14 October 2026.**
+
+- `zig build test-specification-generation --summary all -j2`: 323/323 passed,
+  including pure/mixed invalid findings, actual restricted correction schemas,
+  retained gap sources/questions, persisted readback and denied semantic repair.
+- `zig build test-model-result-schema test-model-candidate-json test-model-payload-schema --summary all -j2`:
+  200/200 passed, including nullable choice projection and unrelated text forms.
+- `zig build verify --summary all -j2`: 1,495/1,495 tests and 137/137 steps passed,
+  including all 97 integration tests, architecture/lint and clean-environment
+  native packaging checks.
+- `zig build install --summary all -j2` and `git diff --check`: passed.
+
+The existing positive membership matrix now explicitly establishes one business
+group shared by the entity basis and writable batch. Its former multi-group source
+expected repair under an unrelated final token group; that was unsafe authority,
+not valid behavior to preserve. Successful repair, retry exhaustion, publication
+and readback assertions remain, alongside the separate token/foreign-owner
+rejection tests. No live calls ran for this follow-up. Complete workflow/rubric
+qualification remains outstanding; the authoring-boundary alternatives above
+remain unselected experiments.
 
 ### Phase 3 — Connect diagnosis, attribution and permitted repair
 

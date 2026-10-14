@@ -72,6 +72,22 @@ not change operational path authorization or the overall Proposed design status.
 - The specification remains authoritative as editable Markdown and is reparsed into
   `SpecificationIR` at the plan boundary.
 
+#### Approved model-facing text amendment — 14 October 2026
+
+Declared business and reference text fields use a string for ordinary prose or
+a closed `{"fragments":[...]}` object for explicit composition around typed
+insertions. Each fragment is an existing prose string or an allowed typed
+reference/exact-copy selection. A collection contains separate complete values;
+it is not an implicit fragment list. Superseded bare text arrays reject.
+
+The shared candidate codec converts these two declared wire shapes into the same
+native segment/node arrays. Encoding a single prose node emits a string; explicit
+composition preserves node order and reference identity. No separator is inserted,
+and matching display text never supplies an occurrence ID. Initial output,
+correction and authorized repair share this conversion. Canonical persistence,
+text validation, provenance, renderer bytes and editable readback retain their
+existing contracts. Other arrays and undeclared fields are unaffected.
+
 ### 7.2 Stage IRs
 
 Execution-local information occurrences use the common envelope contract in

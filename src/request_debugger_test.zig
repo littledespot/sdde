@@ -846,9 +846,9 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
     const canonical = try compiler.compile(a, raw);
     const plan = try compiler.compileComposition(a, config, canonical);
     if (shape == 6) return .{ .schema = try plan.selectSchema(0, &.{}), .response =
-    \\{"kind":"claims","claims":[{"content":{"kind":"business","segments":["The application must start successfully.","When started, the application must display `Hello, World!`.","Should also output date and time in UTC."]},"citations":[{"first":5,"last":7}]},{"content":{"kind":"technical","nodes":["The application displays the string `Hello, World!`.","The application outputs the current date and time in UTC."]},"citations":[{"first":6,"last":7}]}]}
+    \\{"kind":"claims","claims":[{"content":{"kind":"business","segments":{"fragments":["The application must start successfully.","When started, the application must display `Hello, World!`.","Should also output date and time in UTC."]}},"citations":[{"first":5,"last":7}]},{"content":{"kind":"technical","nodes":{"fragments":["The application displays the string `Hello, World!`.","The application outputs the current date and time in UTC."]}},"citations":[{"first":6,"last":7}]}]}
     };
-    const content = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[\"No feature behavior.\"]}}";
+    const content = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"No feature behavior.\"}}";
     const prior = try std.json.parseFromSlice(std.json.Value, a, content, .{});
     if (shape == 2) return .{ .schema = try plan.selectSchema(0, &.{}), .response = content };
     if (shape == 3) return .{ .schema = try plan.selectSchema(1, &.{.{ .part = 0, .value = prior.value }}), .response = "{\"token_classifications\":[]}" };

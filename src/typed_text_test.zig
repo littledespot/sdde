@@ -142,7 +142,7 @@ test "closed extraction text shapes reject legacy strings wrong nodes and extra 
         .{ .kind = "technical", .value = "{\"nodes\":[{\"file\":{\"file_id\":1}}]}" },
         .{ .kind = "business", .value = "{\"segments\":[{\"passive\":{\"passive_literal_id\":1,\"display_value\":\"invented\"}}]}" },
         .{ .kind = "business", .value = "{\"segments\":[{\"literal\":{\"value\":\"ordinary\",\"approved\":true}}]}" },
-        .{ .kind = "technical", .value = "{\"segments\":[]}" },
+        .{ .kind = "technical", .value = "{\"segments\":{\"fragments\":[]}}" },
         .{ .kind = "business", .value = "{\"segments\":[{\"literal\":{\"value\":\"ordinary\"},\"passive\":{\"passive_literal_id\":1}}]}" },
         .{ .kind = "business", .value = "null" },
     }) |case| {
@@ -179,12 +179,12 @@ test "all extraction content kinds and no-claim reasons pass through the shared 
     const scope = context(prepared, inputs, 0).scope;
     for ([_][]const u8{ "business", "scope_guard", "design", "technical", "validation", "implementation_assumption", "open_question" }) |kind| {
         const field = if (std.mem.eql(u8, kind, "business") or std.mem.eql(u8, kind, "scope_guard")) "segments" else "nodes";
-        const bytes = try std.fmt.allocPrint(allocator, "{{\"kind\":\"claims\",\"claims\":[{{\"content\":{{\"kind\":\"{s}\",\"{s}\":[\"A statement\"]}},\"citations\":[]}}],\"token_classifications\":[]}}", .{ kind, field });
+        const bytes = try std.fmt.allocPrint(allocator, "{{\"kind\":\"claims\",\"claims\":[{{\"content\":{{\"kind\":\"{s}\",\"{s}\":\"A statement\"}},\"citations\":[]}}],\"token_classifications\":[]}}", .{ kind, field });
         const parsed = try parser.execute(allocator, .{ .entries = &.{.{ .scope = scope, .result = .{ .response = bytes } }} });
         const checked = (try fixture.validate_text.execute(allocator, prepared.registry, fixture.safety.value(prepared.owner), inputs, parsed)).valid;
         try std.testing.expectEqualStrings(kind, @tagName(checked.entries[0].outcome.claims[0].content));
     }
-    const reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[\"Read source.md\"]},\"token_classifications\":[]}";
+    const reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"Read source.md\"},\"token_classifications\":[]}";
     const parsed = try parser.execute(allocator, .{ .entries = &.{.{ .scope = scope, .result = .{ .response = reason } }} });
     try std.testing.expect((try fixture.validate_text.execute(allocator, prepared.registry, fixture.safety.value(prepared.owner), inputs, parsed)) == .valid);
 }

@@ -12,7 +12,7 @@
     "open_question": "A question left unresolved by the source.",
     "scope_guard": "An explicit inclusion, exclusion or scope boundary."
   },
-  "segments": "Ordered fragments concatenated into one claim, not separate claims. Prefer one complete string unless a permitted reference is needed. References insert supplied display values; strings express meaning.",
-  "nodes": "Ordered fragments concatenated into one reference text. Prefer one complete string unless a permitted reference is needed. References insert supplied display values; strings express meaning.",
+  "segments": "Write the complete claim as a string. If a permitted reference is needed, use {\"fragments\":[text or typed references]}; strings include their own separators. References insert supplied display values; surrounding text expresses meaning.",
+  "nodes": "Write the complete reference text as a string, or use {\"fragments\":[text or permitted references]} for explicit composition. Fragments concatenate exactly; strings include their own separators.",
   "citations": "Source evidence for the complete claim, including its conditions. Each first/last pair selects an inclusive range of source_lines IDs from the current input."
 }

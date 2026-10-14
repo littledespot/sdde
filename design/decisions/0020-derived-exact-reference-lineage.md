@@ -205,6 +205,14 @@ to `specification/v3` and both completed and clarification-pending state to
 `specification-state/v13`. Previous shapes/versions reject without migration;
 canonical reference snapshots no longer persist presentation roles.
 
+The approved 14 October shared diagnosis amendment advances the enclosing state
+to `specification-state/v14`, retaining invalid-content evidence and its nullable
+source authority gap under §12. Canonical content and occurrence lineage remain
+`specification/v3`; the model text wire changes neither segment identity nor
+persisted text meaning. Bare model arrays are replaced by plain prose or explicit
+named composition under §7.1. Fixed repair cannot derive support from dispatch
+order or expand an association to remedy an aggregate gap.
+
 This decision records the runtime contract, not a claim that live quality
 evaluation has passed. The baseline and test checkpoints remain
 in [LLM_REWORK](../../fixes/archive/LLM_REWORK.md).

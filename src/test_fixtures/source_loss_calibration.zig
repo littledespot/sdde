@@ -14,7 +14,9 @@ const codec = @import("../domain/model_candidate_json.zig");
 const packets = @import("../domain/model_input_packet.zig");
 const cases_root = "test/calibration/source-loss-attribution/bound-preservation/obligation";
 const root = "test/calibration/source-loss-attribution/bound-preservation/citation-completeness";
-const output = ".zig-cache/source-loss-citation-completeness";
+// Current contract preparation is separate from the retained historical panel.
+// Old receipts are neither overwritten nor read through the new text contract.
+const output = ".zig-cache/source-loss-citation-completeness-current-contract";
 const Arm = enum { baseline, candidate };
 pub const Case = struct {
     id: []const u8,

@@ -44,12 +44,12 @@ pub fn sourceChoices(allocator: std.mem.Allocator, sources: r.evidence.Inputs) s
 }
 
 /// The same facts constrain admission and describe evidence selection to a model.
-pub const selection_instruction: []const u8 = "For an omission, select the sources supporting the missing meaning. The bound subject fixes claim evidence; source-only omissions have no claim selection. Eligibility alone is not support.";
+pub const selection_instruction: []const u8 = "Select original sources supporting the omission or invalid-content finding. Native code fixes claim evidence for the assigned subject. A retained authority_gap selects its own source evidence under the existing negative rule. Eligibility alone is not support.";
 pub const Minimum = enum { optional, claim_required, claim_or_source_required, source_required };
 pub fn minimum(finding: a.Finding) Minimum {
     return switch (finding) {
         .supported => .claim_required,
-        .candidate_omission => .source_required,
+        .candidate_omission, .candidate_invalid => .source_required,
         .ambiguous, .conflicting, .unsupported, .inconclusive => .optional,
     };
 }
@@ -113,12 +113,12 @@ pub fn requirements(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.e
         .source_preservation = id.unit == .source,
     };
 }
-pub const Issue = enum { invalid_finding, invalid_obligation, invalid_loss, stale_authority, invalid_sources, ineligible_claim, invalid_selection, missing_claims, missing_evidence, wrong_claim_set, wrong_candidate_provenance };
+pub const Issue = enum { invalid_finding, invalid_obligation, invalid_loss, invalid_gap_detail, invalid_gap_question, stale_authority, invalid_sources, ineligible_claim, invalid_selection, missing_claims, missing_evidence, wrong_claim_set, wrong_candidate_provenance };
 pub const Rejection = struct { issue: Issue, rule: Rule };
 pub const Admission = union(enum) { accepted: a.ReviewEvidence, rejected: Rejection };
 
 /// Evidence checks are independent of detail/applicability checks in collection.
-pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, id: a.Id, finding: a.Finding, proposed: spec.Selection, source_ids: []const SourceId, detail: []const u8, missing_obligation: ?[]const u8, loss: @import("source_omission.zig").Location, comparison: ?@import("source_omission.zig").comparisons.Evidence) Error!Admission {
+pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, id: a.Id, finding: a.Finding, proposed: spec.Selection, source_ids: []const SourceId, detail: []const u8, missing_obligation: ?[]const u8, loss: @import("source_omission.zig").Location, comparison: ?@import("source_omission.zig").comparisons.Evidence, authority_gap: ?a.AuthorityGap) Error!Admission {
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
     const required = try requirements(allocator, inputs, sources, id);
     const rule = required.rule(finding, loss);
@@ -129,6 +129,13 @@ pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence
         if (!std.meta.eql(try snapshot(r.evidence.Inputs, allocator, original), try snapshot(r.evidence.Inputs, allocator, sources))) return reject(.stale_authority, rule);
     }
     if (!validObligation(finding, missing_obligation)) return reject(.invalid_obligation, rule);
+    if (authority_gap) |gap| {
+        if (finding != .candidate_invalid or id.unit == .source) return reject(.invalid_finding, rule);
+        if (!validDetail(gap.kind.finding(), gap.detail)) return reject(.invalid_gap_detail, rule);
+        if (questionIssue(gap.kind.finding(), gap.question) != null) return reject(.invalid_gap_question, rule);
+        r.unique(SourceId, gap.source_ids) catch return reject(.invalid_sources, rule);
+        for (gap.source_ids) |selected| if (!r.contains(SourceId, rule.eligible_source_ids, selected)) return reject(.invalid_sources, rule);
+    }
     if (!records.items.state_id.eql(sources.corpus.state_id) or !a.contains(a.Authority, inputs.authorities, .{ .reference = records.items.state_id })) return reject(.stale_authority, rule);
     r.unique(SourceId, source_ids) catch return reject(.invalid_sources, rule);
     for (source_ids) |selected| if (!r.contains(SourceId, rule.eligible_source_ids, selected)) return reject(.invalid_sources, rule);
@@ -148,7 +155,7 @@ pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence
     }
     if (rule.claims == .exact) r.sameSet(r.ClaimId, rule.claims.exact, proposed.claim_ids) catch return reject(.wrong_claim_set, rule);
     if (rule.provenance) |expected| sameProvenance(expected, provenance) catch return reject(.wrong_candidate_provenance, rule);
-    const review: a.ReviewEvidence = .{ .loss = loss, .preservation = comparison, .detail = detail, .missing_obligation = missing_obligation, .provenance = provenance, .source_ids = source_ids };
+    const review: a.ReviewEvidence = .{ .loss = loss, .preservation = comparison, .detail = detail, .missing_obligation = missing_obligation, .authority_gap = authority_gap, .provenance = provenance, .source_ids = source_ids };
     @import("source_omission.zig").validate(allocator, inputs, sources, id, finding, review, loss) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else reject(.invalid_loss, rule);
     return .{ .accepted = review };
 }
@@ -196,6 +203,7 @@ pub fn validDetail(finding: a.Finding, detail: []const u8) bool {
     return detailRule(finding).accepts(detail);
 }
 pub const obligation_instruction = "For candidate_omission, state only the omitted source obligation in missing_obligation. Preserve its conditions, negation, obligation strength and exact values. Keep the defect explanation in detail. Other findings omit missing_obligation.";
+pub const authority_gap_instruction = "Retain candidate_invalid and the presence or absence of authority_gap. A retained gap keeps its kind and original source evidence; correct only the authorized explanation, question or source selection. Never invent a missing obligation or turn a candidate defect into a user gap.";
 
 /// Mechanical shape validation only; faithfulness to sources remains model-assisted.
 pub fn validObligation(finding: a.Finding, missing_obligation: ?[]const u8) bool {
@@ -205,11 +213,12 @@ pub fn validObligation(finding: a.Finding, missing_obligation: ?[]const u8) bool
 }
 pub fn questionRequired(finding: a.Finding) bool {
     return switch (finding) {
-        .supported, .candidate_omission, .inconclusive => false,
+        .supported, .candidate_omission, .candidate_invalid, .inconclusive => false,
         .ambiguous, .conflicting, .unsupported => true,
     };
 }
 pub fn questionGuidance(finding: a.Finding) []const u8 {
+    if (finding == .candidate_invalid) return "Omit a top-level question. A retained authority_gap keeps its question about the missing user choice; do not ask for a review verdict.";
     return if (questionRequired(finding)) "In detail, explain how the missing choice affects required behavior. Ask only for that choice, with an answer format that resolves it, including needed details beyond yes/no. The user answers; do not ask for a review verdict." else "Omit question; preserve the finding and meaning.";
 }
 pub const QuestionIssue = enum { missing_question, invalid_question, forbidden_question };
@@ -224,7 +233,7 @@ pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evide
     if (review.principle_citations.len != 0 or review.principle_registry != null) return error.InvalidRequiredAuthority;
     if (!validDetail(evidence.finding, review.detail)) return error.InvalidRequiredAuthority;
     if (questionIssue(evidence.finding, review.question) != null) return error.InvalidRequiredAuthority;
-    const result = try admit(allocator, inputs, sources, evidence.requirement, evidence.finding, .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, review.source_ids, review.detail, review.missing_obligation, review.loss orelse return error.InvalidRequiredAuthority, review.preservation);
+    const result = try admit(allocator, inputs, sources, evidence.requirement, evidence.finding, .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, review.source_ids, review.detail, review.missing_obligation, review.loss orelse return error.InvalidRequiredAuthority, review.preservation, review.authority_gap);
     if (result != .accepted) return error.InvalidRequiredAuthority;
     try sameProvenance(result.accepted.provenance, review.provenance);
     if (evidence.method != .model_assisted) return error.InvalidRequiredAuthority;

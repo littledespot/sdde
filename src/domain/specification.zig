@@ -102,6 +102,7 @@ pub const Provenance = struct {
 };
 pub const BusinessValue = struct {
     pub const model_scalar = "segments";
+    pub const model_text = "segments";
     segments: []const text.BusinessSegment,
 };
 

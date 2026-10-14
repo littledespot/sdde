@@ -578,3 +578,31 @@ first parent and is always rendered in this form:
 - the current §17.3.1 assessment and complete mandatory Plan-policy handoff validate;
 - all required output writes succeeded and current canonical state records completion;
 - workflow state recorded `specified` after the commit.
+
+### Shared authoring and diagnosis amendment — approved 14 October 2026
+
+Model-assisted review distinguishes invalid additions from missing original
+meaning using the source-only finding in §12. A mixed source gap remains visible
+alongside invalid candidate content and cannot authorize clarification publication
+while the candidate defect remains. Native diagnostics bind the assessed subject,
+purpose, original evidence and permitted correction scope; models never select a
+repair producer or turn candidate assertions into source requirements.
+
+Authoring and content repair use the shared typed-text wire representation in
+§7.1. Prose does not require manual segmentation. Explicit composition retains
+exact and passive occurrence handles; native code converts and renders it without
+adding separators or inferring an occurrence from equal text.
+
+Native record assembly presents required, present and unmet structural families
+from its existing policy and admitted state, without copying previous drafts into
+the request. These facts apply to the assembled specification; an individual
+group may return an empty batch. Presence does not establish semantic coverage.
+An aggregate defect does not acquire an owner from the last dispatched group.
+Repair must retain its evidence and current authorized unit; unsupported ownership
+produces an explicit diagnostic rather than an invented association.
+
+Whole-collection authoring and coherent units supported by several groups remain
+alternatives to compare. This amendment does not add a semantic classifier to the
+generic engine or select an unqualified replacement for the existing record pass.
+Qualification must measure actual authoring, reviewer handoff, repair and rendered
+meaning separately from mechanical admission, through the complete production path.

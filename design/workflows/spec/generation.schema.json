@@ -13,12 +13,30 @@
       "additionalProperties": false
     },
     "business_value": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/business_segment"
-      },
-      "minItems": 1,
-      "maxItems": 4294967295
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4294967295
+        },
+        {
+          "type": "object",
+          "properties": {
+            "fragments": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/business_segment"
+              },
+              "minItems": 1,
+              "maxItems": 4294967295
+            }
+          },
+          "required": [
+            "fragments"
+          ],
+          "additionalProperties": false
+        }
+      ]
     },
     "business_segment": {
       "oneOf": [

@@ -8454,7 +8454,7 @@ test "protocol correction retains summary and signal guidance selection bounds c
         const semantic = for (current.items) |item| {
             if (item.claim.content == .model) break item.claim.id;
         } else return error.MissingSemanticClaim;
-        const response = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d},{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"business\",\"segments\":[\"MOCK renewal outcome\"]}}}}}}]}}", .{ collection, semantic.ordinal, semantic.ordinal });
+        const response = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d},{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"business\",\"segments\":\"MOCK renewal outcome\"}}}}}}]}}", .{ collection, semantic.ordinal, semantic.ordinal });
         fake.invocation_plan.complete.content = response;
         try prepareProtocolAttempt(&runner, false);
         const initial = try currentRequest(&runner);
@@ -8484,11 +8484,11 @@ test "protocol correction retains summary and signal guidance selection bounds c
         try std.testing.expectEqualDeep(original_parts, correction.prepared().?.content[0..original_parts.len]);
         // The corrected request cannot silently broaden either the eligible IDs or
         // the semantic categories while fixing the original collection rejection.
-        const wrong_kind = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"scope_guard\",\"segments\":[\"MOCK unrelated scope\"]}}}}}}]}}", .{ collection, semantic.ordinal });
+        const wrong_kind = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"scope_guard\",\"segments\":\"MOCK unrelated scope\"}}}}}}]}}", .{ collection, semantic.ordinal });
         const invalid = try std.json.parseFromSlice(std.json.Value, a, wrong_kind, .{ .parse_numbers = false });
         try std.testing.expect(payload_validation.validateValue(@import("domain/model_envelope.zig").value(&invalid.value), correction.prepared().?.response_schema.root()) != null);
         try prepareProtocolAttempt(&runner, true);
-        fake.invocation_plan.complete.content = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"business\",\"segments\":[\"MOCK renewal outcome\"]}}}}}}]}}", .{ collection, semantic.ordinal });
+        fake.invocation_plan.complete.content = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"business\",\"segments\":\"MOCK renewal outcome\"}}}}}}]}}", .{ collection, semantic.ordinal });
         for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode", "validate-payload", "close-request" }) |step|
             try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
         try std.testing.expectEqual(@as(usize, 2), fake.effect_count);

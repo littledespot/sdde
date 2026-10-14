@@ -743,3 +743,26 @@ repair trigger. Repair keeps siblings, exact-byte obligations, dependency freshn
 full validation, retry identities and token accounting with their existing owners.
 Native coverage repair remains limited to its existing whole-display equality proof;
 this amendment does not authorize substring guessing or rewriting meaning.
+
+### Meaning and repair ownership amendment — approved 14 October 2026
+
+A source `candidate_invalid` finding (§12) reports unsupported additions or
+retained-obligation contradictions without claiming missing source meaning.
+Its optional nested authority gap remains bound to its own original evidence.
+Neither the invalid finding nor the nested gap authorizes loss attribution,
+upstream rebuilding or semantic content repair. Existing structural review repair
+may correct only its authorized explanation, evidence or question while preserving
+the invalid verdict and nested gap kind. An unsupported repair retains the defect
+and current evidence instead of manufacturing an omission or user question.
+
+Aggregate membership repair must establish the source occurrence and writable
+unit independently of dispatch order. The final record task is not evidence of
+ownership. If the established semantic association cannot be represented within
+the current authorized group, retain an explicit ownership denial. This amendment
+adds no cross-batch mutation, association change or retry allowance.
+
+The declared text wire conversion in §7.1 governs initial content and fixed
+value/record repair together. Strings denote ordinary prose; a named fragments
+object denotes exact composition. Canonical old-value and dependency comparisons,
+reference admission, identity allocation and rendering remain native. There is no
+legacy array reader, automatic spacing or text-to-occurrence inference.

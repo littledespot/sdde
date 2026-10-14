@@ -388,7 +388,7 @@ test "summary and signal schemas restrict semantic claim choices while retaining
             const selected = try schema.restrict(std.testing.allocator, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
             defer selected.release();
             for ([_]r.ClaimId{ semantic, token, .{ .ordinal = 999 } }, 0..) |claim, index| {
-                const bytes = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"business\",\"segments\":[\"MOCK authored meaning\"]}}}}}}]}}", .{ field, claim.ordinal });
+                const bytes = try std.fmt.allocPrint(a, "{{\"{s}\":[{{\"claim_ids\":[{d}],\"content\":{{\"kind\":\"model\",\"model\":{{\"kind\":\"business\",\"segments\":\"MOCK authored meaning\"}}}}}}]}}", .{ field, claim.ordinal });
                 try check(selected.selected().modelBytes(), .{ .bytes = bytes, .rejection = if (index == 0) null else .enum_mismatch, .path = if (index == 0) null else if (packet == summary_packet) "/statements/0/claim_ids/0" else "/signals/0/claim_ids/0" });
             }
             const selected_json = (try std.json.parseFromSlice(std.json.Value, a, selected.selected().modelBytes(), .{})).value.object;
@@ -661,8 +661,8 @@ test "every reference content kind projects validated text into the shared model
         const model = parsed.value.object.get("model").?.object;
         try std.testing.expectEqualStrings(@tagName(kind), model.get("kind").?.string);
         try std.testing.expect(model.get("value") == null);
-        const nodes = model.get(if (kind == .business or kind == .scope_guard) "segments" else "nodes").?.array.items;
-        try std.testing.expectEqualStrings("A librarian renews a loan.", nodes[0].string);
+        const prose = model.get(if (kind == .business or kind == .scope_guard) "segments" else "nodes").?.string;
+        try std.testing.expectEqualStrings("A librarian renews a loan.", prose);
     }
 }
 test "extraction collection rejects missing duplicate foreign and out of order scope" {

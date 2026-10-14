@@ -121,6 +121,47 @@ test "native unique subsets derive collection cardinality without restricting ov
     for ([_][]const i64{ &.{}, &.{7} }) |ids| try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, required, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = ids, .collection = .unique_subset }}));
 }
 
+test "nullable terminal integer choices preserve absence and narrow only authorized values" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const ids = "{\"oneOf\":[{\"type\":\"null\"},{\"type\":\"array\",\"maxItems\":3,\"items\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}}]}";
+    const original = try compile(a, try fieldSchema(a, ids));
+    const narrowed = try schema.restrict(std.testing.allocator, original, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{ 3, 8 }, .collection = .unique_subset }});
+    defer narrowed.release();
+    for ([_][]const u8{ "{\"value\":null}", "{\"value\":[]}", "{\"value\":[3,8]}" }) |good| try expectSelection(a, narrowed.selected(), good, true);
+    for ([_][]const u8{ "{\"value\":[1]}", "{\"value\":[3,8,3]}", "{\"value\":{\"kind\":\"unknown\"}}", "{\"value\":null,\"extra\":3}" }) |bad| try expectSelection(a, narrowed.selected(), bad, false);
+    try expectSelection(a, original, "{\"value\":[1]}", true);
+    const empty = try schema.restrict(std.testing.allocator, original, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{} }});
+    defer empty.release();
+    try expectSelection(a, empty.selected(), "{\"value\":null}", true);
+    try expectSelection(a, empty.selected(), "{\"value\":[]}", true);
+    try expectSelection(a, empty.selected(), "{\"value\":[3]}", false);
+    const scalar = try compile(a, try fieldSchema(a, "{\"oneOf\":[{\"const\":null},{\"type\":\"integer\",\"minimum\":1,\"maximum\":100}]}"));
+    const selected_scalar = try schema.restrict(std.testing.allocator, scalar, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{8} }});
+    defer selected_scalar.release();
+    try expectSelection(a, selected_scalar.selected(), "{\"value\":null}", true);
+    try expectSelection(a, selected_scalar.selected(), "{\"value\":8}", true);
+    try expectSelection(a, selected_scalar.selected(), "{\"value\":3}", false);
+    // Null is never a substitute for a missing or nonnumeric selector target.
+    for ([_][]const u8{ "{\"type\":\"null\"}", "{\"oneOf\":[{\"type\":\"null\"},{\"type\":\"string\",\"maxLength\":8}]}" }) |wrong| {
+        const closed = try compile(a, try fieldSchema(a, wrong));
+        try std.testing.expectError(error.InvalidModelResultSchema, schema.restrict(std.testing.allocator, closed, &.{}, &.{.{ .target = .{ .path = &.{.{ .property = "value" }} }, .allowed = &.{8} }}));
+    }
+
+    // The source-finding correction has two independent source selections;
+    // its nullable gap selection uses this same generic terminal projection.
+    const support = try compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
+    const invalid_selection = support.select(.{ .bytes = "invalid_selection" }).?;
+    const repaired = try schema.restrict(std.testing.allocator, invalid_selection, &.{}, &.{
+        .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = "invalid_selection" }, .allowed = &.{1} },
+        .{ .target = .{ .path = &.{.{ .property = "authority_gap_source_ids" }} }, .definition = .{ .bytes = "invalid_selection" }, .allowed = &.{2} },
+    });
+    defer repaired.release();
+    for ([_][]const u8{ "{\"source_ids\":[1],\"authority_gap_source_ids\":null}", "{\"source_ids\":[1],\"authority_gap_source_ids\":[]}", "{\"source_ids\":[1],\"authority_gap_source_ids\":[2]}" }) |good| try expectSelection(a, repaired.selected(), good, true);
+    for ([_][]const u8{ "{\"source_ids\":[2],\"authority_gap_source_ids\":[2]}", "{\"source_ids\":[1],\"authority_gap_source_ids\":[1]}", "{\"source_ids\":[],\"authority_gap_source_ids\":null}", "{\"source_ids\":[1],\"authority_gap_source_ids\":[999]}", "{\"source_ids\":[1],\"authority_gap_source_ids\":null,\"kind\":\"supported\"}" }) |bad| try expectSelection(a, repaired.selected(), bad, false);
+}
+
 test "unique collection metadata survives packet projections and tagged selection" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, uniqueCollectionPacket, .{});
 }
@@ -623,10 +664,31 @@ test "nested type-disjoint alternatives accept but overlapping and nonobject res
     const disjoint = "{\"oneOf\":[{\"type\":\"boolean\"},{\"type\":\"null\"}]}";
     _ = try compile(a, try fieldSchema(a, disjoint));
     try std.testing.expectError(error.InvalidModelResultSchema, compile(a, disjoint));
+    const prose_composition =
+        \\{"oneOf":[{"type":"string","minLength":1,"maxLength":80},{"type":"object","properties":{"fragments":{"type":"array","minItems":1,"maxItems":4,"items":{"type":"string","minLength":1,"maxLength":80}}},"required":["fragments"],"additionalProperties":false}]}
+    ;
+    const text_schema = try compile(a, try fieldSchema(a, prose_composition));
+    try std.testing.expectError(error.InvalidModelResultSchema, compile(a, prose_composition));
+    try expectSelection(a, text_schema, "{\"value\":\"MOCK ordinary prose\"}", true);
+    try expectSelection(a, text_schema, "{\"value\":{\"fragments\":[\"MOCK composed \",\"prose.\"]}}", true);
+    for ([_][]const u8{ "{\"value\":[\"MOCK ambiguous array\"]}", "{\"value\":{\"fragments\":[]}}", "{\"value\":{\"fragments\":[\"MOCK text\"],\"extra\":0}}" }) |bad| try expectSelection(a, text_schema, bad, false);
+    const projection = @import("domain/model_schema_projection.zig");
+    const outline = try projection.outline(a, text_schema.root());
+    const shapes = outline.object.get("fields").?.object.get("value").?.object;
+    try std.testing.expect(shapes.get("kind") == null);
+    try std.testing.expectEqualStrings("string", shapes.get("types").?.array.items[0].string);
+    try std.testing.expectEqualStrings("object", shapes.get("types").?.array.items[1].string);
+    const bedrock = (try std.json.parseFromSlice(std.json.Value, a, try projection.render(a, text_schema, .bedrock), .{})).value;
+    const alternatives = bedrock.object.get("properties").?.object.get("value").?.object.get("anyOf").?.array.items;
+    try std.testing.expectEqual(@as(usize, 2), alternatives.len);
+    try std.testing.expectEqualStrings("object", alternatives[1].object.get("type").?.string);
+    try std.testing.expect(alternatives[1].object.get("properties").?.object.get("kind") == null);
+    try std.testing.expectEqual(false, alternatives[1].object.get("additionalProperties").?.bool);
     for ([_][]const u8{
         "{\"oneOf\":[{\"type\":\"string\",\"maxLength\":8},{\"const\":\"overlap\"}]}",
         "{\"oneOf\":[{\"type\":\"integer\",\"minimum\":0,\"maximum\":9},{\"const\":10}]}",
         "{\"oneOf\":[{\"type\":\"boolean\"},{\"oneOf\":[{\"type\":\"string\",\"maxLength\":8},{\"type\":\"null\"}]}]}",
+        "{\"oneOf\":[{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}]}",
     }) |bad| try std.testing.expectError(error.InvalidModelResultSchema, compile(a, try fieldSchema(a, bad)));
 }
 

@@ -411,6 +411,62 @@ test "source-backed omissions stay invalid across registered owners and source g
     }
 }
 
+test "invalid candidate content retains genuine authority gaps without authorizing omission repair or clarification" {
+    const needs = @import("domain/required_authority_clarifications.zig");
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    for ([_]a.Kind{ .feature_intent, .entity_applicability }) |kind| {
+        var inputs = try fixture(allocator, kind);
+        var proof = inputs.evidence[0];
+        proof.finding = .candidate_invalid;
+        proof.resolution = .{ .existing_authority = source };
+        proof.review = .{
+            .detail = "MOCK candidate invents an additional approval requirement.",
+            .provenance = .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} },
+            .source_ids = &.{.{ .ordinal = 1 }},
+        };
+        for ([_]?a.AuthorityGap.GapKind{ null, .unsupported, .ambiguous, .conflicting }) |gap_kind| {
+            proof.review.?.authority_gap = if (gap_kind) |selected| .{
+                .kind = selected,
+                .source_ids = &.{},
+                .detail = "MOCK source leaves the delivery deadline unresolved.",
+                .question = "MOCK which delivery deadline applies? Supply the date and timezone.",
+            } else null;
+            inputs.evidence = &.{proof};
+            const observations = try observe(allocator, inputs);
+            const result = try run(allocator, inputs);
+            try std.testing.expectEqual(.invalid, result.continuation);
+            const entry = result.entries[0];
+            try std.testing.expectEqual(.invalid_content, entry.candidate_defect.?.reason);
+            try std.testing.expect(entry.candidate_defect.?.support == null);
+            if (gap_kind) |selected| {
+                try std.testing.expectEqual(@as(a.GapReason, switch (selected) {
+                    .unsupported => .unsupported,
+                    .ambiguous => .ambiguous,
+                    .conflicting => .conflicting,
+                }), entry.outcome.clarification_required.reason);
+                try std.testing.expectEqualStrings("MOCK which delivery deadline applies? Supply the date and timezone.", inputs.evidence[0].review.?.authority_gap.?.question);
+            } else try std.testing.expectEqual(.resolved_exactly_one, std.meta.activeTag(entry.outcome));
+            try std.testing.expect(!try a.validate(allocator, inputs, observations, result));
+            try std.testing.expect((try a.supportedOmission(allocator, inputs, observations, result, id(kind))) == null);
+            try std.testing.expectError(error.InvalidRequiredAuthority, needs.build(allocator, inputs, observations, result));
+            // Persisting a separately supported omission cannot turn the invalid
+            // assertion into authorized omission recovery.
+            var omission = proof;
+            omission.id.ordinal = 2;
+            omission.finding = .candidate_omission;
+            omission.review.?.authority_gap = null;
+            for ([_]bool{ false, true }) |reverse| {
+                inputs.evidence = if (reverse) &.{ omission, proof } else &.{ proof, omission };
+                const both = try run(allocator, inputs);
+                try std.testing.expectEqual(.invalid_content, both.entries[0].candidate_defect.?.reason);
+                try std.testing.expect((try a.supportedOmission(allocator, inputs, try observe(allocator, inputs), both, id(kind))) == null);
+            }
+        }
+    }
+}
+
 test "authority clarification subjects preserve earliest owner and remain stable across finding order and wording" {
     const conversion = @import("domain/required_authority_clarifications.zig");
     const refresh = @import("domain/clarification_refresh.zig");

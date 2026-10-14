@@ -189,6 +189,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             return packets.withIntegerChoices(allocator, base, &.{
                 .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "requirement_ordinal" } } }, .definition = definition, .allowed = ordinals },
                 .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = sources.items },
+                .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "authority_gap" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = sources.items },
             });
         }
 
@@ -214,7 +215,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             const sources = try @import("model_evidence.zig").sources(scratch, context.inputs);
             const subject = try subjects.project(scratch, inputs, context, target);
             const reconstruction = subject != .candidate_field and subject != .reference_signal;
-            const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(target, subject), .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
+            const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(target, subject), .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
             const encoded = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
             var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
             packets.omitAbsent(&projected_input);
@@ -241,7 +242,9 @@ pub fn Contract(comptime purpose: Purpose) type {
             defer packets.release(packet);
             const ids = try scratch.alloc(i64, evidence_rule.eligible_source_ids.len);
             for (ids, evidence_rule.eligible_source_ids) |*id, source| id.* = source.ordinal;
-            return packets.withIntegerChoices(allocator, packet, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = definition, .allowed = ids }});
+            const selected_sources: @import("model_result_schema.zig").IntegerChoice = .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = definition, .allowed = ids };
+            if (inputs.projection == .source_preservation) return packets.withIntegerChoices(allocator, packet, &.{selected_sources});
+            return packets.withIntegerChoices(allocator, packet, &.{ selected_sources, .{ .target = .{ .path = &.{ .{ .property = "authority_gap" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = ids } });
         }
 
         fn lossFinding(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate) Error!struct { finding: Finding, target: a.Id } {
@@ -549,7 +552,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     const before = diagnostics.items.len;
                     if (purpose == .source) if (decisionOf(finding.value) == .not_applicable and required != .review) try diagnostics.append(allocator, diagnostic(proposed, .invalid_decision, requirement.seed.id, ordinal, position));
                     const semantic = decisionOf(finding.value).finding();
-                    var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail, finding.value.missing_obligation, finding.value.loss, finding.value.preservation);
+                    var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail, finding.value.missing_obligation, finding.value.loss, finding.value.preservation, finding.value.authority_gap);
                     const rejection: ?Diagnostic = if (reviewed == .rejected) rejected: {
                         var invalid = diagnostic(proposed, .invalid_evidence, requirement.seed.id, ordinal, position);
                         if (purpose == .source) if (reviewed.rejected.issue == .invalid_finding) {
@@ -557,6 +560,12 @@ pub fn Contract(comptime purpose: Purpose) type {
                         };
                         if (purpose == .source) if (reviewed.rejected.issue == .invalid_obligation) {
                             invalid.issue = .invalid_obligation;
+                        };
+                        if (purpose == .source) if (reviewed.rejected.issue == .invalid_gap_detail) {
+                            invalid.issue = .invalid_detail;
+                        };
+                        if (purpose == .source) if (reviewed.rejected.issue == .invalid_gap_question) {
+                            invalid.issue = .invalid_question;
                         };
                         if (purpose == .source) if (reviewed.rejected.issue == .invalid_loss) {
                             if (finding.value.preservation) |proof| invalid.origin = proof.origin;
@@ -589,7 +598,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                         .id = .{ .ordinal = ordinal },
                         .requirement = requirement.seed.id,
                         .authorities = requirement.seed.input_authorities,
-                        .resolution = if (purpose == .principles) .{ .existing_authority = principles.policyAuthority(inputs.principle_context.?.registry) } else if (not_applicable) |rule| .{ .not_applicable = rule } else if (inputs.specification != null and semantic != .candidate_omission) .{ .supported_candidate = candidates[index].id } else .{ .existing_authority = .{ .reference = sources.corpus.state_id } },
+                        .resolution = if (purpose == .principles) .{ .existing_authority = principles.policyAuthority(inputs.principle_context.?.registry) } else if (semantic == .candidate_invalid) .{ .existing_authority = .{ .reference = sources.corpus.state_id } } else if (not_applicable) |rule| .{ .not_applicable = rule } else if (inputs.specification != null and semantic != .candidate_omission) .{ .supported_candidate = candidates[index].id } else .{ .existing_authority = .{ .reference = sources.corpus.state_id } },
                         .finding = semantic,
                         .review = reviewed.accepted,
                         .method = .model_assisted,
@@ -626,7 +635,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (evidence.finding != .supported) return error.InvalidRequiredAuthority;
                     break :blk Decision.not_applicable;
                 } else try Decision.fromFinding(evidence.finding);
-                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .kind = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .missing_obligation = review.missing_obligation, .question = review.question, .loss = review.loss orelse return error.InvalidRequiredAuthority, .preservation = review.preservation } };
+                finding.* = .{ .requirement_ordinal = @intCast(index + 1), .value = if (purpose == .principles) .{ .decision = decision, .citations = review.principle_citations, .detail = review.detail } else .{ .kind = decision, .provenance = .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, .source_ids = review.source_ids, .detail = review.detail, .missing_obligation = review.missing_obligation, .question = review.question, .authority_gap = review.authority_gap, .loss = review.loss orelse return error.InvalidRequiredAuthority, .preservation = review.preservation } };
             }
             var empty = inputs;
             empty.evidence = &.{};

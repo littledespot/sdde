@@ -201,8 +201,8 @@ Raw whole-repository listings, principle categories not selected by the configur
 - The approved ADR 0006 compact-wire amendment permits nested alternatives proven
   disjoint by JSON type. Same-type object alternatives retain distinct `kind` tags;
   repeated primitive types and overlapping alternatives reject before invocation.
-- The shared candidate codec maps declared ordinal wrappers to integers, literal
-  segments to strings and normalized business values to segment arrays. Explicit
+- The shared candidate codec maps declared ordinal wrappers to integers, ordinary
+  prose to strings and explicit typed composition to closed `fragments` objects. Explicit
   passive/source references and exact-copy selections remain typed candidates.
   A selected scalar/array repair stays inside a closed `value` object envelope.
   This lossless representation is shared by initial output, evidence and repairs;
@@ -840,7 +840,7 @@ assessment response under [§22.1](22-repair.md). The derived location must agre
 with re-admission against current canonical facts. Non-omission and principle
 findings carry no comparison. The response supplies judgments, original-source
 spans and explanations; its comparison ID binds the entire native collection.
-The current `specification-state/v13` contract in [§24.1](24-workflow-state.md#241-workflow-state)
+The current `specification-state/v14` contract in [§24.1](24-workflow-state.md#241-workflow-state)
 retains these native collections and authored associations, rejecting earlier
 snapshot contracts without supplying missing bindings. ADR 0020 governs exact lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
@@ -966,3 +966,33 @@ phase handoffs rather than composition to establish semantic prerequisites.
 Their current-phase assignment projections follow ADR 0022: complete evidence
 remains available, while semantic authoring receives only eligible claim IDs.
 Protocol corrections retain the same projection and acceptance rules.
+
+### Source invalid-content finding — approved 14 October 2026
+
+The implementation request following the architectural review authorizes one
+source-only `candidate_invalid` finding for invented additions and contradictions
+that retain the original obligation. Its closed response contains `source_ids`,
+`detail` and required nullable `authority_gap`. A non-null gap retains the existing
+`unsupported`, `ambiguous` or `conflicting` kind, its own source IDs, explanation
+and actionable question. Native admission validates both evidence selections
+against the same current subject; neither part supplies authority for the other.
+The top-level finding carries no question, `missing_obligation`, localized loss
+or preservation comparison. A contradiction that removes original meaning still
+uses `candidate_omission`. Per-source preservation permits only a null gap;
+principle review retains its separate finding vocabulary.
+
+The shared authority owner retains an `invalid_content` candidate defect without
+omission-repair support, and evaluates a nested gap through its existing gap
+rules. Candidate failure continues to prevent clarification and completion.
+Structural detail, source-selection and question correction preserves both verdict
+kinds. It cannot erase the defect, invent an omission or reassess the finding.
+This amendment grants no new semantic repair or verdict-reassessment permission.
+The finding, explanation, original evidence and native repair denial together
+describe an actionable failure; structural admission is not semantic proof.
+
+The same request authorizes the declared typed-text wire contract in §7.1:
+ordinary prose is a string, and explicit composition is
+`{"fragments":[text, typed-reference, ...]}`. Native conversion preserves declared
+fragments, whitespace and exact occurrence identity. Initial input/output,
+protocol correction and authorized content repair use that one conversion.
+Canonical arrays remain native data; superseded bare model arrays reject.

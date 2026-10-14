@@ -11,7 +11,14 @@ pub const Target = union(enum) { provenance: Subject, value: struct { subject: S
 pub const StableTarget = struct { value: Target };
 pub const Replacement = union(enum) { provenance: g.spec.Selection, value: g.spec.BusinessValue, attributed: g.spec.Model.AttributedValue, record: g.spec.Model.RecordProposal };
 pub const Rule = enum { provenance, typed_text, exact_copy, duplicate_record, entity_membership, unit_kind, interpretation };
-pub const Blocked = enum { competing_records, unit_kind, clarification_question, inconclusive_review };
+pub const Blocked = enum { competing_records, unit_kind, clarification_question, inconclusive_review, entity_insertion_scope };
+/// The admitted basis identifies possible owners; it cannot widen a batch's
+/// existing write permission or choose one owner from several semantic groups.
+pub const EntityInsertionScope = struct {
+    basis_source_group_ids: []const @import("reference_reconciliation.zig").SignalId,
+    writable_source_group_id: ?@import("reference_reconciliation.zig").SignalId,
+    outcome: enum { current_group, multiple_basis_groups, outside_writable_group, no_writable_group },
+};
 pub const Field = union(enum) { target: Target, unit, clarification_question, interpretation };
 pub const Issue = struct {
     detail: ?[]const u8 = null,
@@ -23,7 +30,7 @@ pub const Issue = struct {
     text_issue: ?@import("typed_text.zig").Issue = null,
     value_choices: ?@import("specification_provenance.zig").ValueChoices = null,
     repair_target: ?Target = null,
-    membership: ?struct { disposition: g.spec.Applicability, entity_count: usize } = null,
+    membership: ?struct { disposition: g.spec.Applicability, entity_count: usize, insertion_scope: ?EntityInsertionScope = null } = null,
     native_error: ?enum { InvalidSpecification, InvalidReferenceReconciliation, InvalidSourceCitation, InvalidTypedText, InvalidPassiveLiteral } = null,
 };
 pub const Rejection = struct { owner: identity.ImmutableUnitOwnerId, revision: u64, origin: ?Origin, issue: Issue, last_repair: ?@import("atomic_repair.zig").Merge = null, dependencies: ?@import("atomic_repair.zig").Snapshot = null };

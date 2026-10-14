@@ -31,8 +31,9 @@ cutover originally used `specification/v2`; the explicit source-obligation hando
 the state to `specification-state/v11`. The native-owned assessed-collection
 amendment advanced it to `specification-state/v12`, removing model-returned member
 subsets while retaining complete native collections. The approved FIX03 Phase 5
-authored-association cutover now uses `specification/v3` and
-`specification-state/v13`, for completed and clarification-pending states alike.
+authored-association cutover introduced `specification/v3` and
+`specification-state/v13`; the source-finding cutover below advances completed and
+clarification-pending state to `specification-state/v14`.
 It removes persisted presentation roles and stores required `source_group_ids`
 inside attributed values and shared-provenance records, without changing general
 `Selection`/`Provenance` or adding a parallel association registry. Readback resolves
@@ -62,7 +63,7 @@ It contains no content hashes or fingerprints. Preset IDs/versions and artifact 
 
 The [Phase 6 review receipts](22-repair.md#224-repair-request-and-response) exist
 only in one execution's native owners. They are not part of
-`specification-state/v13` and are not restored by state readback. Loading ordinary
+`specification-state/v14` and are not restored by state readback. Loading ordinary
 published review evidence cannot manufacture an accepted call origin or a reusable
 receipt. Candidate-local re-admission does not resume an earlier execution;
 every fresh invocation starts at `start` with empty review history.
@@ -177,3 +178,18 @@ required clarifications or missing current approvals remain.
 - A rejected review produces a new definition ID; an older approval cannot authorize it.
 - No rework step introduces an independent transaction, task commit, rollback of accepted code
   or saved continuation.
+
+### Source finding cutover — approved 14 October 2026
+
+The shared source invalid-content amendment (§12) advances completed and
+clarification-pending state to `specification-state/v14`. Canonical review evidence
+retains nullable `authority_gap`, with the same closed gap kind, separate sources,
+detail and question admitted at review. Readback revalidates the defect and any gap
+against the exact current subject and authorities. Invalid candidate evidence
+cannot become completed or clarification authority merely by serialization.
+Previous state versions and superseded finding fields reject without migration,
+aliases or dual readers.
+
+Typed-text wire changes do not change canonical segment arrays or their meanings.
+Model-facing prose/composition conversion is never applied to persisted authority
+to guess a missing fragment, separator or source occurrence.

@@ -313,12 +313,17 @@ or repair instructions, rather than another copy of the definitions.
 These descriptions add no optional-family requirement, semantic rejection or
 cross-kind deduplication rule.
 
-The shared generation context describes fragments by their assigned field purpose:
+The shared text wire accepts ordinary prose as a string and explicit composition
+as `{"fragments":[...]}`. Bare text arrays reject. The same declared conversion
+applies to extraction, reconciliation, generation, correction and authorized
+repair; canonical segment/node arrays and rendering remain native.
+The shared generation context describes text by its assigned field purpose:
 a title names, a basis explains, and behavioral fields express requirements.
 Exact-copy/reference fragments insert display values; any required explanation or
 behavioral meaning comes from the surrounding text. The shared context directs
 authors to insert an exact-copy object instead of retyping a supplied preserved
-literal inside prose, with any surrounding prose in separate string fragments.
+literal inside prose, with any surrounding prose in the composition's string
+fragments. Strings carry their own separators; native concatenation adds none.
 Its selector fields still come from the selected schema. Literal-only values remain
 structurally valid where the selected schema permits them. Schema admission and
 valid provenance do not establish that a field fulfils its semantic purpose.

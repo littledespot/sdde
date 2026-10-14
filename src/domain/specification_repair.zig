@@ -54,6 +54,11 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
         const target: Target = if (missing) .{ .record = records.len } else if (rejection.issue.field == .target and rejection.issue.field.target == .record) rejection.issue.field.target else return error.InvalidSpecificationRepair;
         if (missing) {
             for (records) |record| if (record.content == .entity) return error.InvalidSpecificationRepair;
+            const expected_scope = try session.entityInsertionScope(allocator, current, context);
+            defer allocator.free(expected_scope.basis_source_group_ids);
+            const declared_scope = rejection.issue.membership.?.insertion_scope orelse return error.InvalidSpecificationRepair;
+            if (!std.meta.eql(try shared.snapshot(candidates.EntityInsertionScope, allocator, expected_scope), try shared.snapshot(candidates.EntityInsertionScope, allocator, declared_scope))) return error.InvalidSpecificationRepair;
+            if (expected_scope.outcome != .current_group) return error.UnsafeSpecificationRepair;
         } else if (target.record >= records.len or decision != .not_applicable or records[target.record].content != .entity) return error.InvalidSpecificationRepair;
         const assigned = try session.currentBinding(allocator, current, context);
         if (assigned != .records) return error.InvalidSpecificationRepair;

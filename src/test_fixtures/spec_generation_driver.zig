@@ -742,9 +742,10 @@ fn assertRecordReviewRequest(allocator: std.mem.Allocator, view: *const data.Vie
 
 fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preservation: bool) !void {
     const variants = schema.object.get("oneOf").?.array.items;
-    try std.testing.expectEqual(@as(usize, if (preservation) 3 else if (permits_applicability) 7 else 6), variants.len);
+    try std.testing.expectEqual(@as(usize, if (preservation) 4 else if (permits_applicability) 8 else 7), variants.len);
     var has_inconclusive = false;
     var has_not_applicable = false;
+    var has_candidate_invalid = false;
     for (variants) |variant| {
         const properties = variant.object.get("properties").?.object;
         const tag = properties.get("kind").?.object.get("const").?.string;
@@ -752,8 +753,31 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preser
         const gap = @import("../domain/specification_support_evidence.zig").questionRequired(decision.finding());
         if (preservation) try std.testing.expect(@import("../domain/source_preservation.zig").permits(decision.finding()) and decision != .not_applicable);
         try std.testing.expect(!properties.contains("provenance"));
-        try std.testing.expectEqual(@as(usize, if (gap or decision == .candidate_omission) 4 else 3), properties.count());
+        try std.testing.expectEqual(@as(usize, if (gap or decision == .candidate_omission or decision == .candidate_invalid) 4 else 3), properties.count());
         try std.testing.expectEqual(decision == .candidate_omission, properties.contains("missing_obligation"));
+        try std.testing.expectEqual(decision == .candidate_invalid, properties.contains("authority_gap"));
+        if (decision == .candidate_invalid) {
+            const declared_gap = properties.get("authority_gap").?.object;
+            if (preservation) {
+                try std.testing.expectEqualStrings("null", declared_gap.get("type").?.string);
+                try std.testing.expectEqual(@as(usize, 1), declared_gap.count());
+            } else {
+                const gaps = declared_gap.get("oneOf").?.array.items;
+                try std.testing.expect(gaps.len > 1);
+                var nullable = false;
+                for (gaps) |choice| {
+                    const type_name = choice.object.get("type").?.string;
+                    if (std.mem.eql(u8, type_name, "null")) {
+                        try std.testing.expect(!nullable);
+                        nullable = true;
+                    } else {
+                        try std.testing.expectEqualStrings("object", type_name);
+                        try std.testing.expectEqual(false, choice.object.get("additionalProperties").?.bool);
+                    }
+                }
+                try std.testing.expect(nullable);
+            }
+        }
         try std.testing.expect(!properties.contains("decision"));
         try std.testing.expectEqual(gap, properties.contains("question"));
         try std.testing.expect(!properties.contains("loss"));
@@ -761,8 +785,10 @@ fn assertReviewShape(schema: std.json.Value, permits_applicability: bool, preser
         try std.testing.expectEqual(properties.count(), required.len);
         has_inconclusive = has_inconclusive or decision == .inconclusive;
         has_not_applicable = has_not_applicable or decision == .not_applicable;
+        has_candidate_invalid = has_candidate_invalid or decision == .candidate_invalid;
     }
     try std.testing.expect(has_inconclusive);
+    try std.testing.expect(has_candidate_invalid);
     try std.testing.expectEqual(permits_applicability, has_not_applicable);
 }
 
@@ -819,6 +845,15 @@ fn emptyNested(value: *std.json.Value, root: bool) bool {
                 return true;
             }
             for (object.values()) |*child| if (emptyNested(child, false)) return true;
+            if (root) for (object.values()) |*child| switch (child.*) {
+                .object, .array => {},
+                else => {
+                    // Preserve existing aggregate faults first. A selected
+                    // scalar prose repair has no child aggregate to corrupt.
+                    child.* = .{ .object = .{} };
+                    return true;
+                },
+            };
         },
         .array => |*array| {
             for (array.items) |*child| if (emptyNested(child, false)) return true;

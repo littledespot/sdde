@@ -314,7 +314,7 @@ const Compiler = struct {
         if (!depends(self.parts, part, producer)) return invalid();
         var result: std.ArrayList(Projection) = .empty;
         for (variants, groups) |variant, group| {
-            const kind = schema.findProperty(variant.object, "kind").?.schema.constant.string;
+            const kind = schema.discriminator(variant) orelse return invalid();
             for (group) |projection| {
                 if (result.items.len == schema.max_variants) return invalid();
                 const conditions = try self.combine(projection.conditions, &.{.{ .producer = producer, .path = discriminator, .value = kind }}) orelse continue;

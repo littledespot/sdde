@@ -330,7 +330,7 @@ test "authoring assignments retain field purpose bound meaning and exact choices
                     if (body.get("preserved_tokens").?.array.items.len != 0) {
                         const id = body.get("preserved_tokens").?.array.items[0].object.get("claim_id").?.integer;
                         const segment = if (body.get("preserved_tokens").?.array.items.len == 1) "{\"kind\":\"exact_copy\"}" else try std.fmt.allocPrint(a, "{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}", .{id});
-                        const wire = try std.fmt.allocPrint(a, "{{\"kind\":\"brief\",\"title\":{{\"signal_ids\":[1],\"value\":[{s}]}},\"description\":{{\"signal_ids\":[1],\"value\":[{s}]}},\"primary_goal\":{{\"signal_ids\":[1],\"value\":[{s}]}}}}", .{ segment, segment, segment });
+                        const wire = try std.fmt.allocPrint(a, "{{\"kind\":\"brief\",\"title\":{{\"signal_ids\":[1],\"value\":{{\"fragments\":[{s}]}}}},\"description\":{{\"signal_ids\":[1],\"value\":{{\"fragments\":[{s}]}}}},\"primary_goal\":{{\"signal_ids\":[1],\"value\":{{\"fragments\":[{s}]}}}}}}", .{ segment, segment, segment });
                         // The failed live content is structurally legal, as is a
                         // source-required exact title. Purpose is semantic, not a ban.
                         try @import("model_payload_schema_test.zig").checkDocument(selected.selected().modelBytes(), .{ .bytes = wire });
@@ -386,6 +386,7 @@ test "dependent authoring context resolves exact and passive values and follows 
         var current = try completedFixture(&fixture, false);
         current.completed = sessions.records_index;
         current.record_cursor = 0;
+        current.record_batches = &.{};
         current.units[sessions.records_index] = null;
         current.units[0].?.response.content.brief = .{ .title = accepted, .description = accepted, .primary_goal = accepted };
         var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
@@ -1164,7 +1165,12 @@ test "entity membership repair preserves fixed decisions evidence siblings origi
         current.record_cursor = current.record_group_count - 1;
         current.record_batches = current.record_batches[0..current.record_cursor];
         for ([_]bool{ false, true }) |required| {
-            current.units[2].?.response.content.entities.disposition = if (required) .required else .not_applicable;
+            // A positive insertion belongs to the admitted basis's exact group,
+            // not whichever group happens to be the final authoring batch.
+            current.units[2] = (try g.validate(a, text.validator, fixture.context, .entities, .{ .content = .{ .entities = .{
+                .disposition = if (required) .required else .not_applicable,
+                .basis = .{ .value = value.value, .source_group_ids = entity.source_group_ids, .provenance = token_evidence },
+            } } })).valid;
             const records: []const spec.Model.RecordProposal = if (required) &.{ordinary} else &.{ ordinary, entity };
             const candidate: repair.Candidate = .{ .response = .{ .content = .{ .records = records } }, .origins = .{ .initial = origin } };
             const rejection = (try validate_unit.execute(a, current, fixture.context, candidate)).invalid;
@@ -1228,18 +1234,146 @@ test "entity membership repair preserves fixed decisions evidence siblings origi
                 // batches preserve history without contributing a second count.
                 var not_applicable = completed;
                 not_applicable.units[2].?.response.content.entities.disposition = .not_applicable;
-                const present = (try sessions.checkConsistency(a, not_applicable, completed.units[sessions.records_index].?)).?;
+                const present = (try sessions.checkConsistency(a, not_applicable, fixture.context, completed.units[sessions.records_index].?)).?;
                 try std.testing.expectEqual(@as(usize, 1), present.membership.?.entity_count);
                 var missing = completed.units[sessions.records_index].?;
                 var ordinary_records: std.ArrayList(spec.RecordProposal) = .empty;
                 for (missing.response.content.records) |entry| if (entry.content != .entity) try ordinary_records.append(a, entry);
                 missing.response.content.records = ordinary_records.items;
-                const absent = (try sessions.checkConsistency(a, completed, missing)).?;
+                const absent = (try sessions.checkConsistency(a, completed, fixture.context, missing)).?;
                 try std.testing.expectEqual(@as(usize, 0), absent.membership.?.entity_count);
                 try std.testing.expectEqual(.entity_membership, absent.rule);
+                try std.testing.expectEqual(.entity_insertion_scope, absent.blocked.?);
+                try std.testing.expectEqual(.no_writable_group, absent.membership.?.insertion_scope.?.outcome);
             }
             try std.testing.expectEqualDeep(ordinary, records[0]);
         }
+    }
+}
+
+test "missing entities cannot borrow the last batch or guess among admitted basis groups" {
+    const sessions = @import("domain/specification_session.zig");
+    const repair = @import("domain/specification_repair.zig");
+    const binding = @import("domain/specification_source_binding.zig");
+    const diagnostic = @import("domain/candidate_validation_diagnostic.zig").Diagnostic;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "MOCK Record assigned equipment and inspect it annually.", "MOCK Register borrowers and renew eligible loans." }) |source| {
+        var fixture = try Fixture.initContent(a, source, null, true, source, 2);
+        defer fixture.deinit();
+        var current = try completedFixture(&fixture, false);
+        current.completed = sessions.records_index;
+        current.units[sessions.records_index] = null;
+        current.record_cursor = current.record_group_count - 1;
+        current.record_batches = current.record_batches[0..current.record_cursor];
+        const groups = fixture.context.references.records.signals;
+        const value = try fixture.proposal("MOCK The supplied behavior requires business data.");
+        const candidate: repair.Candidate = .{ .response = .{ .content = .{ .records = &.{} } } };
+        for ([_]bool{ false, true }) |multiple| {
+            const association = try binding.resolveGroups(a, @import("domain/reference_support.zig").records(fixture.context.references), fixture.context.inputs, if (multiple) &.{ groups[0].id, groups[1].id } else &.{groups[0].id}, .content);
+            current.units[2] = (try g.validate(a, text.validator, fixture.context, .entities, .{ .content = .{ .entities = .{
+                .disposition = .required,
+                .basis = .{ .value = value.value, .source_group_ids = association.source_group_ids, .provenance = association.selection },
+            } } })).valid;
+            const rejection = (try validate_unit.execute(a, current, fixture.context, candidate)).invalid;
+            const scope = rejection.issue.membership.?.insertion_scope.?;
+            try std.testing.expectEqual(.entity_insertion_scope, rejection.issue.blocked.?);
+            try std.testing.expectEqual(@as(@TypeOf(scope.outcome), if (multiple) .multiple_basis_groups else .outside_writable_group), scope.outcome);
+            try std.testing.expectEqualDeep(association.source_group_ids, scope.basis_source_group_ids);
+            try std.testing.expectEqualDeep(groups[1].id, scope.writable_source_group_id.?);
+            try std.testing.expectEqualDeep(rejection, (try (diagnostic{ .specification = rejection }).copy(a)).specification);
+            try std.testing.expectError(error.UnsafeSpecificationRepair, repair.authorize(a, current, fixture.context, candidate, rejection));
+            // Removing a block or rewriting the scope cannot manufacture a
+            // permission from a valid rejection/dependency snapshot.
+            var forged = rejection;
+            forged.issue.blocked = null;
+            try std.testing.expectError(error.UnsafeSpecificationRepair, repair.authorize(a, current, fixture.context, candidate, forged));
+            forged.issue.membership.?.insertion_scope.?.outcome = .current_group;
+            try std.testing.expectError(error.InvalidSpecificationRepair, repair.authorize(a, current, fixture.context, candidate, forged));
+            forged.issue.membership.?.insertion_scope = null;
+            try std.testing.expectError(error.InvalidSpecificationRepair, repair.authorize(a, current, fixture.context, candidate, forged));
+        }
+        var corrupt = current;
+        corrupt.units[2].?.response.content.entities.basis.source_group_ids = &.{.{ .ordinal = 999 }};
+        try std.testing.expectError(error.InvalidSpecification, sessions.entityInsertionScope(a, corrupt, fixture.context));
+        var foreign_state = current;
+        foreign_state.reference_state.bytes = "MOCK obsolete references";
+        try std.testing.expectError(error.InvalidSpecificationUnit, sessions.entityInsertionScope(a, foreign_state, fixture.context));
+    }
+}
+
+test "record packets project current family presence without exposing prior drafts or per-group floors" {
+    const sessions = @import("domain/specification_session.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    for ([_][]const u8{ "MOCK Inspect registered equipment.", "MOCK Renew an eligible library loan." }) |source| {
+        var fixture = try Fixture.initContent(a, source, null, true, source, 3);
+        defer fixture.deinit();
+        var current = try completedFixture(&fixture, false);
+        current.completed = sessions.records_index;
+        current.units[sessions.records_index] = null;
+        current.record_cursor = 0;
+        current.record_batches = &.{};
+        current.units[2].?.response.content.entities.disposition = .required;
+        const first = try sessions.packet(std.testing.allocator, current, fixture.context);
+        defer packets.release(first);
+        const first_requirements = (try std.json.parseFromSlice(std.json.Value, a, first.body(), .{})).value.object.get("record_requirements").?.object;
+        try std.testing.expectEqual(@as(usize, 0), first_requirements.get("present_families").?.array.items.len);
+        try std.testing.expectEqualDeep(first_requirements.get("required_families").?.array.items, first_requirements.get("unmet_required_families").?.array.items);
+        const value = try fixture.proposal("MOCK PRIOR DRAFT NOT FOR COPYING");
+        const response: g.Response = .{ .content = .{ .records = &.{
+            .{ .content = .{ .functional_requirement = .{ .text = value.value } }, .source_group_ids = value.source_group_ids, .provenance = value.provenance },
+            .{ .content = .{ .acceptance_criterion = .{ .given = value.value, .when = value.value, .then = value.value } }, .source_group_ids = value.source_group_ids, .provenance = value.provenance },
+        } } };
+        current = try sessions.appendBound(a, current, (try validate_unit.execute(a, current, fixture.context, .{ .response = response })).valid);
+        const later = try sessions.packet(std.testing.allocator, current, fixture.context);
+        defer packets.release(later);
+        try std.testing.expect(std.mem.indexOf(u8, later.body(), "MOCK PRIOR DRAFT NOT FOR COPYING") == null);
+        const body = (try std.json.parseFromSlice(std.json.Value, a, later.body(), .{})).value.object;
+        try std.testing.expect(!body.contains("record_assembly"));
+        const requirements = body.get("record_requirements").?.object;
+        const present = requirements.get("present_families").?.array.items;
+        try std.testing.expectEqual(@as(usize, 2), present.len);
+        try std.testing.expectEqualStrings("acceptance_criterion", present[0].string);
+        try std.testing.expectEqualStrings("functional_requirement", present[1].string);
+        const unmet = requirements.get("unmet_required_families").?.array.items;
+        try std.testing.expectEqual(@as(usize, 1), unmet.len);
+        try std.testing.expectEqualStrings("entity", unmet[0].string);
+        const narrowed = try sessions.withSelectionChoices(std.testing.allocator, later, fixture.context, value.provenance);
+        defer packets.release(narrowed);
+        const narrowed_body = (try std.json.parseFromSlice(std.json.Value, a, narrowed.body(), .{})).value.object;
+        try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, body.get("record_requirements").?, .{}), try std.json.Stringify.valueAlloc(a, narrowed_body.get("record_requirements").?, .{}));
+        const repair_packet = try sessions.packetForOptions(std.testing.allocator, current, fixture.context, sessions.records_index, .{ .task = "MOCK Repair one authorized field." });
+        defer packets.release(repair_packet);
+        try std.testing.expect(!(try std.json.parseFromSlice(std.json.Value, a, repair_packet.body(), .{})).value.object.contains("record_requirements"));
+        const empty: g.Response = .{ .content = .{ .records = &.{} } };
+        current = try sessions.appendBound(a, current, (try validate_unit.execute(a, current, fixture.context, .{ .response = empty })).valid);
+        const after_empty = try sessions.packet(std.testing.allocator, current, fixture.context);
+        defer packets.release(after_empty);
+        const empty_requirements = (try std.json.parseFromSlice(std.json.Value, a, after_empty.body(), .{})).value.object.get("record_requirements").?;
+        try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, body.get("record_requirements").?, .{}), try std.json.Stringify.valueAlloc(a, empty_requirements, .{}));
+        var stale = current;
+        const batches = try a.dupe(g.Checked, current.record_batches);
+        stale.record_batches = batches;
+        batches[1].record_assignment = null;
+        try std.testing.expectError(error.InvalidSpecificationUnit, sessions.packet(a, stale, fixture.context));
+        batches[1].record_assignment = current.record_batches[1].record_assignment;
+        batches[1].record_assignment.?.references.bytes[0] ^= 1;
+        try std.testing.expectError(error.InvalidSpecificationUnit, sessions.packet(a, stale, fixture.context));
+        var incomplete = current;
+        incomplete.record_batches = incomplete.record_batches[0..1];
+        try std.testing.expectError(error.InvalidSpecificationUnit, sessions.packet(a, incomplete, fixture.context));
+        var mismatched = fixture.context;
+        const signals = try a.dupe(references.r.Signal, fixture.context.references.records.signals);
+        signals[0].value.content.model.business.value.segments = &.{.{ .literal = .{ .value = "MOCK Changed requirement under the same source group." } }};
+        mismatched.references.records.signals = signals;
+        try std.testing.expectError(error.InvalidSpecificationUnit, sessions.packet(a, current, mismatched));
+        // Presence is a set and follows the canonical family order. It does not
+        // make the semantic contents available as a draft for later copying.
+        try std.testing.expectEqual(@as(usize, 2), current.record_batches[0].response.content.records.len);
     }
 }
 
@@ -1321,7 +1455,7 @@ test "record assembly requirements and generation choices follow the accepted en
             const checked = (try g.validate(a, text.validator, fixture.context, .records, .{ .content = .{ .records = &.{ordinary} } })).valid;
             var last = current;
             last.record_cursor = last.record_group_count - 1;
-            try std.testing.expectEqual(.entity_membership, (try sessions.checkConsistency(a, last, checked)).?.rule);
+            try std.testing.expectEqual(.entity_membership, (try sessions.checkConsistency(a, last, fixture.context, checked)).?.rule);
             // Assembly requirements impose no floor on an individual group:
             // an early empty batch commits its dispatch, but the final empty
             // batch cannot satisfy the accepted entity decision.
@@ -1456,6 +1590,7 @@ test "completed repair packets retire authoring assignments while pending record
         pending.units[sessions.records_index] = null;
         try std.testing.expectError(error.InvalidSpecificationBinding, sessions.packetFor(a, pending, fixture.context, sessions.records_index));
         pending.record_cursor -= 1;
+        pending.record_batches = pending.record_batches[0..pending.record_cursor];
         const assigned = try sessions.packetFor(a, pending, fixture.context, sessions.records_index);
         defer @import("domain/model_input_packet.zig").release(assigned);
         const assignment_json = try std.json.parseFromSlice(std.json.Value, a, assigned.body(), .{});
@@ -1482,20 +1617,20 @@ test "source-bound record batches reject duplicates without merging their eviden
     current.record_cursor = 1;
     current.record_group_count = 2;
     const repeated = (try g.validate(a, text.validator, fixture.context, .records, .{ .content = .{ .records = &.{first} } })).valid;
-    const same = (try sessions.checkConsistency(a, current, repeated)).?;
+    const same = (try sessions.checkConsistency(a, current, fixture.context, repeated)).?;
     try std.testing.expectEqual(.duplicate_record, same.rule);
     try std.testing.expect(same.blocked == null);
     var competing = first;
     competing.provenance.claim_ids = &.{.{ .ordinal = 2 }};
     competing.source_group_ids = &.{fixture.context.references.records.signals[1].id};
     const checked = (try g.validate(a, text.validator, fixture.context, .records, .{ .content = .{ .records = &.{competing} } })).valid;
-    const issue = (try sessions.checkConsistency(a, current, checked)).?;
+    const issue = (try sessions.checkConsistency(a, current, fixture.context, checked)).?;
     try std.testing.expectEqual(.duplicate_record, issue.rule);
     try std.testing.expectEqual(.competing_records, issue.blocked.?);
     var distinct = first;
     distinct.content.functional_requirement.text = (try fixture.proposal("The clock result is visible.")).value;
     const different = (try g.validate(a, text.validator, fixture.context, .records, .{ .content = .{ .records = &.{distinct} } })).valid;
-    try std.testing.expect((try sessions.checkConsistency(a, current, different)) == null);
+    try std.testing.expect((try sessions.checkConsistency(a, current, fixture.context, different)) == null);
 }
 
 test "grouped record clarifications retain family subjects and reject absent or foreign assignment selectors" {
@@ -1627,7 +1762,7 @@ test "mixed prose and exact references survive repair coverage rendering and per
         const packet = try repair.packet(a, current, fixture.context, authorized);
         defer @import("domain/model_input_packet.zig").release(packet);
         const replacement: repair.Replacement = .{ .value = model.value };
-        const wire = try std.fmt.allocPrint(a, "{{\"value\":[{s},{{\"kind\":\"exact_copy\"}},{s}]}}", .{ try std.json.Stringify.valueAlloc(a, case.prefix, .{}), try std.json.Stringify.valueAlloc(a, case.suffix, .{}) });
+        const wire = try std.fmt.allocPrint(a, "{{\"value\":{{\"fragments\":[{s},{{\"kind\":\"exact_copy\"}},{s}]}}}}", .{ try std.json.Stringify.valueAlloc(a, case.prefix, .{}), try std.json.Stringify.valueAlloc(a, case.suffix, .{}) });
         const decoded = try repair.parse(a, authorized, packet, wire);
         try std.testing.expectEqualDeep(replacement, decoded);
         try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorized, packet, try json.encodeSelected(repair.Replacement, a, replacement)));
@@ -3352,24 +3487,24 @@ test "review evidence rules preserve minima exact sets and candidate provenance 
             const id = requirement.seed.id;
             const expected = try admission.requirements(a, inputs, fixture.context.inputs, id);
             try std.testing.expectEqualDeep(sources, expected.eligible_source_ids);
-            try std.testing.expectEqualDeep(expected.rule(.supported, .{ .unlocalized = .{} }), (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, empty, sources, "", null, .{ .unlocalized = .{} }, null)).rejected.rule);
-            try std.testing.expectEqual(.missing_claims, (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, empty, sources, "", null, .{ .unlocalized = .{} }, null)).rejected.issue);
-            try std.testing.expectEqual(.missing_evidence, (try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, empty, &.{}, "The source requirement was lost.", "MOCK After renewal display the new return deadline.", .{ .unlocalized = .{} }, null)).rejected.issue);
-            const omission = try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, empty, sources, "The source requirement was lost.", "MOCK After renewal display the new return deadline.", .{ .unlocalized = .{} }, null);
+            try std.testing.expectEqualDeep(expected.rule(.supported, .{ .unlocalized = .{} }), (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, empty, sources, "", null, .{ .unlocalized = .{} }, null, null)).rejected.rule);
+            try std.testing.expectEqual(.missing_claims, (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, empty, sources, "", null, .{ .unlocalized = .{} }, null, null)).rejected.issue);
+            try std.testing.expectEqual(.missing_evidence, (try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, empty, &.{}, "The source requirement was lost.", "MOCK After renewal display the new return deadline.", .{ .unlocalized = .{} }, null, null)).rejected.issue);
+            const omission = try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, empty, sources, "The source requirement was lost.", "MOCK After renewal display the new return deadline.", .{ .unlocalized = .{} }, null, null);
             if (expected.positive_claims == .exact_set) try std.testing.expectEqual(.wrong_claim_set, omission.rejected.issue) else if (expected.candidate_bound) try std.testing.expectEqual(.wrong_candidate_provenance, omission.rejected.issue) else try std.testing.expect(omission == .accepted);
-            const unsupported = try admission.admit(a, inputs, fixture.context.inputs, id, .unsupported, empty, &.{}, "The source does not settle this requirement.", null, .{ .unlocalized = .{} }, null);
+            const unsupported = try admission.admit(a, inputs, fixture.context.inputs, id, .unsupported, empty, &.{}, "The source does not settle this requirement.", null, .{ .unlocalized = .{} }, null, null);
             if (expected.positive_claims == .exact_set) try std.testing.expectEqual(.wrong_claim_set, unsupported.rejected.issue) else if (expected.candidate_bound) try std.testing.expectEqual(.wrong_candidate_provenance, unsupported.rejected.issue) else try std.testing.expect(unsupported == .accepted);
-            try std.testing.expectEqual(.invalid_sources, (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, finding.value.provenance, &.{.{ .ordinal = 999 }}, "", null, .{ .unlocalized = .{} }, null)).rejected.issue);
-            try std.testing.expectEqual(.invalid_sources, (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, finding.value.provenance, &.{ sources[0], sources[0] }, "", null, .{ .unlocalized = .{} }, null)).rejected.issue);
+            try std.testing.expectEqual(.invalid_sources, (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, finding.value.provenance, &.{.{ .ordinal = 999 }}, "", null, .{ .unlocalized = .{} }, null, null)).rejected.issue);
+            try std.testing.expectEqual(.invalid_sources, (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, finding.value.provenance, &.{ sources[0], sources[0] }, "", null, .{ .unlocalized = .{} }, null, null)).rejected.issue);
             var invalid = finding.value.provenance;
             invalid.claim_ids = try std.mem.concat(a, references.r.ClaimId, &.{ invalid.claim_ids, invalid.claim_ids });
-            try std.testing.expectEqual(.invalid_selection, (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, invalid, &.{}, "", null, .{ .unlocalized = .{} }, null)).rejected.issue);
+            try std.testing.expectEqual(.invalid_selection, (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, invalid, &.{}, "", null, .{ .unlocalized = .{} }, null, null)).rejected.issue);
             invalid = finding.value.provenance;
             invalid.clarification_response_ids = &.{.{ .ordinal = 1 }};
-            try std.testing.expectEqual(.invalid_selection, (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, invalid, &.{}, "", null, .{ .unlocalized = .{} }, null)).rejected.issue);
+            try std.testing.expectEqual(.invalid_selection, (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, invalid, &.{}, "", null, .{ .unlocalized = .{} }, null, null)).rejected.issue);
             if (expected.supported_provenance != null) {
                 invalid = .{ .claim_ids = expected.eligible_claim_ids, .clarification_response_ids = &.{} };
-                try std.testing.expectEqual(.wrong_candidate_provenance, (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, invalid, &.{}, "", null, .{ .unlocalized = .{} }, null)).rejected.issue);
+                try std.testing.expectEqual(.wrong_candidate_provenance, (try admission.admit(a, inputs, fixture.context.inputs, id, .supported, invalid, &.{}, "", null, .{ .unlocalized = .{} }, null, null)).rejected.issue);
             }
         }
         const accepted = try collectSupport(a, inputs, fixture.context, try @import("domain/model_candidate_json.zig").encode(support.Review, a, good));
@@ -3563,7 +3698,7 @@ test "source omission reconciliation repair preserves evidence and rejects stale
         const packet = try repair.packet(std.testing.allocator, parsed, ctx, support, auth);
         defer @import("domain/model_input_packet.zig").release(packet);
         try std.testing.expectEqualStrings("business_text", packet.resultDefinition().?.bytes);
-        const proposed = try repair.parse(a, auth, packet, "{\"segments\":[\"Preserve the required deadline.\"]}");
+        const proposed = try repair.parse(a, auth, packet, "{\"segments\":\"Preserve the required deadline.\"}");
         const merged = try repair.merge(a, parsed, ctx, support, auth, proposed, null);
         try std.testing.expectEqualDeep(parsed.proposal.global.claim_dispositions, merged.proposal.global.claim_dispositions);
         try std.testing.expectEqualDeep(parsed.proposal.global.signals[1..], merged.proposal.global.signals[1..]);
@@ -3709,11 +3844,11 @@ test "localized disposition evidence replaces positive field lineage in every so
             try support.validateStored(a, collected.inputs, fixture.context.inputs);
             try std.testing.expectEqualDeep(&[_]r.ClaimId{discarded}, required.rule(.candidate_omission, selected).fixedClaims().?);
             for ([_][]const r.ClaimId{ &.{retained}, &.{} }) |wrong| {
-                const rejected = try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, .{ .claim_ids = wrong, .clarification_response_ids = &.{} }, located.source_ids, located.detail, located.missing_obligation, selected, null);
+                const rejected = try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, .{ .claim_ids = wrong, .clarification_response_ids = &.{} }, located.source_ids, located.detail, located.missing_obligation, selected, null, null);
                 try std.testing.expect(rejected == .rejected);
             }
             const invalid_location = try model.bindLoss(required, initial.candidate.review.entries[index].value, .{ .reconciliation_disposition = retained }, located.preservation.?);
-            const rejected = try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, invalid_location.provenance, invalid_location.source_ids, invalid_location.detail, invalid_location.missing_obligation, invalid_location.loss, null);
+            const rejected = try admission.admit(a, inputs, fixture.context.inputs, id, .candidate_omission, invalid_location.provenance, invalid_location.source_ids, invalid_location.detail, invalid_location.missing_obligation, invalid_location.loss, null, null);
             try std.testing.expectEqual(.invalid_loss, rejected.rejected.issue);
             try std.testing.checkAllAllocationFailures(std.testing.allocator, lossPacketAllocationCase, .{ inputs, fixture.context, pending });
         }
@@ -4007,7 +4142,7 @@ fn appendMockChecked(a: std.mem.Allocator, current: @import("domain/specificatio
         batch.origins = .{ .fields = origins.items };
         batch.record_assignment = null;
         const admitted = try sessions.admit(a, next, context, batch);
-        try std.testing.expect((try sessions.checkConsistency(a, next, admitted)) == null);
+        try std.testing.expect((try sessions.checkConsistency(a, next, context, admitted)) == null);
         next = try sessions.appendBound(a, next, admitted);
     }
     if (dispatched != response.content.records.len) return error.InvalidMockAssociation;
@@ -4936,7 +5071,7 @@ test "reviewed copied-token narrative loss repairs the bound field without upstr
         const replacement: spec.BusinessValue = .{ .segments = &.{ .{ .literal = .{ .value = example.prefix } }, .{ .exact_copy = .{ .claim_id = token } }, .{ .literal = .{ .value = example.suffix } } } };
         const packet = try repair.omissionPacket(std.testing.allocator, current, fixture.context, content, decision, authorization);
         defer @import("domain/model_input_packet.zig").release(packet);
-        const wire = try std.fmt.allocPrint(a, "{{\"value\":[{s},{{\"kind\":\"exact_copy\"}},{s}]}}", .{ try std.json.Stringify.valueAlloc(a, example.prefix, .{}), try std.json.Stringify.valueAlloc(a, example.suffix, .{}) });
+        const wire = try std.fmt.allocPrint(a, "{{\"value\":{{\"fragments\":[{s},{{\"kind\":\"exact_copy\"}},{s}]}}}}", .{ try std.json.Stringify.valueAlloc(a, example.prefix, .{}), try std.json.Stringify.valueAlloc(a, example.suffix, .{}) });
         const decoded = try repair.parseOmission(a, authorization, packet, wire);
         try std.testing.expectEqualDeep(replacement, decoded.value);
         try std.testing.expectError(error.InvalidJsonDocument, repair.parseOmission(a, authorization, packet, try json.encode(spec.BusinessValue, a, replacement)));
@@ -6449,7 +6584,7 @@ test "incomplete specifications publish supported business evidence and bound qu
                 3 => bad.open_clarifications = &.{.{ .stage = .spec, .ordinal = 0 }},
                 4 => bad.feature = .{ .bytes = "foreign" },
                 5 => bad.clarification.revision = 0,
-                6 => bad.schema = "specification-state/v11",
+                6 => bad.schema = "specification-state/v13",
                 7 => bad.id_ledger.next[0] = 0,
                 else => unreachable,
             }
@@ -6753,18 +6888,21 @@ test "R42 selected question schemas match retained decisions and text defects sh
             entries[index].value.detail = "The source establishes the action; its duration is unspecified.";
             entries[index].value.question = if (negative) null else "Unexpected question.";
             entries[index].value.missing_obligation = if (decision == .candidate_omission) fixture.context.inputs.corpus.sources[0].bytes else null;
-            if (decision == .candidate_omission) entries[index].value.source_ids = &.{fixture.context.inputs.corpus.sources[0].id};
+            if (decision == .candidate_omission or decision == .candidate_invalid) entries[index].value.source_ids = &.{fixture.context.inputs.corpus.sources[0].id};
             try bindReviewClaims(a, inputs, fixture.context, entries);
             const rejected = (try collectReview(review, a, inputs, fixture.context, try json.encode(review.Review, a, .{ .entries = entries }), null)).rejected;
             try std.testing.expectEqual(@as(review.Issue, if (negative) .missing_question else .forbidden_question), rejected.rejection.selected().?.issue);
             const auth = try repair.authorize(a, inputs, fixture.context, rejected);
             const packet = try repair.packet(a, inputs, fixture.context, rejected.candidate.?, auth);
             defer @import("domain/model_input_packet.zig").release(packet);
-            const selected = schemas.select(packet.resultDefinition().?).?;
+            const restricted = try @import("domain/model_result_schema.zig").restrict(a, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+            defer restricted.release();
+            const selected = restricted.selected();
             const only_detail = "{\"detail\":\"The source establishes the action; its duration is unspecified.\"}";
             const pair = "{\"detail\":\"The source establishes the action; its duration is unspecified.\",\"question\":\"What duration applies? State the duration and starting event.\"}";
             const omission_detail = try json.encodeSelected(repair.Replacement, a, .{ .detail = .{ .detail = entries[index].value.detail, .missing_obligation = entries[index].value.missing_obligation } });
-            const accepted_detail = if (negative) pair else if (decision == .candidate_omission) omission_detail else only_detail;
+            const invalid_detail = "{\"detail\":\"MOCK The candidate adds an unsupported duty.\",\"authority_gap\":null}";
+            const accepted_detail = if (negative) pair else if (decision == .candidate_omission) omission_detail else if (decision == .candidate_invalid) invalid_detail else only_detail;
             try check(selected.modelBytes(), .{ .bytes = accepted_detail });
             try check(selected.modelBytes(), .{ .bytes = if (negative) only_detail else pair, .rejection = if (negative) .missing_required_property else .unknown_property, .path = "/question" });
             const fixed = try repair.merge(a, inputs, fixture.context, rejected.candidate.?, auth, try repair.parse(a, auth, packet, accepted_detail), null);
@@ -6848,14 +6986,19 @@ test "selected evidence repair schemas preserve native minima across findings an
                 const auth = try repair.authorize(a, inputs, fixture.context, rejected);
                 const packet = try repair.packet(a, inputs, fixture.context, rejected.candidate.?, auth);
                 defer @import("domain/model_input_packet.zig").release(packet);
-                const selected = schemas.select(packet.resultDefinition().?).?;
+                const restricted = try @import("domain/model_result_schema.zig").restrict(a, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+                defer restricted.release();
+                const selected = restricted.selected();
                 const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
                 const rule = body.get("repair").?.object.get("rule").?.object.get("evidence_rule").?.object;
                 try std.testing.expectEqualStrings(admission.selection_instruction, rule.get("instruction").?.string);
                 const model = @import("domain/specification_support_model.zig");
                 const source_ids = &.{fixture.context.inputs.corpus.sources[0].id};
-                const bytes = try json.encode(model.Selection, a, .{ .source_ids = source_ids });
-                try std.testing.expectEqualStrings("selection", packet.resultDefinition().?.bytes);
+                const bytes = if (decision == .candidate_invalid)
+                    try json.encode(model.InvalidSelection, a, .{ .source_ids = source_ids, .authority_gap_source_ids = null })
+                else
+                    try json.encode(model.Selection, a, .{ .source_ids = source_ids });
+                try std.testing.expectEqualStrings(if (decision == .candidate_invalid) "invalid_selection" else "selection", packet.resultDefinition().?.bytes);
                 try check(selected.modelBytes(), .{ .bytes = "{\"source_ids\":[1],\"provenance\":{\"claim_ids\":[1]}}", .rejection = .unknown_property, .path = "/provenance" });
                 try check(selected.modelBytes(), .{ .bytes = bytes });
                 const fixed = try repair.merge(a, inputs, fixture.context, rejected.candidate.?, auth, try repair.parse(a, auth, packet, bytes), null);
@@ -8337,6 +8480,108 @@ test "supported and source-gap findings never create loss or upstream repair aut
         try std.testing.expectEqual(@as(@TypeOf(decision.result.continuation), if (response == .supported) .all_resolved else .needs_user), decision.result.continuation);
         try std.testing.expectError(error.InvalidRequiredAuthority, @import("domain/source_omission.zig").select(a, fixture.context.inputs, .{ .review = collected.candidate, .inputs = decision.inputs, .observations = decision.observations, .result = decision.result }));
     }
+}
+
+test "invalid candidate findings retain mixed source gaps without loss or publication authority" {
+    const authority = @import("domain/required_authority.zig");
+    const support = @import("domain/specification_support.zig").Source;
+    const model = @import("domain/specification_support_model.zig");
+    const repair = @import("domain/specification_support_repair.zig").Source;
+    const json = @import("domain/model_candidate_json.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    const Failure = enum { defect_sources, gap_question, gap_sources };
+    for ([_][]const u8{
+        "MOCK After approval notify the patient; the delivery channel is undecided.",
+        "MOCK After renewal retain the deadline; the notification channel is undecided.",
+    }) |source| for (std.meta.tags(Failure)) |failure| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const mixed = failure != .defect_sources;
+        var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+        const schemas = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
+        var fixture = try Fixture.initContent(a, source, null, true, source, 1);
+        defer fixture.deinit();
+        const inputs = try completedSupportInputs(&fixture);
+        const ledger = try authority.build(a, inputs);
+        const good = try reviewFor(a, inputs, fixture.context.inputs);
+        const gap: ?authority.AuthorityGap = if (mixed) .{
+            .kind = .unsupported,
+            .source_ids = &.{.{ .ordinal = 1 }},
+            .detail = "MOCK The source leaves the delivery channel undecided.",
+            .question = "MOCK Which delivery channel is required?",
+        } else null;
+        const proposed: model.Value = .{ .candidate_invalid = .{
+            .source_ids = &.{.{ .ordinal = 1 }},
+            .detail = "MOCK The candidate invents a mandatory monthly maintenance duty.",
+            .authority_gap = gap,
+        } };
+        var collection: ?support.Collection = null;
+        for (ledger.requirements, 0..) |required, index| {
+            const packet = try support.packetFor(a, inputs, fixture.context, .{ .finding = required.seed.id });
+            defer packets.release(packet);
+            var initial = proposed;
+            switch (failure) {
+                .defect_sources => initial.candidate_invalid.source_ids = &.{.{ .ordinal = 999 }},
+                .gap_question => initial.candidate_invalid.authority_gap.?.question = " ",
+                .gap_sources => initial.candidate_invalid.authority_gap.?.source_ids = &.{.{ .ordinal = 999 }},
+            }
+            const wire = if (required.seed.id.slot == .description)
+                try json.encode(model.Value, a, initial)
+            else
+                try sourceReviewWire(a, inputs, fixture.context, required.seed.id, good.entries[index].value);
+            collection = try support.collectFocused(a, inputs, fixture.context, collection, packet, wire, .{ .request = .{ .value = @intCast(900 + index) }, .attempt = .{ .value = 1 } });
+            if (required.seed.id.slot == .description) {
+                const rejected = collection.?.rejected;
+                const authorization = try repair.authorize(a, inputs, fixture.context, rejected);
+                const correction = try repair.packet(a, inputs, fixture.context, rejected.candidate.?, authorization);
+                defer packets.release(correction);
+                try std.testing.expectEqualStrings(if (failure == .gap_question) "invalid_detail" else "invalid_selection", correction.resultDefinition().?.bytes);
+                const restricted_schema = try @import("domain/model_result_schema.zig").restrict(a, schemas.select(correction.resultDefinition().?).?, correction.excludedVariants(), correction.integerChoices());
+                defer restricted_schema.release();
+                const selected_schema = restricted_schema.selected();
+                const replacement = if (failure == .gap_question) blk: {
+                    var changed = gap.?;
+                    changed.kind = .ambiguous;
+                    const Detail = struct { detail: []const u8, authority_gap: ?authority.AuthorityGap };
+                    try std.testing.expectError(error.UnsafeSupportRepair, repair.parse(a, authorization, correction, try json.encode(Detail, a, .{ .detail = proposed.candidate_invalid.detail, .authority_gap = changed })));
+                    changed = gap.?;
+                    changed.source_ids = &.{.{ .ordinal = 999 }};
+                    try std.testing.expectError(error.UnsafeSupportRepair, repair.parse(a, authorization, correction, try json.encode(Detail, a, .{ .detail = proposed.candidate_invalid.detail, .authority_gap = changed })));
+                    try std.testing.expectError(error.UnsafeSupportRepair, repair.parse(a, authorization, correction, try json.encode(Detail, a, .{ .detail = proposed.candidate_invalid.detail, .authority_gap = null })));
+                    const bytes = try json.encode(Detail, a, .{ .detail = proposed.candidate_invalid.detail, .authority_gap = gap });
+                    try @import("model_payload_schema_test.zig").checkDocument(selected_schema.modelBytes(), .{ .bytes = bytes });
+                    break :blk try repair.parse(a, authorization, correction, bytes);
+                } else blk: {
+                    try std.testing.expectError(error.UnsafeSupportRepair, repair.parse(a, authorization, correction, try json.encode(model.InvalidSelection, a, .{ .source_ids = proposed.candidate_invalid.source_ids, .authority_gap_source_ids = if (mixed) null else &.{} })));
+                    const bytes = try json.encode(model.InvalidSelection, a, .{ .source_ids = proposed.candidate_invalid.source_ids, .authority_gap_source_ids = if (gap) |retained| retained.source_ids else null });
+                    try @import("model_payload_schema_test.zig").checkDocument(selected_schema.modelBytes(), .{ .bytes = bytes });
+                    break :blk try repair.parse(a, authorization, correction, bytes);
+                };
+                collection = try repair.merge(a, inputs, fixture.context, rejected.candidate.?, authorization, replacement, .{ .request = .{ .value = @intCast(950 + index) }, .attempt = .{ .value = 1 } });
+            }
+            try std.testing.expect(collection.? != .rejected);
+        }
+        const admitted = collection.?.accepted;
+        try std.testing.expect(admitted.candidate.pending_localization == null);
+        try std.testing.expectError(error.InvalidRequiredAuthority, support.packetForLoss(a, inputs, fixture.context, admitted.candidate));
+        const decoded = try @import("domain/strict_json.zig").decode(authority.Inputs, a, try std.json.Stringify.valueAlloc(a, admitted.inputs, .{}), .{ .maximum_depth = 128 });
+        try support.validateStored(a, decoded, fixture.context.inputs);
+        const decision = try supportDecision(a, decoded);
+        try std.testing.expectEqual(.invalid, decision.result.continuation);
+        const entry = for (decision.result.entries) |item| {
+            if (item.requirement.slot == .description) break item;
+        } else return error.InvalidFixture;
+        try std.testing.expectEqual(.invalid_content, entry.candidate_defect.?.reason);
+        try std.testing.expect(entry.candidate_defect.?.support == null);
+        const reviewed_evidence = for (decoded.evidence) |item| {
+            if (item.finding == .candidate_invalid) break item;
+        } else return error.InvalidFixture;
+        try std.testing.expectEqualDeep(gap, reviewed_evidence.review.?.authority_gap);
+        try std.testing.expect(reviewed_evidence.review.?.missing_obligation == null and reviewed_evidence.review.?.preservation == null);
+        try std.testing.expectError(error.InvalidRequiredAuthority, @import("domain/required_authority_clarifications.zig").build(a, decision.inputs, decision.observations, decision.result));
+        try std.testing.expectError(error.InvalidRequiredAuthority, @import("domain/source_omission.zig").select(a, fixture.context.inputs, .{ .review = admitted.candidate, .inputs = decision.inputs, .observations = decision.observations, .result = decision.result }));
+    };
 }
 
 test "omission obligation correction is closed atomic and retained through admission" {

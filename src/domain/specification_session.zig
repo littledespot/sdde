@@ -102,7 +102,14 @@ fn checkBatchGroup(checked: g.Checked, group: @import("reference_reconciliation.
 }
 
 pub fn validateRecordAssignments(a: std.mem.Allocator, current: Session, context: p.Context) Error!void {
-    if (!current.reference_state.eql(context.inputs.corpus.state_id) or current.record_group_count == 0 or current.record_group_count != try binding.recordCount(@import("reference_support.zig").records(context.references)) or current.record_cursor != current.record_group_count or current.record_batches.len != current.record_group_count) return error.InvalidSpecificationUnit;
+    if (current.record_cursor != current.record_group_count) return error.InvalidSpecificationUnit;
+    try validateRecordPrefix(a, current, context);
+}
+
+/// Empty batches retain the same current reference witness as nonempty batches.
+/// Presentation may read this admitted prefix, never a stale or fabricated one.
+fn validateRecordPrefix(a: std.mem.Allocator, current: Session, context: p.Context) Error!void {
+    if (!current.reference_state.eql(context.inputs.corpus.state_id) or current.record_group_count == 0 or current.record_group_count != try binding.recordCount(@import("reference_support.zig").records(context.references)) or current.record_cursor > current.record_group_count or current.record_batches.len != current.record_cursor) return error.InvalidSpecificationUnit;
     const references = try referenceSnapshot(a, context);
     for (current.record_batches, 0..) |batch, index| {
         const assigned = try binding.record(a, @import("reference_support.zig").records(context.references), context.inputs, index);
@@ -144,7 +151,26 @@ pub const PacketOptions = struct {
 const RecordRequirements = struct {
     scope: enum { assembled_specification } = .assembled_specification,
     required_families: []const g.spec.Kind,
+    present_families: []const g.spec.Kind,
+    unmet_required_families: []const g.spec.Kind,
 };
+
+/// Family presence is a native structural fact, not evidence that the earlier
+/// candidate's content is correct or that its obligations have been fulfilled.
+fn recordRequirements(a: std.mem.Allocator, current: Session, context: p.Context, disposition: g.spec.Applicability) Error!RecordRequirements {
+    if (current.completed != records_index or current.record_cursor >= current.record_group_count) return error.InvalidSpecificationUnit;
+    try validateRecordPrefix(a, current, context);
+    var present: std.EnumSet(g.spec.Kind) = .initEmpty();
+    for (current.record_batches) |batch| for (batch.response.content.records) |record| present.insert(std.meta.activeTag(record.content));
+    const required = g.spec.assemblyRequiredRecordFamilies(disposition);
+    var families: std.ArrayList(g.spec.Kind) = .empty;
+    errdefer families.deinit(a);
+    for (std.meta.tags(g.spec.Kind)) |kind| if (present.contains(kind)) try families.append(a, kind);
+    var unmet: std.ArrayList(g.spec.Kind) = .empty;
+    errdefer unmet.deinit(a);
+    for (required) |kind| if (!present.contains(kind)) try unmet.append(a, kind);
+    return .{ .required_families = required, .present_families = try families.toOwnedSlice(a), .unmet_required_families = try unmet.toOwnedSlice(a) };
+}
 
 /// Repair retains all source claims but offers exact-copy choices only from the
 /// bound owning unit. An explicit task replaces authoring purposes while retaining
@@ -248,7 +274,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     const passive_ids = try input.passiveIds(a, payload.passive_literals);
     if (selected == .records) {
         if (assigned != null and options.task == null) {
-            const contextual = try packets.withContext(RecordRequirements, allocator, result, "record_requirements", .{ .required_families = g.spec.assemblyRequiredRecordFamilies(entity_decision.?.disposition) });
+            const contextual = try packets.withContext(RecordRequirements, allocator, result, "record_requirements", try recordRequirements(a, current, context, entity_decision.?.disposition));
             packets.release(result);
             result = contextual;
         }
@@ -405,7 +431,7 @@ pub fn appendBound(a: std.mem.Allocator, current: Session, checked: g.Checked) E
 
 /// Cross-batch and cross-unit consistency belongs to the session. The same
 /// check governs admission, completed replacements and assembly.
-pub fn checkConsistency(a: std.mem.Allocator, current: Session, checked: g.Checked) Error!?@import("specification_candidate.zig").Issue {
+pub fn checkConsistency(a: std.mem.Allocator, current: Session, context: p.Context, checked: g.Checked) Error!?@import("specification_candidate.zig").Issue {
     if (checked.response != .content) return null;
     const proposed = checked.response.content;
     if (proposed != .records and proposed != .entities) return null;
@@ -429,14 +455,40 @@ pub fn checkConsistency(a: std.mem.Allocator, current: Session, checked: g.Check
         if (entities.disposition == .required and count == 0 and current.record_cursor + 1 < current.record_group_count) return null;
     }
     if (g.spec.entityMembershipSatisfied(entities.disposition, count)) return null;
+    const scope = if (count == 0 and proposed == .records) try entityInsertionScope(a, current, context) else null;
+    errdefer if (scope) |owner_scope| a.free(owner_scope.basis_source_group_ids);
     return .{
         .unit = checked.unit,
         .field = if (proposed == .records and first != null) .{ .target = .{ .record = first.? } } else .unit,
         .rule = .entity_membership,
         .observed = null,
-        .membership = .{ .disposition = entities.disposition, .entity_count = count },
-        .detail = if (count == 0) "The fixed entity decision requires at least one entity record; none was supplied." else "Entity records contradict the fixed not_applicable decision.",
+        .blocked = if (scope != null and scope.?.outcome != .current_group) .entity_insertion_scope else null,
+        .membership = .{ .disposition = entities.disposition, .entity_count = count, .insertion_scope = scope },
+        .detail = if (scope) |owner_scope| switch (owner_scope.outcome) {
+            .current_group => "The fixed entity decision requires at least one entity record; none was supplied.",
+            .multiple_basis_groups => "The required entity basis selects several source groups; this batch cannot choose its owner. A separately authorized owner-bound rebuild is required.",
+            .outside_writable_group => try std.fmt.allocPrint(a, "The required entity basis selects source group {d}, but the current writable batch is source group {d}. Insertion here would change its source assignment; an owner-bound rebuild is required.", .{ owner_scope.basis_source_group_ids[0].ordinal, owner_scope.writable_source_group_id.?.ordinal }),
+            .no_writable_group => "The assembled specification lacks a required entity, but no record batch is currently writable. An owner-bound rebuild is required.",
+        } else if (count == 0) "The fixed entity decision requires at least one entity record; none was supplied." else "Entity records contradict the fixed not_applicable decision.",
     };
+}
+
+/// Resolve only an existing, admitted association. Native code does not decide
+/// which of several business groups ought to own a new entity.
+pub fn entityInsertionScope(a: std.mem.Allocator, current: Session, context: p.Context) Error!@import("specification_candidate.zig").EntityInsertionScope {
+    if (!current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
+    const checked = current.units[2] orelse return error.InvalidSpecificationUnit;
+    if (checked.unit != .entities or checked.response != .content or checked.response.content != .entities) return error.InvalidSpecificationUnit;
+    const basis = checked.response.content.entities.basis;
+    if (basis.source_group_ids.len == 0) return error.InvalidSpecificationUnit;
+    const groups = try p.validateAssociation(.canonical, a, context.inputs, @import("reference_support.zig").records(context.references), basis.source_group_ids, basis.provenance, .content);
+    errdefer a.free(groups);
+    const writable = if (current.completed == records_index and current.record_cursor < current.record_group_count) scope: {
+        const bound = try currentBinding(a, current, context);
+        defer a.free(bound.records.selection.claim_ids);
+        break :scope bound.records.signal;
+    } else null;
+    return .{ .basis_source_group_ids = groups, .writable_source_group_id = writable, .outcome = if (writable == null) .no_writable_group else if (groups.len != 1) .multiple_basis_groups else if (groups[0].ordinal != writable.?.ordinal) .outside_writable_group else .current_group };
 }
 
 pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: Session) Error!@import("specification_identity.zig").Assigned {
@@ -451,7 +503,7 @@ pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig
             .invalid => return error.InvalidSpecificationUnit,
         };
         if (result.response != .content) return error.InvalidSpecificationUnit;
-        if (try checkConsistency(allocator, current, result) != null) return error.InvalidSpecificationUnit;
+        if (try checkConsistency(allocator, current, context, result) != null) return error.InvalidSpecificationUnit;
         if (result.response.content == .records) {
             // Canonical section order is a projection; candidate indices and
             // repair origins retain the model's order throughout the session.
@@ -497,6 +549,6 @@ pub fn replaceCompleted(allocator: std.mem.Allocator, validator: @import("typed_
     var next = current;
     next.revision = merged.revision_after;
     next.units[index] = checked;
-    if (try checkConsistency(allocator, next, checked) != null) return error.InvalidSpecificationUnit;
+    if (try checkConsistency(allocator, next, context, checked) != null) return error.InvalidSpecificationUnit;
     return next;
 }

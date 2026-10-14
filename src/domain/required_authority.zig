@@ -69,7 +69,27 @@ pub fn recordField(kind: @import("specification.zig").Kind, slot: Slot) bool {
 pub const Resolution = union(enum) { existing_authority: Authority, supported_candidate: CandidateId, not_applicable: Rule, exception: ExceptionId };
 /// Native, scope-checked evidence supplied by an owning validator/reviewer.
 /// Observation JSON can reference these IDs but cannot create this registry.
-pub const Finding = enum { supported, ambiguous, conflicting, unsupported, candidate_omission, inconclusive };
+pub const Finding = enum { supported, ambiguous, conflicting, unsupported, candidate_omission, candidate_invalid, inconclusive };
+/// A real source decision gap retained alongside invalid candidate content.
+/// It shares the bound finding's subject, authorities, provenance and origin.
+pub const AuthorityGap = struct {
+    kind: GapKind,
+    source_ids: []const @import("reference_identity.zig").SourceId,
+    detail: []const u8,
+    question: []const u8,
+
+    pub const GapKind = enum {
+        unsupported,
+        ambiguous,
+        conflicting,
+
+        pub fn finding(self: GapKind) Finding {
+            return switch (self) {
+                inline else => |value| @field(Finding, @tagName(value)),
+            };
+        }
+    };
+};
 pub const ReviewEvidence = struct {
     loss: ?@import("source_omission.zig").Location = null,
     preservation: ?@import("source_omission.zig").comparisons.Evidence = null,
@@ -77,6 +97,7 @@ pub const ReviewEvidence = struct {
     /// Source review's model-owned comparison target; absent for other reviews.
     missing_obligation: ?[]const u8 = null,
     question: ?[]const u8 = null,
+    authority_gap: ?AuthorityGap = null,
     provenance: @import("specification.zig").Provenance,
     source_ids: []const @import("reference_identity.zig").SourceId,
     principle_citations: []const @import("principle_registry.zig").Citation = &.{},
@@ -129,7 +150,7 @@ pub const Outcome = union(enum) {
     upstream_rework_required: struct { owner: Stage, detected_at: DetectionStage, reason: GapReason },
     administrative_block: BlockReason,
 };
-pub const CandidateDefect = struct { reason: enum { missing_content, not_preserved, inconclusive_review }, support: ?EvidenceId };
+pub const CandidateDefect = struct { reason: enum { missing_content, not_preserved, invalid_content, inconclusive_review }, support: ?EvidenceId };
 pub const Entry = struct { candidate_defect: ?CandidateDefect = null, requirement: Id, outcome: Outcome, evidence_ids: []const EvidenceId, input_authorities: []const Authority };
 pub const Result = struct { feature: @import("feature_identity.zig").FeatureId, entries: []const Entry, continuation: enum { all_resolved, invalid, needs_user, blocked } };
 
@@ -285,8 +306,9 @@ fn resolve(requirement: Requirement, inputs: Inputs) Error!Outcome {
                 }
             }
         }
-        switch (evidence.finding) {
-            .supported, .candidate_omission, .inconclusive => {},
+        const finding = if (evidence.finding == .candidate_invalid and evidence.review != null and evidence.review.?.authority_gap != null) evidence.review.?.authority_gap.?.kind.finding() else evidence.finding;
+        switch (finding) {
+            .supported, .candidate_omission, .candidate_invalid, .inconclusive => {},
             .ambiguous => reason = stronger(reason, .ambiguous),
             .conflicting => reason = stronger(reason, .conflicting),
             .unsupported => reason = stronger(reason, .unsupported),
@@ -430,7 +452,7 @@ fn sameSet(comptime T: type, a: []const T, b: []const T) Error!void {
 }
 
 /// Candidate validity is separate from the six authority outcomes. Established
-/// source evidence cannot make absent content valid, or a source gap repairable.
+/// source evidence cannot make absent/invalid content valid, or a source gap repairable.
 fn candidateDefect(requirement: Requirement, inputs: Inputs, outcome: Outcome) ?CandidateDefect {
     // Contrary current judgments about the same authority and decision are an
     // interpretation defect, not evidence that the original sources conflict.
@@ -455,6 +477,7 @@ fn candidateDefect(requirement: Requirement, inputs: Inputs, outcome: Outcome) ?
     };
     for (inputs.evidence) |evidence| {
         if (!std.meta.eql(evidence.requirement, requirement.seed.id)) continue;
+        if (evidence.finding == .candidate_invalid) return .{ .reason = .invalid_content, .support = null };
         if (evidence.finding == .inconclusive) return .{ .reason = .inconclusive_review, .support = null };
         if (evidence.finding != .candidate_omission) continue;
         if (result == null) result = .{ .reason = .not_preserved, .support = null };

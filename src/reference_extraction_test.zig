@@ -11,7 +11,7 @@ const account = @import("actions/reference/validate_reference_extraction_account
 const text_fixture = @import("test_fixtures/reference_text.zig");
 const token_fixture = @import("test_fixtures/reference_tokens.zig");
 
-pub const no_claim = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[\"This chunk contains no feature claims.\"]},\"token_classifications\":[]}";
+pub const no_claim = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"This chunk contains no feature claims.\"},\"token_classifications\":[]}";
 
 pub fn reply(allocator: std.mem.Allocator, chunk: evidence.Chunk, text: []const u8) ![]const u8 {
     const claim = .{
@@ -113,7 +113,7 @@ test "positive no claim evidence and valid citations are mandatory" {
     var ids: fixture.IdSource = .{};
     const inputs = try fixture.prepare(allocator, &ids, try ingest(allocator, "unicode.md", "Café\r\n"));
     try std.testing.expectError(error.InvalidReferenceExtraction, finish(allocator, inputs, &.{raw(inputs, 0, "{\"kind\":\"claims\",\"claims\":[],\"token_classifications\":[]}")}));
-    const empty_reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":[\"  \"]},\"token_classifications\":[]}";
+    const empty_reason = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"  \"},\"token_classifications\":[]}";
     try std.testing.expectError(error.InvalidTypedText, finish(allocator, inputs, &.{raw(inputs, 0, empty_reason)}));
     const parsed = try parse.execute(allocator, .{ .entries = &.{raw(inputs, 0, try reply(allocator, inputs.chunks.entries[0], "claim"))} });
     var entry = parsed.entries[0];

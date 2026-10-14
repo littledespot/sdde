@@ -66,7 +66,7 @@ proves family/ownership have identical packet and schema bytes and differ only
 by the `sources` string in the static guidance; all other guidance is unchanged.
 Generated packets,
 complete debugger edits, provider bodies, ancestry preflight and preparation
-manifest are beneath `.zig-cache/authoring-associations/assembly-requirements/`.
+manifest are beneath `.zig-cache/authoring-associations/v14-text/assembly-requirements/`.
 Freeze those bytes after offline verification; dependency changes require a new
 preparation and approval. Do not edit a generated packet. Interpret the two
 adjacent comparisons separately; baseline/ownership changes two factors and

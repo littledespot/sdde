@@ -1,6 +1,6 @@
 //! Shared model input/response wire encoding, separate from native/persisted
 //! Zig JSON. Evidence projections remove internal validation wrappers first.
-//! Declared compact wrappers and disjoint values expand to native types;
+//! Declared compact wrappers, text fields and disjoint values expand to native types;
 //! discriminated objects become native unions. strict_json remains the closed
 //! type/transport validator. No inferred variants or legacy wire reader.
 //! Decoded values belong to the caller's arena; encoded bytes are caller-owned.
@@ -128,6 +128,54 @@ fn scalarMatches(comptime T: type, value: std.json.Value) bool {
     };
 }
 
+/// Only a declared typed-text field has this wire form. Ordinary prose becomes
+/// one literal node; explicit composition retains every node and its identity.
+/// Neither path inserts separators, normalizes text or infers reference handles.
+fn transformText(comptime T: type, a: std.mem.Allocator, value: std.json.Value, comptime direction: Direction) json.Error!std.json.Value {
+    const pointer = @typeInfo(T);
+    if (pointer != .pointer or pointer.pointer.size != .slice) @compileError("Model text fields require a slice of declared text nodes");
+    const Node = pointer.pointer.child;
+    if (comptime @typeInfo(Node) != .@"union" or !declared(Node, "model_inline")) @compileError("Model text nodes require disjoint inline prose");
+    comptime checkInline(Node);
+    comptime {
+        var prose = false;
+        for (@typeInfo(@TypeOf(Node.model_inline)).@"struct".fields) |field| {
+            const Payload = @FieldType(Node, field.name);
+            const Child = @FieldType(Payload, @field(Node.model_inline, field.name));
+            prose = prose or inlineShape(Child) == .string;
+        }
+        if (!prose) @compileError("Model text nodes require an inline string variant");
+    }
+    if (direction == .native) {
+        const fragments = if (value == .string) one: {
+            if (value.string.len == 0) return error.InvalidJsonDocument;
+            var array: std.json.Array = .init(a);
+            try array.append(value);
+            break :one std.json.Value{ .array = array };
+        } else explicit: {
+            if (value != .object or value.object.count() != 1) return error.InvalidJsonDocument;
+            const array = value.object.get("fragments") orelse return error.InvalidJsonDocument;
+            if (array != .array or array.array.items.len == 0) return error.InvalidJsonDocument;
+            for (array.array.items) |fragment| if (fragment == .string and fragment.string.len == 0) return error.InvalidJsonDocument;
+            break :explicit array;
+        };
+        return transform(T, a, fragments, direction);
+    }
+    const fragments = try transform(T, a, value, direction);
+    if (fragments != .array or fragments.array.items.len == 0) return error.InvalidJsonDocument;
+    for (fragments.array.items) |fragment| if (fragment == .string and fragment.string.len == 0) return error.InvalidJsonDocument;
+    if (fragments.array.items.len == 1 and fragments.array.items[0] == .string) return fragments.array.items[0];
+    var object: std.json.ObjectMap = .{};
+    try object.put(a, "fragments", fragments);
+    return .{ .object = object };
+}
+
+fn transformField(comptime T: type, comptime name: []const u8, a: std.mem.Allocator, value: std.json.Value, comptime direction: Direction) json.Error!std.json.Value {
+    if (comptime declared(T, "model_text") and !@hasField(T, T.model_text)) @compileError("A model text declaration must name its native field");
+    if (comptime declared(T, "model_text") and std.mem.eql(u8, T.model_text, name)) return transformText(@FieldType(T, name), a, value, direction);
+    return transform(@FieldType(T, name), a, value, direction);
+}
+
 const Direction = enum { native, wire };
 fn transform(comptime T: type, a: std.mem.Allocator, value: std.json.Value, comptime direction: Direction) json.Error!std.json.Value {
     var result = value;
@@ -138,10 +186,10 @@ fn transform(comptime T: type, a: std.mem.Allocator, value: std.json.Value, comp
                 if (s.fields.len != 1 or !@hasField(T, name)) @compileError("A compact wrapper must have exactly its declared field");
                 if (direction == .wire) {
                     if (value != .object or value.object.count() != 1) return error.InvalidJsonDocument;
-                    return transform(@FieldType(T, name), a, value.object.get(name) orelse return error.InvalidJsonDocument, direction);
+                    return transformField(T, name, a, value.object.get(name) orelse return error.InvalidJsonDocument, direction);
                 }
                 var object: std.json.ObjectMap = .{};
-                try object.put(a, name, try transform(@FieldType(T, name), a, value, direction));
+                try object.put(a, name, try transformField(T, name, a, value, direction));
                 return .{ .object = object };
             }
             return transformFields(T, a, value, direction);
@@ -238,7 +286,7 @@ fn transformFields(comptime T: type, a: std.mem.Allocator, value: std.json.Value
     }
     inline for (s.fields) |field| {
         const child = value.object.get(field.name) orelse if (@typeInfo(field.type) == .optional and field.default_value_ptr != null) .null else return error.InvalidJsonDocument;
-        if (!(direction == .wire and @typeInfo(field.type) == .optional and field.default_value_ptr != null and child == .null)) try result.object.put(a, field.name, try transform(field.type, a, child, direction));
+        if (!(direction == .wire and @typeInfo(field.type) == .optional and field.default_value_ptr != null and child == .null)) try result.object.put(a, field.name, try transformField(T, field.name, a, child, direction));
     }
     return result;
 }

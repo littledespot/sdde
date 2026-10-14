@@ -21,6 +21,13 @@ The [manifest](comparison.json) and [scorecard template](scorecard.template.json
 declare both arms, settings, order, denominator and gates before execution.
 Historical panels, results and gates remain unchanged.
 
+The commands and frozen requests below describe that consumed historical panel.
+Current offline preparation uses
+`.zig-cache/source-loss-citation-completeness-current-contract/` after the shared
+text/finding cutover. It does not overwrite or admit historical receipts, and it
+grants no live-call authority. A renewed comparison needs current pins and a new
+bounded approval.
+
 ## One changed factor
 
 Reuse the twelve [canonical cases](../obligation/cases.json). Their baseline files

@@ -284,13 +284,13 @@ test "composition retains type-disjoint values whole and rejects inferred discri
     defer arena.deinit();
     const a = arena.allocator();
     const canonical = try compileSchema(a,
-        \\{"type":"object","properties":{"payload":{"oneOf":[{"type":"string","maxLength":100},{"type":"object","properties":{"kind":{"const":"ref"},"id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","id"],"additionalProperties":false}]}},"required":["payload"],"additionalProperties":false}
+        \\{"type":"object","properties":{"payload":{"oneOf":[{"type":"string","maxLength":100},{"type":"object","properties":{"fragments":{"type":"array","maxItems":3,"items":{"type":"string","maxLength":100}}},"required":["fragments"],"additionalProperties":false}]}},"required":["payload"],"additionalProperties":false}
     );
     const whole = try compilePlan(a,
         \\{"schema":"json-composition/v1","result":"shape","parts":{"content":{"paths":["/payload"]}}}
     , canonical);
     try std.testing.expectEqual(@as(usize, 1), whole.parts().len);
     try std.testing.expectError(error.InvalidJsonComposition, compilePlan(a,
-        \\{"schema":"json-composition/v1","result":"shape","parts":{"content":{"paths":["/payload/kind","/payload/id"]}}}
+        \\{"schema":"json-composition/v1","result":"shape","parts":{"content":{"paths":["/payload/fragments"]}}}
     , canonical));
 }

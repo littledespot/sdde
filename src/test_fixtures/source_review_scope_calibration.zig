@@ -212,7 +212,7 @@ fn mechanicalProbe(a: std.mem.Allocator, example: Case, prepared: shared.Prepare
         .candidate_omission => .{ .candidate_omission = .{ .source_ids = sources, .detail = "MOCK mechanically admissible omission; expectation remains scoring data.", .missing_obligation = example.expected.missing_obligation orelse return error.MissingCalibrationExpectation } },
     });
     const value = try model.decode(a, bytes, required);
-    const admitted = try evidence.admit(a, prepared.inputs, prepared.context.inputs, target, value.kind.finding(), value.provenance, value.source_ids, value.detail, value.missing_obligation, value.loss, value.preservation);
+    const admitted = try evidence.admit(a, prepared.inputs, prepared.context.inputs, target, value.kind.finding(), value.provenance, value.source_ids, value.detail, value.missing_obligation, value.loss, value.preservation, value.authority_gap);
     try std.testing.expect(admitted == .accepted);
     try shared.writeAt(a, output, example.id, "mechanical-probe.json", try std.json.Stringify.valueAlloc(a, .{ .mock = true, .semantic_evidence = false, .admitted = true, .finding = value.kind }, .{}));
 }

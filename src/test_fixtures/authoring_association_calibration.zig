@@ -12,7 +12,7 @@ const codec = @import("../domain/model_candidate_json.zig");
 const binding = @import("../domain/specification_source_binding.zig");
 const schema_owner = @import("../domain/model_result_schema.zig");
 const root = "test/calibration/authoring-associations";
-const output = ".zig-cache/authoring-associations";
+const output = ".zig-cache/authoring-associations/v14-text";
 const captured_run = "zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959";
 const captured_feature = captured_run ++ "/project/specs/hello-world";
 const parent_identity: shared.ReviewParent = .{ .run = "RUN-5603b655c6e6a7498c6980fc0d447584", .call = "request-1-inference-1" };
@@ -223,8 +223,8 @@ pub fn runAssemblyRequirementsComparison() !void {
     const strict = @import("../domain/strict_json.zig");
     const retained = try strict.decode([]const Case, a, try shared.read(a, root ++ "/cases.json"), .{ .maximum_depth = 128 });
     const panel = try strict.decode(Panel, a, try shared.read(a, panel_root ++ "/cases.json"), .{ .maximum_depth = 128 });
-    const old_guidance = try shared.read(a, panel_root ++ "/old-generation.context.json");
     const current_guidance = try shared.read(a, "design/workflows/spec/generation.context.json");
+    const old_guidance = try ownershipBaseline(a, try shared.read(a, panel_root ++ "/old-generation.context.json"), current_guidance);
     try ownershipGuidanceChecks(a, old_guidance, current_guidance);
     var cases: std.ArrayList(Case) = .empty;
     for (panel.retained_case_ids) |id| {
@@ -296,7 +296,7 @@ pub fn runAssemblyRequirementsComparison() !void {
     }) |path| try dependencies.append(a, try pin(a, path));
     const preparation = try std.json.Stringify.valueAlloc(a, .{
         .status = "offline_prepared_no_live_dispatch_authority",
-        .factor = "Baseline/family differ only by conditional entity in record_requirements.required_families; family/ownership differ only by the shared sources guidance. The middle arm is run once and reused for adjacent comparisons. All groups, sources, seeds, schema, model controls and native admission are unchanged.",
+        .factor = "Baseline/family differ only by conditional entity in required and unmet assembly families; family/ownership differ only by the shared sources guidance. The middle arm is run once and reused for adjacent comparisons. All groups, sources, seeds, schema, model controls and native admission are unchanged.",
         .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = @import("calibration_temperature_policy.zig").temperature, .response_mode = "native_schema", .max_output_tokens = 16384, .seed = "absent", .top_p = "absent" },
         .limits = .{ .cases = cases.items.len, .logical_trials = trials.items.len, .repetitions = 2, .physical_sends = physical_sends, .stop_at_actual_input_plus_output_tokens = 200000, .retries_corrections_repairs_model_judges_review_calls_e2e = 0 },
         .admission = "Same current native admission applies to all three diagnostic arms; native requirements remain aggregate, and empty individual batches are permitted.",
@@ -313,16 +313,14 @@ fn comparisonChecks(a: std.mem.Allocator, baseline: Request, candidate: Request,
     const revised = try shared.read(a, candidate.packet.path);
     var body = try std.json.parseFromSliceLeaky(std.json.Value, a, revised, .{});
     const requirements = body.object.getPtr("record_requirements").?;
-    const families = requirements.object.getPtr("required_families").?;
-    var entity_count: usize = 0;
-    var index: usize = 0;
-    while (index < families.array.items.len) {
-        if (std.mem.eql(u8, families.array.items[index].string, "entity")) {
-            entity_count += 1;
-            _ = families.array.orderedRemove(index);
-        } else index += 1;
-    }
+    const entity_count = try removeEntityFamily(requirements.object.getPtr("required_families").?);
+    const unmet_count = try removeEntityFamily(requirements.object.getPtr("unmet_required_families").?);
+    const present = requirements.object.get("present_families").?.array.items;
+    const entity_present = for (present) |family| {
+        if (std.mem.eql(u8, family.string, "entity")) break true;
+    } else false;
     try std.testing.expectEqual(@as(usize, if (decision == .required) 1 else 0), entity_count);
+    try std.testing.expectEqual(@as(usize, if (decision == .required and !entity_present) 1 else 0), unmet_count);
     try std.testing.expectEqualStrings(original, try std.json.Stringify.valueAlloc(a, body, .{}));
     if (decision != .required) try std.testing.expectEqualStrings(original, revised);
     const original_edit = try @import("../domain/strict_json.zig").decode(@import("../domain/request_debugger.zig").Edit, a, try shared.read(a, baseline.edit.path), .{ .maximum_depth = 64 });
@@ -340,6 +338,27 @@ fn comparisonChecks(a: std.mem.Allocator, baseline: Request, candidate: Request,
             else => return error.InvalidCalibrationContent,
         }
     }
+}
+
+// Current controls change only the historical source-purpose wording. Other
+// guidance uses the current text contract; frozen historical receipts stay inert.
+fn ownershipBaseline(a: std.mem.Allocator, historical: []const u8, current: []const u8) ![]const u8 {
+    const before = try std.json.parseFromSliceLeaky(std.json.Value, a, historical, .{});
+    var after = try std.json.parseFromSliceLeaky(std.json.Value, a, current, .{});
+    try after.object.put(a, "sources", before.object.get("sources") orelse return error.InvalidCalibrationContent);
+    return std.json.Stringify.valueAlloc(a, after, .{});
+}
+fn removeEntityFamily(value: *std.json.Value) !usize {
+    if (value.* != .array) return error.InvalidCalibrationAssignment;
+    var removed: usize = 0;
+    var index: usize = 0;
+    while (index < value.array.items.len) {
+        if (std.mem.eql(u8, value.array.items[index].string, "entity")) {
+            _ = value.array.orderedRemove(index);
+            removed += 1;
+        } else index += 1;
+    }
+    return removed;
 }
 
 fn ownershipGuidanceChecks(a: std.mem.Allocator, old_guidance: []const u8, current_guidance: []const u8) !void {
@@ -469,18 +488,18 @@ pub fn admitResponse(a: std.mem.Allocator, schema: *const schema_owner.Schema, c
         .valid => |checked| try session.admit(a, current, context, checked),
         .invalid => |issue| return .{ .invalid = issue },
     };
-    if (try session.checkConsistency(a, current, checked)) |issue| return .{ .invalid = issue };
+    if (try session.checkConsistency(a, current, context, checked)) |issue| return .{ .invalid = issue };
     return .{ .valid = checked };
 }
 
 fn singletonConstructionChecks(a: std.mem.Allocator, schema: *const schema_owner.Schema, current: session.Session, context: @import("../domain/specification_provenance.zig").Context) !void {
-    const wire = "{\"kind\":\"primary_user_story\",\"value\":[{\"kind\":\"exact_copy\"},\" MOCK The application starts successfully and displays its greeting and UTC date and time.\"],\"signal_ids\":[1,2]}";
+    const wire = "{\"kind\":\"primary_user_story\",\"value\":{\"fragments\":[{\"kind\":\"exact_copy\"},\" MOCK The application starts successfully and displays its greeting and UTC date and time.\"]},\"signal_ids\":[1,2]}";
     const checked = switch (try admitResponse(a, schema, current, context, wire)) {
         .valid => |checked| checked,
         .invalid => return error.InvalidCalibrationSingleton,
     };
     try std.testing.expectEqual(@as(u32, 4), checked.response.content.primary_user_story.value.segments[0].exact_copy.claim_id.ordinal);
-    const echoed = "{\"kind\":\"primary_user_story\",\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":4}],\"signal_ids\":[1,2]}";
+    const echoed = "{\"kind\":\"primary_user_story\",\"value\":{\"fragments\":[{\"kind\":\"exact_copy\",\"claim_id\":4}]},\"signal_ids\":[1,2]}";
     try std.testing.expectError(error.InvalidCalibrationPayload, admitResponse(a, schema, current, context, echoed));
 }
 
@@ -682,13 +701,8 @@ fn presentationBody(a: std.mem.Allocator, packet: *const packets.Packet, present
     if (presentation == .current) return packet.body();
     var body = try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{});
     const requirements = body.object.getPtr("record_requirements") orelse return error.InvalidCalibrationAssignment;
-    const families = requirements.object.getPtr("required_families") orelse return error.InvalidCalibrationAssignment;
-    var index: usize = 0;
-    while (index < families.array.items.len) {
-        if (std.mem.eql(u8, families.array.items[index].string, "entity")) {
-            _ = families.array.orderedRemove(index);
-        } else index += 1;
-    }
+    _ = try removeEntityFamily(requirements.object.getPtr("required_families") orelse return error.InvalidCalibrationAssignment);
+    _ = try removeEntityFamily(requirements.object.getPtr("unmet_required_families") orelse return error.InvalidCalibrationAssignment);
     return std.json.Stringify.valueAlloc(a, body, .{});
 }
 fn receiptChecks(a: std.mem.Allocator, request: Request, answer: []const u8) !void {
