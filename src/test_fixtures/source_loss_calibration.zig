@@ -1,7 +1,6 @@
 //! Offline preparation/admission for a frozen diagnostic comparison.
 //! No model dispatch, semantic judge or production fallback.
 const std = @import("std");
-const temperature_policy = @import("calibration_temperature_policy.zig");
 const refs = @import("reference_reconciliation.zig");
 const r = refs.r;
 const text = @import("reference_text.zig");
@@ -361,6 +360,7 @@ fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
         .temperature = .fixed,
         .max_output_tokens = .{ .value = 16384 },
         .reasoning_effort = .low,
+        .request_profile = .openai_oss,
     }, .inference);
 }
 fn write(a: std.mem.Allocator, id: []const u8, suffix: []const u8, bytes: []const u8) !void {

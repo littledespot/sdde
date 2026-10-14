@@ -2,7 +2,8 @@
 
 Implements the evaluator-only path in [H-001–H-006](01-rubric-evaluator.md).
 It sends captured requirements, a supplied specification and its rubric to
-OpenAI or Bedrock, validates the returned judgments, and writes JSON/Markdown reports.
+the permitted Bedrock Luna target, validates the returned judgments, and writes
+JSON/Markdown reports. The retained OpenAI adapter is tested offline.
 It does **not** run Specify or require a deterministic definition of good prose.
 
 The [live E2E harness](e2e.md) now joins production generation to this evaluator.
@@ -50,10 +51,10 @@ The internal test environment supplies the evaluation selection:
 
 | Variable | Required value |
 | --- | --- |
-| `TEST_EVALUATION_PROVIDER` | `openai` or `bedrock`; unknown or missing providers reject. |
-| `TEST_EVALUATION_MODEL` | Exact operator-selected model ID; missing/empty IDs reject. OpenAI requires Structured Outputs support; Bedrock requires a registered model/region pair. |
-| `TEST_EVALUATION_REGION` | Explicit registered Bedrock region; empty/unset for OpenAI. |
-| `TEST_OPENAI_API_KEY` | Credential for internal evaluation calls only; no fallback to `OPENAI_API_KEY`. |
+| `TEST_EVALUATION_PROVIDER` | Explicit `bedrock` for the permitted live cohort. The parser recognizes the retained OpenAI adapter, but the live policy rejects its selection. Unknown or missing providers reject. |
+| `TEST_EVALUATION_MODEL` | Explicit `global.openai.gpt-6-luna`. Missing, expensive, historical and other IDs reject before credentials or network use. |
+| `TEST_EVALUATION_REGION` | Explicit `ap-southeast-2` (Sydney) for the registered Luna global profile. Its routing may leave Australia. |
+| `TEST_OPENAI_API_KEY` | Retained OpenAI credential port, exercised offline; direct OpenAI live selection is disallowed. No fallback to `OPENAI_API_KEY`. |
 | `TEST_AWS_BEARER_TOKEN_BEDROCK` | Credential when evaluating through Bedrock; no fallback to production AWS credentials or the OpenAI test key. |
 
 - The test-only environment reader borrows the process's startup snapshot.
@@ -63,6 +64,13 @@ The internal test environment supplies the evaluation selection:
 - The Bedrock test key is passed directly to the internal adapter.
 - It is not forwarded to production credential loading.
 - No environment values are compiled into either executable.
+- The shared [cost policy](../../test/harness/model_cost_policy.zig) allows only
+  `aws-bedrock` / `global.openai.gpt-6-luna`.
+  Environment selection checks it before credentials are read, and shared live
+  composition checks it before constructing a provider adapter. Sonnet, Sol,
+  Haiku, direct OpenAI, historical models and other aliases cannot reach a live request.
+  This development restriction supplies no default and does not restrict the
+  production engine's independent model catalogue.
 
 ### Judge configuration
 
@@ -73,8 +81,8 @@ The internal test environment supplies the evaluation selection:
 | Field | Value / responsibility |
 | --- | --- |
 | `schema` | `"evaluation-config/v1"` |
-| `reasoning_effort` | Explicit `null`, or `none`, `minimal`, `low`, `medium`, `high`, `xhigh`; must be supported by the selected model. |
-| `temperature` | Bedrock: `null` derives the required control from registered capabilities; explicit `0.1` is accepted only when supported, and other values reject. OpenAI: explicit `null`, or a supported number from 0 through 2. |
+| `reasoning_effort` | Explicit `null` for the live Luna profile. The closed parser retains other effort values for offline adapter conformance, but Luna rejects every explicit override until its Converse wire contract is verified. |
+| `temperature` | Explicit `null` for live Luna; no temperature is sent. Offline Bedrock profiles derive their required control from registered capabilities; explicit `0.1` is accepted only when registered. The retained OpenAI parser supports `null` or a number from 0 through 2. |
 | `timeout_ms` | Positive integer deadline for each network attempt. |
 | `retry_limit` | Integer 0–65535; additional attempts, not total attempts. Zero disables retries. |
 | `retry_delay_ms` | Nonnegative integer; must be positive when retries are enabled. |
@@ -97,7 +105,7 @@ The internal test environment supplies the evaluation selection:
 - The same day's Bedrock extension adds the explicit region and selected-provider
   credential.
 - Reports retain the complete resolved configuration, including `api:
-  "openai_responses"` or `"bedrock_invoke"`, `region` and the selected `model`;
+  "openai_responses"` or `"bedrock_converse"`, `region` and the selected `model`;
   credentials remain separate and never enter a request body or report.
 
 ### Provider behavior
@@ -113,36 +121,46 @@ The internal test environment supplies the evaluation selection:
 - No SDK or production dependency was added.
 
 - The internal Bedrock adapter uses
-  [InvokeModel](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_InvokeModel.html)
+  [Converse](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)
   with its [API
   key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys-use.html), reusing
   the production HTTPS transport, endpoint encoding, text request codec, response
   decoding and AWS exception classification.
 - Bedrock grading requires native JSON Schema capability from the existing model
-  registry. Currently `openai.gpt-oss-20b-1:0` in `ap-southeast-2` qualifies;
-  the registered prompt-only Haiku model cannot be selected for grading. There is
-  no separate evaluator model allowlist or prompt-only fallback.
+  registry in addition to the live-test policy. Explicitly select
+  `TEST_EVALUATION_PROVIDER=bedrock`,
+  `TEST_EVALUATION_MODEL=global.openai.gpt-6-luna` and
+  `TEST_EVALUATION_REGION=ap-southeast-2`. The current Luna profile satisfies
+  both gates. Its global routing is not an Australian-residency guarantee.
+  No model or response mode falls back.
 - Unknown, mismatched or schema-incapable selections reject before a provider call;
   no model, region, credential chain or endpoint is inferred.
-- Reasoning effort and temperature follow the same registry. GPT-OSS accepts null,
-  `low`, `medium` and `high` reasoning effort; supported Bedrock temperature resolves
-  to `0.1`, otherwise omission, without an operator override.
+- The compiled `BedrockRequestProfile` and capability owner admit only verified
+  request fields. Luna sends no explicit reasoning or temperature override;
+  AWS documents its default medium reasoning. Broader effort options on the
+  model card do not establish their Converse wire mapping. Offline fixtures
+  exercise existing GPT-OSS controls without granting live selection.
 - These are the repository's registered contracts, not a catalogue of all models
   available from the provider.
 
-- Under the user-approved 23 and 25 September 2026 amendments, Bedrock grading requests
-  native structured output through `response_format` with type
-  `json_schema`, using the existing shared request encoder. This supersedes the
-  prompt-only evaluator profile.
+- The native-schema grading requirement remains in force. The canonical Converse
+  encoder requests `outputConfig.textFormat.type: "json_schema"` and passes the
+  schema string through `outputConfig.textFormat.structure.jsonSchema.schema`.
+  Luna's registered request profile additionally sets
+  `additionalModelRequestFields.text.format.strict: true`, as required by the
+  [AWS Luna contract](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-luna.html).
+  Common supported controls use `inferenceConfig`; explicit reasoning and
+  temperature are omitted for this evidence-backed subset. These are the
+  [Converse structured-output fields](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html).
 - `packet.resultSchema` derives one schema from the native judgment type; that
-  same schema supplies prompt guidance and the serialized native schema object.
+  same schema supplies prompt guidance and the serialized native schema string.
   It uses the supported object/array/scalar/enum/nullable subset. No second schema
   definition or evaluator-specific provider transformation is introduced.
 - Complete local judgment validation still owns criterion coverage, score bounds,
   dispositions and exact source/specification evidence. Native schema requests do
   not authorize accepting malformed or unsupported judgments.
 - The evaluator supplies no output allowance, so its requests omit
-  `max_completion_tokens`. No tools, truncation or provider-specific retry policy is added.
+  `inferenceConfig.maxTokens`. No tools, truncation or provider-specific retry policy is added.
 - Stopped and malformed output never becomes a grade; validated usage is retained even
   when content is rejected.
 

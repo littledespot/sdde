@@ -262,7 +262,7 @@ test "production E2E binding honors configured models and cannot succeed without
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try fixture.materialize(io, project.dir, captured);
-        const model = if (example == 0) "openai.gpt-oss-20b-1:0" else "anthropic.claude-3-5-haiku-20241022-v1:0";
+        const model = if (example == 0) "global.openai.gpt-6-luna" else "anthropic.claude-3-5-haiku-20241022-v1:0";
         if (example == 1) {
             var model_config = try std.json.parseFromSlice(std.json.Value, a, captured.config, .{});
             defer model_config.deinit();
@@ -274,7 +274,7 @@ test "production E2E binding honors configured models and cannot succeed without
             }
             try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, model_config.value, .{}) });
             const catalogue = try @import("../files.zig").read(io, a, project.dir, ".sddtoolkit/providers/.sddproviders.json");
-            const model_catalogue = try std.mem.replaceOwned(u8, a, catalogue, "openai.gpt-oss-20b-1:0", model);
+            const model_catalogue = try std.mem.replaceOwned(u8, a, catalogue, "global.openai.gpt-6-luna", model);
             // This registered model only supports prompt guidance.
             const replaced = try std.mem.replaceOwned(u8, a, model_catalogue, "\"json\": true", "\"json\": false");
             try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit/providers/.sddproviders.json", .data = try std.mem.replaceOwned(u8, a, replaced, "ap-southeast-2", "us-west-2") });
@@ -372,7 +372,7 @@ test "rubric handoff preserves poor output and scores without changing workflow 
         failed.workflow_outcome = outcome;
         try std.testing.expectError(error.GenerationNotCompleted, evaluation.inputs(a, failed, captured.evaluation, "stale output", "run-124"));
     }
-    const config = try @import("../configuration.zig").parse(a, captured.evaluation.config_bytes, .{ .api = .bedrock_invoke, .model = @import("../contracts.zig").ModelId.parse("openai.gpt-oss-20b-1:0").?, .region = .@"ap-southeast-2" });
+    const config = try @import("../configuration.zig").parse(a, captured.evaluation.config_bytes, .{ .api = .bedrock_converse, .model = @import("../contracts.zig").ModelId.parse("openai.gpt-oss-20b-1:0").?, .region = .@"ap-southeast-2" });
     const result: @import("../report.zig").Report = .{ .capture = inputs, .configuration = config, .attempts = &.{}, .outcome = .{ .evaluated = .{ .results = &.{}, .assessment = .scored, .score_percent = 10, .threshold = .not_met } } };
     evaluation.apply(&report, result);
     try std.testing.expectEqual(.scored, report.semantic_quality);
@@ -577,7 +577,7 @@ test "failure reports preserve separate engine provider and model evidence" {
 
 fn fractionalEvaluationConfiguration(a: std.mem.Allocator) !@import("../configuration.zig").Config {
     return @import("../configuration.zig").parse(a, @embedFile("../../e2e/config/evaluation.json"), .{
-        .api = .bedrock_invoke,
+        .api = .bedrock_converse,
         .model = @import("../contracts.zig").ModelId.parse("openai.gpt-oss-20b-1:0").?,
         .region = .@"ap-southeast-2",
     });
@@ -911,8 +911,12 @@ test "unrepairable responses preserve complete production logs and forbid public
             try std.testing.expectEqual(.ok, bindings.invokeParseInvocation());
             try std.testing.expectEqual(.ok, bindings.invokeSelectWorkflow());
             try std.testing.expectEqual(.ok, bindings.invokePrepareWorkflow());
-            var wire: @import("../../../src/bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"<reasoning>metadata</reasoning>\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":884,\"completion_tokens\":48,\"total_tokens\":932}}" };
-            if (mode != 0) wire.inference_body = try std.fmt.allocPrint(a, "{{\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":{s}}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":884,\"completion_tokens\":48,\"total_tokens\":932}}}}", .{try std.json.Stringify.valueAlloc(a, if (mode == 1) "{" else "{}", .{})});
+            var wire: @import("../../../src/bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}" };
+            if (mode != 0) wire.inference_body = try std.json.Stringify.valueAlloc(a, .{
+                .output = .{ .message = .{ .role = "assistant", .content = .{.{ .text = if (mode == 1) "{" else "{}" }} } },
+                .stopReason = "end_turn",
+                .usage = .{ .inputTokens = 884, .outputTokens = 48, .totalTokens = 932 },
+            }, .{});
             runtime.provider_runtime.provider.?.aws_bedrock.transport = wire.port();
             const Prepared = struct {
                 fn selected(_: *anyopaque) @import("../../../src/application/workflow_engine_child_bindings.zig").SelectionStepOutcome {

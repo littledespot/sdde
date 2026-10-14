@@ -201,7 +201,7 @@ pub fn endpoint(allocator: std.mem.Allocator, request: transport.Request) std.me
     }
     // Region is a closed enum, not a user-supplied host or URL string.
     return std.fmt.allocPrint(allocator, "https://bedrock-runtime.{s}.amazonaws.com/model/{s}/{s}", .{
-        @tagName(request.region), encoded.written(), if (request.kind == .inference) "invoke" else "count-tokens",
+        @tagName(request.region), encoded.written(), if (request.kind == .inference) "converse" else "count-tokens",
     });
 }
 

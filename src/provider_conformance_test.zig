@@ -96,13 +96,16 @@ const Fixture = struct {
     fn init(self: *Fixture, allocator: std.mem.Allocator, backend: Backend) !void {
         try self.base.init(allocator);
         errdefer self.base.deinit();
-        const contract = contracts.registry.entries[1];
+        const contract = contracts.registry.resolve(.{ .bytes = "aws-bedrock" }, .{ .bytes = "anthropic.claude-3-5-haiku-20241022-v1:0" }).?.*;
         self.base.registry_entry.provider = contract.provider;
         self.base.registry_entry.model = contract.model;
         self.base.registry_entry.capabilities = contract.capabilities;
+        self.base.registry_entry.bedrock_request_profile = contract.bedrock_request_profile;
         self.base.registry_entry.config = .{ .aws_bedrock = .{ .region = .@"us-west-2" } };
         self.base.registry_entry.supported_reasoning_efforts = &.{};
         self.base.provider_binding.reasoning_effort = null;
+        self.base.provider_binding.controls = contract.capabilities.inferenceControls();
+        self.base.request.controls = self.base.provider_binding.controls;
         self.base.request.binding_id = self.base.provider_binding.bindingId();
         self.auth = .{ .allocator = allocator };
         var canary: [48]u8 = undefined;
@@ -175,11 +178,18 @@ test "Bedrock captures exact serialized requests and raw responses before respon
     const reasoning = try std.testing.allocator.alloc(u8, 170000);
     defer std.testing.allocator.free(reasoning);
     @memset(reasoning, 'r');
-    const reasoning_complete = try std.fmt.allocPrint(std.testing.allocator, "{{\"choices\":[{{\"index\":0,\"message\":{{\"role\":\"assistant\",\"content\":\"<reasoning>{s}</reasoning>{{}}\"}},\"finish_reason\":\"stop\"}}],\"usage\":{{\"prompt_tokens\":10,\"completion_tokens\":16384,\"total_tokens\":16394}}}}", .{reasoning});
+    const reasoning_complete = try std.json.Stringify.valueAlloc(std.testing.allocator, .{
+        .output = .{ .message = .{ .role = "assistant", .content = .{
+            .{ .reasoningContent = .{ .reasoningText = .{ .text = reasoning } } },
+            .{ .text = "{}" },
+        } } },
+        .stopReason = "end_turn",
+        .usage = .{ .inputTokens = 10, .outputTokens = 16384, .totalTokens = 16394 },
+    }, .{});
     defer std.testing.allocator.free(reasoning_complete);
-    const reasoning_stopped = try std.mem.replaceOwned(u8, std.testing.allocator, reasoning_complete, "\"stop\"", "\"length\"");
+    const reasoning_stopped = try std.mem.replaceOwned(u8, std.testing.allocator, reasoning_complete, "\"end_turn\"", "\"max_tokens\"");
     defer std.testing.allocator.free(reasoning_stopped);
-    const reasoning_unfinished = try std.mem.replaceOwned(u8, std.testing.allocator, reasoning_complete, "</reasoning>{}", "");
+    const reasoning_unfinished = try std.mem.replaceOwned(u8, std.testing.allocator, reasoning_complete, ",{\"text\":\"{}\"}", "");
     defer std.testing.allocator.free(reasoning_unfinished);
     const Expected = enum { complete, malformed, stopped, rejected, missing_final, http_error };
     const cases = [_]struct { body: []const u8, status: u16 = 200, exception: ?[]const u8 = null, expected: Expected }{
@@ -188,8 +198,8 @@ test "Bedrock captures exact serialized requests and raw responses before respon
         .{ .body = reasoning_stopped, .expected = .stopped },
         .{ .body = reasoning_unfinished, .expected = .missing_final },
         .{ .body = "\xffnot-json", .expected = .malformed },
-        .{ .body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}", .expected = .stopped },
-        .{ .body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"unknown\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}", .expected = .rejected },
+        .{ .body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"\"}]}},\"stopReason\":\"max_tokens\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}", .expected = .stopped },
+        .{ .body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"\"}]}},\"stopReason\":\"unknown\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}", .expected = .rejected },
         .{ .body = "{\"message\":\"unparsed provider error detail\"}", .status = 429, .exception = "ThrottlingException", .expected = .http_error },
     };
     for (cases) |case| {
@@ -277,8 +287,8 @@ test "Bedrock request capture failure prevents transport for inference and token
 test "Bedrock response capture failure preserves completed stopped and rejected usage" {
     const bodies = [_][]const u8{
         @import("bedrock_transport_test_fixture.zig").complete,
-        "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}",
-        "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"unknown\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}",
+        "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"\"}]}},\"stopReason\":\"max_tokens\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}",
+        "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"\"}]}},\"stopReason\":\"unknown\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}",
     };
     for (bodies) |body| {
         var fixture: Fixture = undefined;
@@ -496,7 +506,7 @@ test "shared fake and Bedrock preserve provider failure cancellation and stopped
                 },
                 2 => {
                     fixture.fake_provider.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 10, .output_tokens = 2 } };
-                    fixture.wire.result = .{ .received = .{ .status = 200, .body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}" } };
+                    fixture.wire.result = .{ .received = .{ .status = 200, .body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"\"}]}},\"stopReason\":\"max_tokens\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}" } };
                     var observed = try fixture.call(authorized);
                     defer observed.deinit();
                     try std.testing.expectEqual(.output_limit, observed.completed.raw_result.stopped.reason);
@@ -517,7 +527,19 @@ test "production contracts require exact externally selected model region and cl
     const model = contracts.registry.entries[0];
     try std.testing.expect(!model.capabilities.input_token_count);
     try std.testing.expect(model.capabilities.supports_max_output_tokens);
-    try std.testing.expect(!contracts.registry.entries[1].capabilities.supports_max_output_tokens);
+    const counted = contracts.registry.resolve(.{ .bytes = "aws-bedrock" }, .{ .bytes = "anthropic.claude-3-5-haiku-20241022-v1:0" }).?;
+    try std.testing.expect(!counted.capabilities.supports_max_output_tokens);
+    for ([_][]const u8{"global.openai.gpt-6-luna"}) |name| {
+        const current = contracts.registry.resolve(.{ .bytes = "aws-bedrock" }, .{ .bytes = name }).?;
+        try std.testing.expect(current.capabilities.supports_max_output_tokens);
+        try std.testing.expect(!current.capabilities.temperature);
+        try std.testing.expect(!current.capabilities.input_token_count);
+        try std.testing.expectEqual(.bedrock_json_schema, current.capabilities.structured_response);
+        try std.testing.expectEqual(.openai_luna, current.bedrock_request_profile);
+        try std.testing.expectEqual(@as(usize, 0), current.supported_reasoning_efforts.len);
+        try std.testing.expect(current.acceptsConfig(.{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } }));
+        try std.testing.expect(!current.acceptsConfig(.{ .aws_bedrock = .{ .region = .@"us-west-2" } }));
+    }
     try std.testing.expect(model.acceptsConfig(.{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } }));
     try std.testing.expect(!model.acceptsConfig(.{ .aws_bedrock = .{ .region = .@"us-west-2" } }));
     const config = @import("domain/llm_provider_config_schema.zig");
@@ -530,9 +552,23 @@ test "production contracts require exact externally selected model region and cl
 
 test "Bedrock endpoint encoding is HTTPS fixed-region with no target reinterpretation" {
     const http = @import("adapters/provider/bedrock_http.zig");
-    const value = try http.endpoint(std.testing.allocator, .{ .region = .@"ap-southeast-2", .model = contracts.registry.entries[0].model, .kind = .inference, .body = "", .api_key = "", .deadline_monotonic_ms = 1 });
-    defer std.testing.allocator.free(value);
-    try std.testing.expectEqualStrings("https://bedrock-runtime.ap-southeast-2.amazonaws.com/model/openai.gpt-oss-20b-1%3A0/invoke", value);
+    // Transport routing depends only on operation kind, across every trusted
+    // model profile. Count capability admission remains the caller's contract.
+    for (contracts.registry.entries) |model| {
+        for (model.bedrock_regions) |region| {
+            for (std.enums.values(operation.ProviderOperationKind)) |kind| {
+                const value = try http.endpoint(std.testing.allocator, .{ .region = region, .model = model.model, .kind = kind, .body = "", .api_key = "", .deadline_monotonic_ms = 1 });
+                defer std.testing.allocator.free(value);
+                const expected = try std.fmt.allocPrint(std.testing.allocator, "https://bedrock-runtime.{s}.amazonaws.com/model/{f}/{s}", .{
+                    @tagName(region),
+                    std.fmt.alt(std.Uri.Component{ .raw = model.model.bytes }, .formatEscaped),
+                    if (kind == .inference) "converse" else "count-tokens",
+                });
+                defer std.testing.allocator.free(expected);
+                try std.testing.expectEqualStrings(expected, value);
+            }
+        }
+    }
     // Force native HTTP implementation compilation without a network request.
     _ = &http.Adapter.port;
 }
@@ -568,21 +604,24 @@ test "Bedrock projects the exact input once without an unconfigured output allow
         \\{ "$defs": {"flag": {"type":"boolean"}}, "type":"object", "properties":{"ok":{"$ref":"#/$defs/flag"}}, "required":["ok"], "additionalProperties":false }
     );
     const encoding = @import("adapters/provider/bedrock_request.zig");
-    const infer = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference);
+    const infer = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference, .none);
     defer std.testing.allocator.free(infer);
-    const count_body = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count);
+    const count_body = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count, .none);
     defer std.testing.allocator.free(count_body);
     var first = try strict.parse(std.testing.allocator, infer, .{ .maximum_depth = 32 }, false, null);
     defer first.deinit();
     const decoded_count = try @import("bedrock_transport_test_fixture.zig").requestBody(std.testing.allocator, count_body, .input_token_count);
     defer std.testing.allocator.free(decoded_count);
-    try std.testing.expectEqualStrings(infer, decoded_count);
-    try std.testing.expectEqual(@as(usize, 3), first.value.object.get("messages").?.array.items[0].object.get("content").?.array.items.len);
+    try std.testing.expect(first.value.object.swapRemove("inferenceConfig"));
+    const input_only = try std.json.Stringify.valueAlloc(std.testing.allocator, first.value, .{});
+    defer std.testing.allocator.free(input_only);
+    try std.testing.expectEqualStrings(input_only, decoded_count);
+    try std.testing.expectEqual(@as(usize, 3), first.value.object.get("system").?.array.items.len);
     const framing = @import("domain/model_controls.zig").response_format_guidance;
-    try std.testing.expectEqualStrings(framing, first.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[1].object.get("text").?.string);
+    try std.testing.expectEqualStrings(framing, first.value.object.get("system").?.array.items[1].object.get("text").?.string);
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, infer, framing));
     try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, decoded_count, framing));
-    try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), first.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[2].object.get("text").?.string);
+    try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), first.value.object.get("system").?.array.items[2].object.get("text").?.string);
     try std.testing.expect(std.mem.indexOf(u8, infer, "$ref") == null);
     try std.testing.expect(std.mem.indexOf(u8, infer, "$defs") == null);
     for ([_][]const u8{ "max_completion_tokens", "model_request_id", "binding_id", "deadline", "Authorization", "outputConfig" }) |name| {
@@ -591,7 +630,7 @@ test "Bedrock projects the exact input once without an unconfigured output allow
     }
 }
 
-test "Bedrock serializes an explicit output allowance unchanged in inference and count bodies" {
+test "Bedrock serializes exact output allowance only in Converse inference controls" {
     const encoding = @import("adapters/provider/bedrock_request.zig");
     const controls = @import("domain/model_controls.zig");
     for (std.enums.values(controls.ResponseGuidanceMode)) |mode| {
@@ -607,11 +646,11 @@ test "Bedrock serializes an explicit output allowance unchanged in inference and
             fixture.base.request.response_guidance_mode = mode;
             try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
 
-            const encoded = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference);
+            const encoded = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference, .none);
             defer std.testing.allocator.free(encoded);
             var parsed = try strict.parse(std.testing.allocator, encoded, .{ .maximum_depth = 32 }, false, null);
             defer parsed.deinit();
-            const field = parsed.value.object.get("max_completion_tokens");
+            const field = if (parsed.value.object.get("inferenceConfig")) |config| config.object.get("maxTokens") else null;
             if (limit) |value| {
                 try std.testing.expectEqual(value, try std.fmt.parseInt(u32, field.?.number_string, 10));
             } else try std.testing.expect(field == null);
@@ -619,11 +658,15 @@ test "Bedrock serializes an explicit output allowance unchanged in inference and
             try std.testing.expect(!parsed.value.object.contains("max_tokens"));
 
             // The wrapper is tested independently of model CountTokens support.
-            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count);
+            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count, .none);
             defer std.testing.allocator.free(counted);
             const decoded = try @import("bedrock_transport_test_fixture.zig").requestBody(std.testing.allocator, counted, .input_token_count);
             defer std.testing.allocator.free(decoded);
-            try std.testing.expectEqualStrings(encoded, decoded);
+            if (parsed.value.object.contains("inferenceConfig")) try std.testing.expect(parsed.value.object.swapRemove("inferenceConfig"));
+            if (parsed.value.object.contains("outputConfig")) try std.testing.expect(parsed.value.object.swapRemove("outputConfig"));
+            const input_only = try std.json.Stringify.valueAlloc(std.testing.allocator, parsed.value, .{});
+            defer std.testing.allocator.free(input_only);
+            try std.testing.expectEqualStrings(input_only, decoded);
         }
     }
     var fixture: Fixture = undefined;
@@ -631,7 +674,7 @@ test "Bedrock serializes an explicit output allowance unchanged in inference and
     defer fixture.deinit();
     fixture.base.request.controls.max_output_tokens = .{ .value = 0 };
     for (std.enums.values(operation.ProviderOperationKind)) |kind| {
-        try std.testing.expectError(error.InvalidRequest, encoding.encode(std.testing.allocator, &fixture.base.request, kind));
+        try std.testing.expectError(error.InvalidRequest, encoding.encode(std.testing.allocator, &fixture.base.request, kind, .none));
     }
 }
 
@@ -646,6 +689,7 @@ test "shared fake and Bedrock retain actual stopped usage with an allowance and 
             fixture.base.registry_entry.provider = contract.provider;
             fixture.base.registry_entry.model = contract.model;
             fixture.base.registry_entry.capabilities = contract.capabilities;
+            fixture.base.registry_entry.bedrock_request_profile = contract.bedrock_request_profile;
             fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0] } };
             fixture.base.registry_entry.supported_reasoning_efforts = contract.supported_reasoning_efforts;
             fixture.base.provider_binding.controls.max_output_tokens = allowance;
@@ -654,7 +698,7 @@ test "shared fake and Bedrock retain actual stopped usage with an allowance and 
             const authorized = try fixture.start(.inference);
             if (withdraw_support) fixture.base.registry_entry.capabilities.supports_max_output_tokens = false;
             fixture.fake_provider.invocation_plan = .{ .stopped = .{ .reason = .output_limit, .input_tokens = 10, .output_tokens = 2 } };
-            fixture.wire.result = .{ .received = .{ .status = 200, .body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"length\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}" } };
+            fixture.wire.result = .{ .received = .{ .status = 200, .body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"\"}]}},\"stopReason\":\"max_tokens\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}" } };
             var observed = try fixture.call(authorized);
             defer observed.deinit();
             if (withdraw_support) {
@@ -693,32 +737,30 @@ test "Bedrock native projection retains complete guidance and registered mode wi
     for (accepted) |bytes| {
         fixture.base.request.response_schema = try parser.compiler().compile(fixture.base.schema_arena.allocator(), bytes);
         try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
-        const body = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, &fixture.base.request, .inference);
+        const body = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, &fixture.base.request, .inference, .none);
         defer std.testing.allocator.free(body);
         var parsed = try strict.parse(std.testing.allocator, body, .{ .maximum_depth = 32 }, false, null);
         defer parsed.deinit();
-        const format = parsed.value.object.get("response_format").?;
+        const format = parsed.value.object.get("outputConfig").?.object.get("textFormat").?;
         try std.testing.expectEqualStrings("json_schema", format.object.get("type").?.string);
-        const schema = try std.json.Stringify.valueAlloc(std.testing.allocator, format.object.get("json_schema").?.object.get("schema").?, .{});
-        defer std.testing.allocator.free(schema);
+        const schema = format.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
         try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), schema);
         try std.testing.expectEqualDeep(fixture.base.request.response_schema.root().*, (try parser.compiler().compile(fixture.base.schema_arena.allocator(), schema)).root().*);
-        try std.testing.expectEqual(@as(usize, 3), parsed.value.object.get("messages").?.array.items[0].object.get("content").?.array.items.len);
+        try std.testing.expectEqual(@as(usize, 3), parsed.value.object.get("system").?.array.items.len);
         const framing = @import("domain/model_controls.zig").response_format_guidance;
-        try std.testing.expectEqualStrings(framing, parsed.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[1].object.get("text").?.string);
+        try std.testing.expectEqualStrings(framing, parsed.value.object.get("system").?.array.items[1].object.get("text").?.string);
         try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, body, framing));
     }
     for ([_][]const u8{ "{\"type\":\"string\",\"maxLength\":100}", "{\"type\":\"integer\",\"minimum\":0,\"maximum\":4}", "{\"type\":\"array\",\"maxItems\":2,\"items\":{\"type\":\"boolean\"}}" }) |property| {
         const bytes = try std.fmt.allocPrint(fixture.base.schema_arena.allocator(), "{{\"type\":\"object\",\"properties\":{{\"value\":{s}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{property});
         fixture.base.request.response_schema = try parser.compiler().compile(fixture.base.schema_arena.allocator(), bytes);
         try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
-        const native = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, &fixture.base.request, .inference);
+        const native = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, &fixture.base.request, .inference, .none);
         defer std.testing.allocator.free(native);
         var wire = try strict.parse(std.testing.allocator, native, .{ .maximum_depth = 32 }, false, null);
         defer wire.deinit();
-        try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), wire.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[2].object.get("text").?.string);
-        const projection = try std.json.Stringify.valueAlloc(std.testing.allocator, wire.value.object.get("response_format").?.object.get("json_schema").?.object.get("schema").?, .{});
-        defer std.testing.allocator.free(projection);
+        try std.testing.expectEqualStrings(fixture.base.request.response_schema.modelBytes(), wire.value.object.get("system").?.array.items[2].object.get("text").?.string);
+        const projection = wire.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
         for ([_][]const u8{ "maxLength", "minimum", "maximum", "maxItems" }) |unsupported| try std.testing.expect(std.mem.indexOf(u8, projection, unsupported) == null);
         fixture.base.request.response_guidance_mode = .prompt_only;
         fixture.base.registry_entry.json = false;
@@ -728,24 +770,46 @@ test "Bedrock native projection retains complete guidance and registered mode wi
     }
 }
 
-test "Bedrock reasoning effort is explicit registered and retained in the counted body" {
+test "Converse native schema rejects malformed projected data instead of weakening response mode" {
     const encoding = @import("adapters/provider/bedrock_request.zig");
-    for ([_]?[]const u8{ null, "low", "medium", "high" }) |effort| {
-        for (contracts.registry.entries, 0..) |contract, index| {
+    for ([_][]const u8{ "{broken", "null", "[]", "{\"type\":\"object\",\"type\":\"object\"}", "{} {}" }) |structure| {
+        for (std.enums.values(operation.ProviderOperationKind)) |kind| {
+            try std.testing.expectError(error.InvalidRequest, encoding.encodeText(std.testing.allocator, .{
+                .content = &.{.{ .user = "input" }},
+                .schema = .{ .native = .{ .guidance = "{}", .structure = structure } },
+                .schema_name = "test",
+                .temperature = null,
+                .reasoning_effort = null,
+            }, kind));
+        }
+    }
+}
+
+test "Bedrock reasoning controls follow the exact registered policy in inference and counting" {
+    const encoding = @import("adapters/provider/bedrock_request.zig");
+    for (contracts.registry.entries) |contract| {
+        for ([_]?[]const u8{ null, "low", "medium", "high", "xhigh", "max" }) |effort| {
             var fixture: Fixture = undefined;
             try fixture.init(std.testing.allocator, .bedrock);
             defer fixture.deinit();
             fixture.base.registry_entry.provider = contract.provider;
             fixture.base.registry_entry.model = contract.model;
             fixture.base.registry_entry.capabilities = contract.capabilities;
+            fixture.base.registry_entry.bedrock_request_profile = contract.bedrock_request_profile;
             fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0] } };
             fixture.base.registry_entry.supported_reasoning_efforts = contract.supported_reasoning_efforts;
             fixture.base.provider_binding.reasoning_effort = effort;
+            fixture.base.provider_binding.controls = contract.capabilities.inferenceControls();
+            fixture.base.request.controls = fixture.base.provider_binding.controls;
             fixture.base.request.binding_id = fixture.base.provider_binding.bindingId();
+            const supported = if (effort) |value| supported: {
+                for (contract.supported_reasoning_efforts) |registered| if (std.mem.eql(u8, value, registered)) break :supported true;
+                break :supported false;
+            } else true;
             const authorized = try fixture.start(.inference);
             var observed = try fixture.call(authorized);
             defer observed.deinit();
-            if (index == 1 and effort != null) {
+            if (!supported) {
                 try std.testing.expectEqual(.request_rejected, observed.failed.cause);
                 try std.testing.expectEqual(.not_sent, observed.failed.delivery);
                 try std.testing.expectEqual(@as(usize, 0), fixture.effects());
@@ -753,127 +817,190 @@ test "Bedrock reasoning effort is explicit registered and retained in the counte
             }
             try std.testing.expect(observed == .completed);
             try std.testing.expectEqual(@as(usize, 1), fixture.effects());
-            const bytes = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference);
+            const bytes = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference, contract.bedrock_request_profile);
             defer std.testing.allocator.free(bytes);
             var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 32 }, false, null);
             defer parsed.deinit();
-            const additional = parsed.value.object.get("reasoning_effort");
-            if (effort) |value| {
-                try std.testing.expectEqualStrings(value, additional.?.string);
-            } else try std.testing.expect(additional == null);
-            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count);
+            const additional = parsed.value.object.get("additionalModelRequestFields");
+            switch (contract.bedrock_request_profile) {
+                .none => try std.testing.expect(additional == null),
+                .openai_oss => if (effort) |value| {
+                    try std.testing.expectEqualStrings(value, additional.?.object.get("reasoning_effort").?.string);
+                    try std.testing.expectEqual(@as(usize, 1), additional.?.object.count());
+                } else try std.testing.expect(additional == null),
+                .openai_luna => try std.testing.expect(additional == null),
+            }
+            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count, contract.bedrock_request_profile);
             defer std.testing.allocator.free(counted);
             const counted_body = try @import("bedrock_transport_test_fixture.zig").requestBody(std.testing.allocator, counted, .input_token_count);
             defer std.testing.allocator.free(counted_body);
-            try std.testing.expectEqualStrings(bytes, counted_body);
-            try std.testing.expect(!parsed.value.object.contains("max_completion_tokens"));
+            if (parsed.value.object.contains("inferenceConfig")) try std.testing.expect(parsed.value.object.swapRemove("inferenceConfig"));
+            const input_only = try std.json.Stringify.valueAlloc(std.testing.allocator, parsed.value, .{});
+            defer std.testing.allocator.free(input_only);
+            try std.testing.expectEqualStrings(input_only, counted_body);
         }
     }
-    for ([_][]const u8{ "", "LOW", "none", "minimal", "xhigh", "low\n", "unknown" }) |invalid|
+    for ([_][]const u8{ "", "LOW", "none", "minimal", "low\n", "unknown" }) |invalid|
         try std.testing.expectError(error.InvalidRequest, encoding.reasoningEffort(invalid));
+    for ([_]encoding.ReasoningEffort{ .xhigh, .max }) |effort| {
+        try std.testing.expectError(error.InvalidRequest, encoding.encodeText(std.testing.allocator, .{
+            .content = &.{.{ .user = "input" }},
+            .schema = .{ .prompt_only = "{}" },
+            .schema_name = "test",
+            .temperature = null,
+            .reasoning_effort = effort,
+            .request_profile = .openai_oss,
+        }, .inference));
+    }
+    try std.testing.expectError(error.InvalidRequest, encoding.encodeText(std.testing.allocator, .{
+        .content = &.{.{ .user = "input" }},
+        .schema = .{ .prompt_only = "{}" },
+        .schema_name = "test",
+        .temperature = null,
+        .reasoning_effort = .low,
+        .request_profile = .none,
+    }, .inference));
 }
 
-test "Bedrock response rejects malformed UTF8 identity-shaped unknown data and inconsistent usage" {
+test "Converse response rejects malformed UTF8 unknown fields duplicate values and inconsistent usage" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator, .bedrock);
     defer fixture.deinit();
     const original = @import("bedrock_transport_test_fixture.zig").complete;
     const changes = [_][2][]const u8{
-        .{ "\"content\":\"{}\"", "\"content\":\"\xff\"" },
-        .{ "\"content\":\"{}\"", "\"content\":\"{}\",\"content\":\"{}\"" },
-        .{ "\"total_tokens\":12", "\"total_tokens\":11" },
-        .{ "\"prompt_tokens\":10", "\"prompt_tokens\":\"10\"" },
-        .{ "\"prompt_tokens\":10", "\"prompt_tokens\":18446744073709551615" },
-        .{ "\"total_tokens\":12", "\"total_tokens\":12,\"secret\":true" },
-        .{ "\"role\":\"assistant\"", "\"role\":\"user\"" },
-        .{ "\"stop\"", "\"stop_sequence\"" },
-        .{ "\"stop\"", "\"unknown\"" },
+        .{ "\"text\":\"{}\"", "\"text\":\"\xff\"" },
+        .{ "\"text\":\"{}\"", "\"text\":\"{}\",\"text\":\"{}\"" },
+        .{ "\"totalTokens\":12", "\"totalTokens\":11" },
+        .{ "\"inputTokens\":10", "\"inputTokens\":\"10\"" },
+        .{ "\"inputTokens\":10", "\"inputTokens\":18446744073709551615" },
+        .{ "\"totalTokens\":12", "\"totalTokens\":12,\"secret\":true" },
+        .{ "\"stopReason\":", "\"model_request_id\":\"invented\",\"stopReason\":" },
     };
-    for (changes, 0..) |change, index| {
+    for (changes) |change| {
         const bytes = try std.mem.replaceOwned(u8, std.testing.allocator, original, change[0], change[1]);
         defer std.testing.allocator.free(bytes);
+        try std.testing.expect(!std.mem.eql(u8, original, bytes));
         var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = bytes } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
         defer observed.deinit();
-        if (index >= 6) {
-            try std.testing.expectEqual(.invalid_content, observed.completed.raw_result.rejected.reason);
-            try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.rejected.usage.total_tokens);
-        } else {
-            try std.testing.expectEqual(.response_invalid, observed.failed.cause);
-            try std.testing.expectEqual(.response_received, observed.failed.delivery);
-        }
+        try std.testing.expectEqual(.response_invalid, observed.failed.cause);
+        try std.testing.expectEqual(.response_received, observed.failed.delivery);
     }
 }
 
-test "Bedrock InvokeModel separates reasoning and retains usage on invalid final content" {
+test "Converse separates typed reasoning and joins text exactly without interpreting provider text" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator, .bedrock);
     defer fixture.deinit();
-    const cases = [_]struct { content: []const u8, missing: bool = false, expected: []const u8 = "{}" }{
-        .{ .content = "{}" },
-        .{ .content = "<reasoning>metadata</reasoning>{}" },
-        .{ .content = " \n<reasoning>metadata</reasoning> \n{}" },
-        .{ .content = "<reasoning>{}</reasoning>", .missing = true },
-        .{ .content = "<reasoning>unfinished", .missing = true },
-        .{ .content = "", .missing = true },
-        .{ .content = " \t\n", .missing = true },
-        .{ .content = "<reasoning>notes</reasoning>{broken", .expected = "{broken" },
-        .{ .content = "prefix {}", .expected = "prefix {}" },
-        .{ .content = "{\"text\":\"<reasoning>literal</reasoning>\"}", .expected = "{\"text\":\"<reasoning>literal</reasoning>\"}" },
+    const cases = [_]struct { blocks: []const u8, expected: ?[]const u8 }{
+        .{ .blocks = "[{\"text\":\"{}\"}]", .expected = "{}" },
+        .{ .blocks = "[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\",\"signature\":\"opaque\"}}},{\"text\":\"{\"},{\"text\":\"}\"}]", .expected = "{}" },
+        .{ .blocks = "[{\"text\":\" a\"},{\"reasoningContent\":{\"redactedContent\":\"YQ==\"}},{\"text\":\"b \\n\"}]", .expected = " ab \n" },
+        .{ .blocks = "[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"{}\"}}}]", .expected = null },
+        .{ .blocks = "[]", .expected = null },
+        .{ .blocks = "[{\"text\":\" \\t\\n\"}]", .expected = null },
+        .{ .blocks = "[{\"text\":\"<reasoning>literal</reasoning>{}\"}]", .expected = "<reasoning>literal</reasoning>{}" },
+        .{ .blocks = "[{\"text\":\"{broken\"}]", .expected = "{broken" },
     };
     for (cases) |case| {
-        const bytes = try std.json.Stringify.valueAlloc(std.testing.allocator, .{
-            .choices = .{.{ .index = @as(u32, 0), .message = .{ .role = "assistant", .content = case.content }, .finish_reason = "stop" }},
-            .usage = .{ .prompt_tokens = 10, .completion_tokens = 2, .total_tokens = 12 },
-        }, .{});
+        const bytes = try std.fmt.allocPrint(std.testing.allocator, "{{\"output\":{{\"message\":{{\"role\":\"assistant\",\"content\":{s}}}}},\"stopReason\":\"end_turn\",\"usage\":{{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}}}", .{case.blocks});
         defer std.testing.allocator.free(bytes);
         var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = bytes } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
         defer observed.deinit();
-        if (case.missing) {
+        if (case.expected) |expected| {
+            try std.testing.expectEqualStrings(expected, observed.completed.raw_result.complete.content.bytes);
+            try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.complete.usage.total_tokens);
+        } else {
             const rejected = observed.completed.raw_result.rejected;
             try std.testing.expectEqual(.missing_final_text, rejected.reason);
             try std.testing.expectEqual(@as(u64, 12), rejected.usage.total_tokens);
             try std.testing.expect(rejected.request_id == fixture.base.model_request_id);
             try std.testing.expect(rejected.binding_id.eql(fixture.base.provider_binding.bindingId()));
-        } else {
-            try std.testing.expectEqualStrings(case.expected, observed.completed.raw_result.complete.content.bytes);
-            try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.complete.usage.total_tokens);
         }
     }
 }
 
-test "InvokeModel content failures preserve usage and reject ambiguous answers" {
+test "Converse content failures preserve valid usage and reject ambiguous content variants" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator, .bedrock);
     defer fixture.deinit();
     const original = @import("bedrock_transport_test_fixture.zig").complete;
-    for ([_]struct { old: []const u8, new: []const u8, reason: operation.ProviderContentDiagnostic = .invalid_content }{
-        .{ .old = "\"index\":0", .new = "\"index\":1" },
-        .{ .old = "\"content\":\"{}\"", .new = "\"content\":{}" },
-        .{ .old = "\"content\":\"{}\"", .new = "\"content\":null", .reason = .missing_final_text },
-        .{ .old = ",\"content\":\"{}\"", .new = "", .reason = .missing_final_text },
-        .{ .old = "\"message\":", .new = "\"logprobs\":{},\"message\":" },
+    const cases = [_]struct { old: []const u8, new: []const u8, reason: operation.ProviderContentDiagnostic = .invalid_content }{
+        .{ .old = "\"role\":\"assistant\"", .new = "\"role\":\"user\"" },
+        .{ .old = "\"text\":\"{}\"", .new = "\"text\":{}" },
+        .{ .old = "\"text\":\"{}\"", .new = "\"text\":null" },
+        .{ .old = "\"text\":\"{}\"", .new = "\"text\":\"{}\",\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}" },
+        .{ .old = "\"text\":\"{}\"", .new = "\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\",\"unknown\":true}}" },
+        .{ .old = "\"text\":\"{}\"", .new = "\"reasoningContent\":{\"redactedContent\":\"!bad\"}" },
+        .{ .old = "\"text\":\"{}\"", .new = "\"toolUse\":{\"toolUseId\":\"id\",\"name\":\"action\",\"input\":{}}" },
+        .{ .old = "\"end_turn\"", .new = "\"unknown\"" },
         .{ .old = "\"role\":\"assistant\"", .new = "\"role\":\"assistant\",\"unexpected\":true" },
-    }) |case| {
+        .{ .old = "\"content\":[{\"text\":\"{}\"}]", .new = "\"content\":null" },
+        .{ .old = ",\"content\":[{\"text\":\"{}\"}]", .new = "", .reason = .missing_final_text },
+    };
+    for (cases) |case| {
         const bytes = try std.mem.replaceOwned(u8, std.testing.allocator, original, case.old, case.new);
         defer std.testing.allocator.free(bytes);
-        try std.testing.expect(!std.mem.eql(u8, bytes, original));
+        try std.testing.expect(!std.mem.eql(u8, original, bytes));
         var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = bytes } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
         defer observed.deinit();
         try std.testing.expectEqual(case.reason, observed.completed.raw_result.rejected.reason);
         try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.rejected.usage.total_tokens);
     }
-    for ([_]usize{ 0, 2 }) |count| {
-        const choice = .{ .index = @as(u32, 0), .message = .{ .role = "assistant", .content = "{}" }, .finish_reason = "stop" };
-        const choices = [_]@TypeOf(choice){ choice, choice };
+}
+
+test "Converse retains all documented stops without admitting partial candidates" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator, .bedrock);
+    defer fixture.deinit();
+    const cases = [_]struct { wire: []const u8, expected: operation.ProviderNonCandidateStopReason }{
+        .{ .wire = "max_tokens", .expected = .output_limit },
+        .{ .wire = "tool_use", .expected = .unsupported_tool_request },
+        .{ .wire = "malformed_tool_use", .expected = .unsupported_tool_request },
+        .{ .wire = "content_filtered", .expected = .content_filtered },
+        .{ .wire = "guardrail_intervened", .expected = .content_filtered },
+        .{ .wire = "malformed_model_output", .expected = .malformed_output },
+        .{ .wire = "stop_sequence", .expected = .malformed_output },
+        .{ .wire = "model_context_window_exceeded", .expected = .context_limit },
+    };
+    for (cases) |case| {
         const bytes = try std.json.Stringify.valueAlloc(std.testing.allocator, .{
-            .choices = choices[0..count],
-            .usage = .{ .prompt_tokens = 10, .completion_tokens = 2, .total_tokens = 12 },
+            .stopReason = case.wire,
+            .usage = .{ .inputTokens = 10, .outputTokens = 2, .totalTokens = 12 },
         }, .{});
         defer std.testing.allocator.free(bytes);
         var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = bytes } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
         defer observed.deinit();
-        try std.testing.expectEqual(.invalid_content, observed.completed.raw_result.rejected.reason);
-        try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.rejected.usage.total_tokens);
+        try std.testing.expectEqual(case.expected, observed.completed.raw_result.stopped.reason);
+        try std.testing.expectEqual(@as(u64, 12), observed.completed.raw_result.stopped.usage.total_tokens);
+    }
+}
+
+test "Converse accounts cached input tokens and validates cache details without undercounting" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator, .bedrock);
+    defer fixture.deinit();
+    const bytes = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"cacheReadInputTokens\":20,\"cacheWriteInputTokens\":30,\"cacheDetails\":[{\"ttl\":\"1h\",\"inputTokens\":15},{\"ttl\":\"5m\",\"inputTokens\":15}],\"outputTokens\":2,\"totalTokens\":62},\"metrics\":{\"latencyMs\":42},\"serviceTier\":{\"type\":\"default\"},\"performanceConfig\":{\"latency\":\"standard\"}}";
+    var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = bytes } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
+    defer observed.deinit();
+    const complete = observed.completed.raw_result.complete;
+    try std.testing.expectEqual(@as(u64, 60), complete.usage.input_tokens);
+    try std.testing.expectEqual(@as(u64, 62), complete.usage.total_tokens);
+    try std.testing.expectEqual(@as(?u32, 42), complete.provider_latency_ms);
+    for ([_][2][]const u8{
+        .{ "\"totalTokens\":62", "\"totalTokens\":12" },
+        .{ "\"cacheReadInputTokens\":20", "\"cacheReadInputTokens\":18446744073709551615" },
+        .{ "\"cacheWriteInputTokens\":30", "\"cacheWriteInputTokens\":18446744073709551615" },
+        .{ "\"cacheWriteInputTokens\":30", "\"cacheWriteInputTokens\":-1" },
+        .{ "\"ttl\":\"1h\"", "\"ttl\":\"5m\"" },
+        .{ "\"inputTokens\":15", "\"inputTokens\":14" },
+        .{ "\"cacheDetails\":[", "\"unknown\":true,\"cacheDetails\":[" },
+        .{ "\"latencyMs\":42", "\"latencyMs\":4294967296" },
+    }) |change| {
+        const invalid = try std.mem.replaceOwned(u8, std.testing.allocator, bytes, change[0], change[1]);
+        defer std.testing.allocator.free(invalid);
+        var rejected = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = invalid } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
+        defer rejected.deinit();
+        try std.testing.expectEqual(.response_invalid, rejected.failed.cause);
     }
 }
 
@@ -1081,20 +1208,21 @@ test "Bedrock inference serializes 0.1 for every registered model and omits unsu
             fixture.base.registry_entry.provider = contract.provider;
             fixture.base.registry_entry.model = contract.model;
             fixture.base.registry_entry.capabilities = contract.capabilities;
+            fixture.base.registry_entry.bedrock_request_profile = contract.bedrock_request_profile;
             // The unsupported variant is a synthetic registered capability contract.
             fixture.base.registry_entry.capabilities.temperature = temperature_supported;
             fixture.base.provider_binding.controls = fixture.base.registry_entry.capabilities.inferenceControls();
             fixture.base.request.binding_id = fixture.base.provider_binding.bindingId();
             fixture.base.request.controls = fixture.base.provider_binding.controls;
             try std.testing.expect(fixture.base.request.matchesBinding(fixture.base.provider_binding));
-            const bytes = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference);
+            const bytes = try encoding.encode(std.testing.allocator, &fixture.base.request, .inference, .none);
             defer std.testing.allocator.free(bytes);
             var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 32 }, false, null);
             defer parsed.deinit();
             if (temperature_supported) {
-                try std.testing.expectEqualStrings("0.1", parsed.value.object.get("temperature").?.number_string);
-            } else try std.testing.expect(parsed.value.object.get("temperature") == null);
-            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count);
+                try std.testing.expectEqualStrings("0.1", parsed.value.object.get("inferenceConfig").?.object.get("temperature").?.number_string);
+            } else try std.testing.expect(parsed.value.object.get("inferenceConfig") == null);
+            const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count, .none);
             defer std.testing.allocator.free(counted);
             try std.testing.expect(std.mem.indexOf(u8, counted, "\"temperature\"") == null);
             var altered = fixture.base.request;
@@ -1104,5 +1232,247 @@ test "Bedrock inference serializes 0.1 for every registered model and omits unsu
             try std.testing.expect(!altered.matchesBinding(fixture.base.provider_binding));
             try std.testing.expect(!altered.matchesBinding(altered_binding));
         }
+    }
+}
+
+const diagnostic_reasoning_blocks = "[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"first <script> & \\n\",\"signature\":\"opaque\\\"signature\"}}},{\"text\":\"{\"},{\"reasoningContent\":{\"redactedContent\":\"YQ==\"}},{\"reasoningContent\":{\"reasoningText\":{\"text\":\"last\"}}},{\"text\":\"}\"}]";
+
+fn reasoningResponse(a: std.mem.Allocator, blocks: []const u8, stop: []const u8) ![]const u8 {
+    return std.fmt.allocPrint(a, "{{\"output\":{{\"message\":{{\"role\":\"assistant\",\"content\":{s}}}}},\"stopReason\":\"{s}\",\"usage\":{{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}}}", .{ blocks, stop });
+}
+
+fn ownedReasoningScenario(a: std.mem.Allocator) !void {
+    var decoded = blk: {
+        const bytes = try reasoningResponse(a, diagnostic_reasoning_blocks, "end_turn");
+        defer a.free(bytes);
+        var parsed = try strict.parse(a, bytes, .{ .maximum_depth = std.math.maxInt(usize) }, false, null);
+        defer parsed.deinit();
+        break :blk try response.decodeConverse(a, parsed.value);
+    };
+    defer decoded.deinit(a);
+    // All views survive the parsed response and its wire buffer.
+    try std.testing.expectEqualStrings("{}", decoded.output.text);
+    try std.testing.expectEqual(@as(usize, 3), decoded.reasoning.len);
+    try std.testing.expectEqualStrings("first <script> & \n", decoded.reasoning[0].text.text);
+    try std.testing.expectEqualStrings("opaque\"signature", decoded.reasoning[0].text.signature.?);
+    try std.testing.expectEqualStrings("YQ==", decoded.reasoning[1].redacted.base64);
+    try std.testing.expectEqualStrings("last", decoded.reasoning[2].text.text);
+    try std.testing.expectEqual(@as(?[]const u8, null), decoded.reasoning[2].text.signature);
+    const cloned = try @import("domain/provider_reasoning.zig").clone(a, decoded.reasoning);
+    defer @import("domain/provider_reasoning.zig").deinit(a, cloned);
+    try std.testing.expectEqualDeep(decoded.reasoning, cloned);
+}
+
+test "Converse owns ordered reasoning signatures and opaque redaction independently of final text" {
+    try ownedReasoningScenario(std.testing.allocator);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, ownedReasoningScenario, .{});
+}
+
+test "Converse preserves reasoning on stopped rejected and missing-answer responses without admitting it" {
+    const cases = [_]struct { blocks: []const u8, stop: []const u8, output: std.meta.Tag(@FieldType(response.Inference, "output")), reason_count: usize }{
+        .{ .blocks = diagnostic_reasoning_blocks, .stop = "max_tokens", .output = .stopped, .reason_count = 3 },
+        .{ .blocks = "[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"{}\"}}}]", .stop = "end_turn", .output = .invalid, .reason_count = 1 },
+        .{ .blocks = diagnostic_reasoning_blocks, .stop = "unknown", .output = .invalid, .reason_count = 3 },
+        .{ .blocks = "[{\"toolUse\":{\"toolUseId\":\"id\",\"name\":\"bad\",\"input\":{}}},{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]", .stop = "tool_use", .output = .stopped, .reason_count = 1 },
+        .{ .blocks = "[{\"unexpected\":true},{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}},{\"text\":\"{}\"}]", .stop = "end_turn", .output = .invalid, .reason_count = 1 },
+        .{ .blocks = "[{\"text\":\"{}\"}]", .stop = "end_turn", .output = .text, .reason_count = 0 },
+    };
+    for (cases) |case| {
+        const bytes = try reasoningResponse(std.testing.allocator, case.blocks, case.stop);
+        defer std.testing.allocator.free(bytes);
+        var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = std.math.maxInt(usize) }, false, null);
+        defer parsed.deinit();
+        var decoded = try response.decodeConverse(std.testing.allocator, parsed.value);
+        defer decoded.deinit(std.testing.allocator);
+        try std.testing.expectEqual(case.output, std.meta.activeTag(decoded.output));
+        try std.testing.expectEqual(case.reason_count, decoded.reasoning.len);
+        try std.testing.expectEqual(@as(u64, 12), decoded.usage.total_tokens);
+        if (case.output == .invalid and case.reason_count == 1 and std.mem.eql(u8, case.stop, "end_turn") and std.mem.startsWith(u8, case.blocks, "[{\"reasoningContent\"")) {
+            try std.testing.expectEqual(.missing_final_text, decoded.output.invalid);
+        }
+    }
+}
+
+test "Converse rejects malformed reasoning unions signatures and redacted payloads" {
+    const invalid = [_][]const u8{
+        "{\"reasoningText\":{\"text\":\"x\"},\"redactedContent\":\"YQ==\"}",
+        "{\"reasoningText\":{\"signature\":\"opaque\"}}",
+        "{\"reasoningText\":{\"text\":\"x\",\"signature\":null}}",
+        "{\"reasoningText\":{\"text\":\"x\",\"signature\":12}}",
+        "{\"reasoningText\":{\"text\":\"x\",\"unknown\":true}}",
+        "{\"redactedContent\":\"Y!==\"}",
+        "{\"redactedContent\":true}",
+        "{}",
+    };
+    for (invalid) |value| {
+        const blocks = try std.fmt.allocPrint(std.testing.allocator, "[{{\"reasoningContent\":{s}}},{{\"text\":\"{{}}\"}}]", .{value});
+        defer std.testing.allocator.free(blocks);
+        const bytes = try reasoningResponse(std.testing.allocator, blocks, "end_turn");
+        defer std.testing.allocator.free(bytes);
+        var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = std.math.maxInt(usize) }, false, null);
+        defer parsed.deinit();
+        var decoded = try response.decodeConverse(std.testing.allocator, parsed.value);
+        defer decoded.deinit(std.testing.allocator);
+        try std.testing.expectEqual(.invalid_content, decoded.output.invalid);
+        try std.testing.expectEqual(@as(usize, 0), decoded.reasoning.len);
+        try std.testing.expectEqual(@as(u64, 12), decoded.usage.total_tokens);
+    }
+}
+
+const ReasoningProductionResult = enum { complete, stopped, missing_answer };
+
+fn productionReasoningScenario(a: std.mem.Allocator, expected: ReasoningProductionResult) !void {
+    var fixture: Fixture = undefined;
+    try fixture.init(a, .bedrock);
+    defer fixture.deinit();
+    const authorized = try fixture.start(.inference);
+    // The existing runner result owner is prepared before provider dispatch.
+    const owner = try @import("domain/model_invocation_result.zig").For(.inference).Owner.init(a, fixture.base.requests.ledger().?, authorized.invoked.id);
+    defer owner.destroy();
+    const observed = blk: {
+        const blocks = if (expected == .missing_answer)
+            "[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"{}\",\"signature\":\"opaque\"}}}]"
+        else
+            diagnostic_reasoning_blocks;
+        const bytes = try reasoningResponse(a, blocks, if (expected == .stopped) "max_tokens" else "end_turn");
+        defer a.free(bytes);
+        fixture.wire.result = .{ .received = .{ .status = 200, .body = bytes } };
+        break :blk try fixture.call(authorized);
+    };
+    owner.finish(.{ .observation = observed });
+    const retained = owner.view().outcome().?.observation.completed.raw_result;
+    const diagnostic = switch (retained) {
+        inline .complete, .stopped, .rejected => |value| value.reasoning orelse return error.ExpectedReasoningDiagnostics,
+    };
+    // Returned diagnostics survive both the parsed tree and the transport body,
+    // and remain available through the production provider port/result owner.
+    if (expected == .missing_answer) {
+        try std.testing.expectEqual(.missing_final_text, retained.rejected.reason);
+        try std.testing.expectEqual(@as(usize, 1), diagnostic.blocks.len);
+        try std.testing.expectEqualStrings("{}", diagnostic.blocks[0].text.text);
+        try std.testing.expectEqualStrings("opaque", diagnostic.blocks[0].text.signature.?);
+    } else {
+        try std.testing.expectEqual(@as(usize, 3), diagnostic.blocks.len);
+        try std.testing.expectEqualStrings("first <script> & \n", diagnostic.blocks[0].text.text);
+        try std.testing.expectEqualStrings("opaque\"signature", diagnostic.blocks[0].text.signature.?);
+        try std.testing.expectEqualStrings("YQ==", diagnostic.blocks[1].redacted.base64);
+        try std.testing.expectEqualStrings("last", diagnostic.blocks[2].text.text);
+        if (expected == .complete) {
+            try std.testing.expectEqualStrings("{}", retained.complete.content.bytes);
+        } else try std.testing.expectEqual(.output_limit, retained.stopped.reason);
+    }
+    const usage = switch (retained) {
+        inline .complete, .stopped, .rejected => |value| value.usage,
+    };
+    try std.testing.expectEqual(@as(u64, 12), usage.total_tokens);
+}
+
+test "production provider observations retain owned reasoning across complete stopped and rejected results" {
+    inline for (std.meta.tags(ReasoningProductionResult)) |expected| {
+        try productionReasoningScenario(std.testing.allocator, expected);
+        try std.testing.checkAllAllocationFailures(std.testing.allocator, productionReasoningScenario, .{expected});
+    }
+}
+
+test "absent provider reasoning stays absent across all raw result variants" {
+    inline for (std.meta.tags(ReasoningProductionResult)) |expected| {
+        inline for (std.meta.tags(Backend)) |backend| {
+            var fixture: Fixture = undefined;
+            try fixture.init(std.testing.allocator, backend);
+            defer fixture.deinit();
+            const bytes = try reasoningResponse(std.testing.allocator, if (expected == .missing_answer) "[]" else "[{\"text\":\"{}\"}]", if (expected == .stopped) "max_tokens" else "end_turn");
+            defer std.testing.allocator.free(bytes);
+            fixture.wire.result = .{ .received = .{ .status = 200, .body = bytes } };
+            fixture.fake_provider.invocation_plan = switch (expected) {
+                .complete => .{ .complete = .{ .content = "{}", .input_tokens = 10, .output_tokens = 2 } },
+                .stopped => .{ .stopped = .{ .reason = .output_limit, .input_tokens = 10, .output_tokens = 2 } },
+                .missing_answer => .{ .complete = .{ .content = "", .content_diagnostic = .missing_final_text, .input_tokens = 10, .output_tokens = 2 } },
+            };
+            var observed = try fixture.call(try fixture.start(.inference));
+            defer observed.deinit();
+            switch (observed.completed.raw_result) {
+                inline .complete, .stopped, .rejected => |value| try std.testing.expect(value.reasoning == null),
+            }
+        }
+    }
+}
+
+test "Luna native JSON emits its required strict flag only for inference and preserves canonical schema" {
+    const encoding = @import("adapters/provider/bedrock_request.zig");
+    const structure = "{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false}";
+    const request: encoding.TextRequest = .{
+        .content = &.{ .{ .guidance = "Generate the answer." }, .{ .user = "input" } },
+        .schema = .{ .native = .{ .guidance = structure, .structure = structure } },
+        .schema_name = "luna_schema",
+        .temperature = null,
+        .reasoning_effort = null,
+        .request_profile = .openai_luna,
+        .max_output_tokens = .{ .value = 16384 },
+    };
+    const body = try encoding.encodeText(std.testing.allocator, request, .inference);
+    defer std.testing.allocator.free(body);
+    var parsed = try strict.parse(std.testing.allocator, body, .{ .maximum_depth = 32 }, false, null);
+    defer parsed.deinit();
+    const root = parsed.value.object;
+    const schema = root.get("outputConfig").?.object.get("textFormat").?.object;
+    try std.testing.expectEqualStrings("json_schema", schema.get("type").?.string);
+    const format = schema.get("structure").?.object.get("jsonSchema").?.object;
+    try std.testing.expectEqualStrings(structure, format.get("schema").?.string);
+    try std.testing.expectEqualStrings("luna_schema", format.get("name").?.string);
+    const additional = root.get("additionalModelRequestFields").?.object;
+    try std.testing.expectEqual(@as(usize, 1), additional.count());
+    try std.testing.expect(additional.get("text").?.object.get("format").?.object.get("strict").?.bool);
+    try std.testing.expect(!additional.contains("reasoning") and !additional.contains("reasoning_effort") and !additional.contains("thinking"));
+    try std.testing.expect(!root.get("inferenceConfig").?.object.contains("temperature"));
+    try std.testing.expectEqualStrings("16384", root.get("inferenceConfig").?.object.get("maxTokens").?.number_string);
+    // This tests the common CountTokens input serializer in isolation. The Luna
+    // production contract rejects CountTokens before transport because unsupported.
+    const count = try encoding.encodeText(std.testing.allocator, request, .input_token_count);
+    defer std.testing.allocator.free(count);
+    var counted = try strict.parse(std.testing.allocator, count, .{ .maximum_depth = 32 }, false, null);
+    defer counted.deinit();
+    const input = counted.value.object.get("input").?.object.get("converse").?.object;
+    try std.testing.expectEqual(@as(usize, 2), input.count());
+    try std.testing.expect(!input.contains("additionalModelRequestFields"));
+    try std.testing.expect(!input.contains("outputConfig") and !input.contains("inferenceConfig"));
+    var unrelated = request;
+    unrelated.request_profile = .none;
+    const other = try encoding.encodeText(std.testing.allocator, unrelated, .inference);
+    defer std.testing.allocator.free(other);
+    var other_parsed = try strict.parse(std.testing.allocator, other, .{ .maximum_depth = 32 }, false, null);
+    defer other_parsed.deinit();
+    try std.testing.expect(!other_parsed.value.object.contains("additionalModelRequestFields"));
+    try std.testing.expect(other_parsed.value.object.contains("outputConfig"));
+    var prompted = request;
+    prompted.schema = .{ .prompt_only = structure };
+    const prompt = try encoding.encodeText(std.testing.allocator, prompted, .inference);
+    defer std.testing.allocator.free(prompt);
+    var prompt_parsed = try strict.parse(std.testing.allocator, prompt, .{ .maximum_depth = 32 }, false, null);
+    defer prompt_parsed.deinit();
+    try std.testing.expect(!prompt_parsed.value.object.contains("additionalModelRequestFields"));
+    try std.testing.expect(!prompt_parsed.value.object.contains("outputConfig"));
+}
+
+test "Luna request profile rejects unverified reasoning and temperature overrides" {
+    const encoding = @import("adapters/provider/bedrock_request.zig");
+    const base: encoding.TextRequest = .{
+        .content = &.{.{ .user = "input" }},
+        .schema = .{ .prompt_only = "{}" },
+        .schema_name = "test",
+        .temperature = null,
+        .reasoning_effort = null,
+        .request_profile = .openai_luna,
+    };
+    inline for (std.meta.tags(encoding.ReasoningEffort)) |effort| {
+        var value = base;
+        value.reasoning_effort = effort;
+        inline for (std.meta.tags(operation.ProviderOperationKind)) |kind| {
+            try std.testing.expectError(error.InvalidRequest, encoding.encodeText(std.testing.allocator, value, kind));
+        }
+    }
+    var temperature = base;
+    temperature.temperature = .fixed;
+    inline for (std.meta.tags(operation.ProviderOperationKind)) |kind| {
+        try std.testing.expectError(error.InvalidRequest, encoding.encodeText(std.testing.allocator, temperature, kind));
     }
 }

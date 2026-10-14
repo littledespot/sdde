@@ -215,6 +215,53 @@ Raw whole-repository listings, principle categories not selected by the configur
   data.
 - See the [compact response example](../code.md#model-response-envelope).
 
+#### 12.3.1 Bedrock Converse — user-directed transport amendment, 15 October 2026
+
+All Bedrock consumers use one canonical
+[Converse](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)
+request/response codec, including production invocation, diagnostic replay and the
+development harness. Common `system`, `messages`, `inferenceConfig` and
+`outputConfig` fields replace provider-specific chat envelopes. Native structured
+output projects the existing compiled schema into `outputConfig.textFormat`;
+`structure.jsonSchema.schema` is a JSON string. Prompt-only models still receive
+the exact closed schema as guidance and pass the same native candidate validators.
+
+The compiled provider/model contract owns the typed additional-control policy:
+no additional fields, GPT-OSS reasoning effort, or Luna strict native JSON. The external
+catalogue can select a supported tuple but cannot supply a serializer or control
+policy. Unknown models, regions, controls and unsupported schema modes reject at
+the existing binding boundary. Model switching therefore requires a registered
+contract and explicit configuration, rather than a model-name branch or fallback.
+
+Only an `end_turn` response with valid assistant text is candidate-eligible. Join
+text fragments in order without inserting characters. Provider-supplied reasoning
+is retained as owned, ordered typed diagnostic data on complete, stopped and
+rejected raw provider results, including optional signatures and opaque redacted
+blocks, and is available in debugger extraction. The existing observation owner
+controls its lifetime and cleanup independently of final answer content. It is excluded
+from answer content and has no semantic-validation or workflow authority.
+Absent reasoning stays absent; encrypted/redacted data is not invented as prose.
+Stopped or missing-answer responses can expose supplied reasoning without
+becoming candidates. Tool-use, truncation, filtering, guardrail and other
+noncandidate stops preserve their typed outcomes and independently valid usage.
+Normalize cached token usage under
+[ADR 0011](../decisions/0011-provider-owned-request-limits.md#workflow-token-accounting).
+Optional CountTokens uses its `input.converse` shape, without inference-only
+configuration or an encoded legacy chat body. Models without registered count support do
+not acquire it merely because the API exists.
+
+The current small-model test binding is `global.openai.gpt-6-luna` from
+`ap-southeast-2`, native JSON Schema with the registered strict-output field,
+temperature omitted, and optional provider output allowance. Explicit reasoning
+effort is omitted; the protocol records AWS's documented default medium without
+guessing an unverified Converse control mapping. Its registered verified subset
+has no CountTokens, temperature or explicit effort controls, consistent with the
+[AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-luna.html).
+This is mechanical support, not a live compatibility or semantic-quality claim.
+The test cost policy is development-only; it cannot change production authority.
+Historical captures follow the immutable inspection/replay boundary in
+[ADR 0019](../decisions/0019-single-request-debugger.md#replay).
+
 ### 12.4 Context requests
 
 If the current unit cannot be completed with supplied facts, a workflow model operation may declare one typed context request:

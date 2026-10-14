@@ -122,14 +122,17 @@ test "loss protocol correction preserves the complete selected contract in both 
         for (std.enums.values(@import("domain/model_controls.zig").ResponseGuidanceMode)) |mode| {
             var request = source.*;
             request.response_guidance_mode = mode;
-            const wire = try std.json.parseFromSlice(std.json.Value, a, try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference), .{});
+            // This synthetic request probes the registered OpenAI Bedrock wire
+            // policy; its fake provider identity remains test-only lineage.
+            const wire = try std.json.parseFromSlice(std.json.Value, a, try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference, .openai_oss), .{});
             var occurrences: usize = 0;
-            for (wire.value.object.get("messages").?.array.items[0].object.get("content").?.array.items) |part|
+            for (wire.value.object.get("system").?.array.items) |part|
                 occurrences += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, selected.modelBytes()));
             try std.testing.expectEqual(@as(usize, 1), occurrences);
-            try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("response_format"));
+            try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("outputConfig"));
             if (mode == .native_schema) {
-                const shape = wire.value.object.get("response_format").?.object.get("json_schema").?.object.get("schema").?;
+                const schema_text = wire.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
+                const shape = (try std.json.parseFromSlice(std.json.Value, a, schema_text, .{})).value;
                 try std.testing.expect(!shape.object.get("additionalProperties").?.bool);
                 const assessment = shape.object.get("properties").?.object.get("assessments").?.object.get("items").?;
                 try std.testing.expect(!assessment.object.get("additionalProperties").?.bool);
@@ -183,12 +186,12 @@ test "child requirements stay inside selected definitions parts and repair schem
         for (std.enums.values(@import("domain/model_controls.zig").ResponseGuidanceMode)) |mode| {
             var request = retry.request.*;
             request.response_guidance_mode = mode;
-            const bytes = try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference);
+            const bytes = try @import("adapters/provider/bedrock_request.zig").encode(a, &request, .inference, .openai_oss);
             const wire = try std.json.parseFromSlice(std.json.Value, a, bytes, .{});
             var count: usize = 0;
-            for (wire.value.object.get("messages").?.array.items[0].object.get("content").?.array.items) |part| count += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, schema.modelBytes()));
+            for (wire.value.object.get("system").?.array.items) |part| count += @intFromBool(std.mem.eql(u8, part.object.get("text").?.string, schema.modelBytes()));
             try std.testing.expectEqual(@as(usize, 1), count);
-            try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("response_format"));
+            try std.testing.expectEqual(mode == .native_schema, wire.value.object.contains("outputConfig"));
         }
     }
 }
@@ -428,7 +431,7 @@ test "unrelated schemas retain one universal framing instruction across initial 
             // Retry-owned content retains task guidance only; serialization adds framing.
             for (request.content) |part| try std.testing.expect(std.mem.indexOf(u8, part.bytes(), framing) == null);
             for ([_]provider.ProviderOperationKind{ .inference, .input_token_count }) |kind| {
-                const bytes = try encoding.encode(std.testing.allocator, request, kind);
+                const bytes = try encoding.encode(std.testing.allocator, request, kind, .openai_oss);
                 defer std.testing.allocator.free(bytes);
                 const decoded_body = try @import("bedrock_transport_test_fixture.zig").requestBody(std.testing.allocator, bytes, kind);
                 defer std.testing.allocator.free(decoded_body);
@@ -436,7 +439,7 @@ test "unrelated schemas retain one universal framing instruction across initial 
                 var parsed = try @import("domain/strict_json.zig").parse(std.testing.allocator, decoded_body, .{ .maximum_depth = 64 }, false, null);
                 defer parsed.deinit();
                 const root = parsed.value;
-                const system = root.object.get("messages").?.array.items[0].object.get("content").?.array.items;
+                const system = root.object.get("system").?.array.items;
                 try std.testing.expectEqualStrings(framing, system[system.len - 2].object.get("text").?.string);
                 try std.testing.expectEqualStrings(request.response_schema.modelBytes(), system[system.len - 1].object.get("text").?.string);
             }
@@ -731,10 +734,10 @@ fn checkFixture(fixture: *Fixture, case: Case) !void {
             const projected = try projection.value(a, result.invalid.expected, .complete);
             try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, projected, .{}), try std.json.Stringify.valueAlloc(a, located, .{}));
             try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, try projection.outline(a, result.invalid.expected), .{}), try std.json.Stringify.valueAlloc(a, expected.get("shape").?, .{}));
-            const wire = try @import("adapters/provider/bedrock_request.zig").encode(a, retried.request, .inference);
+            const wire = try @import("adapters/provider/bedrock_request.zig").encode(a, retried.request, .inference, .openai_oss);
             const request = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
             var occurrences: usize = 0;
-            for (request.value.object.get("messages").?.array.items[0].object.get("content").?.array.items) |part|
+            for (request.value.object.get("system").?.array.items) |part|
                 occurrences += std.mem.count(u8, part.object.get("text").?.string, retried.request.response_schema.modelBytes());
             try std.testing.expectEqual(@as(usize, 1), occurrences);
             try std.testing.expectEqual(@as(usize, 3), guidance.value.object.count());

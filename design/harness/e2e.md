@@ -6,7 +6,12 @@ The checked-in [greeting](../../test/e2e/wf-001-hello-world/node-vitest/workflow
 and [loan-renewal](../../test/e2e/wf-002-loan-renewal/workflow.case.json) cases have
 separate sources and rubrics and reference the same workflow/model configuration.
 
-1. Configure credentials and judge selection under [Environment setup](#environment-setup).
+1. Review the case's explicit Bedrock `global.openai.gpt-6-luna` generation
+   selection from `ap-southeast-2`, then configure the same Luna judge under
+   [Environment setup](#environment-setup). Both cases share the native JSON
+   catalogue; all six generation slots omit explicit reasoning overrides and
+   temperature. AWS documents default medium reasoning. Global routing may leave
+   Australia; Sydney is the source region, not a residency guarantee.
 2. Obtain explicit user approval for this E2E run under
    [AGENTS.md](../../AGENTS.md#testing-expectations).
 3. Run the launcher with an explicitly selected live case:
@@ -30,6 +35,11 @@ separate sources and rubrics and reference the same workflow/model configuration
 - The script requires the pinned Zig compiler and locates the checkout from its own path.
 - Case paths are repository-relative and must be supplied with `--case <path>`.
   The script has no default case.
+- The shared [live-test cost policy](../../test/harness/model_cost_policy.zig)
+  permits only `aws-bedrock` / `global.openai.gpt-6-luna`. E2E preflight checks
+  every configured generation slot and the judge selection before reading
+  credentials or starting the workflow. Sonnet, Sol, Haiku, direct OpenAI,
+  historical models and other aliases reject; no target is substituted.
 - Automated tests cannot open native model connections, including with credentials
   present. Smoke subprocesses use the same application entry points with model
   connections compiled out. Test/verification build steps reject transitive dependencies on live
@@ -55,8 +65,8 @@ After obtaining explicit approval for the selected live diagnostic and repeat co
   --run 'zig-out/e2e-spec/<UTC-date-time>-<unique-id>' \
   --workflow spec-generation \
   --call 1 \
-  --model openai.gpt-oss-20b-1:0 \
-  --reasoning-effort high \
+  --model global.openai.gpt-6-luna \
+  --reasoning-effort none \
   --repeats 3
 ```
 
@@ -82,7 +92,7 @@ uses the caller's environment:
 zig build e2e-call -- \
   --run 'zig-out/e2e-spec/<UTC-date-time>-<unique-id>' \
   --workflow spec-generation --call 1 \
-  --model openai.gpt-oss-20b-1:0 --reasoning-effort high
+  --model global.openai.gpt-6-luna --reasoning-effort none
 ```
 
 The selected model must resolve through the selected run's retained provider
@@ -91,14 +101,23 @@ creates an ephemeral in-memory binding:
 it inherits the captured provider and takes the selected model's region from the
 catalogue. Captured response mode and other inference controls, including an
 optional output allowance, are preserved. Unsupported combinations reject before
-dispatch; no model, response mode or control silently falls back. The capture and
-its configuration remain unchanged. Browser exact and modified replay retain
+dispatch; no model, response mode or control silently falls back. The effective
+binding must also pass the live cost policy before the credential is read.
+A current Luna capture with omitted temperature/reasoning controls is eligible.
+Retained catalogues must already authorize the requested Luna tuple. Historical
+captures with incompatible response modes or temperature controls reject; the
+command does not rewrite those controls or add catalogue entries. The capture
+and its configuration remain unchanged. Browser exact and modified replay retain
 their existing model/settings restrictions.
 
-The launcher adds no model-family encoders. The current Bedrock request encoder
-uses the GPT-OSS wire format; the registered Claude entry does not establish
-Claude wire compatibility. Comparing additional model families requires support
-in the shared provider adapter, not a harness-specific serializer.
+The launcher reuses the canonical Bedrock Converse encoder and decoder. The
+registered `BedrockRequestProfile` selects provider-specific fields through
+`additionalModelRequestFields`, while supported common controls use
+`inferenceConfig`. Luna's native JSON mode additionally requires
+`text.format.strict: true`. The registered subset omits temperature and explicit
+reasoning; `--reasoning-effort none` requests omission, not disabled model
+reasoning. The documented provider default is medium. Complete engine validation
+still applies. No model-name prefix selects a serializer or grants a capability.
 
 Each dispatched repeat makes exactly one provider request. There are no automatic
 retries, repairs, upstream nodes, workflow continuation, publication or evaluator
@@ -135,11 +154,13 @@ the [model-conformance contract](../contracts/28-testing.md#288-model-conformanc
    Git-ignored `.env.e2e`. Never put credentials in tracked configuration or
    command arguments.
 3. Set generation to use `TEST_AWS_BEARER_TOKEN_BEDROCK`.
-4. Select grading with `TEST_EVALUATION_PROVIDER` and `TEST_EVALUATION_MODEL`.
-   Supply `TEST_OPENAI_API_KEY` for OpenAI; supply
-   `TEST_AWS_BEARER_TOKEN_BEDROCK` and `TEST_EVALUATION_REGION` for Bedrock.
-   Leave the region empty/unset for OpenAI. Supported controls and model pairs
-   are in the [evaluator contract](evaluator.md#run).
+4. Explicitly set `TEST_EVALUATION_PROVIDER=bedrock`,
+   `TEST_EVALUATION_MODEL=global.openai.gpt-6-luna` and
+   `TEST_EVALUATION_REGION=ap-southeast-2`. The judge uses the same
+   `TEST_AWS_BEARER_TOKEN_BEDROCK` credential port as generation, with independent
+   settings and accounting. Judge JSON must specify `reasoning_effort: null` and
+   `temperature: null`. Native JSON remains required; no fallback exists.
+   See the [evaluator contract](evaluator.md#run).
 5. For direct build/evaluator commands, load the file in the invoking shell:
 
    ```sh
@@ -170,7 +191,11 @@ credentials. No model answer means no evidence yet about schema conformance.
   bindings and cleanup, then runs one ordinary invocation through production bootstrap,
   provider catalogue validation, request preparation, authorization, HTTPS transport, YAML
   transitions, deterministic validators and publication.
-- Generation uses the model slots selected by that test's `.sddtoolkit.json`.
+- Generation uses the model slots explicitly selected by that test's
+  `.sddtoolkit.json`; all configured slots must pass the current small-model cost
+  preflight. The provider catalogue must declare `global.openai.gpt-6-luna`
+  with `json: true` in `ap-southeast-2`; slots omit `reasoningEffort`. The compiled
+  profile omits temperature and uses the documented provider default reasoning.
 - The current production provider is Bedrock; its internal test credential is
   `TEST_AWS_BEARER_TOKEN_BEDROCK`.
 - The harness supplies a validated credential snapshot to the shared runtime. The CLI
@@ -182,8 +207,9 @@ credentials. No model answer means no evidence yet about schema conformance.
 
 - After successful generation, the harness reads the specification actually published by
   that invocation and grades those exact captured bytes against the case's rubric.
-- The judge uses `TEST_EVALUATION_PROVIDER=openai|bedrock`, `TEST_EVALUATION_MODEL`, the
-  selected `TEST_` credential and, for Bedrock, `TEST_EVALUATION_REGION`.
+- The judge selection uses `TEST_EVALUATION_PROVIDER`, `TEST_EVALUATION_MODEL`, the
+  selected `TEST_` credential and any required region. The current permitted live
+  grading combination is Bedrock / `global.openai.gpt-6-luna` / `ap-southeast-2`.
 - The case's `evaluation_config` supplies explicit reasoning, timeout, retry and
   total-budget settings; no provider or model is selected by a fallback.
 - Judge settings and credentials are validated before generation starts.
@@ -194,8 +220,15 @@ credentials. No model answer means no evidence yet about schema conformance.
 - The engine enforces the workflow's cumulative actual-token budget; the evaluator has
   its separate cumulative budget.
 - Provider-owned response limits still apply and are reported as provider stops.
-- GPT-OSS supports explicit `low`, `medium` and `high` reasoning effort through the
-  shared Bedrock serializer; the selected case configures the generation and judge settings.
+- Bedrock generation, grading and diagnostics share the Converse codec. Luna's
+  registered profile supplies its required strict JSON flag, sends no reasoning
+  or temperature override, and projects any configured output allowance to
+  `inferenceConfig.maxTokens`. Provider reasoning counts toward output usage;
+  the engine accounts actual reported tokens separately from provider quotas.
+  The [AWS Luna model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-luna.html)
+  confirms native JSON support, global-profile Sydney availability, default
+  medium reasoning, Standard tier and no CountTokens support. No live model
+  qualification is inferred from these API facts.
 
 - Every generation call and both evaluator providers use the engine's short [universal
   JSON framing instruction](../decisions/0014-universal-response-format-guidance.md).

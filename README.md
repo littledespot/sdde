@@ -163,10 +163,13 @@ inspection separates provider bytes, extracted text, parsed JSON and schema diag
 With `"logs": { "level": "debug", "console": true }` in `.sddtoolkit.json`,
 the prompt stream beneath the feature's `logs/prompts` retains the entire available
 provider response after credential redaction. Large responses span ordered chunks;
-the chunk size does not truncate the response. Bedrock GPT-OSS reasoning remains
-in the raw response, including when the provider stops at its output limit or
-returns no final answer. In the debugger, select **Response → Raw provider response**
-to inspect it; **Extracted model text** contains only the admitted final answer.
+the chunk size does not truncate the response. Bedrock Converse reasoning is
+retained as separate, owned diagnostics on complete, stopped and rejected provider
+results, including when no final answer is available. The debugger's
+**Response → Provider reasoning** card shows ordered readable blocks and identifies
+provider-redacted blocks whose text is unavailable. **Raw provider response**
+retains the original captured bytes; **Extracted model text** contains only the
+candidate answer. Reasoning never becomes candidate JSON or workflow authority.
 Interrupted transport retains all received bytes with explicit partial-response
 provenance. `trace` also enables capture; `console` controls the console mirror,
 not file capture.
@@ -177,6 +180,10 @@ incur provider charges and saves a new linked record under the feature's
 `logs/debugger`; original captures remain unchanged. Current provider authorization
 and credentials are required. Replay does not run workflow nodes or semantic
 validators, publish artifacts, or change workflow state.
+
+Older provider-specific chat captures remain inspectable as recorded evidence. Exact replay
+rejects when their bytes differ from the current canonical Converse request;
+there is no legacy wire codec or replay fallback.
 
 The UI is embedded in the executable. Captures use `prompt-columns/v3`; older
 prompt formats are rejected. Request descriptions use `model-request-debug/v3`
@@ -206,6 +213,14 @@ source snapshot explicitly show that source navigation is unavailable.
 selection, retained evidence and result interpretation. Each agent-initiated
 E2E run requires explicit user approval under [AGENTS.md](AGENTS.md).
 
+Live development tests permit only Bedrock `global.openai.gpt-6-luna` from
+`ap-southeast-2`, with native JSON Schema. Generation and grading use the same
+explicit model tuple with separate settings and accounting. The registered
+profile omits temperature and reasoning overrides; AWS documents default medium
+reasoning. Its global routing may leave Australia. Sonnet, Sol, Haiku, direct
+OpenAI and historical selections reject before credentials or network use.
+These API contracts do not establish model quality or authorize a live run.
+
 ```sh
 ./scripts/e2e-spec.sh --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json
 ```
@@ -229,7 +244,7 @@ effort:
 ./scripts/e2e-call.sh \
   --run 'zig-out/e2e-spec/<UTC-date-time>-<unique-id>' \
   --workflow spec-generation --call 1 \
-  --model openai.gpt-oss-20b-1:0 --reasoning-effort high --repeats 3
+  --model global.openai.gpt-6-luna --reasoning-effort none --repeats 3
 ```
 
 Replace the run placeholder with a real capture; the command never selects the
@@ -240,6 +255,8 @@ semantic quality is not assessed. The launcher shares `.env.e2e` setup with
 `e2e-spec.sh`; `--help` and offline builds make no API calls. Live diagnostics
 require explicit approval for the selected calls and repeat count. They do not
 establish full-workflow E2E acceptance or change browser replay behavior.
+`--reasoning-effort none` omits the override; it does not disable provider-default
+reasoning. Captured catalogues and controls must already admit the Luna tuple.
 
 The [historical authoring-role diagnostics](test/calibration/authoring-roles/README.md)
 retain frozen experiment evidence. FIX03 Phase 5 removes that production classifier

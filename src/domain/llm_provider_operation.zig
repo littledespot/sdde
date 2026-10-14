@@ -3,6 +3,7 @@ const binding = @import("llm_provider_binding.zig");
 const request_identity = @import("model_request_identity.zig");
 const execution_reference = @import("execution_reference.zig");
 const model_controls = @import("model_controls.zig");
+const provider_reasoning = @import("provider_reasoning.zig");
 
 pub const ProviderOperationKind = enum {
     input_token_count,
@@ -309,6 +310,7 @@ pub const RawProviderModelResult = union(enum) {
         reason: ProviderContentDiagnostic,
         usage: ProviderUsage,
         provider_latency_ms: ?u32,
+        reasoning: ?provider_reasoning.Owned = null,
     },
     complete: struct {
         request_id: *const request_identity.ModelRequestId,
@@ -316,6 +318,7 @@ pub const RawProviderModelResult = union(enum) {
         content: CompleteOwnedUtf8,
         usage: ProviderUsage,
         provider_latency_ms: ?u32,
+        reasoning: ?provider_reasoning.Owned = null,
     },
     stopped: struct {
         request_id: *const request_identity.ModelRequestId,
@@ -323,12 +326,16 @@ pub const RawProviderModelResult = union(enum) {
         reason: ProviderNonCandidateStopReason,
         usage: ProviderUsage,
         provider_latency_ms: ?u32,
+        reasoning: ?provider_reasoning.Owned = null,
     },
 
     pub fn deinit(self: *RawProviderModelResult) void {
         switch (self.*) {
-            .complete => |*value| value.content.deinit(),
-            .stopped, .rejected => {},
+            .complete => |*value| {
+                value.content.deinit();
+                if (value.reasoning) |*diagnostic| diagnostic.deinit();
+            },
+            inline .stopped, .rejected => |*value| if (value.reasoning) |*diagnostic| diagnostic.deinit(),
         }
         self.* = undefined;
     }

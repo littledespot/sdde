@@ -1,6 +1,6 @@
 {
   "schema": "evaluation-config/v1",
-  "reasoning_effort": "low",
+  "reasoning_effort": null,
   "temperature": null,
   "timeout_ms": 120000,
   "retry_limit": 0,

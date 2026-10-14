@@ -5,6 +5,8 @@
 - **Decision authority:** Repeated explicit user direction; no further approval required
 - **Scoped amendment:** 2026-10-10, explicitly user-approved optional slot output
   allowance. Other capacity, accounting and retry boundaries remain unchanged.
+- **Transport amendment:** 2026-10-15, explicit user direction to use Bedrock
+  Converse for model switching. This replaces the previous chat wire mapping only.
 - **Amends:** Design Sections 3, 9, 12–13, 20, 24, 28 and 31; ADRs 0004–0006;
   F0001, F0005–F0007; and their samples and diagrams
 
@@ -34,8 +36,8 @@
   control. Closed decoding checks positivity and native integer representability;
   the registered model contract must support the control.
 - When present, send the requested value unchanged. When absent, omit the provider
-  field and delegate its default to the provider. Bedrock `InvokeModel` maps the
-  control to `max_completion_tokens` through the shared request encoder.
+  field and delegate its default to the provider. Bedrock `Converse` maps the
+  control to `inferenceConfig.maxTokens` through the shared request encoder.
 - This is a provider-enforced requested allowance, not an engine capacity ceiling
   or a claim that the response will fit. The API still owns its supported maximum
   and any rejection or stopped-response outcome. SDDE does not predict, reserve,
@@ -54,6 +56,11 @@
   model-consumption limit, initialized afresh for each execution.
 - Record actual API-reported input plus output tokens after every inference call,
   including retries and stopped output.
+- For Converse, normalize input usage as `inputTokens + cacheReadInputTokens +
+  cacheWriteInputTokens` (absent optional cache counters are zero), then add
+  `outputTokens`. Check arithmetic and the reported `totalTokens`; invalid usage
+  retains the unavailable-usage outcome. This follows the
+  [AWS cache accounting contract](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html).
 - A call may overshoot: retain its full usage, return `WorkflowTokenBudgetExceeded`, and
   prohibit subsequent calls.
 - At exact equality the current result may proceed, but subsequent calls cannot.

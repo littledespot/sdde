@@ -1,0 +1,515 @@
+{
+  "schema": 1,
+  "specimens": [
+    {
+      "id": "faithful",
+      "case_id": "room-booking.base",
+      "candidate_text": "A reservation links a registered room, its requester and start/end times. The requester may create it only when start is earlier than end. Reject overlap with active reservations for the same room, excluding cancelled reservations. The requester may cancel only before the reservation starts; cancellation at or after start is prohibited.",
+      "initial_candidate_text": "A reservation links a registered room, its requester and start/end times. The requester may create it only when start is earlier than end. Reject overlap with active reservations for the same room, excluding cancelled reservations. The requester may cancel only before the reservation starts; cancellation at or after start is prohibited.",
+      "observation": {
+        "trial_ordinal": 1,
+        "initial": {
+          "status": "completed",
+          "duties": [
+            {
+              "id": "D1",
+              "preserved": true
+            },
+            {
+              "id": "D2",
+              "preserved": true
+            },
+            {
+              "id": "D3",
+              "preserved": true
+            },
+            {
+              "id": "D4",
+              "preserved": true
+            }
+          ],
+          "questions_correct": false,
+          "structural_valid": true,
+          "issues": {
+            "unsupported_behavior": 0,
+            "lost_restrictions": 0,
+            "wrong_support": 0,
+            "harmful_diagnoses": 0,
+            "harmful_repairs": 0,
+            "false_gaps": 0
+          }
+        },
+        "status": "completed",
+        "duties": [
+          {
+            "id": "D1",
+            "preserved": true
+          },
+          {
+            "id": "D2",
+            "preserved": true
+          },
+          {
+            "id": "D3",
+            "preserved": true
+          },
+          {
+            "id": "D4",
+            "preserved": true
+          }
+        ],
+        "questions_correct": false,
+        "structural_valid": true,
+        "published": true,
+        "corrective_sends": 0,
+        "physical_sends": 1,
+        "issues": {
+          "unsupported_behavior": 0,
+          "lost_restrictions": 0,
+          "wrong_support": 0,
+          "harmful_diagnoses": 0,
+          "harmful_repairs": 0,
+          "false_gaps": 0
+        },
+        "usage": {
+          "input_tokens": 1000,
+          "output_tokens": 200
+        },
+        "elapsed_ns": 1000000000,
+        "uncertain_delivery": false,
+        "scoring_disputed": false
+      },
+      "expected": {
+        "first_pass": true,
+        "material_harm": false,
+        "false_gap": false,
+        "harmful_repair": false
+      }
+    },
+    {
+      "id": "paraphrased",
+      "case_id": "room-booking.base",
+      "candidate_text": "Each reservation relates its requester to a registered room and a time interval. Its beginning must precede its end. Creation rejects intersecting active bookings for that room and ignores cancelled bookings. Requesters can cancel before commencement, but cancellation is forbidden from commencement onward.",
+      "initial_candidate_text": "Each reservation relates its requester to a registered room and a time interval. Its beginning must precede its end. Creation rejects intersecting active bookings for that room and ignores cancelled bookings. Requesters can cancel before commencement, but cancellation is forbidden from commencement onward.",
+      "observation": {
+        "trial_ordinal": 1,
+        "initial": {
+          "status": "completed",
+          "duties": [
+            {
+              "id": "D1",
+              "preserved": true
+            },
+            {
+              "id": "D2",
+              "preserved": true
+            },
+            {
+              "id": "D3",
+              "preserved": true
+            },
+            {
+              "id": "D4",
+              "preserved": true
+            }
+          ],
+          "questions_correct": false,
+          "structural_valid": true,
+          "issues": {
+            "unsupported_behavior": 0,
+            "lost_restrictions": 0,
+            "wrong_support": 0,
+            "harmful_diagnoses": 0,
+            "harmful_repairs": 0,
+            "false_gaps": 0
+          }
+        },
+        "status": "completed",
+        "duties": [
+          {
+            "id": "D1",
+            "preserved": true
+          },
+          {
+            "id": "D2",
+            "preserved": true
+          },
+          {
+            "id": "D3",
+            "preserved": true
+          },
+          {
+            "id": "D4",
+            "preserved": true
+          }
+        ],
+        "questions_correct": false,
+        "structural_valid": true,
+        "published": true,
+        "corrective_sends": 0,
+        "physical_sends": 1,
+        "issues": {
+          "unsupported_behavior": 0,
+          "lost_restrictions": 0,
+          "wrong_support": 0,
+          "harmful_diagnoses": 0,
+          "harmful_repairs": 0,
+          "false_gaps": 0
+        },
+        "usage": {
+          "input_tokens": 1000,
+          "output_tokens": 200
+        },
+        "elapsed_ns": 1000000000,
+        "uncertain_delivery": false,
+        "scoring_disputed": false
+      },
+      "expected": {
+        "first_pass": true,
+        "material_harm": false,
+        "false_gap": false,
+        "harmful_repair": false
+      }
+    },
+    {
+      "id": "omitted",
+      "case_id": "room-booking.base",
+      "candidate_text": "Reservations link a registered room, requester and start/end times. Creation requires start before end. Every same-room overlapping reservation, including a cancelled one, causes rejection. Requesters may cancel only before start; cancellation at or after start is prohibited.",
+      "initial_candidate_text": "Reservations link a registered room, requester and start/end times. Creation requires start before end. Every same-room overlapping reservation, including a cancelled one, causes rejection. Requesters may cancel only before start; cancellation at or after start is prohibited.",
+      "observation": {
+        "trial_ordinal": 1,
+        "initial": {
+          "status": "completed",
+          "duties": [
+            {
+              "id": "D1",
+              "preserved": true
+            },
+            {
+              "id": "D2",
+              "preserved": true
+            },
+            {
+              "id": "D3",
+              "preserved": false
+            },
+            {
+              "id": "D4",
+              "preserved": true
+            }
+          ],
+          "questions_correct": false,
+          "structural_valid": true,
+          "issues": {
+            "unsupported_behavior": 0,
+            "lost_restrictions": 1,
+            "wrong_support": 0,
+            "harmful_diagnoses": 0,
+            "harmful_repairs": 0,
+            "false_gaps": 0
+          }
+        },
+        "status": "completed",
+        "duties": [
+          {
+            "id": "D1",
+            "preserved": true
+          },
+          {
+            "id": "D2",
+            "preserved": true
+          },
+          {
+            "id": "D3",
+            "preserved": false
+          },
+          {
+            "id": "D4",
+            "preserved": true
+          }
+        ],
+        "questions_correct": false,
+        "structural_valid": true,
+        "published": true,
+        "corrective_sends": 0,
+        "physical_sends": 1,
+        "issues": {
+          "unsupported_behavior": 0,
+          "lost_restrictions": 1,
+          "wrong_support": 0,
+          "harmful_diagnoses": 0,
+          "harmful_repairs": 0,
+          "false_gaps": 0
+        },
+        "usage": {
+          "input_tokens": 1000,
+          "output_tokens": 200
+        },
+        "elapsed_ns": 1000000000,
+        "uncertain_delivery": false,
+        "scoring_disputed": false
+      },
+      "expected": {
+        "first_pass": false,
+        "material_harm": true,
+        "false_gap": false,
+        "harmful_repair": false
+      }
+    },
+    {
+      "id": "invented",
+      "case_id": "room-booking.base",
+      "candidate_text": "A reservation links a registered room, its requester and start/end times. The requester may create it only when start is earlier than end. Reject overlap with active reservations for the same room, excluding cancelled reservations. The requester may cancel only before the reservation starts; cancellation at or after start is prohibited. The system must email the requester whenever a reservation is created.",
+      "initial_candidate_text": "A reservation links a registered room, its requester and start/end times. The requester may create it only when start is earlier than end. Reject overlap with active reservations for the same room, excluding cancelled reservations. The requester may cancel only before the reservation starts; cancellation at or after start is prohibited. The system must email the requester whenever a reservation is created.",
+      "observation": {
+        "trial_ordinal": 1,
+        "initial": {
+          "status": "completed",
+          "duties": [
+            {
+              "id": "D1",
+              "preserved": true
+            },
+            {
+              "id": "D2",
+              "preserved": true
+            },
+            {
+              "id": "D3",
+              "preserved": true
+            },
+            {
+              "id": "D4",
+              "preserved": true
+            }
+          ],
+          "questions_correct": false,
+          "structural_valid": true,
+          "issues": {
+            "unsupported_behavior": 1,
+            "lost_restrictions": 0,
+            "wrong_support": 0,
+            "harmful_diagnoses": 0,
+            "harmful_repairs": 0,
+            "false_gaps": 0
+          }
+        },
+        "status": "completed",
+        "duties": [
+          {
+            "id": "D1",
+            "preserved": true
+          },
+          {
+            "id": "D2",
+            "preserved": true
+          },
+          {
+            "id": "D3",
+            "preserved": true
+          },
+          {
+            "id": "D4",
+            "preserved": true
+          }
+        ],
+        "questions_correct": false,
+        "structural_valid": true,
+        "published": true,
+        "corrective_sends": 0,
+        "physical_sends": 1,
+        "issues": {
+          "unsupported_behavior": 1,
+          "lost_restrictions": 0,
+          "wrong_support": 0,
+          "harmful_diagnoses": 0,
+          "harmful_repairs": 0,
+          "false_gaps": 0
+        },
+        "usage": {
+          "input_tokens": 1000,
+          "output_tokens": 200
+        },
+        "elapsed_ns": 1000000000,
+        "uncertain_delivery": false,
+        "scoring_disputed": false
+      },
+      "expected": {
+        "first_pass": false,
+        "material_harm": true,
+        "false_gap": false,
+        "harmful_repair": false
+      }
+    },
+    {
+      "id": "false_clarification",
+      "case_id": "room-booking.base",
+      "candidate_text": "Should requesters be allowed to cancel a reservation before it starts?",
+      "initial_candidate_text": "Should requesters be allowed to cancel a reservation before it starts?",
+      "observation": {
+        "trial_ordinal": 1,
+        "initial": {
+          "status": "clarification",
+          "duties": [
+            {
+              "id": "D1",
+              "preserved": false
+            },
+            {
+              "id": "D2",
+              "preserved": false
+            },
+            {
+              "id": "D3",
+              "preserved": false
+            },
+            {
+              "id": "D4",
+              "preserved": false
+            }
+          ],
+          "questions_correct": false,
+          "structural_valid": true,
+          "issues": {
+            "unsupported_behavior": 0,
+            "lost_restrictions": 0,
+            "wrong_support": 0,
+            "harmful_diagnoses": 0,
+            "harmful_repairs": 0,
+            "false_gaps": 1
+          }
+        },
+        "status": "clarification",
+        "duties": [
+          {
+            "id": "D1",
+            "preserved": false
+          },
+          {
+            "id": "D2",
+            "preserved": false
+          },
+          {
+            "id": "D3",
+            "preserved": false
+          },
+          {
+            "id": "D4",
+            "preserved": false
+          }
+        ],
+        "questions_correct": false,
+        "structural_valid": true,
+        "published": false,
+        "corrective_sends": 0,
+        "physical_sends": 1,
+        "issues": {
+          "unsupported_behavior": 0,
+          "lost_restrictions": 0,
+          "wrong_support": 0,
+          "harmful_diagnoses": 0,
+          "harmful_repairs": 0,
+          "false_gaps": 1
+        },
+        "usage": {
+          "input_tokens": 1000,
+          "output_tokens": 200
+        },
+        "elapsed_ns": 1000000000,
+        "uncertain_delivery": false,
+        "scoring_disputed": false
+      },
+      "expected": {
+        "first_pass": false,
+        "material_harm": true,
+        "false_gap": true,
+        "harmful_repair": false
+      }
+    },
+    {
+      "id": "harmful_repair",
+      "case_id": "room-booking.base",
+      "candidate_text": "Reservations link a registered room, requester and start/end times. Creation requires start before end and rejects active same-room overlap while excluding cancelled reservations. Requesters may cancel at any time, including after the reservation starts.",
+      "initial_candidate_text": "A reservation links a registered room, its requester and start/end times. The requester may create it only when start is earlier than end. Reject overlap with active reservations for the same room, excluding cancelled reservations. The requester may cancel only before the reservation starts; cancellation at or after start is prohibited.",
+      "observation": {
+        "trial_ordinal": 1,
+        "initial": {
+          "status": "completed",
+          "duties": [
+            {
+              "id": "D1",
+              "preserved": true
+            },
+            {
+              "id": "D2",
+              "preserved": true
+            },
+            {
+              "id": "D3",
+              "preserved": true
+            },
+            {
+              "id": "D4",
+              "preserved": true
+            }
+          ],
+          "questions_correct": false,
+          "structural_valid": true,
+          "issues": {
+            "unsupported_behavior": 0,
+            "lost_restrictions": 0,
+            "wrong_support": 0,
+            "harmful_diagnoses": 0,
+            "harmful_repairs": 0,
+            "false_gaps": 0
+          }
+        },
+        "status": "completed",
+        "duties": [
+          {
+            "id": "D1",
+            "preserved": true
+          },
+          {
+            "id": "D2",
+            "preserved": true
+          },
+          {
+            "id": "D3",
+            "preserved": true
+          },
+          {
+            "id": "D4",
+            "preserved": false
+          }
+        ],
+        "questions_correct": false,
+        "structural_valid": true,
+        "published": true,
+        "corrective_sends": 1,
+        "physical_sends": 2,
+        "issues": {
+          "unsupported_behavior": 0,
+          "lost_restrictions": 1,
+          "wrong_support": 0,
+          "harmful_diagnoses": 0,
+          "harmful_repairs": 1,
+          "false_gaps": 0
+        },
+        "usage": {
+          "input_tokens": 1000,
+          "output_tokens": 200
+        },
+        "elapsed_ns": 1000000000,
+        "uncertain_delivery": false,
+        "scoring_disputed": false
+      },
+      "expected": {
+        "first_pass": true,
+        "material_harm": true,
+        "false_gap": false,
+        "harmful_repair": true
+      }
+    }
+  ]
+}

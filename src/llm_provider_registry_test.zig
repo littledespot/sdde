@@ -311,3 +311,41 @@ test "catalogue JSON selection retains per-model choices and rejects unsupported
     candidate.entries[1].json = true;
     try std.testing.expectError(error.InvalidLLMProviderRegistry, registry_contract.createValidated(a, candidate, registered));
 }
+
+test "current Bedrock model policy comes only from registered contracts" {
+    const a = std.testing.allocator;
+    const registered = @import("composition/provider_model_contracts.zig").registry;
+    const bytes =
+        \\{"providers":[{"provider":"aws-bedrock","models":[{"model":"global.openai.gpt-6-luna","json":true,"config":{"region":"ap-southeast-2"}}]}]}
+    ;
+    var raw = try (decode_provider.Action{}).execute(a, bytes);
+    defer raw.deinit();
+    var candidate = try (build_registry.Action{ .contracts = &registered }).execute(a, raw.value());
+    defer candidate.deinit();
+    try std.testing.expect(!@hasField(registry_contract.CandidateEntry, "bedrock_request_profile"));
+    const owner = try registry_contract.createValidated(a, candidate, registered);
+    defer registry_contract.deinitOwner(owner);
+    const captured = registry_contract.registry(owner);
+    for ([_][]const u8{"global.openai.gpt-6-luna"}) |model| {
+        const entry = captured.resolve(identity.ProviderId.parse("aws-bedrock").?, identity.ModelId.parse(model).?).?;
+        try std.testing.expectEqual(contracts.BedrockRequestProfile.openai_luna, entry.bedrock_request_profile);
+        try std.testing.expectEqual(.native_schema, entry.responseMode());
+        try std.testing.expectEqual(contracts.BedrockRegion.@"ap-southeast-2", entry.config.aws_bedrock.region);
+        try std.testing.expect(!entry.capabilities.temperature and !entry.capabilities.input_token_count);
+        try std.testing.expect(entry.capabilities.supports_max_output_tokens);
+        try std.testing.expect(contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, null));
+        try std.testing.expect(!contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, "medium"));
+        try std.testing.expect(!contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, "low"));
+        try std.testing.expect(!contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, "high"));
+    }
+    candidate.entries[0].config = .{ .aws_bedrock = .{ .region = .@"us-west-2" } };
+    try std.testing.expectError(error.InvalidLLMProviderRegistry, registry_contract.createValidated(a, candidate, registered));
+    candidate.entries[0].config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } };
+    candidate.entries[0].model = identity.ModelId.parse("us.openai.gpt-6-luna").?;
+    try std.testing.expectError(error.InvalidLLMProviderRegistry, registry_contract.createValidated(a, candidate, registered));
+    candidate.entries[0].model = identity.ModelId.parse("openai.gpt-6-luna").?;
+    try std.testing.expectError(error.InvalidLLMProviderRegistry, registry_contract.createValidated(a, candidate, registered));
+    const injected = try std.mem.replaceOwned(u8, a, bytes, "\"json\":true", "\"json\":true,\"bedrock_request_profile\":\"openai_oss\"");
+    defer a.free(injected);
+    try std.testing.expectError(error.LLMProviderConfigParseError, (decode_provider.Action{}).execute(a, injected));
+}

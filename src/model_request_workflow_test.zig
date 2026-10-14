@@ -115,10 +115,11 @@ test "static JSON guidance stays separate from dynamic input in both preparation
             var parsed = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
             defer parsed.deinit();
             const messages = parsed.value.object.get("messages").?.array.items;
-            try std.testing.expectEqualStrings("developer", messages[0].object.get("role").?.string);
-            try std.testing.expectEqualStrings(context_bytes, messages[0].object.get("content").?.array.items[0].object.get("text").?.string);
-            try std.testing.expectEqualStrings("user", messages[1].object.get("role").?.string);
-            const user = messages[1].object.get("content").?.array.items;
+            try std.testing.expectEqualStrings(context_bytes, parsed.value.object.get("system").?.array.items[0].object.get("text").?.string);
+            try std.testing.expectEqualStrings(prompt_bytes, parsed.value.object.get("system").?.array.items[1].object.get("text").?.string);
+            try std.testing.expectEqual(@as(usize, 1), messages.len);
+            try std.testing.expectEqualStrings("user", messages[0].object.get("role").?.string);
+            const user = messages[0].object.get("content").?.array.items;
             try std.testing.expectEqual(@as(usize, 1), user.len);
             try std.testing.expectEqualStrings(body, user[0].object.get("text").?.string);
             var captured_graph = graph.*;
@@ -3347,8 +3348,8 @@ test "response admission preserves selected requests captured authority and seri
         try std.testing.expectEqualStrings(before.response_schema.modelBytes(), after.response_schema.modelBytes());
         try std.testing.expectEqualDeep(before.model_operation_id, after.model_operation_id);
         const encode = @import("adapters/provider/bedrock_request.zig").encode;
-        const before_wire = try encode(allocator, before, .inference);
-        const after_wire = try encode(allocator, after, .inference);
+        const before_wire = try encode(allocator, before, .inference, (try currentRequest(&first)).binding().registry_entry.bedrock_request_profile);
+        const after_wire = try encode(allocator, after, .inference, (try currentRequest(&second)).binding().registry_entry.bedrock_request_profile);
         try std.testing.expectEqualStrings(before_wire, after_wire);
         for ([_][]const u8{ before_wire, after_wire }, [_][]const u8{ "before", "after" }) |wire, label| {
             const path = try std.fmt.allocPrint(allocator, ".zig-cache/chunk13-admission-{s}-{s}.json", .{ if (selected) "selected" else "root", label });
@@ -4305,7 +4306,7 @@ test "protocol repetition requires the current correction association and same t
         try std.testing.expectEqual(@as(u32, @intCast(index + 1)), correction_origin.model_attempt_ordinal.value);
         if (prior_correction) |stale| try std.testing.expect(!correction_origin.eql(stale));
         prior_correction = correction_origin;
-        const wire = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, correction.prepared().?, .inference);
+        const wire = try @import("adapters/provider/bedrock_request.zig").encode(std.testing.allocator, correction.prepared().?, .inference, correction.binding().registry_entry.bedrock_request_profile);
         defer std.testing.allocator.free(wire);
         try std.testing.expectEqual(@as(usize, if (index == 1) 1 else 0), std.mem.count(u8, wire, "The previous correction still failed this validation."));
         try std.testing.expect(std.mem.indexOf(u8, wire, "identical response") == null);
@@ -7479,7 +7480,7 @@ test "production request capture failure records non-delivery and response captu
         var sink: ModelCaptureSink = .{ .allocator = fixture.arena.allocator(), .fail_direction = case.direction };
         runner.model_capture.logs = sink.barrier();
         try runtime.bind(&runner);
-        const body = if (case.overshoot) try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12", "\"prompt_tokens\":100000,\"completion_tokens\":2,\"total_tokens\":100002") else bedrock_complete_body;
+        const body = if (case.overshoot) try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":2,\"totalTokens\":100002") else bedrock_complete_body;
         var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = body };
         runtime.provider.?.aws_bedrock.transport = wire.port();
         var harness: Harness = .{ .runner = &runner };
@@ -7714,7 +7715,7 @@ test "production capture attributes count and inference bodies to the existing r
                 try body.appendSlice(a, fragment.content);
             }
             const expected = if (direction == .request)
-                try @import("adapters/provider/bedrock_request.zig").encode(a, request.prepared().?, kind)
+                try @import("adapters/provider/bedrock_request.zig").encode(a, request.prepared().?, kind, request.binding().registry_entry.bedrock_request_profile)
             else if (kind == .input_token_count)
                 "{\"inputTokens\":10}"
             else
@@ -7865,7 +7866,7 @@ test "production Bedrock YAML records budget overshoot and blocks another call" 
     var runner = fixture.runner(graph, std.testing.allocator);
     defer runner.deinit();
     try runtime.bind(&runner);
-    const body = try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12", "\"prompt_tokens\":100000,\"completion_tokens\":2,\"total_tokens\":100002");
+    const body = try std.mem.replaceOwned(u8, fixture.arena.allocator(), bedrock_complete_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":2,\"totalTokens\":100002");
     var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = body };
     runtime.provider.?.aws_bedrock.transport = wire.port();
     var harness: Harness = .{ .runner = &runner };
@@ -7906,7 +7907,7 @@ test "production Bedrock missing credentials follow explicit pre-call terminatio
     try std.testing.expectEqual(.not_invoked_authorization_failure, (try requestLedger(&runner)).record(request.id()).?.terminal_reason.?);
 }
 
-const bedrock_complete_body = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"answer\\\":\\\"candidate\\\"}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}";
+const bedrock_complete_body = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{\\\"answer\\\":\\\"candidate\\\"}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
 
 test "production missing-answer observation retains usage and can close without correction" {
     for ([_]bool{ false, true }) |overshoot| {
@@ -7928,9 +7929,9 @@ test "production missing-answer observation retains usage and can close without 
         try std.testing.expectEqual(@as(usize, 0), runner.envelope.records.items.len);
         try runtime.bind(&runner);
         const body = if (overshoot)
-            "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"<reasoning>metadata</reasoning>\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":100000,\"completion_tokens\":48,\"total_tokens\":100048}}"
+            "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":100000,\"outputTokens\":48,\"totalTokens\":100048}}"
         else
-            "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"<reasoning>metadata</reasoning>\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":884,\"completion_tokens\":48,\"total_tokens\":932}}";
+            "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"metadata\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":884,\"outputTokens\":48,\"totalTokens\":932}}";
         var wire: @import("bedrock_transport_test_fixture.zig").Wire = .{ .inference_body = body };
         runtime.provider.?.aws_bedrock.transport = wire.port();
         var harness: Harness = .{ .runner = &runner };
@@ -7965,10 +7966,11 @@ test "production missing-answer observation retains usage and can close without 
             try std.testing.expectEqual(.available, tokens.status());
             const record = runner.envelope.records.items[runner.envelope.records.items.len - 1];
             const encode = @import("adapters/provider/bedrock_request.zig").encode;
-            const before = try encode(std.testing.allocator, evidence.request(), .inference);
+            const policy = fixture.services.registry().resolveId(evidence.request().binding_id.registry_entry_id).?.bedrock_request_profile;
+            const before = try encode(std.testing.allocator, evidence.request(), .inference, policy);
             defer std.testing.allocator.free(before);
             _ = try runner.envelope.place(record.occurrence, record.value, record.origin);
-            const after = try encode(std.testing.allocator, evidence.request(), .inference);
+            const after = try encode(std.testing.allocator, evidence.request(), .inference, policy);
             defer std.testing.allocator.free(after);
             try std.testing.expectEqualStrings(before, after);
             try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = ".zig-cache/chunk18-stack-request-before.json", .data = before });
@@ -7981,7 +7983,7 @@ test "production missing-answer observation retains usage and can close without 
 }
 
 test "missing answers share protocol allowance through mixed failure and successful recovery" {
-    const missing = "{\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"<reasoning>reasoning must not become an answer</reasoning>\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":2,\"total_tokens\":12}}";
+    const missing = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"reasoning must not become an answer\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
     const shapes = [_]struct { schema: []const u8, valid: []const u8 }{
         .{ .schema = schema_bytes, .valid = "{\"answer\":\"complete\"}" },
         .{ .schema = "{\"type\":\"object\",\"properties\":{\"ready\":{\"type\":\"boolean\"},\"names\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"maxLength\":20},\"maxItems\":3}},\"required\":[\"ready\",\"names\"],\"additionalProperties\":false}", .valid = "{\"ready\":true,\"names\":[\"first\",\"second\"]}" },
@@ -8012,8 +8014,9 @@ test "missing answers share protocol allowance through mixed failure and success
             const succeeds = sequence == 0 and attempt == 2;
             const body = if (succeeds) shape.valid else if (sequence == 2) "{}" else "{";
             wire.inference_body = if (absent) missing else try std.json.Stringify.valueAlloc(fixture.arena.allocator(), .{
-                .choices = .{.{ .index = @as(u32, 0), .message = .{ .role = "assistant", .content = body }, .finish_reason = "stop" }},
-                .usage = .{ .prompt_tokens = @as(u64, 10), .completion_tokens = @as(u64, 2), .total_tokens = @as(u64, 12) },
+                .output = .{ .message = .{ .role = "assistant", .content = .{.{ .text = body }} } },
+                .stopReason = "end_turn",
+                .usage = .{ .inputTokens = @as(u64, 10), .outputTokens = @as(u64, 2), .totalTokens = @as(u64, 12) },
             }, .{});
             try prepareProtocolAttempt(&runner, attempt != 0);
             const request = try currentRequest(&runner);

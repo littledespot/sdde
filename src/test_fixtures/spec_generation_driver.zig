@@ -202,7 +202,7 @@ pub const Driver = struct {
                     .compiled_steps = self.runner.selected.graph.authority.steps.len,
                     .content = parts,
                     .schema = current_request.prepared().?.response_schema.modelBytes(),
-                    .wire = @import("../adapters/provider/bedrock_request.zig").encode(arena.allocator(), current_request.prepared().?, .inference) catch unreachable,
+                    .wire = @import("../adapters/provider/bedrock_request.zig").encode(arena.allocator(), current_request.prepared().?, .inference, current_request.binding().registry_entry.bedrock_request_profile) catch unreachable,
                     .composition = if (current_request.part()) |part| .{
                         .part = part.plan.parts()[part.part].id.bytes,
                         .canonical_schema = part.plan.completeSchema().modelBytes(),
@@ -312,7 +312,7 @@ pub const Driver = struct {
                 if (current_request.id().immutable_unit_owner_id == .semantic_review) self.support_repair_calls += 1;
                 if (view.contains(@import("../application/specification_omission_repair_workflow.zig").schema.key)) self.omission_repair_calls += 1;
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
-                assertRepairRequest(arena.allocator(), current_request.prepared().?, packet) catch unreachable;
+                assertRepairRequest(arena.allocator(), current_request.prepared().?, packet, current_request.binding().registry_entry.bedrock_request_profile) catch unreachable;
                 if (current_request.id().immutable_unit_owner_id == .semantic_review and std.mem.startsWith(u8, current_request.id().immutable_unit_owner_id.semantic_review.review_slot_id.bytes, "principle-consistency-")) self.principle_repair_calls += 1;
             }
             if (current_request.id().immutable_unit_owner_id == .reference_global and current_request.id().purpose == .atomic_repair) {
@@ -432,7 +432,9 @@ pub const Driver = struct {
         var before_merge: data.View = .{};
         defer for (before_merge.slots) |value| if (value) |retained| values.destroy(retained);
         var semantic_parent: ?@import("../domain/workflow_retry.zig").Permit = null;
+        var summary_check_before: ?SummaryCheckSnapshot = null;
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes)) {
+            if (std.mem.eql(u8, entry.operation_id.bytes, "check-reference-summary-reuse")) summary_check_before = SummaryCheckSnapshot.capture(arena.allocator(), self) catch unreachable;
             if ((self.candidate_omissions != null or self.story_omission == .recover or self.record_review == .two_omissions) and std.mem.eql(u8, entry.operation_id.bytes, "apply-specification-support")) semantic_parent = self.runner.repair_retry.currentPermit();
             const keys: []const @import("../domain/pipeline.zig").DataKey = if (sourceMergeContract(entry.operation_id.bytes) != null) &.{.source_omission_repair} else if (std.mem.eql(u8, entry.operation_id.bytes, "collect-specification-support-loss")) &.{.specification_support_review} else if (std.mem.eql(u8, entry.operation_id.bytes, "merge-specification-support-repair")) &.{ .specification_support_review, .specification_support_repair } else if (std.mem.eql(u8, entry.operation_id.bytes, "merge-specification-omission-repair")) &.{.specification_omission_repair} else if ((self.summary_sequence != null or self.global_sequence != null) and std.mem.eql(u8, entry.operation_id.bytes, "merge-reference-reconciliation-repair")) &.{.parsed_reference_reconciliation} else &.{};
             for (keys) |key| {
@@ -476,9 +478,11 @@ pub const Driver = struct {
                 self.carried_summaries += 1;
             }
         };
-        for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "check-reference-summary-reuse") and result.status() == .more) {
-            const view: data.View = .{ .slots = self.runner.envelope.slots };
-            std.testing.expect(!view.contains(.parsed_reference_reconciliation)) catch unreachable;
+        if (summary_check_before) |before| if (result.status() == .ok or result.status() == .more) {
+            // The eligibility decision has no delta. Regeneration can retain
+            // an earlier captured parse until its producer replaces it; this
+            // check neither clears that evidence nor starts model work.
+            before.assertUnchanged(arena.allocator(), self) catch unreachable;
         };
         for (self.runner.selected.graph.authority.steps) |entry| if (std.mem.eql(u8, entry.id.bytes, id.bytes) and std.mem.eql(u8, entry.operation_id.bytes, "build-reference-reconciliation-summary") and result.status() == .ok) {
             const view: data.View = .{ .slots = self.runner.envelope.slots };
@@ -603,6 +607,58 @@ pub const Driver = struct {
     }
 };
 
+/// Snapshot the read-only eligibility boundary before invoking it. Slot handles
+/// are copied, the complete current input is hashed, and mutable accounting is
+/// projected to scalar revisions so comparisons cannot share an updated view.
+const SummaryCheckSnapshot = struct {
+    slots: []const ?*data.Value,
+    input: @import("../domain/atomic_repair.zig").Snapshot,
+    token_revision: u64,
+    tokens: u128,
+    token_operations: usize,
+    fake_calls: usize,
+    accounting: ?Accounting,
+
+    const Accounting = struct { request_revision: u64, requests: usize, attempt_revision: u64, operation_revision: u64 };
+
+    fn capture(a: std.mem.Allocator, driver: *Driver) !SummaryCheckSnapshot {
+        const reconciliation = @import("../application/reference_reconciliation_workflow.zig");
+        const extraction = @import("../application/reference_extraction_workflow.zig");
+        const view: data.View = .{ .slots = driver.runner.envelope.slots };
+        const input = (try extraction.read(&view, reconciliation.input_schema, .reconciliation_input)).payload().reconciliation_input;
+        const tokens = driver.runner.tokenLedger();
+        const accounting: ?Accounting = if (driver.runner.model_accounting) |state| account: {
+            const requests_ledger = @import("../domain/model_request_identity.zig").ledger(state.requests);
+            break :account .{
+                .request_revision = requests_ledger.revision().value,
+                .requests = requests_ledger.recordCount(),
+                .attempt_revision = @import("../domain/model_attempt_accounting.zig").accounting(state.attempts).revision().value,
+                .operation_revision = state.current_operations.revision().value,
+            };
+        } else null;
+        return .{
+            .slots = try a.dupe(?*data.Value, &driver.runner.envelope.slots),
+            .input = try @import("../domain/atomic_repair.zig").snapshot(@import("../domain/reference_reconciliation.zig").Input, a, input),
+            .token_revision = tokens.revision().value,
+            .tokens = tokens.committed(),
+            .token_operations = tokens.accounted_operations.items.len,
+            .fake_calls = driver.fake.invocation_call_count,
+            .accounting = accounting,
+        };
+    }
+
+    fn assertUnchanged(self: SummaryCheckSnapshot, a: std.mem.Allocator, driver: *Driver) !void {
+        const after = try capture(a, driver);
+        try std.testing.expectEqualDeep(self.slots, after.slots);
+        try std.testing.expectEqualDeep(self.input, after.input);
+        try std.testing.expectEqual(self.token_revision, after.token_revision);
+        try std.testing.expectEqual(self.tokens, after.tokens);
+        try std.testing.expectEqual(self.token_operations, after.token_operations);
+        try std.testing.expectEqual(self.fake_calls, after.fake_calls);
+        try std.testing.expectEqualDeep(self.accounting, after.accounting);
+    }
+};
+
 fn assertSupportMerge(allocator: std.mem.Allocator, before: *const data.View, after: *const data.View) !void {
     const workflow_review = @import("../application/specification_support_workflow.zig");
     const support = @import("../domain/specification_support.zig");
@@ -655,11 +711,11 @@ fn assertGenerationContext(a: std.mem.Allocator, request: *const @import("../dom
     try std.testing.expectEqual(@as(usize, 1), count);
 }
 
-fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest, packet: *const @import("../domain/model_input_packet.zig").Packet) !void {
+fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest, packet: *const @import("../domain/model_input_packet.zig").Packet, policy: @import("../domain/llm_provider_contracts.zig").BedrockRequestProfile) !void {
     // Exercise the real provider serializer, without making a network call.
-    const wire = try @import("../adapters/provider/bedrock_request.zig").encode(a, request, .inference);
+    const wire = try @import("../adapters/provider/bedrock_request.zig").encode(a, request, .inference, policy);
     const decoded = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
-    const user = decoded.value.object.get("messages").?.array.items[1].object.get("content").?.array.items[0].object.get("text").?.string;
+    const user = decoded.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[0].object.get("text").?.string;
     try std.testing.expectEqualStrings(packet.body(), user);
     const input = try std.json.parseFromSlice(std.json.Value, a, user, .{});
     const repair = input.value.object.get("repair").?.object;
@@ -695,7 +751,7 @@ fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/
     const configured = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, prompt_path, a, .unlimited);
     var schema_found = false;
     var instruction_found = false;
-    for (decoded.value.object.get("messages").?.array.items[0].object.get("content").?.array.items) |part| {
+    for (decoded.value.object.get("system").?.array.items) |part| {
         const value = part.object.get("text").?.string;
         schema_found = schema_found or std.mem.eql(u8, value, request.response_schema.modelBytes());
         instruction_found = instruction_found or std.mem.eql(u8, value, configured);

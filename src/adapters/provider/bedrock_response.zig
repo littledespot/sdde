@@ -3,6 +3,7 @@ const operation = @import("../../domain/llm_provider_operation.zig");
 const binding = @import("../../domain/llm_provider_binding.zig");
 const strict = @import("../../domain/strict_json.zig");
 const transport = @import("bedrock_transport.zig");
+const provider_reasoning = @import("../../domain/provider_reasoning.zig");
 const Invalid = error{InvalidResponse};
 
 pub fn failure(id: operation.ProviderOperationId, cause: operation.ProviderFailureCause, delivery: operation.ProviderDeliveryDisposition) operation.ProviderFailure {
@@ -50,81 +51,168 @@ pub const Inference = struct {
     usage: operation.ProviderUsage,
     latency_ms: ?u32,
     output: union(enum) { text: []const u8, stopped: operation.ProviderNonCandidateStopReason, invalid: operation.ProviderContentDiagnostic },
+    reasoning: []const provider_reasoning.Block,
+
+    pub fn deinit(self: *Inference, allocator: std.mem.Allocator) void {
+        if (self.output == .text) allocator.free(self.output.text);
+        provider_reasoning.deinit(allocator, self.reasoning);
+        self.* = undefined;
+    }
 };
 
-// Borrowed InvokeModel wire facts. Usage survives a rejected candidate; returned
-// identities and reasoning never become workflow authority.
-pub fn decodeInvoke(raw: std.json.Value) Invalid!Inference {
-    try fields(raw, &.{ "id", "object", "created", "model", "choices", "usage", "service_tier", "system_fingerprint" });
-    for ([_][]const u8{ "id", "model" }) |name| if (raw.object.get(name)) |v| {
-        _ = try string(v);
-    };
-    if (raw.object.get("object")) |v| if (!std.mem.eql(u8, try string(v), "chat.completion")) return error.InvalidResponse;
-    if (raw.object.get("created")) |v| {
-        _ = try integer(v);
+// Converse wire facts. Usage survives a rejected candidate; provider reasoning
+// never becomes authored content or workflow authority. Text owns its exact join.
+pub fn decodeConverse(allocator: std.mem.Allocator, raw: std.json.Value) (Invalid || std.mem.Allocator.Error)!Inference {
+    try fields(raw, &.{ "output", "stopReason", "usage", "metrics", "serviceTier", "performanceConfig", "additionalModelResponseFields" });
+    var latency_ms: ?u32 = null;
+    if (raw.object.get("metrics")) |metrics| {
+        try fields(metrics, &.{"latencyMs"});
+        latency_ms = std.math.cast(u32, try integer(try field(metrics, "latencyMs"))) orelse return error.InvalidResponse;
     }
-    for ([_][]const u8{ "service_tier", "system_fingerprint" }) |name| if (raw.object.get(name)) |v| {
-        if (v != .null) _ = try string(v);
-    };
+    if (raw.object.get("serviceTier")) |tier| {
+        try fields(tier, &.{"type"});
+        try enumeration(try field(tier, "type"), &.{ "default", "priority", "flex", "reserved" });
+    }
+    if (raw.object.get("performanceConfig")) |performance| {
+        try fields(performance, &.{"latency"});
+        try enumeration(try field(performance, "latency"), &.{ "standard", "optimized" });
+    }
+    if (raw.object.get("additionalModelResponseFields")) |extra| {
+        if (extra != .null) try fields(extra, &.{});
+    }
     const usage = try field(raw, "usage");
-    try fields(usage, &.{ "prompt_tokens", "completion_tokens", "total_tokens", "prompt_tokens_details", "completion_tokens_details" });
-    try usageDetails(usage, "prompt_tokens_details", &.{ "cached_tokens", "audio_tokens" });
-    try usageDetails(usage, "completion_tokens_details", &.{ "reasoning_tokens", "audio_tokens", "accepted_prediction_tokens", "rejected_prediction_tokens" });
+    try fields(usage, &.{ "inputTokens", "outputTokens", "totalTokens", "cacheReadInputTokens", "cacheWriteInputTokens", "cacheDetails" });
+    const cache_read = if (usage.object.get("cacheReadInputTokens")) |v| try integer(v) else 0;
+    const cache_write = if (usage.object.get("cacheWriteInputTokens")) |v| try integer(v) else 0;
+    if (usage.object.get("cacheDetails")) |details| {
+        if (details != .array) return error.InvalidResponse;
+        var described: u64 = 0;
+        var previous: ?[]const u8 = null;
+        for (details.array.items) |detail| {
+            try fields(detail, &.{ "inputTokens", "ttl" });
+            const ttl = try string(try field(detail, "ttl"));
+            try enumeration(try field(detail, "ttl"), &.{ "1h", "5m" });
+            if (previous) |prior| if (std.mem.eql(u8, prior, ttl) or std.mem.eql(u8, prior, "5m")) return error.InvalidResponse;
+            previous = ttl;
+            described = std.math.add(u64, described, try integer(try field(detail, "inputTokens"))) catch return error.InvalidResponse;
+        }
+        if (described != cache_write) return error.InvalidResponse;
+    }
+    // AWS reports uncached input separately from cache reads and writes.
+    const uncached_and_read = std.math.add(u64, try integer(try field(usage, "inputTokens")), cache_read) catch return error.InvalidResponse;
+    const inclusive_input = std.math.add(u64, uncached_and_read, cache_write) catch return error.InvalidResponse;
     const reported = operation.ProviderUsage.init(
-        try integer(try field(usage, "prompt_tokens")),
-        try integer(try field(usage, "completion_tokens")),
-        try integer(try field(usage, "total_tokens")),
+        inclusive_input,
+        try integer(try field(usage, "outputTokens")),
+        try integer(try field(usage, "totalTokens")),
     ) orelse return error.InvalidResponse;
-    return .{ .usage = reported, .latency_ms = null, .output = decodeOutput(raw) catch .{ .invalid = .invalid_content } };
+    var reasoning_blocks: std.ArrayList(provider_reasoning.Block) = .empty;
+    defer reasoning_blocks.deinit(allocator);
+    errdefer for (reasoning_blocks.items) |block| block.deinit(allocator);
+    const output: @FieldType(Inference, "output") = decodeOutput(allocator, raw, &reasoning_blocks) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.InvalidResponse => .{ .invalid = .invalid_content },
+    };
+    errdefer if (output == .text) allocator.free(output.text);
+    return .{ .usage = reported, .latency_ms = latency_ms, .output = output, .reasoning = try reasoning_blocks.toOwnedSlice(allocator) };
 }
 
-fn usageDetails(usage: std.json.Value, name: []const u8, allowed: []const []const u8) Invalid!void {
-    const detail = usage.object.get(name) orelse return;
-    if (detail == .null) return;
-    try fields(detail, allowed);
-    for (detail.object.values()) |v| _ = try integer(v);
-}
-
-fn decodeOutput(raw: std.json.Value) Invalid!@FieldType(Inference, "output") {
-    const choices = try field(raw, "choices");
-    if (choices != .array or choices.array.items.len != 1) return error.InvalidResponse;
-    const choice = choices.array.items[0];
-    try fields(choice, &.{ "index", "message", "finish_reason", "logprobs" });
-    if (try integer(try field(choice, "index")) != 0) return error.InvalidResponse;
-    if (choice.object.get("logprobs")) |v| if (v != .null) return error.InvalidResponse;
-    const stop = try string(try field(choice, "finish_reason"));
-    if (!std.mem.eql(u8, stop, "stop")) {
-        const reason: operation.ProviderNonCandidateStopReason = if (std.mem.eql(u8, stop, "length")) .output_limit else if (std.mem.eql(u8, stop, "tool_calls") or std.mem.eql(u8, stop, "function_call")) .unsupported_tool_request else if (std.mem.eql(u8, stop, "content_filter")) .content_filtered else return error.InvalidResponse;
+fn decodeOutput(allocator: std.mem.Allocator, raw: std.json.Value, reasoning_blocks: *std.ArrayList(provider_reasoning.Block)) (Invalid || std.mem.Allocator.Error)!@FieldType(Inference, "output") {
+    const decoded = decodeMessage(allocator, raw, reasoning_blocks) catch |err| switch (err) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.InvalidResponse => @as(@FieldType(Inference, "output"), .{ .invalid = .invalid_content }),
+    };
+    errdefer if (decoded == .text) allocator.free(decoded.text);
+    const stop = try string(try field(raw, "stopReason"));
+    const Stop = enum { end_turn, tool_use, max_tokens, stop_sequence, guardrail_intervened, content_filtered, malformed_model_output, malformed_tool_use, model_context_window_exceeded };
+    const selected = std.meta.stringToEnum(Stop, stop) orelse return error.InvalidResponse;
+    const stopped: ?operation.ProviderNonCandidateStopReason = switch (selected) {
+        .end_turn => null,
+        .tool_use, .malformed_tool_use => .unsupported_tool_request,
+        .max_tokens => .output_limit,
+        .guardrail_intervened, .content_filtered => .content_filtered,
+        .malformed_model_output, .stop_sequence => .malformed_output,
+        .model_context_window_exceeded => .context_limit,
+    };
+    if (stopped) |reason| {
+        if (decoded == .text) allocator.free(decoded.text);
         return .{ .stopped = reason };
     }
-    const message = try field(choice, "message");
-    try fields(message, &.{ "role", "content", "refusal", "tool_calls" });
+    return decoded;
+}
+
+fn decodeMessage(allocator: std.mem.Allocator, raw: std.json.Value, reasoning_blocks: *std.ArrayList(provider_reasoning.Block)) (Invalid || std.mem.Allocator.Error)!@FieldType(Inference, "output") {
+    const output = raw.object.get("output") orelse return .{ .invalid = .missing_final_text };
+    try fields(output, &.{"message"});
+    const message = try field(output, "message");
+    try fields(message, &.{ "role", "content" });
     if (!std.mem.eql(u8, try string(try field(message, "role")), "assistant")) return error.InvalidResponse;
-    if (message.object.get("refusal")) |v| if (v != .null) {
-        _ = try string(v);
-        return .{ .stopped = .content_filtered };
-    };
-    if (message.object.get("tool_calls")) |v| if (v != .null) {
-        if (v != .array) return error.InvalidResponse;
-        if (v.array.items.len != 0) return .{ .stopped = .unsupported_tool_request };
-    };
     const content = message.object.get("content") orelse return .{ .invalid = .missing_final_text };
-    if (content == .null) return .{ .invalid = .missing_final_text };
-    const text = try string(content);
-    // AWS documents one leading <reasoning> block for this API. Strip that
-    // framing only, never scan for JSON or repair arbitrary provider text.
-    const trimmed = std.mem.trimStart(u8, text, " \r\n\t");
-    const answer = if (std.mem.startsWith(u8, trimmed, "<reasoning>")) answer: {
-        const close = std.mem.indexOf(u8, trimmed, "</reasoning>") orelse return .{ .invalid = .missing_final_text };
-        break :answer std.mem.trimStart(u8, trimmed[close + "</reasoning>".len ..], " \r\n\t");
-    } else text;
-    if (std.mem.trim(u8, answer, " \r\n\t").len == 0) return .{ .invalid = .missing_final_text };
-    return .{ .text = answer };
+    if (content != .array) return error.InvalidResponse;
+    var text: std.Io.Writer.Allocating = .init(allocator);
+    defer text.deinit();
+    var invalid_content = false;
+    for (content.array.items) |block| {
+        fields(block, &.{ "text", "reasoningContent" }) catch {
+            invalid_content = true;
+            continue;
+        };
+        if (block.object.count() != 1) {
+            invalid_content = true;
+            continue;
+        }
+        if (block.object.get("text")) |part| {
+            const value = string(part) catch {
+                invalid_content = true;
+                continue;
+            };
+            text.writer.writeAll(value) catch return error.OutOfMemory;
+        } else {
+            const owned = reasoning(allocator, try field(block, "reasoningContent")) catch |err| switch (err) {
+                error.OutOfMemory => return error.OutOfMemory,
+                error.InvalidResponse => {
+                    invalid_content = true;
+                    continue;
+                },
+            };
+            errdefer owned.deinit(allocator);
+            try reasoning_blocks.append(allocator, owned);
+        }
+    }
+    if (invalid_content) return .{ .invalid = .invalid_content };
+    if (std.mem.trim(u8, text.written(), " \r\n\t").len == 0) return .{ .invalid = .missing_final_text };
+    return .{ .text = try text.toOwnedSlice() };
+}
+
+fn reasoning(allocator: std.mem.Allocator, raw: std.json.Value) (Invalid || std.mem.Allocator.Error)!provider_reasoning.Block {
+    try fields(raw, &.{ "reasoningText", "redactedContent" });
+    if (raw.object.count() != 1) return error.InvalidResponse;
+    if (raw.object.get("reasoningText")) |text| {
+        try fields(text, &.{ "text", "signature" });
+        return (provider_reasoning.Block{ .text = .{
+            .text = try string(try field(text, "text")),
+            .signature = if (text.object.get("signature")) |signature| try string(signature) else null,
+        } }).clone(allocator);
+    } else {
+        const encoded = try string(try field(raw, "redactedContent"));
+        const size = std.base64.standard.Decoder.calcSizeForSlice(encoded) catch return error.InvalidResponse;
+        const bytes = try allocator.alloc(u8, size);
+        defer allocator.free(bytes);
+        std.base64.standard.Decoder.decode(bytes, encoded) catch return error.InvalidResponse;
+        return (provider_reasoning.Block{ .redacted = .{ .base64 = encoded } }).clone(allocator);
+    }
+}
+
+fn enumeration(raw: std.json.Value, allowed: []const []const u8) Invalid!void {
+    const value = try string(raw);
+    for (allowed) |name| if (std.mem.eql(u8, value, name)) return;
+    return error.InvalidResponse;
 }
 
 fn decodeInference(allocator: std.mem.Allocator, raw: std.json.Value, selected: *const binding.ValidatedProviderModelBinding, request: *const operation.IdentifiedProviderNeutralModelRequest, id: operation.ProviderOperationId) (Invalid || std.mem.Allocator.Error)!operation.ProviderInvocationObservation {
-    const decoded = try decodeInvoke(raw);
-    return .{ .completed = .{ .operation_id = id, .raw_result = switch (decoded.output) {
+    var decoded = try decodeConverse(allocator, raw);
+    defer decoded.deinit(allocator);
+    var result: operation.RawProviderModelResult = switch (decoded.output) {
         .invalid => |reason| .{ .rejected = .{
             .request_id = request.model_request_id,
             .binding_id = selected.bindingId(),
@@ -146,7 +234,11 @@ fn decodeInference(allocator: std.mem.Allocator, raw: std.json.Value, selected: 
             .usage = decoded.usage,
             .provider_latency_ms = decoded.latency_ms,
         } },
-    } } };
+    };
+    if (decoded.reasoning.len != 0) switch (result) {
+        inline .complete, .stopped, .rejected => |*value| value.reasoning = provider_reasoning.Owned.take(allocator, &decoded.reasoning),
+    };
+    return .{ .completed = .{ .operation_id = id, .raw_result = result } };
 }
 
 fn errorResponse(allocator: std.mem.Allocator, response: transport.Response, id: operation.ProviderOperationId) std.mem.Allocator.Error!?operation.ProviderFailure {

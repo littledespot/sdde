@@ -42,13 +42,16 @@ pub fn main(init: std.process.Init) !void {
     var args: std.ArrayList([]const u8) = .empty;
     while (iterator.next()) |arg| try args.append(a, arg);
     if (args.items.len == 1 and std.mem.eql(u8, args.items[0], "--help")) {
-        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build evaluate-spec -- --case <relative-json> --spec <relative-md> --config <relative-json> --output <existing-relative-directory> --live\nAll paths are relative to the current directory. Live execution sends source/spec/rubric to the selected provider and may incur charges. Set TEST_EVALUATION_PROVIDER=openai|bedrock, TEST_EVALUATION_MODEL and its TEST_ credential. Bedrock also requires TEST_EVALUATION_REGION. No .env file is loaded automatically.\n");
+        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build evaluate-spec -- --case <relative-json> --spec <relative-md> --config <relative-json> --output <existing-relative-directory> --live\nAll paths are relative to the current directory. Live execution sends source/spec/rubric to the selected provider and may incur charges. Explicitly set TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=global.openai.gpt-6-luna, TEST_EVALUATION_REGION=ap-southeast-2 and TEST_AWS_BEARER_TOKEN_BEDROCK. Luna judge settings require null reasoning_effort and temperature. No .env file is loaded automatically.\n");
         return;
     }
     const options = parse(args.items) catch return fail(io, "Invalid arguments; use --help. No API call made.");
     const config_bytes = files.read(io, a, .cwd(), options.config) catch return fail(io, "Evaluator configuration is unavailable. No API call made.");
-    const selection = environment.selection(init.environ_map) catch return fail(io, "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.");
-    const config = configuration.parse(a, config_bytes, selection) catch return fail(io, "Invalid evaluator configuration. No API call made.");
+    const selection = environment.selection(init.environ_map) catch |err| return fail(io, if (err == error.DisallowedTestModel)
+        "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=global.openai.gpt-6-luna and TEST_EVALUATION_REGION=ap-southeast-2. No API call made."
+    else
+        "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.");
+    const config = configuration.parse(a, config_bytes, selection) catch return fail(io, "Invalid evaluator settings or unavailable native-schema capability. Bedrock Luna requires reasoning_effort:null and temperature:null in judge settings. No API call made.");
     const key = environment.credential(init.environ_map, selection.api) catch |err| return fail(io, try std.fmt.allocPrint(a, "{s} is {s}. No API call made.", .{ environment.credentialName(selection.api), switch (err) {
         error.MissingTestApiKey => "missing",
         error.InvalidTestApiKey => "invalid",

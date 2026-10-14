@@ -58,11 +58,18 @@ human approval is claimed by the offline fixtures.
 
 - The shared grading call accepts explicit artifact provenance; full-workflow handoff is
   still H-015.
-- Responses/InvokeModel APIs with native HTTPS are implemented without a new dependency.
+- Responses/Converse APIs with native HTTPS are implemented without a new dependency.
 - Exact evaluation provider/model come only from the `TEST_` environment variables in
   [the evaluator contract](evaluator.md#run); the credential is `TEST_OPENAI_API_KEY` or
   `TEST_AWS_BEARER_TOKEN_BEDROCK` for the selected provider.
 - Bedrock additionally requires `TEST_EVALUATION_REGION`.
+- The shared [live-test cost policy](../../test/harness/model_cost_policy.zig)
+  permits only Bedrock `global.openai.gpt-6-luna` from `ap-southeast-2`.
+  Sonnet, Sol, Haiku, direct OpenAI, historical models and other aliases reject
+  before credentials or network activity. The judge retains its native-schema
+  gate; Luna's registered Converse request profile adds the required strict JSON
+  flag and admits only omitted temperature/reasoning controls. The documented
+  provider default is medium reasoning. No response mode falls back.
 - Other settings/budget remain mandatory judge JSON configuration.
 - The production executable consumes none of these test variables.
 - Numeric scoring choices live in the draft rubric, not evaluator code or release
@@ -200,7 +207,8 @@ use H-002 for the initial case.
   Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
 - The implemented endpoint and explicit per-run configuration are documented in [the
   evaluator contract](evaluator.md#run).
-- No model or paid run was selected.
+- Live model selection remains explicit within the current small-model cost
+  policy. This update made no provider request and does not authorize a paid run.
 
 ## H-005 — Validate judgments and calculate results
 

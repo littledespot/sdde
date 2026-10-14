@@ -23,7 +23,7 @@ fn command(init: std.process.Init) !bool {
     var arguments: std.ArrayList([]const u8) = .empty;
     while (iterator.next()) |argument| try arguments.append(allocator, argument);
     if (arguments.items.len == 1 and std.mem.eql(u8, arguments.items[0], "--help")) {
-        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-spec -- --case <relative-workflow.case.json>\nRuns the real LLM selected by the case's .sddtoolkit.json, then grades its published specification against the case rubric. This command makes live API calls. Generation uses TEST_AWS_BEARER_TOKEN_BEDROCK; grading uses TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL, TEST_EVALUATION_REGION and the selected TEST_ credential. Load .env.e2e explicitly before running. Retains one UTC-dated run under zig-out/e2e-spec.\n");
+        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-spec -- --case <relative-workflow.case.json>\nRuns the real LLM selected by the case's .sddtoolkit.json, then grades its published specification against the case rubric. This command makes live API calls. Live generation and grading permit only Bedrock global.openai.gpt-6-luna from ap-southeast-2. Explicitly set TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=global.openai.gpt-6-luna, TEST_EVALUATION_REGION=ap-southeast-2 and TEST_AWS_BEARER_TOKEN_BEDROCK. Load .env.e2e explicitly before running. Retains one UTC-dated run under zig-out/e2e-spec.\n");
         return true;
     }
     const case_path = parse(arguments.items) catch {
@@ -82,11 +82,14 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
     const captured = try fixture.capture(io, allocator, .cwd(), selected);
     try @import("../output.zig").write(io, run, "inputs.json", try std.json.Stringify.valueAlloc(allocator, captured, .{ .whitespace = .indent_2 }));
     try fixture.materialize(io, project, captured);
-    const selection = @import("../environment.zig").selection(environment) catch return error.InvalidEvaluationEnvironment;
+    var generation_config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(allocator, captured.config);
+    defer generation_config.deinit();
+    try @import("../model_cost_policy.zig").requireConfiguredSlots(&generation_config.value().models);
+    const selection = @import("../environment.zig").selection(environment) catch |err| return if (err == error.DisallowedTestModel) err else error.InvalidEvaluationEnvironment;
     const config = @import("../configuration.zig").parse(allocator, captured.evaluation.config_bytes, selection) catch return error.InvalidEvaluationConfiguration;
     report.evaluation_configuration = config;
     const judge_key = try @import("../environment.zig").credential(environment, selection.api);
-    const generation_key = try @import("../environment.zig").credential(environment, .bedrock_invoke);
+    const generation_key = try @import("../environment.zig").credential(environment, .bedrock_converse);
     try std.Io.File.stdout().writeStreamingAll(io, "Generating with the selected project's configured LLM...\n");
     const secrets = [_][]const u8{ generation_key, judge_key };
     const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = allocator, .run = run, .secrets = &secrets };

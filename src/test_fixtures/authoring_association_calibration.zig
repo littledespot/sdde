@@ -203,7 +203,7 @@ pub fn run() !void {
         .limits = .{ .cases = cases.len, .logical_trials = trials.items.len, .repetitions = 2, .physical_sends = physical_sends, .stop_at_actual_input_plus_output_tokens = 200000, .retries_corrections_repairs_model_judges_review_calls_e2e = 0 },
         .admission = "Actual response must pass its frozen schema, current native generation parse/validate/admit and record consistency. A diagnostic receipt is never native workflow origin or publication authority.",
         .downstream = "Native admitted authored associations determine the review subject and evidence. No review model calls or expected-value loss findings are prepared.",
-        .parent = .{ .feature = captured_feature, .identity = parent_identity, .description = parent, .wire_preflight = "Exact captured and all modified bodies rebuilt through existing replay provider prepare; zero sends. Current compiled graph authorization is a separate required preflight." },
+        .parent = .{ .feature = captured_feature, .identity = parent_identity, .description = parent, .wire_preflight = "Current Converse modified bodies rebuilt through existing replay provider prepare; zero sends. A retained request with different wire bytes is ineligible as an exact current parent. Current compiled graph authorization is a separate required preflight." },
         .dependencies = dependencies.items,
         .trials = trials.items,
     }, .{});
@@ -387,9 +387,16 @@ fn ownershipComparisonChecks(a: std.mem.Allocator, family: Request, ownership: R
 
 const PreparationAccess = struct {
     expected: @import("../domain/request_debugger.zig").Description,
-    fn authorize(context: *@import("../ports/request_replay.zig").Context, supplied: @import("../domain/request_debugger.zig").Description) @import("../ports/request_replay.zig").Error!void {
+    fn authorize(context: *@import("../ports/request_replay.zig").Context, supplied: @import("../domain/request_debugger.zig").Description) @import("../ports/request_replay.zig").Error!@import("../domain/llm_provider_contracts.zig").BedrockRequestProfile {
         const self: *PreparationAccess = @ptrCast(@alignCast(context));
         if (!std.meta.eql(self.expected, supplied)) return error.ReplayUnauthorized;
+        const model = @import("../composition/provider_model_contracts.zig").registry.resolve(
+            @import("../domain/llm_provider_identity.zig").ProviderId.parse(supplied.provider) orelse return error.ReplayUnauthorized,
+            @import("../domain/llm_provider_identity.zig").ModelId.parse(supplied.model) orelse return error.ReplayUnauthorized,
+        ) orelse return error.ReplayUnauthorized;
+        if (!model.acceptsConfig(supplied.provider_config) or !model.capabilities.supports(supplied.response_mode, supplied.controls) or
+            !@import("../domain/llm_provider_contracts.zig").supportsReasoningEffort(model.supported_reasoning_efforts, supplied.reasoning_effort)) return error.ReplayUnauthorized;
+        return model.bedrock_request_profile;
     }
 };
 
@@ -422,7 +429,7 @@ fn wirePreflight(a: std.mem.Allocator, directory: []const u8, trials: []const Tr
     var clock: @import("../provider_authorization_test_fixture.zig").TestClock = .{};
     var compiler: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
     var adapter: @import("../adapters/provider/request_replay.zig").Adapter = .{ .authorization = .{ .context = @ptrCast(&access), .authorize_fn = PreparationAccess.authorize }, .environment = &environment, .transport = wire.port(), .clock = clock.port(), .compiler = compiler.compiler() };
-    try std.testing.expectEqualStrings(actual.request.?, try adapter.provider().prepare(a, description));
+    const current_parent = std.mem.eql(u8, actual.request.?, try adapter.provider().prepare(a, description));
     for (trials) |trial| for (trial.requests) |request| {
         const edit = try @import("../domain/strict_json.zig").decode(@import("../domain/request_debugger.zig").Edit, a, try shared.read(a, request.edit.path), .{ .maximum_depth = 64 });
         var modified = description;
@@ -432,6 +439,9 @@ fn wirePreflight(a: std.mem.Allocator, directory: []const u8, trials: []const Tr
         try std.testing.expectEqualStrings(try shared.read(a, request.request.path), try adapter.provider().prepare(a, modified));
     };
     try std.testing.expectEqual(@as(usize, 0), wire.calls);
+    // Exact replay admission is byte-exact. An old provider protocol never
+    // becomes a current parent merely because its model/settings still match.
+    if (!current_parent) return .unavailable;
     try shared.writeAt(a, directory, "parent", "description.json", try std.json.Stringify.valueAlloc(a, description, .{}));
     return .{ .ready = try pin(a, try std.fmt.allocPrint(a, "{s}/parent.description.json", .{directory})) };
 }
@@ -631,10 +641,12 @@ fn responseFacts(a: std.mem.Allocator, receipt: Receipt) !ResponseFacts {
         return result;
     };
     defer raw.deinit();
-    const decoded = @import("../adapters/provider/bedrock_response.zig").decodeInvoke(raw.value) catch {
+    var decoded = @import("../adapters/provider/bedrock_response.zig").decodeConverse(a, raw.value) catch |err| {
+        if (err == error.OutOfMemory) return err;
         result.rejection = "InvalidProviderResponse";
         return result;
     };
+    defer decoded.deinit(a);
     result.cost.usage = decoded.usage;
     if (decoded.output != .text) {
         result.cost.provider_stop = switch (decoded.output) {
@@ -708,7 +720,7 @@ fn presentationBody(a: std.mem.Allocator, packet: *const packets.Packet, present
 fn receiptChecks(a: std.mem.Allocator, request: Request, answer: []const u8) !void {
     const edit = try @import("../domain/strict_json.zig").decode(@import("../domain/request_debugger.zig").Edit, a, try shared.read(a, request.edit.path), .{ .maximum_depth = 64 });
     const run_manifest: Run = .{ .schema = .@"authoring-diagnostic-run/v1", .preparation_sha256 = "MOCK preparation hash", .parent = .{ .run = "MOCK-parent", .call = "MOCK-call" } };
-    const raw = try std.json.Stringify.valueAlloc(a, .{ .choices = &.{.{ .index = 0, .message = .{ .role = "assistant", .content = answer }, .finish_reason = "stop" }}, .usage = .{ .prompt_tokens = 11, .completion_tokens = 7, .total_tokens = 18 } }, .{});
+    const raw = try std.json.Stringify.valueAlloc(a, .{ .output = .{ .message = .{ .role = "assistant", .content = &.{.{ .text = answer }} } }, .stopReason = "end_turn", .usage = .{ .inputTokens = 11, .outputTokens = 7, .totalTokens = 18 } }, .{});
     const good: Receipt = .{
         .schema = .@"authoring-diagnostic-receipt/v1",
         .trial_id = "MOCK-trial",

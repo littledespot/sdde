@@ -25,27 +25,39 @@ test "concrete HTTP captures request identity and rejects duplicate identity hea
     }
 }
 
-test "concrete HTTP sends each API once and owns a complete fragmented response" {
-    for ([_]@import("domain/llm_provider_operation.zig").ProviderOperationKind{ .input_token_count, .inference }) |kind| {
-        var fixture: fixture_module.Fixture = undefined;
-        fixture.init(good);
-        defer fixture.deinit();
-        var adapter = fixture.adapter();
-        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-        defer arena.deinit();
-        const result = try adapter.port().exchange(arena.allocator(), fixture.request(kind));
-        try std.testing.expectEqualStrings("hello", result.received.body);
-        try std.testing.expectEqual(@as(u16, 200), result.received.status);
-        try fixture.expectJoined();
-        try std.testing.expectEqual(@as(usize, 1), fixture.opens);
-        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, "POST "));
-        const path = if (kind == .inference) "/invoke HTTP/1.1\r\n" else "/count-tokens HTTP/1.1\r\n";
-        try std.testing.expect(std.mem.indexOf(u8, fixture.wire.items, path) != null);
-        try std.testing.expect(std.mem.indexOf(u8, fixture.wire.items, "host: bedrock-runtime.ap-southeast-2.amazonaws.com\r\n") != null);
-        try std.testing.expect(std.mem.endsWith(u8, fixture.wire.items, fixture.request(kind).body));
-        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, &fixture.canary));
-        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, "authorization: Bearer "));
-        try std.testing.expect(std.mem.indexOf(u8, result.received.body, &fixture.canary) == null);
+test "concrete HTTP routes every registered model region through Converse or token counting once" {
+    for (@import("composition/provider_model_contracts.zig").registry.entries) |model| {
+        for (model.bedrock_regions) |region| {
+            for (std.enums.values(@import("domain/llm_provider_operation.zig").ProviderOperationKind)) |kind| {
+                var fixture: fixture_module.Fixture = undefined;
+                fixture.init(good);
+                defer fixture.deinit();
+                var adapter = fixture.adapter();
+                var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+                defer arena.deinit();
+                var request = fixture.request(kind);
+                request.model = model.model;
+                request.region = region;
+                fixture.expected_host = try std.fmt.allocPrint(arena.allocator(), "bedrock-runtime.{s}.amazonaws.com", .{@tagName(region)});
+                const result = try adapter.port().exchange(arena.allocator(), request);
+                try std.testing.expectEqualStrings("hello", result.received.body);
+                try std.testing.expectEqual(@as(u16, 200), result.received.status);
+                try fixture.expectJoined();
+                try std.testing.expectEqual(@as(usize, 1), fixture.opens);
+                try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, "POST "));
+                const request_line = try std.fmt.allocPrint(arena.allocator(), "POST /model/{f}/{s} HTTP/1.1\r\n", .{
+                    std.fmt.alt(std.Uri.Component{ .raw = model.model.bytes }, .formatEscaped),
+                    if (kind == .inference) "converse" else "count-tokens",
+                });
+                try std.testing.expect(std.mem.startsWith(u8, fixture.wire.items, request_line));
+                const host = try std.fmt.allocPrint(arena.allocator(), "host: {s}\r\n", .{fixture.expected_host});
+                try std.testing.expect(std.mem.indexOf(u8, fixture.wire.items, host) != null);
+                try std.testing.expect(std.mem.endsWith(u8, fixture.wire.items, request.body));
+                try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, &fixture.canary));
+                try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, fixture.wire.items, "authorization: Bearer "));
+                try std.testing.expect(std.mem.indexOf(u8, result.received.body, &fixture.canary) == null);
+            }
+        }
     }
 }
 

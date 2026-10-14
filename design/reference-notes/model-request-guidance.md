@@ -461,19 +461,30 @@ approved controlled calls are still needed to measure model outcomes under §28.
 ## Provider mode and implementation evidence
 
 - The model catalogue’s required `json` boolean selects response mode (ADR 0012).
-  With `true`, the shared Bedrock serializer sends Structured Outputs through
-  `response_format.type: "json_schema"`, derived from the compiled schema.
+  With `true`, the canonical Bedrock Converse serializer sends Structured Outputs
+  through `outputConfig.textFormat.type: "json_schema"`; its
+  `structure.jsonSchema.schema` is a string derived from the compiled schema.
 - The complete schema remains in system guidance and engine validation.
 - Tagged `oneOf` becomes disjoint `anyOf`; unsupported bounds stay engine-enforced.
 - Explicit token counting uses the same text input as inference.
-- The maintained Specify catalogue now sets `json: true` under the user’s
-  21 September direction. Earlier prompt-only runs and native tagged-schema
-  failures remain historical evidence; enabling native output is not live
+- The current live-test Specify catalogue selects Bedrock
+  `global.openai.gpt-6-luna` with `json: true` from `ap-southeast-2`. All six
+  generation slots omit explicit reasoning controls, and temperature is omitted.
+  The judge independently selects the same Luna profile and retains its native
+  schema gate. Luna native mode requires the compiled request profile's
+  `additionalModelRequestFields.text.format.strict: true` flag.
+  Earlier `json: true` GPT-OSS runs, prompt-only runs and native tagged-schema
+  failures remain historical evidence; changing a mode or model is not live
   evidence that those failures have been resolved.
 
 AWS documents [structured-output support for gpt-oss-20b](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-oss-20b.html)
-and [schema-constrained InvokeModel output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
-(checked 25 September 2026). Availability does not overturn the
+and [schema-constrained Converse output](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)
+(checked 15 October 2026). The current
+[Luna contract](../features/F0007-AWSBedrockProvider.md) registers native JSON
+Schema and the global profile from Sydney, with no CountTokens, temperature or
+explicit reasoning override. AWS documents provider-default medium reasoning;
+its global routing is not an Australian-residency guarantee. Availability does
+not overturn the
 [retained native-mode failures](../../fixes/archive/FIX_001.md#47-native-mode-and-retry-counts-are-not-demonstrated-solutions)
 or prove improvement for the configured provider/model/schema combination. A
 comparison must record the actual mode and full engine-validation results.

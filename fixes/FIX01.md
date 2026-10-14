@@ -77,6 +77,20 @@ implemented changes, finished experiments and their verification. A failed
 experiment is completed execution, not completed semantic acceptance. Outstanding
 work remains below.
 
+**15 October 2026 — FIX04 evaluation foundation and Converse:** the user-requested
+Phase 0 prepares a frozen current-small-model protocol, 24 source-backed features
+with 72 variants, six labelled specimens and feature-level accounting with no
+publication authority. The associated Bedrock transport change uses shared
+Converse codecs, typed reasoning diagnostics and a pre-credential live-test cost
+policy permitting only Bedrock Luna and excluding Sonnet/Sol/Haiku. Canonical live
+fixtures select `global.openai.gpt-6-luna` with native JSON Schema;
+generation topology and semantic acceptance rules are unchanged.
+[FIX04 §5.6](FIX04.md#56-phased-rollout-and-exit-gates) and its
+[retained Phase 0 report](../test/calibration/semantic-simplicity/phase0-results.md)
+record the completed scope/checks: **Phase 0 complete offline**, with full
+verification at 145/145 build steps and 1,671/1,671 tests. No live
+compatibility, model-quality, brittleness or E2E gate is closed by offline tests.
+
 ## 3. Remaining work and feasibility
 
 Feasibility describes architectural coupling, not an effort estimate or probability

@@ -34,14 +34,16 @@ const Fixture = struct {
     fail_request: bool = false,
     fail_response: bool = false,
     saved: ?debug.RequestRecord = null,
+    request_profile: @import("domain/llm_provider_contracts.zig").BedrockRequestProfile = .openai_oss,
     fn init(self: *Fixture, a: std.mem.Allocator) !void {
         self.* = .{ .environment = .init(a) };
         try self.environment.put("AWS_BEARER_TOKEN_BEDROCK", "test-secret-never-log");
         self.provider = .{ .authorization = .{ .context = @ptrCast(self), .authorize_fn = authorize }, .environment = &self.environment, .transport = self.wire.port(), .clock = .{ .context = @ptrCast(self), .now_fn = now }, .compiler = self.compiler.compiler() };
     }
-    fn authorize(ctx: *port.Context, value: debug.Description) port.Error!void {
+    fn authorize(ctx: *port.Context, value: debug.Description) port.Error!@import("domain/llm_provider_contracts.zig").BedrockRequestProfile {
         const self: *Fixture = @ptrCast(@alignCast(ctx));
         if (self.denied or !std.mem.eql(u8, value.model, description.model)) return error.ReplayUnauthorized;
+        return self.request_profile;
     }
     fn now(_: *@import("ports/provider_authorization_lease.zig").Context) error{ClockUnavailable}!u64 {
         return 100;
@@ -92,7 +94,7 @@ test "exact replay retains byte equality and modified replay changes only select
     try std.testing.expectEqualDeep(description.controls, modified.request.description.controls);
     var parsed = try std.json.parseFromSlice(std.json.Value, a, modified.request.body, .{});
     defer parsed.deinit();
-    try std.testing.expectEqual(@as(i64, 16384), parsed.value.object.get("max_completion_tokens").?.integer);
+    try std.testing.expectEqual(@as(i64, 16384), parsed.value.object.get("inferenceConfig").?.object.get("maxTokens").?.integer);
     try std.testing.expectEqual(@as(u64, 2), fixture.saved.?.sequence);
     try std.testing.expect(modified.request.source_overrides);
     try std.testing.expectEqualDeep(parent.source_snapshot, modified.request.source_snapshot);
@@ -145,6 +147,39 @@ test "replay rejects redacted incomplete inconsistent and unauthorized requests 
     try std.testing.expectEqual(@as(usize, 0), fixture.requests);
 }
 
+test "exact replay rejects immutable legacy provider request bytes before storage or dispatch" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture: Fixture = undefined;
+    try fixture.init(a);
+    defer fixture.environment.deinit();
+    var parent = try fixture.parent(a);
+    // A retained old-wire request is an inspection record, never a request to
+    // migrate or silently reconstruct for the current Converse endpoint.
+    const legacy = try std.json.Stringify.valueAlloc(a, .{
+        .messages = .{
+            .{ .role = "developer", .content = .{
+                .{ .type = "text", .text = "Generate an answer." },
+                .{ .type = "text", .text = description.protocol_prompt },
+                .{ .type = "text", .text = schema },
+            } },
+            .{ .role = "user", .content = .{.{ .type = "text", .text = "{\"claims\":[\"one\",\"two\"]}" }} },
+        },
+        .reasoning_effort = "low",
+        .temperature = @as(f64, 0.1),
+        .max_completion_tokens = @as(u32, 16384),
+    }, .{});
+    parent.request = legacy;
+    const before = parent;
+    try std.testing.expectError(error.InvalidReplay, fixture.replay().replay(a, replayIdentity("a" ** 32, 1), parent, .{ .call = 0, .mode = .exact }));
+    try std.testing.expectEqualDeep(before, parent);
+    try std.testing.expectEqualStrings(legacy, parent.request.?);
+    try std.testing.expectEqual(@as(usize, 0), fixture.wire.calls);
+    try std.testing.expectEqual(@as(usize, 0), fixture.requests);
+    try std.testing.expectEqual(@as(usize, 0), fixture.responses);
+}
+
 test "request persistence precedes the only send and response storage failure cannot report success" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -174,7 +209,7 @@ test "response inspection reuses extraction and reports the exact schema path an
     var fixture: Fixture = undefined;
     try fixture.init(a);
     defer fixture.environment.deinit();
-    const response = try std.json.Stringify.valueAlloc(a, .{ .choices = .{.{ .index = @as(u32, 0), .message = .{ .role = "assistant", .content = "{\"answer\":null}" }, .finish_reason = "stop" }}, .usage = .{ .prompt_tokens = 10, .completion_tokens = 2, .total_tokens = 12 } }, .{});
+    const response = try debugResponse(a, "{\"answer\":null}");
     const checked = try fixture.provider.provider().inspect(a, description, response);
     try std.testing.expectEqual(.valid, checked.extraction);
     try std.testing.expectEqual(.valid, checked.json);
@@ -274,9 +309,9 @@ test "debugger reconstructs entire reasoning responses including output-limit an
     const reasoning = try a.alloc(u8, 170000);
     @memset(reasoning, 'r');
     for ([_]struct { finish: []const u8, tail: []const u8 }{
-        .{ .finish = "stop", .tail = "</reasoning>{\"answer\":\"complete tail\"}" },
-        .{ .finish = "length", .tail = "</reasoning>" },
-        .{ .finish = "length", .tail = "unfinished reasoning" },
+        .{ .finish = "end_turn", .tail = "</reasoning>{\"answer\":\"complete tail\"}" },
+        .{ .finish = "max_tokens", .tail = "</reasoning>" },
+        .{ .finish = "max_tokens", .tail = "unfinished reasoning" },
     }) |case| {
         var sink: LogSink = .{ .a = a };
         try sink.rows.appendSlice(a, format.prompt_heading);
@@ -288,8 +323,9 @@ test "debugger reconstructs entire reasoning responses including output-limit an
         const request_sequence = sink.sequence;
         const content = try std.mem.concat(a, u8, &.{ "<reasoning>", reasoning, "\n|\\🐈", secret, case.tail });
         const body = try std.json.Stringify.valueAlloc(a, .{
-            .choices = .{.{ .index = @as(u32, 0), .message = .{ .role = "assistant", .content = content }, .finish_reason = case.finish }},
-            .usage = .{ .prompt_tokens = @as(u64, 10), .completion_tokens = @as(u64, 16384), .total_tokens = @as(u64, 16394) },
+            .output = .{ .message = .{ .role = "assistant", .content = .{.{ .text = content }} } },
+            .stopReason = case.finish,
+            .usage = .{ .inputTokens = @as(u64, 10), .outputTokens = @as(u64, 16384), .totalTokens = @as(u64, 16394) },
         }, .{});
         try std.testing.expectEqual(.recorded, logger.port().capture(.response, .{ .provider_body = body }, &.{secret}));
         try std.testing.expect(sink.sequence - request_sequence > @import("domain/sanitized_prompt_log.zig").max_fragments_per_batch);
@@ -374,7 +410,7 @@ test "replay retains redacted partial errors and native schema modifications wit
     const replacement = "{\"type\":\"object\",\"properties\":{\"updated\":{\"type\":\"boolean\"}},\"required\":[\"updated\"],\"additionalProperties\":false}";
     const modified = try fixture.replay().replay(a, replayIdentity("b" ** 32, 2), parent, .{ .call = 0, .mode = .modified, .edit = .{ .content = description.content, .schema = replacement } });
     try std.testing.expect(std.mem.indexOf(u8, modified.request.body, "updated") != null);
-    try std.testing.expect(std.mem.indexOf(u8, modified.request.body, "response_format") != null);
+    try std.testing.expect(std.mem.indexOf(u8, modified.request.body, "outputConfig") != null);
     try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
 }
 
@@ -423,7 +459,7 @@ test "native JSON diagnostic probes retain controls and inspect normalized and v
             try std.testing.expectEqualStrings(description.reasoning_effort.?, result.request.description.reasoning_effort.?);
             try std.testing.expectEqual(.native_schema, result.request.description.response_mode);
             const wire = try std.json.parseFromSlice(std.json.Value, a, result.request.body, .{});
-            const native_bytes = try std.json.Stringify.valueAlloc(a, wire.value.object.get("response_format").?.object.get("json_schema").?.object.get("schema").?, .{});
+            const native_bytes = wire.value.object.get("outputConfig").?.object.get("textFormat").?.object.get("structure").?.object.get("jsonSchema").?.object.get("schema").?.string;
             const native = try std.json.parseFromSlice(std.json.Value, a, native_bytes, .{});
             try std.testing.expectEqual(probe.union_root, native.value.object.contains("anyOf"));
             if (!probe.union_root) {
@@ -471,6 +507,7 @@ test "captured production request reconstructs exactly in both schema modes" {
     production.registry_entry.config = description.provider_config;
     production.registry_entry.capabilities.structured_response = .bedrock_json_schema;
     production.registry_entry.capabilities.supports_max_output_tokens = true;
+    production.registry_entry.bedrock_request_profile = .openai_oss;
     production.request.response_schema = try fixture.compiler.compiler().compile(production.schema_arena.allocator(), schema);
     for ([_]?u32{ null, 32768 }) |allowance| for ([_]@import("domain/model_controls.zig").ResponseGuidanceMode{ .prompt_only, .native_schema }) |mode| {
         production.provider_binding.controls.max_output_tokens = if (allowance) |value| .{ .value = value } else null;
@@ -479,7 +516,7 @@ test "captured production request reconstructs exactly in both schema modes" {
         production.request.response_guidance_mode = mode;
         production.registry_entry.json = mode == .native_schema;
         try std.testing.expect(production.request.matchesBinding(production.provider_binding));
-        const captured = try @import("adapters/provider/bedrock_request.zig").encode(a, &production.request, .inference);
+        const captured = try @import("adapters/provider/bedrock_request.zig").encode(a, &production.request, .inference, production.registry_entry.bedrock_request_profile);
         const projection = debug.Description.from(&production.request, &production.provider_binding, .inference);
         const serialized = try std.json.Stringify.valueAlloc(a, projection, .{});
         const restored = try debug.Description.decode(a, serialized);
@@ -776,6 +813,7 @@ test "selected request schemas survive capture and graph release without whole-s
             production.registry_entry.model.bytes = description.model;
             production.registry_entry.config = description.provider_config;
             production.registry_entry.capabilities.structured_response = .bedrock_json_schema;
+            production.registry_entry.bedrock_request_profile = .openai_oss;
             const selected = try debuggerSelectedShape(source, fixture.compiler.compiler(), shape);
             production.request.response_schema = selected.schema;
             response_text = try a.dupe(u8, selected.response);
@@ -788,7 +826,7 @@ test "selected request schemas survive capture and graph release without whole-s
             try std.testing.expectEqualStrings(selected.schema.modelBytes(), projection.schema);
             logger.begin(.{ .workflow = try @import("domain/telemetry.zig").WorkflowShortcode.parse("SPEC"), .workflow_id = .{ .bytes = projection.workflow_id }, .node = .{ .bytes = "generation-invoke" }, .action = .{ .bytes = "invoke-model" }, .operation = .{ .bytes = projection.request_step }, .model_slot = .{ .bytes = projection.model_slot }, .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }, .description = projection });
             defer logger.end();
-            const body = try @import("adapters/provider/bedrock_request.zig").encode(source, &production.request, .inference);
+            const body = try @import("adapters/provider/bedrock_request.zig").encode(source, &production.request, .inference, production.registry_entry.bedrock_request_profile);
             try std.testing.expectEqual(.recorded, logger.port().capture(.request, .{ .provider_body = body }, &.{}));
             const response = try debugResponse(source, selected.response);
             try std.testing.expectEqual(.recorded, logger.port().capture(.response, .{ .provider_body = response }, &.{}));
@@ -820,7 +858,32 @@ test "selected request schemas survive capture and graph release without whole-s
 }
 
 fn debugResponse(a: std.mem.Allocator, content: []const u8) ![]const u8 {
-    return std.json.Stringify.valueAlloc(a, .{ .choices = .{.{ .index = @as(u32, 0), .message = .{ .role = "assistant", .content = content }, .finish_reason = "stop" }}, .usage = .{ .prompt_tokens = 10, .completion_tokens = 2, .total_tokens = 12 } }, .{});
+    return std.json.Stringify.valueAlloc(a, .{ .output = .{ .message = .{ .role = "assistant", .content = .{.{ .text = content }} } }, .stopReason = "end_turn", .usage = .{ .inputTokens = 10, .outputTokens = 2, .totalTokens = 12 } }, .{});
+}
+
+test "replay serializes only the trusted model request profile and rejects legacy response bodies" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture: Fixture = undefined;
+    try fixture.init(a);
+    defer fixture.environment.deinit();
+    var selected = description;
+    selected.reasoning_effort = null;
+    selected.controls.temperature = null;
+    selected.response_mode = .native_schema;
+    fixture.request_profile = .openai_luna;
+    const body = try fixture.provider.provider().prepare(a, selected);
+    const parsed = try std.json.parseFromSlice(std.json.Value, a, body, .{});
+    const fields = parsed.value.object.get("additionalModelRequestFields").?.object;
+    try std.testing.expect(fields.get("text").?.object.get("format").?.object.get("strict").?.bool);
+    try std.testing.expectEqual(@as(usize, 1), fields.count());
+    try std.testing.expect(!fields.contains("reasoning_effort"));
+    selected.reasoning_effort = "medium";
+    try std.testing.expectError(error.InvalidReplay, fixture.provider.provider().prepare(a, selected));
+    try std.testing.expectEqual(@as(usize, 0), fixture.wire.calls);
+    const legacy = "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"{}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}";
+    try std.testing.expectEqual(.invalid, (try fixture.provider.provider().inspect(a, selected, legacy)).extraction);
 }
 
 fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_result_schema_compiler.zig").Compiler, shape: usize) !struct { schema: *const @import("domain/model_result_schema.zig").Schema, response: []const u8 } {
@@ -901,4 +964,63 @@ test "selected schema reconstruction does not reapply the source file size limit
     const rebuilt = try compiler.compileSelected(a, canonical.modelBytes());
     try std.testing.expectEqualStrings(canonical.modelBytes(), rebuilt.modelBytes());
     try std.testing.expectError(error.InvalidModelResultSchema, compiler.compile(a, canonical.modelBytes()));
+}
+
+test "debugger exposes provider reasoning separately including stopped and missing final answers" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture: Fixture = undefined;
+    try fixture.init(a);
+    defer fixture.environment.deinit();
+    const supplied = "<script>alert('x')</script> & \"quoted\"\n🐈";
+    for ([_][]const u8{ "end_turn", "max_tokens" }) |stop| {
+        const bytes = try std.json.Stringify.valueAlloc(a, .{
+            .output = .{ .message = .{ .role = "assistant", .content = .{
+                .{ .reasoningContent = .{ .reasoningText = .{ .text = supplied, .signature = "opaque\"signature" } } },
+                .{ .reasoningContent = .{ .redactedContent = "YQ==" } },
+                .{ .reasoningContent = .{ .reasoningText = .{ .text = "second" } } },
+                .{ .text = "{\"answer\":\"final\"}" },
+            } } },
+            .stopReason = stop,
+            .usage = .{ .inputTokens = 10, .outputTokens = 2, .totalTokens = 12 },
+        }, .{});
+        const inspected = try fixture.provider.provider().inspect(a, description, bytes);
+        try std.testing.expectEqual(@as(usize, 3), inspected.reasoning.len);
+        try std.testing.expectEqualStrings(supplied, inspected.reasoning[0].text.text);
+        try std.testing.expectEqualStrings("opaque\"signature", inspected.reasoning[0].text.signature.?);
+        try std.testing.expectEqualStrings("YQ==", inspected.reasoning[1].redacted.base64);
+        try std.testing.expectEqualStrings("second", inspected.reasoning[2].text.text);
+        try std.testing.expectEqual(@as(?u64, 10), inspected.input_tokens);
+        const exposed = try std.json.Stringify.valueAlloc(a, inspected, .{});
+        var reparsed = try std.json.parseFromSlice(std.json.Value, a, exposed, .{});
+        defer reparsed.deinit();
+        const block = reparsed.value.object.get("reasoning").?.array.items[0].object.get("text").?.object;
+        try std.testing.expectEqualStrings(supplied, block.get("text").?.string);
+        if (std.mem.eql(u8, stop, "end_turn")) {
+            try std.testing.expectEqual(.valid, inspected.schema);
+            try std.testing.expectEqualStrings("{\"answer\":\"final\"}", inspected.model_text.?);
+            try std.testing.expect(std.mem.indexOf(u8, inspected.model_text.?, supplied) == null);
+        } else {
+            try std.testing.expectEqual(.invalid, inspected.extraction);
+            try std.testing.expectEqualStrings("output_limit", inspected.reason.?);
+            try std.testing.expect(inspected.model_text == null);
+            try std.testing.expectEqual(.unavailable, inspected.schema);
+        }
+    }
+    const only_reasoning = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"reasoningContent\":{\"reasoningText\":{\"text\":\"{\\\"answer\\\":\\\"reasoning cannot become an answer\\\"}\"}}}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12}}";
+    const missing = try fixture.provider.provider().inspect(a, description, only_reasoning);
+    try std.testing.expectEqual(@as(usize, 1), missing.reasoning.len);
+    try std.testing.expectEqual(.invalid, missing.extraction);
+    try std.testing.expectEqualStrings("missing_final_text", missing.reason.?);
+    try std.testing.expect(missing.model_text == null);
+    try std.testing.expectEqual(.unavailable, missing.schema);
+    const no_reasoning = try fixture.provider.provider().inspect(a, description, try debugResponse(a, "{\"answer\":\"plain\"}"));
+    try std.testing.expectEqual(@as(usize, 0), no_reasoning.reasoning.len);
+    // Embedded rendering uses text nodes for the exact provider text/signature,
+    // including markup-shaped diagnostic strings; no HTML injection sink exists.
+    const ui = @embedFile("debugger/app.js");
+    try std.testing.expect(std.mem.indexOf(u8, ui, "p.append(reasoningView(v.reasoning))") != null);
+    try std.testing.expect(std.mem.indexOf(u8, ui, "e.textContent = String(text)") != null);
+    try std.testing.expect(std.mem.indexOf(u8, ui, "innerHTML") == null);
 }

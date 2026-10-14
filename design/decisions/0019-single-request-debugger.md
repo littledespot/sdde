@@ -105,6 +105,18 @@ Settings include the optional output allowance under
 replay preserves captured omission or value rather than replacing it from current
 configuration.
 
+**User-directed Converse amendment, 15 October 2026:** Bedrock request construction,
+capture, extraction and replay use the same canonical Converse codec as production
+invocation. Current validated model registration supplies the typed reasoning
+policy; a captured model name cannot choose a codec or invent controls. Historical
+Provider-specific legacy chat captures remain immutable inspection records and fail exact replay
+reconstruction under this serializer. There is no legacy wire reader, migration,
+fallback or automatic retargeting. New compatibility evidence requires a fresh
+authorized current-model capture. Available provider reasoning is projected as
+separate ordered diagnostic blocks (text/signature or opaque redacted content),
+including when no final answer is eligible. The debugger renders it as inert text;
+it cannot be used as candidate JSON, approval, completion or workflow evidence.
+
 Every replay creates new immutable diagnostic request/result records beneath the
 selected feature's `logs/debugger`, linked to the source run/call. The request is
 durably saved before dispatch; available response bytes, usage and transport

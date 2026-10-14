@@ -104,11 +104,11 @@ test "diagnostic binding rejects the entire malformed duplicate or unsupported c
 test "diagnostic authorization accepts content edits and rejects binding drift before dispatch" {
     var authority: binding.Authorization = .{ .binding = captured };
     const context: *@import("../../src/ports/request_replay.zig").Context = @ptrCast(&authority);
-    try binding.Authorization.authorize(context, captured);
+    try std.testing.expectEqual(.openai_oss, try binding.Authorization.authorize(context, captured));
     var edited = captured;
     edited.content = &.{.{ .user = "MOCK changed prompt" }};
     edited.schema = "MOCK changed schema";
-    try binding.Authorization.authorize(context, edited);
+    try std.testing.expectEqual(.openai_oss, try binding.Authorization.authorize(context, edited));
     for (0..8) |mode| {
         var rejected = captured;
         switch (mode) {
@@ -123,5 +123,23 @@ test "diagnostic authorization accepts content edits and rejects binding drift b
             else => unreachable,
         }
         try std.testing.expectError(error.ReplayUnauthorized, binding.Authorization.authorize(context, rejected));
+    }
+}
+
+test "diagnostic authorization derives request profile from each validated registered tuple" {
+    const registered = @import("../../src/composition/provider_model_contracts.zig");
+    for (registered.registry.entries) |entry| {
+        var selected = captured;
+        selected.provider = entry.provider.bytes;
+        selected.model = entry.model.bytes;
+        selected.provider_config = .{ .aws_bedrock = .{ .region = entry.bedrock_regions[0] } };
+        selected.controls = entry.capabilities.inferenceControls();
+        selected.response_mode = if (entry.capabilities.structured_response == .bedrock_json_schema) .native_schema else .prompt_only;
+        selected.reasoning_effort = if (entry.supported_reasoning_efforts.len == 0) null else entry.supported_reasoning_efforts[0];
+        var authority: binding.Authorization = .{ .binding = selected };
+        const context: *@import("../../src/ports/request_replay.zig").Context = @ptrCast(&authority);
+        try std.testing.expectEqual(entry.bedrock_request_profile, try binding.Authorization.authorize(context, selected));
+        authority.binding.model = "unregistered-model";
+        try std.testing.expectError(error.ReplayUnauthorized, binding.Authorization.authorize(context, authority.binding));
     }
 }

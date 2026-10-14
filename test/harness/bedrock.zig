@@ -15,7 +15,8 @@ const Region = @import("../../src/domain/llm_provider_contracts.zig").BedrockReg
 
 pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Capture) c.Error![]const u8 {
     try configuration.validate(config);
-    if (config.api != .bedrock_invoke) return error.InvalidEvaluationContract;
+    if (config.api != .bedrock_converse) return error.InvalidEvaluationContract;
+    const supported = @import("../../src/composition/provider_model_contracts.zig").registry.resolve(.{ .bytes = "aws-bedrock" }, c.ModelId.parse(config.model).?) orelse return error.InvalidEvaluationContract;
     const content = [_]operation.ModelVisibleContent{
         .{ .system = packet.instructions },
         .{ .user = try packet.input(a, capture) },
@@ -27,6 +28,7 @@ pub fn request(a: std.mem.Allocator, config: configuration.Config, capture: c.Ca
         .schema_name = "rubric_judgment",
         .temperature = if (config.temperature != null) .fixed else null,
         .reasoning_effort = encoding.reasoningEffort(if (config.reasoning_effort) |effort| @tagName(effort) else null) catch return error.InvalidEvaluationContract,
+        .request_profile = supported.bedrock_request_profile,
     }, .inference) catch |err| return switch (err) {
         error.OutOfMemory => error.OutOfMemory,
         error.InvalidRequest => error.InvalidEvaluationContract,
@@ -80,7 +82,8 @@ pub fn response(a: std.mem.Allocator, received: transport.Response) std.mem.Allo
     } };
     var parsed = strict.parse(a, received.received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else .{ .failure = .invalid_response };
     defer parsed.deinit();
-    const decoded = decoding.decodeInvoke(parsed.value) catch return .{ .failure = .invalid_response };
+    var decoded = decoding.decodeConverse(a, parsed.value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else .{ .failure = .invalid_response };
+    defer decoded.deinit(a);
     return switch (decoded.output) {
         .invalid => .{ .usage = decoded.usage, .failure = .invalid_response },
         .text => |text| .{ .usage = decoded.usage, .payload = try a.dupe(u8, text) },

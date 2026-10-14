@@ -1,6 +1,8 @@
 # F0007 — AWSBedrockProvider
 
-**Status:** Production integration accepted as part of F0006 completion.
+**Status:** Production integration accepted as part of F0006 completion. The
+2026-10-15 user-directed amendment uses Bedrock Converse for inference and
+preserves provider reasoning as separate, owned diagnostic data.
 
 - The user explicitly includes production contracts, concrete authorization/count/
   inference implementations, applicable native-schema checks and shared adapter
@@ -47,7 +49,7 @@ entries, never an absent entry. No model or region is a runtime default.
   "providers": [{
     "provider": "aws-bedrock",
     "models": [{
-      "model": "openai.gpt-oss-20b-1:0",
+      "model": "global.openai.gpt-6-luna",
       "json": true,
       "config": {"region": "ap-southeast-2"}
     }]
@@ -55,43 +57,55 @@ entries, never an absent entry. No model or region is a runtime default.
 }
 ```
 
-`json: true` uses InvokeModel with `response_format.type: "json_schema"` and
-`response_format.json_schema.schema` as an object ([AWS structured-output contract](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)).
+`json: true` uses Converse with `outputConfig.textFormat.type: "json_schema"`
+and `outputConfig.textFormat.structure.jsonSchema.schema` as a JSON string
+([AWS structured-output contract](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)).
 `false` sends complete schema guidance without that native output constraint.
 Neither changes engine validation or permits fallback after provider rejection.
 
-The initial registered contracts are:
+The compiled registry supports these exact contracts:
 
-| Exact model | Explicit region | InvokeModel | CountTokens | Response modes |
-| --- | --- | --- | --- | --- |
-| `openai.gpt-oss-20b-1:0` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; native schema projection |
-| `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` | Unresolved; see below | Yes | Prompt-only |
+| Exact model | Explicit source region | Converse | CountTokens | Response modes | Registered reasoning policy | Temperature / output allowance |
+| --- | --- | --- | --- | --- | --- | --- |
+| `openai.gpt-oss-20b-1:0` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; native schema projection | OpenAI effort: `low`, `medium`, `high` | Fixed `0.1`; optional output allowance |
+| `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` | Yes | Yes | Prompt-only | None | Fixed `0.1`; no registered output-allowance support |
+| `global.openai.gpt-6-luna` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; native schema with required strict flag | Provider default only; documented medium | Temperature omitted; optional output allowance |
 
-**Outstanding catalogue decision:** the unused Haiku registration predates this
-amendment. Its native request requires a different codec and an explicit output
-limit, incompatible with simply reusing the open-weight body. Removal has been
-proposed for approval; the API transition is not complete while that incompatible
-registration remains. No current project catalogue selects it.
+The current Luna tuple is an explicitly registered **global inference profile**
+with Sydney as its source region. It may route worldwide and provides no
+Australian-residency guarantee. The base `openai.gpt-6-luna` model is not available
+for in-region runtime invocation, and the US geographic profile is not supported
+from Sydney. These are exact registrations, not model-name pattern rules. AWS's
+[current Luna model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-luna.html)
+confirms Converse, native JSON Schema, global-profile Sydney availability,
+Standard tier only and no CountTokens support (checked 2026-10-15).
 
-- Both support the registered temperature control.
-- GPT-OSS registers the explicit reasoning-effort values `low`, `medium` and `high`;
-  Claude registers none.
+AWS documents default medium reasoning and several effort options, but does not
+establish their exact Converse override fields. SDDE's evidence-backed subset
+admits only omission of explicit reasoning and temperature controls. It neither
+sends an inferred field nor claims adjustable-temperature support. The native
+JSON profile additionally requires
+`additionalModelRequestFields.text.format.strict: true`. No performance or model
+quality conclusion follows from API availability.
+
 - Unknown models, source regions, configuration fields, controls and capability claims
   reject.
-- Only these in-region foundation-model targets are installed; geographic/global
-  profiles and their data-routing policies are not silently enabled.
 - Future support requires another trusted contract, not an inferred capability or
   model-name pattern.
+- Existing GPT-OSS and earlier Haiku registrations remain production contracts and
+  offline conformance representatives. They do not qualify current-model outcomes.
+- The separate development [live-test cost policy](../../test/harness/model_cost_policy.zig)
+  permits only Bedrock `global.openai.gpt-6-luna` for generation, grading and
+  captured-call diagnostics. Sonnet, Sol, Haiku, direct OpenAI, historical models
+  and other aliases reject before credentials or network use. Production
+  catalogue policy remains independent.
+- The rubric judge retains its native-schema gate; Luna satisfies the registered
+  capability contract without fallback. See the [evaluator contract](../harness/evaluator.md).
 
-- AWS documents [Sydney availability and capabilities for
-  gpt-oss-20b](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-oss-20b.html).
-- The [CountTokens
-  example](https://docs.aws.amazon.com/bedrock/latest/userguide/count-tokens.html) uses
-  the registered Claude 3.5 Haiku ID.
-- Separate counting is an explicit YAML operation and cannot authorize inference or
-  charge usage.
-- Actual input/output usage accounting from inference is mandatory regardless of
-  CountTokens support.
+Separate counting is an explicit YAML operation and cannot authorize inference or
+charge usage. Actual inference input/output usage accounting is mandatory
+regardless of CountTokens support. The [CountTokens contract](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_CountTokens.html)
+accepts the same Converse input where the selected model supports counting.
 
 ## Credentials and transport
 
@@ -132,25 +146,36 @@ registration remains. No current project catalogue selects it.
 
 ## Request and schema projection
 
-- Under the user-approved 25 September 2026 amendment, inference uses only
-  `/model/<encoded-model>/invoke`; CountTokens uses `/model/<encoded-model>/count-tokens`.
-- The shared open-weight codec emits ordered system/guidance text blocks in one
-  `developer` message and user/evidence blocks in one `user` message. Explicit
-  user/evidence input is required; no input text is invented.
-- CountTokens wraps the exact serialized inference body as base64 in
-  `input.invokeModel.body`. A model without exact-count support rejects before dispatch.
-- Supported temperature is `0.1` (§12.5, amended 2026-10-11); selected `reasoning_effort` is a
-  top-level field. Both follow the existing binding, not adapter defaults.
-- Under the [2026-10-10 amendment to ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance),
-  bound `maxOutputTokens` maps unchanged to top-level `max_completion_tokens`.
-  An absent allowance omits that field; the API owns its default and supported maximum.
-- Model and streaming fields are omitted because the endpoint fixes them
-  ([AWS model parameters](https://docs.aws.amazon.com/bedrock/latest/userguide/model-parameters-openai.html)).
-  No tools, stop sequences or arbitrary parameters are added.
+- Under the user-directed 2026-10-15 amendment, inference uses only
+  `/model/<encoded-model>/converse`; CountTokens uses
+  `/model/<encoded-model>/count-tokens`.
+- The canonical [Converse codec](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html)
+  emits ordered system/guidance text blocks in `system` and user/evidence blocks
+  in one `user` message. Explicit user/evidence input is required; no input text
+  is invented. Model ID is supplied by the authorized endpoint target.
+- CountTokens sends `input.converse` with the same `system`, `messages` and
+  `additionalModelRequestFields`. It omits inference/output controls absent from
+  the [count input contract](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_ConverseTokensRequest.html).
+  A model without exact-count support rejects before dispatch.
+- Supported temperature is `0.1` (§12.5, amended 2026-10-11), serialized under
+  `inferenceConfig.temperature`; unsupported temperature is omitted.
+- The compiled `BedrockRequestProfile` selects verified model-specific request
+  fields: `.openai_oss` projects GPT-OSS `reasoning_effort`, while `.openai_luna`
+  supplies the required native JSON strict-format flag and admits no explicit
+  reasoning override. `.none` supplies no additional profile fields. Neither the
+  project nor a model-name prefix selects the wire contract.
+- Bound `maxOutputTokens` maps unchanged to `inferenceConfig.maxTokens`.
+  An absent allowance omits that field; the API owns its default and maximum.
+  Thinking and final text share the provider output allowance. No local limit,
+  reservation or silent control substitution is introduced.
+- No streaming, tools, stop sequences or arbitrary request parameters are added.
 - Both response modes add the complete compiled result schema once to guidance.
-  Native mode also sends its registered structural projection as a JSON object in
-  `response_format.json_schema.schema`, with `type: "json_schema"` and name
-  `sdde_model_envelope_v1`. Prompt-only mode omits `response_format`.
+  Native mode also sends its registered structural projection as a JSON string in
+  `outputConfig.textFormat.structure.jsonSchema.schema`, with type `json_schema`
+  and name `sdde_model_envelope_v1`. Luna native mode also emits
+  `additionalModelRequestFields.text.format.strict: true`; prompt-only mode
+  omits both native output fields. No service-tier override is sent, retaining
+  the model's supported Standard default.
 - This is derived data, never a second schema source.
 - Under [ADR 0006](../decisions/0006-minimal-model-response.md), closed objects,
   required fields, types, enums and constants are retained; disjoint tagged `oneOf`
@@ -170,27 +195,45 @@ registration remains. No current project catalogue selects it.
   original operation, binding and input.
 - No tokenizer approximation is used.
 
-- Inference validates `prompt_tokens`, `completion_tokens` and `total_tokens`
-  with checked `input + output == total`. Optional closed token-detail objects
-  are metadata, never additional charges. No response-body latency is invented.
-- One choice at index zero with `finish_reason: "stop"` must contain an assistant
-  message. Its string `content` remains an untrusted candidate.
-- Only the documented leading `<reasoning>...</reasoning>` framing is separated
-  from final text. Reasoning-only, empty or absent final text yields
-  `missing_final_text`; reasoning never becomes candidate content.
-- Valid wire/usage retains actual usage on content rejection. Only missing final
-  text is eligible for the existing bounded correction under §22.6; other invalid
-  content remains terminal. The adapter never repairs JSON or retries.
-- Refusal and tool-call metadata cannot become an answer. Unknown fields, wrong
-  types, multiple choices and unknown finish reasons reject.
+- Inference validates Converse `usage.inputTokens`, `outputTokens` and
+  `totalTokens`, including optional closed cache counters/details with checked
+  arithmetic. AWS's [prompt-caching contract](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html)
+  reports uncached input separately: inclusive input is `inputTokens +
+  cacheReadInputTokens + cacheWriteInputTokens`; inclusive input plus output must
+  equal `totalTokens`. Implicit caching can occur without explicit cache points.
+  Optional validated `metrics.latencyMs` remains provider-reported metadata.
+- `stopReason: "end_turn"` with an assistant `output.message` permits candidate
+  text extraction. Text blocks concatenate exactly in order without separators,
+  JSON scanning, reasoning-tag stripping or rewriting provider text.
+- Closed `reasoningContent` blocks are separate diagnostic values: readable
+  `reasoningText` with optional signature, or base64 `redactedContent`. They
+  never join the candidate or authorize a workflow transition.
+- `RawProviderModelResult.complete`, `.stopped` and `.rejected` can each own an
+  optional ordered reasoning diagnostic. Ownership moves from decoder to provider
+  observation; destroying that observation frees every block/signature/redacted
+  buffer on each terminal path. See [F0006's lifetime contract](F0006-LLMProviderInterface.md#8-closed-request-observation-and-failure-algebra).
+- Valid reasoning and usage survive absent/invalid final text and non-candidate
+  stops. Reasoning-only, empty or absent final text yields `missing_final_text`.
+  Provider-redacted reasoning remains unreadable; it is not decrypted or invented.
+- Only missing final text is eligible for existing bounded correction under §22.6;
+  other invalid content remains terminal. The adapter never repairs JSON or retries.
+- Refusal, unexpected tool use, malformed blocks and unknown stop reasons cannot
+  become an answer. No reasoning block becomes a substitute final response.
 
-Recognized non-candidate finishes discard content and retain usage:
+The debugger's **Response → Provider reasoning** card presents these diagnostics
+separately from extracted text, parsed candidate JSON and schema results. The raw
+credential-redacted provider response also remains available. Reasoning is neither
+semantic proof nor an input to completion, repair authority or workflow decisions.
 
-| AWS finish reason | F0006 outcome |
+Recognized non-candidate stops retain usage and any valid reasoning diagnostics:
+
+| AWS `stopReason` | F0006 outcome |
 | --- | --- |
-| `length` | `output_limit` |
-| `tool_calls`, `function_call` | `unsupported_tool_request` |
-| `content_filter` | `content_filtered` |
+| `max_tokens` | `output_limit` |
+| `tool_use`, `malformed_tool_use` | `unsupported_tool_request` |
+| `content_filtered`, `guardrail_intervened` | `content_filtered` |
+| `malformed_model_output`, unexpected `stop_sequence` | `malformed_output` |
+| `model_context_window_exceeded` | `context_limit` |
 | Unknown | `invalid_content` rejection |
 
 - AWS exception discrimination follows the [restJson1 error
@@ -223,7 +266,8 @@ attempt and lease. The adapter does not back off, refresh, reroute or replay.
   usage rejection, secret redaction, native projection, unsupported
   counting, status/type agreement and growing HTTP headers.
 - Output-allowance fixtures cover present and omitted fields, exact selected values
-  and CountTokens wrapping the same serialized inference body without clamping.
+  and CountTokens retaining identical model-visible input without inference/output
+  controls or clamping.
 - [Concrete HTTP tests](../../src/bedrock_http_test.zig) exercise the actual serializer,
   response reader and deadline race over event-controlled in-memory connections.
 

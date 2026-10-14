@@ -1,7 +1,7 @@
 # Spec workflow evaluation backlog
 
 **Status:** Live generation and rubric handoff are implemented. Human rubric
-calibration and broader acceptance remain open. **Reviewed:** 2026-09-15 (documentation/source review; no new live run).
+calibration and broader acceptance remain open. **Reviewed:** 2026-10-15 (documentation/source review; no new live run).
 [Run instructions and result interpretation](e2e.md).
 
 ## User-directed outcome
@@ -28,12 +28,25 @@ calibration and broader acceptance remain open. **Reviewed:** 2026-09-15 (docume
 - An explicitly selectable live case is `test/e2e/wf-001-hello-world/node-vitest`,
   using its sibling [stories.md](../../test/e2e/wf-001-hello-world/reference/stories.md).
   Offline calibration specimens remain under `test/integration/fixtures/`.
-- Evaluator providers: OpenAI Responses or Bedrock InvokeModel, explicitly selected through
-  the internal test environment.
+- Implemented evaluator adapters: OpenAI Responses and Bedrock Converse. Live
+  environment selection is restricted to the tuple below; OpenAI remains covered
+  by offline conformance tests.
 - The workflow's generation provider and the evaluator's provider/model are separate
   selections.
-- The supplied-spec evaluator uses Responses/InvokeModel with native HTTPS without a new
+- The supplied-spec evaluator uses Responses/Converse with native HTTPS without a new
   dependency.
+- The shared [live-test cost policy](../../test/harness/model_cost_policy.zig)
+  permits only `aws-bedrock` / `global.openai.gpt-6-luna`, through Converse in
+  source region `ap-southeast-2`. It rejects Sonnet, Sol, Haiku, direct OpenAI,
+  historical models and other aliases before credentials or network use. It
+  supplies no model default and leaves production catalogue policy independent.
+- The current generation and rubric targets both use Luna with native JSON
+  Schema. Its registered request profile adds the required strict-format flag,
+  omits temperature and explicit reasoning overrides, and uses the provider's
+  documented default medium reasoning. The global profile can route worldwide;
+  the source region does not guarantee Australian residency. These are API
+  contracts, not model-quality evidence. Offline provider fixtures grant no live
+  permission; see the [Luna contract](../features/F0007-AWSBedrockProvider.md).
 - Exact model and limits are mandatory operator selections; draft rubric scoring is
   visible in the rubric file, not a production policy or calibrated result.
 - This is development-only evaluation of the engine in isolated test projects.

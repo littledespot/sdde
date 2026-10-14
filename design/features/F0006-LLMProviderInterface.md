@@ -387,6 +387,13 @@ LLMProviderDispatch = union(enum) {
   bounds, remains in guidance and deterministic validation.
 - Unsupported modes reject without fallback.
 - Provider grammar never establishes candidate validity.
+- The compiled `BedrockRequestProfile` owns verified model-specific wire fields,
+  independently of those neutral capabilities. Luna's native profile requires
+  an additional strict-format flag and admits only omitted temperature and
+  reasoning overrides. Provider-default medium reasoning is documented in
+  [F0007](F0007-AWSBedrockProvider.md); it is not a locally supplied control or
+  evidence of semantic quality. The development live-test policy selects only
+  that exact Bedrock Luna tuple and leaves production catalogue authority separate.
 
 - Every union variant conforms directly to `LLMProviderInterface`; dispatch forwards
   exactly one operation and introduces no second port.
@@ -896,21 +903,24 @@ RawProviderModelResult =
       bindingId,
       content: CompleteOwnedUtf8,
       usage,
-      providerLatencyMs?
+      providerLatencyMs?,
+      reasoning?: OwnedProviderReasoning
     }
   | stopped {
       requestId,
       bindingId,
       reason: ProviderNonCandidateStopReason,
       usage,
-      providerLatencyMs?
+      providerLatencyMs?,
+      reasoning?: OwnedProviderReasoning
     }
   | rejected {
       requestId,
       bindingId,
       reason: invalid_content | missing_final_text,
       usage,
-      providerLatencyMs?
+      providerLatencyMs?,
+      reasoning?: OwnedProviderReasoning
     }
 
 ProviderFailureCause =
@@ -966,12 +976,23 @@ Every terminal lifecycle fact retains delivery disposition, including
 cancellation outside `ProviderFailure`. An API request already sent cannot be
 undone; it does not make any candidate workflow output successful.
 
-- All `RawProviderModelResult` variants contain only engine-supplied identities,
-  bounded nonnegative usage, and optional bounded latency; none accepts an identity
+- All `RawProviderModelResult` variants contain engine-supplied identities,
+  validated nonnegative usage, optional validated latency and optional owned
+  reasoning diagnostics; none accepts an identity
   from the provider.
 - Only `.complete` owns UTF-8 content.
 - `.stopped` and `.rejected` contain no content member, so a missing/non-text provider output cannot be
   represented by an empty-string sentinel.
+- The 2026-10-15 user-directed reasoning amendment adds
+  [owned ordered diagnostic blocks](../../src/domain/provider_reasoning.zig) to
+  each variant. Readable text, optional signatures and provider-redacted base64
+  remain separate from candidate content. Ownership transfers from adapter decoder
+  to the provider observation; its existing `deinit` releases the diagnostic on
+  complete, stopped and rejected paths. Borrowed views cannot outlive that owner.
+- Reasoning can remain available when final text is absent, malformed or stopped.
+  It supplies no validity, semantic-proof, repair, transition or completion
+  authority. The debugger renders it in its separate **Provider reasoning** card;
+  raw exchange capture retains the credential-redacted source bytes.
 
 - `.stopped` publishes no candidate to `DecodeModelEnvelopeAction`.
 - A `.complete` result is still untrusted candidate data.
