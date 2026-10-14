@@ -1,0 +1,38 @@
+[
+  {
+    "id": "smoke-exit-compound",
+    "cohort": "unused",
+    "sources": [
+      "When smoke is detected, the controller must sound the alarm.\nWhile smoke persists, the controller must keep the exit door unlocked.\n",
+      "The building log must record the sensor calibration version.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "When smoke is detected, the controller must sound the alarm.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 1,
+        "text": "While smoke persists, the controller must keep the exit door unlocked.",
+        "first": 2,
+        "last": 2
+      },
+      {
+        "source": 2,
+        "text": "The building log must record the sensor calibration version.",
+        "first": 1,
+        "last": 1
+      }
+    ],
+    "description": "The controller displays the smoke reading.",
+    "missing": "The description omits the required alarm and persistent unlocked exit behavior.",
+    "missing_obligation": "When smoke is detected, the controller must sound the alarm and must keep the exit door unlocked while smoke persists.",
+    "mode": "candidate",
+    "verdicts": [
+      "preserved"
+    ],
+    "expected": "candidate"
+  }
+]

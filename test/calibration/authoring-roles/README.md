@@ -1,9 +1,24 @@
 # Authoring-role calibration
 
+The authoring-role classifier and its development build/launch steps are retired
+by FIX03 Phase 5. The material below records historical experiments and their
+then-current commands; it is not a supported production or current calibration
+entry point. The pending [representation-control diagnostic](representation-control/README.md)
+uses its isolated pinned historical executable and assets only. Current authored
+association comparisons use the existing request replay/admission path.
+
+
 Development diagnostic under design §28.8, separate from integration tests and
 live E2E. It measures role selection before R10's coverage gate and cannot publish
 or authorize workflow output. Each live trial uses the existing replay owner for
 one physical send, with no correction or repair.
+
+The [Phase 5 representation-control panel](representation-control/README.md)
+adds the latest four-negative production captures and source-identical
+compound/separate claim pairs, plus unrelated and insufficient-support controls.
+Its 22 requests are prepared offline with proposed labels; no live call or
+presentation-role replacement is authorized by preparation. It uses this same
+packet, admission, scoring and replay path and retains R10.
 
 ## Complete role-decision contract
 

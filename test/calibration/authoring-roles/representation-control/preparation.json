@@ -1,0 +1,1459 @@
+{
+  "schema": "role-representation-preparation/v1",
+  "status": "offline_prepared",
+  "live_calls_sent": 0,
+  "label_status": "proposed",
+  "registered_response_contract": "complete-role-decisions/v1",
+  "phase": "FIX03 Phase 5 under retained R10; Phase 11 qualification separate",
+  "settings": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "provider_config": {
+      "aws_bedrock": {
+        "region": "ap-southeast-2"
+      }
+    },
+    "model_slot": "spec_generation",
+    "response_mode": "native_schema",
+    "controls": {
+      "temperature": "fixed",
+      "max_output_tokens": {
+        "value": 16384
+      }
+    },
+    "reasoning_effort": "low",
+    "operation_kind": "inference"
+  },
+  "prepared_provider_controls": {
+    "reasoning_effort": "low",
+    "temperature": 0.1,
+    "max_completion_tokens": 16384
+  },
+  "prospective_maximum_physical_calls": 22,
+  "repetitions_per_case": 2,
+  "declared_cases": 11,
+  "controlled_representation_pairs": [
+    {
+      "family": "startup-representation",
+      "whole_chunk": "startup-whole-chunk",
+      "separate_lines": "startup-separate-lines",
+      "source_bytes": 188,
+      "source_sha256": "41c6783468471aa2cda5256e489e8f1fd531bfff35ebec42c73199c54d9b4659",
+      "signal_content_equal": true,
+      "source_coverage_equal": true,
+      "claim_membership_counts": [
+        1,
+        3
+      ],
+      "role_purposes_equal": true,
+      "labels_equal": true,
+      "difference": "claim representation, native claim identities and citation edges only; same complete semantic signal and original source bytes"
+    },
+    {
+      "family": "lamp-representation",
+      "whole_chunk": "lamp-whole-chunk",
+      "separate_lines": "lamp-separate-lines",
+      "source_bytes": 156,
+      "source_sha256": "d50aa3fffede129025b2442d4ebaf06bed39e3761a5ba69ddbbc6b9941d285e3",
+      "signal_content_equal": true,
+      "source_coverage_equal": true,
+      "claim_membership_counts": [
+        1,
+        3
+      ],
+      "role_purposes_equal": true,
+      "labels_equal": true,
+      "difference": "claim representation, native claim identities and citation edges only; same complete semantic signal and original source bytes"
+    },
+    {
+      "family": "parcel-representation",
+      "whole_chunk": "parcel-whole-chunk",
+      "separate_lines": "parcel-separate-lines",
+      "source_bytes": 219,
+      "source_sha256": "66c8da68a946e4a70fda1dda387c18a00fe988a6d47a59896e8d0235a4408407",
+      "signal_content_equal": true,
+      "source_coverage_equal": true,
+      "claim_membership_counts": [
+        1,
+        3
+      ],
+      "role_purposes_equal": true,
+      "labels_equal": true,
+      "difference": "claim representation, native claim identities and citation edges only; same complete semantic signal and original source bytes"
+    }
+  ],
+  "captured_cases": "known correlated production observations; not a controlled paired intervention or held-out confirmation",
+  "semantic_gates": {
+    "missing_supported_roles": "required roles lacking a labelled supporting group, including wrong-only selections",
+    "false_unsupported_roles": "admitted explicit negative on a required role, excluding optional labels",
+    "wrong_selections": "every pair outside permitted support; wrong-basis subset for roles with labelled alternatives",
+    "admission": "report all native, protocol and operational failures in declared 22-trial denominator",
+    "promotion": "no production replacement without approved lifecycle authority and prospective evidence; measure required false negatives, wrong-only selections, forbidden positives, captured/family regressions and all admission failures separately",
+    "publication": "actual authored obligations, E2E publication and rubric evaluation required separately",
+    "calls_and_cost": "physical sends and actual input/output/total tokens; unknown usage remains unknown",
+    "support_meaning": "assess support judgments against complete original source obligations and supplied role purposes; no authored output is produced by this panel"
+  },
+  "dependencies": [
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/test/calibration/authoring-roles/representation-control/cohort.json",
+      "bytes": 22195,
+      "sha256": "6d0b7d00dca9ac11439df925d157243d64525a3e7c5c084d2f69370d148a7265",
+      "original_path": "test/calibration/authoring-roles/representation-control/cohort.json"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/design/workflows/spec/reconciliation-roles.prompt.md",
+      "bytes": 419,
+      "sha256": "ae5e12193546fcf828cf6db9294a316d40742942bd8bc5a5dba5a6f024a792de",
+      "original_path": "design/workflows/spec/reconciliation-roles.prompt.md"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/design/workflows/spec/reconciliation.schema.json",
+      "bytes": 15056,
+      "sha256": "275c461874770a0f6840d4102ecee034ea346c1a61ada989f2443164ef2e9d0f",
+      "original_path": "design/workflows/spec/reconciliation.schema.json"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/test/harness/roles/contracts.zig",
+      "bytes": 3013,
+      "sha256": "4082e754b2100543a17e3bc5384aac30074480f2339119b6540036ca797dab48",
+      "original_path": "test/harness/roles/contracts.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/test/harness/roles/input.zig",
+      "bytes": 5709,
+      "sha256": "9b4abaf142a411f7449996762c1f30fc251e9b9e0e27996dd4a58ba2acb70d8f",
+      "original_path": "test/harness/roles/input.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/test/harness/roles/cli.zig",
+      "bytes": 18064,
+      "sha256": "497d08b1aa576db66391dfe49ef565abf47e1b08267436cbfba5bb0030eab52b",
+      "original_path": "test/harness/roles/cli.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/test/harness/roles/score.zig",
+      "bytes": 5532,
+      "sha256": "e115788485f51691beb9827fc872f99294225297d11dcf97568eb99b1ac1f78a",
+      "original_path": "test/harness/roles/score.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/test/harness/roles/report.zig",
+      "bytes": 8921,
+      "sha256": "de83842456acc4ad5bec758f8832960a5c0861c188407ecdf7925b2e760ee4ae",
+      "original_path": "test/harness/roles/report.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/test/harness/roles/tests.zig",
+      "bytes": 36214,
+      "sha256": "4b43f3490493ac51c69d924c8ac9f21775a4c77c673ee808ce36feb335b79953",
+      "original_path": "test/harness/roles/tests.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/src/domain/reference_model_input.zig",
+      "bytes": 19092,
+      "sha256": "cae8a9fd3d106d019e75bd7ac093a6bea6145e3b0e343f7139c5781d70e10345",
+      "original_path": "src/domain/reference_model_input.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/src/domain/reference_role_assignment.zig",
+      "bytes": 4700,
+      "sha256": "41df5deb1443edda1e402cd1f4ca07e06c57583d868c4b50a9ccc05191c5aa7b",
+      "original_path": "src/domain/reference_role_assignment.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/src/domain/reference_reconciliation_stage.zig",
+      "bytes": 11192,
+      "sha256": "82172e327d0cafb5649309a23cbb90b9ef7268217c5e29aa5e3a17ed3952f076",
+      "original_path": "src/domain/reference_reconciliation_stage.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/src/domain/reference_reconciliation_validation.zig",
+      "bytes": 38172,
+      "sha256": "2a1635ad15a6265aedd2525bbd4a6652be04a41394dedde2b6fceffd9dc9df1c",
+      "original_path": "src/domain/reference_reconciliation_validation.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/src/domain/reference_support.zig",
+      "bytes": 4453,
+      "sha256": "70588c6dfe9d28353852f1e8657c3ee27ea48de790cda629398a4668425e1903",
+      "original_path": "src/domain/reference_support.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/src/domain/required_authority_description.zig",
+      "bytes": 11187,
+      "sha256": "24c7861fbef6b7e44d3d80249c12d271c4af6414c505c93934b719c630e7323a",
+      "original_path": "src/domain/required_authority_description.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/src/domain/model_controls.zig",
+      "bytes": 1407,
+      "sha256": "879b3c88345ab13b6cad40c72c5463c4dbbbe04662cfe0b501231a86d234deac",
+      "original_path": "src/domain/model_controls.zig"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/src/test_fixtures/reference_reconciliation.zig",
+      "bytes": 11200,
+      "sha256": "323b0b2b16cd9254c1c2dd364c41a68c86c948c99ad6b334b00b5d7374b3eb21",
+      "original_path": "src/test_fixtures/reference_reconciliation.zig"
+    }
+  ],
+  "offline_report": {
+    "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/report.json",
+    "bytes": 13311,
+    "sha256": "5790a1e417e89ff0e13fdebcb1153706823b4cfca5dd16fe05779a8c227d737b",
+    "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/report.json"
+  },
+  "offline_plan": {
+    "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/plan.json",
+    "bytes": 33104,
+    "sha256": "35e43d53ef1786131799623289aca6df6a773d0eda1fe86a621f8bf9263c6e5a",
+    "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/plan.json"
+  },
+  "trials": [
+    {
+      "case": "captured-four-negative-latest",
+      "repeat": 1,
+      "input_origin": "captured",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/e73efec84aa328e999cac1013348a4e2.request.json",
+        "bytes": 21031,
+        "sha256": "de95c1d0032e8ec315323bd4f9ace0664cc812053b57456850cc790f0c68c9a4",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/e73efec84aa328e999cac1013348a4e2.request.json"
+      },
+      "provider_body": {
+        "bytes": 10460,
+        "sha256": "7d1fab77bbd560ff4baaa42c6998d491413691d1f79db73ea67628c434cdd722"
+      },
+      "input": {
+        "bytes": 4341,
+        "sha256": "6a571580d0cab1745c442ff552068ccc33d20dd23ecc9bad5970aefb027d2fb8"
+      },
+      "schema": {
+        "bytes": 2371,
+        "sha256": "d6b281124af01f69f404334232cb11e2ba95409fd3132e4d4bb1692a7233f912"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 1,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "captured-four-negative-latest",
+      "repeat": 2,
+      "input_origin": "captured",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/5ff45f4cd481abcbee7e6ae2b4a1a9f0.request.json",
+        "bytes": 21031,
+        "sha256": "128076c6c9cfc3e8b579102266d68e65286614fa0b796f94b20be71fd7b65630",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/5ff45f4cd481abcbee7e6ae2b4a1a9f0.request.json"
+      },
+      "provider_body": {
+        "bytes": 10460,
+        "sha256": "7d1fab77bbd560ff4baaa42c6998d491413691d1f79db73ea67628c434cdd722"
+      },
+      "input": {
+        "bytes": 4341,
+        "sha256": "6a571580d0cab1745c442ff552068ccc33d20dd23ecc9bad5970aefb027d2fb8"
+      },
+      "schema": {
+        "bytes": 2371,
+        "sha256": "d6b281124af01f69f404334232cb11e2ba95409fd3132e4d4bb1692a7233f912"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 2,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "captured-four-negative-preceding",
+      "repeat": 1,
+      "input_origin": "captured",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/12402ff7a9abf69935273e5a76bb0983.request.json",
+        "bytes": 21071,
+        "sha256": "55903581a5fb2463c43d122939dc84e79f836fd9fe1cae9edbed9d2e4f56f3ec",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/12402ff7a9abf69935273e5a76bb0983.request.json"
+      },
+      "provider_body": {
+        "bytes": 10472,
+        "sha256": "1257ad06c5df0220f6a51573d9d7c5f8cd0bff658317efb2c5f27cc5f6eb365d"
+      },
+      "input": {
+        "bytes": 4345,
+        "sha256": "2bde4c3bc4cf1ad39e1aa341056fa7f54606244d4bf8cfd315016084f7aafe61"
+      },
+      "schema": {
+        "bytes": 2371,
+        "sha256": "d6b281124af01f69f404334232cb11e2ba95409fd3132e4d4bb1692a7233f912"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 3,
+        "parent_run": "RUN-d9038e02f38db84cc14443480c6d0662",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-d9038e02f38db84cc14443480c6d0662",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "captured-four-negative-preceding",
+      "repeat": 2,
+      "input_origin": "captured",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/e0a8db55253ffbee085d57025bcc6272.request.json",
+        "bytes": 21071,
+        "sha256": "d7b0e15ebd3dc53b99e51656d01d9ecd644f385ac5da2b0277b53848d2ab0d03",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/e0a8db55253ffbee085d57025bcc6272.request.json"
+      },
+      "provider_body": {
+        "bytes": 10472,
+        "sha256": "1257ad06c5df0220f6a51573d9d7c5f8cd0bff658317efb2c5f27cc5f6eb365d"
+      },
+      "input": {
+        "bytes": 4345,
+        "sha256": "2bde4c3bc4cf1ad39e1aa341056fa7f54606244d4bf8cfd315016084f7aafe61"
+      },
+      "schema": {
+        "bytes": 2371,
+        "sha256": "d6b281124af01f69f404334232cb11e2ba95409fd3132e4d4bb1692a7233f912"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 4,
+        "parent_run": "RUN-d9038e02f38db84cc14443480c6d0662",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-d9038e02f38db84cc14443480c6d0662",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "captured-supported-control",
+      "repeat": 1,
+      "input_origin": "captured",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/62f90b495e4e23402557a2059d48a9af.request.json",
+        "bytes": 22767,
+        "sha256": "bef56f3c993da66297e38feb867c6613d0a0b3c0904a87b0c513422ef20c5ae9",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/62f90b495e4e23402557a2059d48a9af.request.json"
+      },
+      "provider_body": {
+        "bytes": 11212,
+        "sha256": "e992c6ab67a8e6081392374ee768eda07299d2551ac9a8f01a932197f426e823"
+      },
+      "input": {
+        "bytes": 4977,
+        "sha256": "64ca02edaad307c726411f059bf2660b4761608e172e981970a8e280729034b3"
+      },
+      "schema": {
+        "bytes": 2371,
+        "sha256": "d6b281124af01f69f404334232cb11e2ba95409fd3132e4d4bb1692a7233f912"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 5,
+        "parent_run": "RUN-97279dcdf824fc2622d889dcaf595f5b",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-97279dcdf824fc2622d889dcaf595f5b",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "captured-supported-control",
+      "repeat": 2,
+      "input_origin": "captured",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/a46c5a6141c7635167d458fc3748daca.request.json",
+        "bytes": 22767,
+        "sha256": "0f5bd8c700e0c05bb4d15e25a56c75edf8a595301b540965e6329f409e6bd6a0",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/a46c5a6141c7635167d458fc3748daca.request.json"
+      },
+      "provider_body": {
+        "bytes": 11212,
+        "sha256": "e992c6ab67a8e6081392374ee768eda07299d2551ac9a8f01a932197f426e823"
+      },
+      "input": {
+        "bytes": 4977,
+        "sha256": "64ca02edaad307c726411f059bf2660b4761608e172e981970a8e280729034b3"
+      },
+      "schema": {
+        "bytes": 2371,
+        "sha256": "d6b281124af01f69f404334232cb11e2ba95409fd3132e4d4bb1692a7233f912"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 6,
+        "parent_run": "RUN-97279dcdf824fc2622d889dcaf595f5b",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-97279dcdf824fc2622d889dcaf595f5b",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "startup-whole-chunk",
+      "repeat": 1,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/5843d1613f1738f2b09677f8acb2ba68.request.json",
+        "bytes": 21261,
+        "sha256": "c8b009e97de23f2066df02436cb121f700abaa7dee79f227ae0d64f7b5379b2a",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/5843d1613f1738f2b09677f8acb2ba68.request.json"
+      },
+      "provider_body": {
+        "bytes": 10569,
+        "sha256": "6d901ba442587de564558ec3dfc9c7dd9104fe7568b20d89a6345706826de3f6"
+      },
+      "input": {
+        "bytes": 4444,
+        "sha256": "0c5415dc562125fc07ceb92ac4013670ba3d710eb7426a774b59a2f1876c9d17"
+      },
+      "schema": {
+        "bytes": 2371,
+        "sha256": "d6b281124af01f69f404334232cb11e2ba95409fd3132e4d4bb1692a7233f912"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 7,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "startup-whole-chunk",
+      "repeat": 2,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/6e6c8052ceb880fb22466987bfe7f7dd.request.json",
+        "bytes": 21261,
+        "sha256": "56c6567381ab825db0199561c9c730c8e38ba7c03a3cf2a7e31bea1d8f0dbdef",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/6e6c8052ceb880fb22466987bfe7f7dd.request.json"
+      },
+      "provider_body": {
+        "bytes": 10569,
+        "sha256": "6d901ba442587de564558ec3dfc9c7dd9104fe7568b20d89a6345706826de3f6"
+      },
+      "input": {
+        "bytes": 4444,
+        "sha256": "0c5415dc562125fc07ceb92ac4013670ba3d710eb7426a774b59a2f1876c9d17"
+      },
+      "schema": {
+        "bytes": 2371,
+        "sha256": "d6b281124af01f69f404334232cb11e2ba95409fd3132e4d4bb1692a7233f912"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 8,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "startup-separate-lines",
+      "repeat": 1,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/eabcc2ef02534640caaf6365444c6c64.request.json",
+        "bytes": 22997,
+        "sha256": "ef37b6ad0fef83a28eaf64e829c2d602b49c818456af9d82a041e8fbb09008c9",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/eabcc2ef02534640caaf6365444c6c64.request.json"
+      },
+      "provider_body": {
+        "bytes": 11321,
+        "sha256": "8381f063f9a9b197ef8d5bfa0dddb483cb414e75545958d9281f20041f764931"
+      },
+      "input": {
+        "bytes": 5080,
+        "sha256": "82459468c31a05b9253c1d0f50ee43b4d3cbfe79352a80aad76df90dbec305f1"
+      },
+      "schema": {
+        "bytes": 2371,
+        "sha256": "d6b281124af01f69f404334232cb11e2ba95409fd3132e4d4bb1692a7233f912"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 9,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "startup-separate-lines",
+      "repeat": 2,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/e1cffc7db82920fb3c5e28b408dbe728.request.json",
+        "bytes": 22998,
+        "sha256": "6c1304bd0a17667e98247c50e01f445180f1b7c8c375fa4c62b9e1afbbc6b9bb",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/e1cffc7db82920fb3c5e28b408dbe728.request.json"
+      },
+      "provider_body": {
+        "bytes": 11321,
+        "sha256": "8381f063f9a9b197ef8d5bfa0dddb483cb414e75545958d9281f20041f764931"
+      },
+      "input": {
+        "bytes": 5080,
+        "sha256": "82459468c31a05b9253c1d0f50ee43b4d3cbfe79352a80aad76df90dbec305f1"
+      },
+      "schema": {
+        "bytes": 2371,
+        "sha256": "d6b281124af01f69f404334232cb11e2ba95409fd3132e4d4bb1692a7233f912"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 10,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "lamp-whole-chunk",
+      "repeat": 1,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/27b6d803624da67235148fcc7810c1d5.request.json",
+        "bytes": 19524,
+        "sha256": "a7cbe1abf76daf48c4b47f4b59da88e0f53f631d42f72c54c131b28275a2815b",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/27b6d803624da67235148fcc7810c1d5.request.json"
+      },
+      "provider_body": {
+        "bytes": 9780,
+        "sha256": "17cbf9c17c439914f3be3dc686ab66af6ccf3d76b198e8a66046d03dc0350f3b"
+      },
+      "input": {
+        "bytes": 3765,
+        "sha256": "6c2e10ded2c81ebb0d5284825ad18f61a30c8f7192f9083fe80da9e5b638d6ef"
+      },
+      "schema": {
+        "bytes": 2359,
+        "sha256": "2a0496510a31df37e609591f708605485fbb22b9c68b254c11cdc8182c2fa8c9"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 11,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "lamp-whole-chunk",
+      "repeat": 2,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/5e2267e7191f53c6723d60acbffdea13.request.json",
+        "bytes": 19524,
+        "sha256": "e8735ee010c0a95c619d71b46f4c70e1277900bcbd7b37d8eb385a126775aa47",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/5e2267e7191f53c6723d60acbffdea13.request.json"
+      },
+      "provider_body": {
+        "bytes": 9780,
+        "sha256": "17cbf9c17c439914f3be3dc686ab66af6ccf3d76b198e8a66046d03dc0350f3b"
+      },
+      "input": {
+        "bytes": 3765,
+        "sha256": "6c2e10ded2c81ebb0d5284825ad18f61a30c8f7192f9083fe80da9e5b638d6ef"
+      },
+      "schema": {
+        "bytes": 2359,
+        "sha256": "2a0496510a31df37e609591f708605485fbb22b9c68b254c11cdc8182c2fa8c9"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 12,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "lamp-separate-lines",
+      "repeat": 1,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/4c72168abf155f9b138c7fc273762bba.request.json",
+        "bytes": 21260,
+        "sha256": "5683b274b809548bdc662abae2a95913576dc43a88cfc55b1562d70b1864eaee",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/4c72168abf155f9b138c7fc273762bba.request.json"
+      },
+      "provider_body": {
+        "bytes": 10532,
+        "sha256": "e8d7bb69771c2810d1792476ec4f281b62d0892d582badcff8dad25d09d492bb"
+      },
+      "input": {
+        "bytes": 4401,
+        "sha256": "aa323af04420cb6fc3c0dd1e0125e59a67d7ba4ba5deef7a9ead783f915c9deb"
+      },
+      "schema": {
+        "bytes": 2359,
+        "sha256": "2a0496510a31df37e609591f708605485fbb22b9c68b254c11cdc8182c2fa8c9"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 13,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "lamp-separate-lines",
+      "repeat": 2,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/9abf7b713f1d54b79533c0e07c424567.request.json",
+        "bytes": 21260,
+        "sha256": "d3650880fcd86787b2be5d2ab4bd5e03e45ea1fde76d798a52f19df74e63a234",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/9abf7b713f1d54b79533c0e07c424567.request.json"
+      },
+      "provider_body": {
+        "bytes": 10532,
+        "sha256": "e8d7bb69771c2810d1792476ec4f281b62d0892d582badcff8dad25d09d492bb"
+      },
+      "input": {
+        "bytes": 4401,
+        "sha256": "aa323af04420cb6fc3c0dd1e0125e59a67d7ba4ba5deef7a9ead783f915c9deb"
+      },
+      "schema": {
+        "bytes": 2359,
+        "sha256": "2a0496510a31df37e609591f708605485fbb22b9c68b254c11cdc8182c2fa8c9"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 14,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "parcel-whole-chunk",
+      "repeat": 1,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/832c14a6df328846cbcdd5d7a4aed8d1.request.json",
+        "bytes": 19902,
+        "sha256": "0b971487e16301f76c984184d5d11e91a6d4d9e7261fc266f096c8be3afe1664",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/832c14a6df328846cbcdd5d7a4aed8d1.request.json"
+      },
+      "provider_body": {
+        "bytes": 9969,
+        "sha256": "6b2e1774392358b3003ce7cc51b657f51a5cfe3048a7f821308a2018c9900f50"
+      },
+      "input": {
+        "bytes": 3954,
+        "sha256": "5bd202d80e195c1d9e66cc5b9da3a99b4f31685e926920b2f82588e73df5c814"
+      },
+      "schema": {
+        "bytes": 2359,
+        "sha256": "2a0496510a31df37e609591f708605485fbb22b9c68b254c11cdc8182c2fa8c9"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 15,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "parcel-whole-chunk",
+      "repeat": 2,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/28efac3bc440d611208d91c89f66db70.request.json",
+        "bytes": 19902,
+        "sha256": "84cba5cdf3a8c57ed4d8467b8c1a52676c5f1e47cce7d509d30241218289ab71",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/28efac3bc440d611208d91c89f66db70.request.json"
+      },
+      "provider_body": {
+        "bytes": 9969,
+        "sha256": "6b2e1774392358b3003ce7cc51b657f51a5cfe3048a7f821308a2018c9900f50"
+      },
+      "input": {
+        "bytes": 3954,
+        "sha256": "5bd202d80e195c1d9e66cc5b9da3a99b4f31685e926920b2f82588e73df5c814"
+      },
+      "schema": {
+        "bytes": 2359,
+        "sha256": "2a0496510a31df37e609591f708605485fbb22b9c68b254c11cdc8182c2fa8c9"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 16,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "parcel-separate-lines",
+      "repeat": 1,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/13417ba63e9788890673f89822ba52ca.request.json",
+        "bytes": 21638,
+        "sha256": "566d8e20b9bb77f22f39b1ed3953385594f312cab13bda47ebc60a61af135f64",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/13417ba63e9788890673f89822ba52ca.request.json"
+      },
+      "provider_body": {
+        "bytes": 10721,
+        "sha256": "ad38157e72fb2bc0243f465b99e2f61a12904bb04226ad3adfa9a64f975259db"
+      },
+      "input": {
+        "bytes": 4590,
+        "sha256": "e786bc9d0291c46606600e5f6a852aa3f7f1465f6dc15a5bee16fc6e191e19e2"
+      },
+      "schema": {
+        "bytes": 2359,
+        "sha256": "2a0496510a31df37e609591f708605485fbb22b9c68b254c11cdc8182c2fa8c9"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 17,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "parcel-separate-lines",
+      "repeat": 2,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/b990efa79182f25edc705434e5d49396.request.json",
+        "bytes": 21638,
+        "sha256": "fea0fadb0abd0f576ce9c332a4807e6b857b2a810a126decb430573c66c02439",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/b990efa79182f25edc705434e5d49396.request.json"
+      },
+      "provider_body": {
+        "bytes": 10721,
+        "sha256": "ad38157e72fb2bc0243f465b99e2f61a12904bb04226ad3adfa9a64f975259db"
+      },
+      "input": {
+        "bytes": 4590,
+        "sha256": "e786bc9d0291c46606600e5f6a852aa3f7f1465f6dc15a5bee16fc6e191e19e2"
+      },
+      "schema": {
+        "bytes": 2359,
+        "sha256": "2a0496510a31df37e609591f708605485fbb22b9c68b254c11cdc8182c2fa8c9"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 18,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "implementation-only-insufficient",
+      "repeat": 1,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/690f6bf70554eec1d8299b43d0be7848.request.json",
+        "bytes": 19522,
+        "sha256": "f86c13fc5c7adc74e926c1a0f798a5e3bde5a137ad24d4f5b2fc9b0d9f9dc863",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/690f6bf70554eec1d8299b43d0be7848.request.json"
+      },
+      "provider_body": {
+        "bytes": 9782,
+        "sha256": "7e7bc28812fbe73cea7c5c9895d854fb09082df01b0ce09fe3f5996897ace187"
+      },
+      "input": {
+        "bytes": 3770,
+        "sha256": "9d5ac53ff615c5bdc2e65bcccf8251835e6aedfb4b429501bdac58df7584f567"
+      },
+      "schema": {
+        "bytes": 2359,
+        "sha256": "2a0496510a31df37e609591f708605485fbb22b9c68b254c11cdc8182c2fa8c9"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 19,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "implementation-only-insufficient",
+      "repeat": 2,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/047923e9df768e982c4e529e7cc6094b.request.json",
+        "bytes": 19522,
+        "sha256": "d6077bb5c44cbe912662a58a9da10b92ef4378f1b883afb3ba7bcfb2bed44dc2",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/047923e9df768e982c4e529e7cc6094b.request.json"
+      },
+      "provider_body": {
+        "bytes": 9782,
+        "sha256": "7e7bc28812fbe73cea7c5c9895d854fb09082df01b0ce09fe3f5996897ace187"
+      },
+      "input": {
+        "bytes": 3770,
+        "sha256": "9d5ac53ff615c5bdc2e65bcccf8251835e6aedfb4b429501bdac58df7584f567"
+      },
+      "schema": {
+        "bytes": 2359,
+        "sha256": "2a0496510a31df37e609591f708605485fbb22b9c68b254c11cdc8182c2fa8c9"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 20,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "constraint-only-partial-support",
+      "repeat": 1,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/e25adfc111825a77a0e285c19d6078e0.request.json",
+        "bytes": 18850,
+        "sha256": "15c1b56884c5b3292b2635ea9589bc584540a242605b97d81992894c6f641b57",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/e25adfc111825a77a0e285c19d6078e0.request.json"
+      },
+      "provider_body": {
+        "bytes": 9449,
+        "sha256": "99dcec7f3282f9968e6115efa06aedb32a0e326c4b035b8e4df7ef5202d3d136"
+      },
+      "input": {
+        "bytes": 3440,
+        "sha256": "44d36b6856c5e0719a893569cb40bcf15c60c8acaa79ac715c91f32bb9c00702"
+      },
+      "schema": {
+        "bytes": 2359,
+        "sha256": "2a0496510a31df37e609591f708605485fbb22b9c68b254c11cdc8182c2fa8c9"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 21,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    },
+    {
+      "case": "constraint-only-partial-support",
+      "repeat": 2,
+      "input_origin": "controlled",
+      "receipt": {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/8ee67fe988200b4408c0f97e45c8b942.request.json",
+        "bytes": 18850,
+        "sha256": "b20c3b87897ef5a31da8471b59cd1a1907acc6f6cdf21446c8f1e32edf78b635",
+        "original_path": "zig-out/phase5-role-representation/2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920/logs/debugger/8ee67fe988200b4408c0f97e45c8b942.request.json"
+      },
+      "provider_body": {
+        "bytes": 9449,
+        "sha256": "99dcec7f3282f9968e6115efa06aedb32a0e326c4b035b8e4df7ef5202d3d136"
+      },
+      "input": {
+        "bytes": 3440,
+        "sha256": "44d36b6856c5e0719a893569cb40bcf15c60c8acaa79ac715c91f32bb9c00702"
+      },
+      "schema": {
+        "bytes": 2359,
+        "sha256": "2a0496510a31df37e609591f708605485fbb22b9c68b254c11cdc8182c2fa8c9"
+      },
+      "header": {
+        "version": "request-replay/v4",
+        "run": "2026-10-11T09-09-54Z-6c47a28eafe5bf0fc1783165688b1920",
+        "sequence": 22,
+        "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "parent_call": "request-6-inference-1",
+        "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+        "original_call": "request-6-inference-1",
+        "node": "g37-g25-g8-validate-request-roles-request-call",
+        "mode": "modified",
+        "source_overrides": true
+      },
+      "native_admitted_premise": true,
+      "semantic_outcome": "not_run"
+    }
+  ],
+  "compiled_harness": {
+    "path": "zig-out/phase5-role-representation/baseline/sdde-calibrate-roles",
+    "bytes": 7143576,
+    "sha256": "f8eda9626ba4432d6c40f48c36c9bac3a2ea1e0b18d16b96427424d7e7e1369d",
+    "original_path": ".zig-cache/o/c5686e36684469b115adf111ab0ef859/sdde-calibrate-roles"
+  },
+  "dispatch_limits": {
+    "maximum_physical_sends": 22,
+    "stop_at_accounted_input_plus_output_tokens": 150000,
+    "check_after_each_exchange": true,
+    "one_in_flight_completion_may_cross_token_stop": true,
+    "stop_on_unknown_or_inconsistent_usage": true,
+    "stop_on_uncertain_dispatch_or_failure": true,
+    "stop_on_body_configuration_or_hash_drift": true,
+    "restart_renews_allowance": false,
+    "resend_uncertain_trial": false,
+    "retries_corrections_repairs_model_judges_e2e": 0
+  },
+  "dispatch_status": "not_authorized; single-case cohorts retain proposed labels; fresh explicit review and bounded approval plus re-freeze required",
+  "single_case_cohorts": [
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-latest.json",
+      "bytes": 2120,
+      "sha256": "24e6203b163020d602fe9d32fb5d56e2af4a0824f53df6f969543517365f8178",
+      "original_path": "zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-latest.json"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-preceding.json",
+      "bytes": 2123,
+      "sha256": "e89ca9eaf1b4712cee17ee9d1ca44f02b75321b54688e7e7251ae71b1c80121a",
+      "original_path": "zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-preceding.json"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/captured-supported-control.json",
+      "bytes": 2117,
+      "sha256": "40a34ac9ba3bf75abf28f6f36060f7ab6919907647ab7312cc8970e961a6c947",
+      "original_path": "zig-out/phase5-role-representation/single-case-cohorts/captured-supported-control.json"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/startup-whole-chunk.json",
+      "bytes": 2233,
+      "sha256": "3b152ced5d2e2fb8e1a75578315b322ef528434d414193f6b11fd9a7ac1520e1",
+      "original_path": "zig-out/phase5-role-representation/single-case-cohorts/startup-whole-chunk.json"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/startup-separate-lines.json",
+      "bytes": 2239,
+      "sha256": "b8fbad7ccf8473c707b462ea77e8ff0eb8f7707bacf505a16c5feb6e2447a65b",
+      "original_path": "zig-out/phase5-role-representation/single-case-cohorts/startup-separate-lines.json"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/lamp-whole-chunk.json",
+      "bytes": 2170,
+      "sha256": "c67ddb4dc2b8e4fef1bb99eac5b54d89029d0246a33184ef6d043bfc914abaa5",
+      "original_path": "zig-out/phase5-role-representation/single-case-cohorts/lamp-whole-chunk.json"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/lamp-separate-lines.json",
+      "bytes": 2176,
+      "sha256": "6feae8033896faa8aded40cfc2538adca0d35e3b2c6fceeeefc3dd8b7bdc03f5",
+      "original_path": "zig-out/phase5-role-representation/single-case-cohorts/lamp-separate-lines.json"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/parcel-whole-chunk.json",
+      "bytes": 2245,
+      "sha256": "be83b3a3580576e4f796c83b4652ec6b41619e1a9ef2858e56c1d61673a2b865",
+      "original_path": "zig-out/phase5-role-representation/single-case-cohorts/parcel-whole-chunk.json"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/parcel-separate-lines.json",
+      "bytes": 2251,
+      "sha256": "b2a19de1db2895d9fb1f7488fc7c998fb11c4da667a7010b4bf1800f41186032",
+      "original_path": "zig-out/phase5-role-representation/single-case-cohorts/parcel-separate-lines.json"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/implementation-only-insufficient.json",
+      "bytes": 1637,
+      "sha256": "837705536f85456b71c9f0ec12ad3dc755a4766da76bcfb6fa75c1c8bad97824",
+      "original_path": "zig-out/phase5-role-representation/single-case-cohorts/implementation-only-insufficient.json"
+    },
+    {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/constraint-only-partial-support.json",
+      "bytes": 1934,
+      "sha256": "b390e084f36d3772a40afe2830af888deb71be775e3d18390ad22a209f409962",
+      "original_path": "zig-out/phase5-role-representation/single-case-cohorts/constraint-only-partial-support.json"
+    }
+  ],
+  "ordered_single_send_commands": [
+    {
+      "ordinal": 1,
+      "case": "captured-four-negative-latest",
+      "repetition": 1,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-latest.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-latest.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-latest.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "7d1fab77bbd560ff4baaa42c6998d491413691d1f79db73ea67628c434cdd722",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-latest.json"
+    },
+    {
+      "ordinal": 2,
+      "case": "captured-four-negative-latest",
+      "repetition": 2,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-latest.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-latest.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-latest.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "7d1fab77bbd560ff4baaa42c6998d491413691d1f79db73ea67628c434cdd722",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-latest.json"
+    },
+    {
+      "ordinal": 3,
+      "case": "captured-four-negative-preceding",
+      "repetition": 1,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-preceding.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-preceding.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-preceding.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "1257ad06c5df0220f6a51573d9d7c5f8cd0bff658317efb2c5f27cc5f6eb365d",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-preceding.json"
+    },
+    {
+      "ordinal": 4,
+      "case": "captured-four-negative-preceding",
+      "repetition": 2,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-preceding.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-preceding.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-preceding.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "1257ad06c5df0220f6a51573d9d7c5f8cd0bff658317efb2c5f27cc5f6eb365d",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/captured-four-negative-preceding.json"
+    },
+    {
+      "ordinal": 5,
+      "case": "captured-supported-control",
+      "repetition": 1,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/captured-supported-control.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/captured-supported-control.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/captured-supported-control.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "e992c6ab67a8e6081392374ee768eda07299d2551ac9a8f01a932197f426e823",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/captured-supported-control.json"
+    },
+    {
+      "ordinal": 6,
+      "case": "captured-supported-control",
+      "repetition": 2,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/captured-supported-control.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/captured-supported-control.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/captured-supported-control.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "e992c6ab67a8e6081392374ee768eda07299d2551ac9a8f01a932197f426e823",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/captured-supported-control.json"
+    },
+    {
+      "ordinal": 7,
+      "case": "startup-whole-chunk",
+      "repetition": 1,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/startup-whole-chunk.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/startup-whole-chunk.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/startup-whole-chunk.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "6d901ba442587de564558ec3dfc9c7dd9104fe7568b20d89a6345706826de3f6",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/startup-whole-chunk.json"
+    },
+    {
+      "ordinal": 8,
+      "case": "startup-whole-chunk",
+      "repetition": 2,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/startup-whole-chunk.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/startup-whole-chunk.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/startup-whole-chunk.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "6d901ba442587de564558ec3dfc9c7dd9104fe7568b20d89a6345706826de3f6",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/startup-whole-chunk.json"
+    },
+    {
+      "ordinal": 9,
+      "case": "startup-separate-lines",
+      "repetition": 1,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/startup-separate-lines.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/startup-separate-lines.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/startup-separate-lines.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "8381f063f9a9b197ef8d5bfa0dddb483cb414e75545958d9281f20041f764931",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/startup-separate-lines.json"
+    },
+    {
+      "ordinal": 10,
+      "case": "startup-separate-lines",
+      "repetition": 2,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/startup-separate-lines.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/startup-separate-lines.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/startup-separate-lines.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "8381f063f9a9b197ef8d5bfa0dddb483cb414e75545958d9281f20041f764931",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/startup-separate-lines.json"
+    },
+    {
+      "ordinal": 11,
+      "case": "lamp-whole-chunk",
+      "repetition": 1,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/lamp-whole-chunk.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/lamp-whole-chunk.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/lamp-whole-chunk.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "17cbf9c17c439914f3be3dc686ab66af6ccf3d76b198e8a66046d03dc0350f3b",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/lamp-whole-chunk.json"
+    },
+    {
+      "ordinal": 12,
+      "case": "lamp-whole-chunk",
+      "repetition": 2,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/lamp-whole-chunk.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/lamp-whole-chunk.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/lamp-whole-chunk.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "17cbf9c17c439914f3be3dc686ab66af6ccf3d76b198e8a66046d03dc0350f3b",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/lamp-whole-chunk.json"
+    },
+    {
+      "ordinal": 13,
+      "case": "lamp-separate-lines",
+      "repetition": 1,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/lamp-separate-lines.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/lamp-separate-lines.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/lamp-separate-lines.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "e8d7bb69771c2810d1792476ec4f281b62d0892d582badcff8dad25d09d492bb",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/lamp-separate-lines.json"
+    },
+    {
+      "ordinal": 14,
+      "case": "lamp-separate-lines",
+      "repetition": 2,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/lamp-separate-lines.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/lamp-separate-lines.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/lamp-separate-lines.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "e8d7bb69771c2810d1792476ec4f281b62d0892d582badcff8dad25d09d492bb",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/lamp-separate-lines.json"
+    },
+    {
+      "ordinal": 15,
+      "case": "parcel-whole-chunk",
+      "repetition": 1,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/parcel-whole-chunk.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/parcel-whole-chunk.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/parcel-whole-chunk.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "6b2e1774392358b3003ce7cc51b657f51a5cfe3048a7f821308a2018c9900f50",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/parcel-whole-chunk.json"
+    },
+    {
+      "ordinal": 16,
+      "case": "parcel-whole-chunk",
+      "repetition": 2,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/parcel-whole-chunk.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/parcel-whole-chunk.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/parcel-whole-chunk.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "6b2e1774392358b3003ce7cc51b657f51a5cfe3048a7f821308a2018c9900f50",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/parcel-whole-chunk.json"
+    },
+    {
+      "ordinal": 17,
+      "case": "parcel-separate-lines",
+      "repetition": 1,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/parcel-separate-lines.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/parcel-separate-lines.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/parcel-separate-lines.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "ad38157e72fb2bc0243f465b99e2f61a12904bb04226ad3adfa9a64f975259db",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/parcel-separate-lines.json"
+    },
+    {
+      "ordinal": 18,
+      "case": "parcel-separate-lines",
+      "repetition": 2,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/parcel-separate-lines.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/parcel-separate-lines.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/parcel-separate-lines.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "ad38157e72fb2bc0243f465b99e2f61a12904bb04226ad3adfa9a64f975259db",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/parcel-separate-lines.json"
+    },
+    {
+      "ordinal": 19,
+      "case": "implementation-only-insufficient",
+      "repetition": 1,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/implementation-only-insufficient.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/implementation-only-insufficient.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/implementation-only-insufficient.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "7e7bc28812fbe73cea7c5c9895d854fb09082df01b0ce09fe3f5996897ace187",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/implementation-only-insufficient.json"
+    },
+    {
+      "ordinal": 20,
+      "case": "implementation-only-insufficient",
+      "repetition": 2,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/implementation-only-insufficient.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/implementation-only-insufficient.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/implementation-only-insufficient.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "7e7bc28812fbe73cea7c5c9895d854fb09082df01b0ce09fe3f5996897ace187",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/implementation-only-insufficient.json"
+    },
+    {
+      "ordinal": 21,
+      "case": "constraint-only-partial-support",
+      "repetition": 1,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/constraint-only-partial-support.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/constraint-only-partial-support.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/constraint-only-partial-support.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "99dcec7f3282f9968e6115efa06aedb32a0e326c4b035b8e4df7ef5202d3d136",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/constraint-only-partial-support.json"
+    },
+    {
+      "ordinal": 22,
+      "case": "constraint-only-partial-support",
+      "repetition": 2,
+      "cohort": "zig-out/phase5-role-representation/single-case-cohorts/constraint-only-partial-support.json",
+      "preflight_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/constraint-only-partial-support.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1",
+      "conditional_live_command": "../sdde-calibrate-roles --cohort zig-out/phase5-role-representation/single-case-cohorts/constraint-only-partial-support.json --output zig-out/phase5-role-representation --feature zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world --run RUN-5603b655c6e6a7498c6980fc0d447584 --call request-6-inference-1 --split development --repeats 1 --live",
+      "expected_provider_body_sha256": "99dcec7f3282f9968e6115efa06aedb32a0e326c4b035b8e4df7ef5202d3d136",
+      "dispatch_now": false,
+      "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+      "cohort_snapshot_path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-representation/single-case-cohorts/constraint-only-partial-support.json"
+    }
+  ],
+  "frozen_baseline": {
+    "status": "old native baseline preserved before Phase 5 production cutover",
+    "working_directory": "zig-out/phase5-role-representation/baseline/workspace",
+    "native_contract": "complete-role-decisions/v1; historical role classifier only",
+    "source_pin_count": 53,
+    "retained_capture_files": [
+      {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world/logs/events/RUN-5603b655c6e6a7498c6980fc0d447584/.stream.lock",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world/logs/events/RUN-5603b655c6e6a7498c6980fc0d447584/LOGBIND-1/0001.log",
+        "bytes": 146311,
+        "sha256": "fc763d6eb637d5fd9cbb4159031366061987edd05b65603494b00d5f216318fa"
+      },
+      {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world/logs/prompts/RUN-5603b655c6e6a7498c6980fc0d447584/.stream.lock",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/e2e-spec/2026-10-11T07-50-47Z-7c05a7d38e4f86264d45ec27a08a4959/project/specs/hello-world/logs/prompts/RUN-5603b655c6e6a7498c6980fc0d447584/LOGBIND-1/0001.log",
+        "bytes": 670806,
+        "sha256": "49dbd3bf3a8d95c27a51b298f67d81968dcf54aba7e763ed9039b74773bcba03"
+      },
+      {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/e2e-spec/2026-10-11T07-42-49Z-f175464cdecd52a67240fef474b7a3a0/project/specs/hello-world/logs/events/RUN-d9038e02f38db84cc14443480c6d0662/.stream.lock",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/e2e-spec/2026-10-11T07-42-49Z-f175464cdecd52a67240fef474b7a3a0/project/specs/hello-world/logs/events/RUN-d9038e02f38db84cc14443480c6d0662/LOGBIND-1/0001.log",
+        "bytes": 145826,
+        "sha256": "808947d7c87ec875348be212206e2868faac5fd6a80b956c08317a9f100704e6"
+      },
+      {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/e2e-spec/2026-10-11T07-42-49Z-f175464cdecd52a67240fef474b7a3a0/project/specs/hello-world/logs/prompts/RUN-d9038e02f38db84cc14443480c6d0662/.stream.lock",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/e2e-spec/2026-10-11T07-42-49Z-f175464cdecd52a67240fef474b7a3a0/project/specs/hello-world/logs/prompts/RUN-d9038e02f38db84cc14443480c6d0662/LOGBIND-1/0001.log",
+        "bytes": 670339,
+        "sha256": "6deee2efa515a952b0aa93fcbd2fec9a10683a20c8b48619c8c1211fe2ea7fef"
+      },
+      {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/e2e-spec/2026-10-11T07-03-52Z-1b37c292a96b5055e6cf7d3f3b85e5dc/project/specs/hello-world/logs/events/RUN-97279dcdf824fc2622d889dcaf595f5b/.stream.lock",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/e2e-spec/2026-10-11T07-03-52Z-1b37c292a96b5055e6cf7d3f3b85e5dc/project/specs/hello-world/logs/events/RUN-97279dcdf824fc2622d889dcaf595f5b/LOGBIND-1/0001.log",
+        "bytes": 768478,
+        "sha256": "398ae81414f719fc1984d793838c52e0e406b1c6dce1f5d3fc37ee6463136a4a"
+      },
+      {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/e2e-spec/2026-10-11T07-03-52Z-1b37c292a96b5055e6cf7d3f3b85e5dc/project/specs/hello-world/logs/prompts/RUN-97279dcdf824fc2622d889dcaf595f5b/.stream.lock",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/e2e-spec/2026-10-11T07-03-52Z-1b37c292a96b5055e6cf7d3f3b85e5dc/project/specs/hello-world/logs/prompts/RUN-97279dcdf824fc2622d889dcaf595f5b/LOGBIND-1/0001.log",
+        "bytes": 5049046,
+        "sha256": "5e5c1a0a172b89bcb1a6b127634e7dbc798a3f85f1a7e24364dfdc9fa1745f4b"
+      }
+    ],
+    "provider_bodies_changed": false,
+    "live_calls_sent": 0,
+    "offline_reconstruction": {
+      "path": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-baseline-smoke/2026-10-11T09-47-13Z-e72072604476ed49403cdbd957eba122/report.json",
+      "bytes": 13311,
+      "sha256": "a2b5ac7717a6e308838b7bbe5faae04cca4b4bbe3c59f03392153452b0df1bd0",
+      "physical_requests": 22,
+      "all_provider_body_hashes_unchanged": true,
+      "live_calls_sent": 0
+    }
+  }
+}

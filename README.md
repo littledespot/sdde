@@ -92,6 +92,12 @@ they do not assess prompt quality. The separately invoked live `e2e-spec`
 command runs the configured LLM and grades its published output against the
 rubric.
 
+Parser and schema matrices run at their owning unit boundaries; workflow tests
+use representative cases to check routing, evidence and accounting. Historical
+calibration inputs and results under `test/calibration` retain experiment evidence;
+the automated suite does not pin every frozen panel's counts, model settings or
+prompt bytes. Calibration and live E2E execution remain separately invoked.
+
 The specification-generation integration matrix emits tab-separated
 `scenario-cost` rows to stderr, with the zero-based scenario index, outcome and
 milliseconds spent in fixture setup, bootstrap, runner setup, execution,
@@ -173,7 +179,7 @@ and credentials are required. Replay does not run workflow nodes or semantic
 validators, publish artifacts, or change workflow state.
 
 The UI is embedded in the executable. Captures use `prompt-columns/v3`; older
-prompt formats are rejected. Request descriptions use `model-request-debug/v2`
+prompt formats are rejected. Request descriptions use `model-request-debug/v3`
 and retain the exact selected response schema; older descriptions are rejected.
 Replays use `request-replay/v4` records with a saved
 session and dispatch sequence; older replay records are rejected. Replay sessions
@@ -235,11 +241,12 @@ semantic quality is not assessed. The launcher shares `.env.e2e` setup with
 require explicit approval for the selected calls and repeat count. They do not
 establish full-workflow E2E acceptance or change browser replay behavior.
 
-The separate [authoring-role calibration](test/calibration/authoring-roles/README.md)
-uses `zig build calibrate-roles` to prepare explicit controlled/captured assignment
-comparisons without API calls. Human-reviewed labels and bounded approval precede
-`--live` diagnostic trials. It reuses production packets, role admission and request
-replay; it is neither an E2E case nor workflow authority.
+The [historical authoring-role diagnostics](test/calibration/authoring-roles/README.md)
+retain frozen experiment evidence. FIX03 Phase 5 removes that production classifier
+and its development launcher. The pending representation panel preserves an
+isolated old native executable; current authoring-association comparisons reuse
+request replay and current admission. Labels, approvals and diagnostic results
+remain separate from E2E and workflow authority.
 
 ## Documentation
 

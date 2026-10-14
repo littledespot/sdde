@@ -29,8 +29,12 @@ Debug/trace prompt rows additionally retain workflow ID, registered action ID,
 call ID, call kind, original call ID, parent call ID and complete sanitized body
 length. `node_id` names the expanded YAML invocation entry; `route_id` names its
 request-preparation entry. Run ID plus call ID is the join identity. Retries link
-to the preceding attempt and original call; repairs carry their candidate's
-producing origin through the shared native repair packet. No correlation is guessed
+to the preceding attempt and original call; repairs of response-produced values carry
+their candidate's producing origin through the shared native repair packet. A native
+authorized repair of an assembled candidate may have no single producing response:
+it retains `repair` kind, its own original call and no parent. The native packet's
+repair permit distinguishes that case from missing required response provenance;
+it does not fabricate an origin or change repair authority. No correlation is guessed
 from adjacent log rows, workflow names or prompt text.
 Model and correlated validator events use that complete call ID in `correlation_id`,
 including operation kind and attempt, so token-count observations cannot attach to
@@ -122,6 +126,11 @@ Offline tests cover exact reconstruction, wrong/missing chunks, attribution,
 retry/repair chains, closed replay input, unchanged exact wire bytes, modified
 prompt/context/schema, current provider authorization, one-call behavior,
 immutable parent records, pre/post-dispatch storage failure, and HTTP access checks.
+Capture rejections retain their typed boundary and cause through runner events,
+terminal reports and finalization. If subsequent logging also fails, retain that
+failure alongside the original capture diagnostic; neither permits dispatch or
+completion. Parentless assembled-candidate repairs and their retries use the same
+capture and debugger readback contract as other calls.
 Native packaging embeds the UI and exercises debugger startup without the source
 tree. Live provider replay remains separately authorized; offline evidence is not
 E2E evidence.

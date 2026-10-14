@@ -11,10 +11,11 @@ test "reference phase definitions share the captured shape owner" {
     const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .limited(schema.max_bytes));
     const canonical = try compileSchema(a, bytes);
     const grouping = canonical.select(.{ .bytes = "signals_assignment" }).?;
-    const roles = canonical.select(.{ .bytes = "roles_assignment" }).?;
+    const conflicts = canonical.select(.{ .bytes = "conflicts_assignment" }).?;
     try std.testing.expect(schema.findProperty(grouping.root().object, "signals") != null);
     try std.testing.expect(schema.findProperty(grouping.root().object, "role_decisions") == null);
-    try std.testing.expect(schema.findProperty(roles.root().object, "role_decisions") != null);
+    try std.testing.expect(schema.findProperty(conflicts.root().object, "conflicts") != null);
+    try std.testing.expect(canonical.select(.{ .bytes = "roles_assignment" }) == null);
 }
 
 fn compileSchema(allocator: std.mem.Allocator, bytes: []const u8) !*const schema.Schema {

@@ -27,7 +27,7 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
     }
     const reconciliation = @import("reference_reconciliation_workflow.zig");
     if (try @import("reference_reconciliation_repair_workflow.zig").diagnostic(view)) |rejection| return .{ .reconciliation = rejection };
-    for ([_]data.Schema{ reconciliation.summary_schema, reconciliation.dispositions_schema, reconciliation.signals_schema, reconciliation.roles_schema, reconciliation.conflicts_schema }) |schema| {
+    for ([_]data.Schema{ reconciliation.summary_schema, reconciliation.dispositions_schema, reconciliation.signals_schema, reconciliation.conflicts_schema }) |schema| {
         if (!view.contains(schema.key)) continue;
         const value = try values.read(view, schema, @import("../domain/reference_candidate_value.zig").Value);
         if (value.payload().* == .reconciliation_rejected) return .{ .reconciliation = value.payload().reconciliation_rejected };
@@ -36,7 +36,7 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
     if (view.contains(spec.session_schema.key)) {
         const storage = @import("specification_values.zig").storage;
         const value = storage.payload(try values.read(view, spec.session_schema, storage.Value));
-        if (value.* == .binding_rejected) return .{ .authoring_roles = value.binding_rejected };
+        if (value.* == .binding_rejected) return .{ .source_catalogue = value.binding_rejected };
     }
     if (view.contains(spec.checked_schema.key)) {
         const storage = @import("specification_values.zig").storage;

@@ -54,6 +54,20 @@ keep their registered `debug` severity and the configured event threshold.
   or creating repair authority.
 - Model-text capture status belongs to the captured call. A later correlation or reporting
   error cannot relabel successfully saved text as a capture failure.
+- Capture rejection retains one typed diagnostic: the failing boundary, closed
+  cause, call origin when available, direction and logging failure code. Lineage,
+  source-snapshot projection, serialization, redaction, chunking and persistence
+  failures remain distinguishable without recording credentials or raw bodies in
+  diagnostics. A subsequent logging/finalization failure cannot replace the first
+  capture cause; both remain failed evidence.
+  CLI failure output and terminal reports expose the typed diagnostic. Action and
+  terminal event codes retain the boundary and closed cause; the terminal event
+  retains the call correlation and attempt when known.
+- An authorized assembled-candidate repair has explicit native provenance, `repair`
+  call kind, its own original call and no fabricated parent. Response-produced
+  repairs and context follow-ups still require a known producing call. The shared
+  lineage validator owns both capture and prompt admission; debugger readback
+  preserves the distinction using the existing call/original/parent columns.
 
 ### Complete execution evidence
 
@@ -119,3 +133,12 @@ request debugger and single-request replay. `prompt-columns/v3` retains caller
 and YAML-entry attribution, exact request descriptions, body lengths and explicit
 retry/repair lineage. Debugger records remain diagnostic and never grant workflow
 authority; replay requires an explicit user-triggered request for one call.
+
+### Bound preservation comparison origins
+
+Retain the original review-finding origin and the separate comparison-call origin.
+A protocol-corrected comparison records the admitted attempt, while the finding
+origin remains unchanged. Native invalid-comparison diagnostics identify that
+comparison attempt; unresolved ownership and known unsupported repair remain
+distinct from invalid evidence. Origins are observations, never evidence authority
+or a requirement for log replay during readback.

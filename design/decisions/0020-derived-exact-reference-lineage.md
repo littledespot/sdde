@@ -6,6 +6,7 @@
 - **27 September 2026 amendment authority:** Explicit user approval of provenance-free, source-bound per-unit assignments in this session.
 - **28 September 2026 amendment authority:** Explicit user instruction to clarify generation-role assignment and require nonempty role lists when supplied.
 - **9 October 2026 amendment authority:** Explicit user instruction to implement the complete role-decision contract in [Z_FIX01 §9.8](../../fixes/Z_FIX01.md#98-complete-role-decisions-critical-review--9-october-2026), including shared admission, lifecycle and calibration paths.
+- **11 October 2026 authoring-association amendment authority:** Explicit user instruction to implement FIX03 Phase 5 and its resolved replacement in [§5.2.1](../../fixes/FIX03.md#521-phase-5-replacement-contract--implemented-candidate-qualification-pending); supersedes the presentation-role classifier and prebinding gate.
 - **9 October 2026 loss-evidence amendment authority:** Explicit user instruction to implement R7 authoring-input projection and R6 retained producer-loss evidence; no change to exact-reference lineage or retry policy.
 - **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1. The overall design remains Proposed.
 
@@ -25,8 +26,10 @@ or stale trusted ledger/binding rejects before it offers choices. A well-shaped
 but unavailable model selection is an invalid candidate.
 
 For each attributed field or shared-provenance record, canonical
-`provenance.claim_ids` stores only the explicitly selected reference claims `S`,
-bound to that unit before its content request. Model responses do not contain
+`provenance.claim_ids` stores the explicitly selected reference claims `S`.
+Initial Spec authors select complete accepted source groups together with content;
+native code derives `S` from those occurrences. Fixed repairs retain that
+association. Model responses do not contain
 `provenance`. Derive `E` from all exact segments in that unit, then
 `L = stableUnique(S + E)` and its citation union through the same reference
 owner. The union orders explicit selections first, then first exact occurrence
@@ -49,28 +52,27 @@ capability.
 
 ## Provenance-free response amendment (approved 27 September 2026)
 
-The model chooses source meaning during reconciliation; the engine retains the
-validated claim group on each reconciliation signal. Reconciliation also records
-the semantic generation roles of those groups for feature-level fields. The
-complete role-decision amendment below supersedes sparse model role lists.
-Canonical signals retain derived positive `generation_roles`; an unselected
-context-only signal retains an empty list. The engine validates group membership
-and role coverage, then binds each attributed field or record-generation task to
-its current source obligation before
-dispatch. It resolves that bound group through the existing reference ledger
-to construct canonical `S`. A record task is scoped to one group and may
-produce several requirements. A group may contain claims from several original
-source requirements, and one claim may participate in several groups. This
-supports both many-to-many directions without a model `provenance` field or a
-second reference authority.
-Model-facing generated records contain business content only; canonical
-records retain engine-constructed `provenance.claim_ids` for traceability.
+Reconciliation retains validated semantic groups without presentation-role lists.
+Initial attributed Spec values select nonempty unique canonical `signal_ids`
+alongside their business content. These handles identify current complete retained
+group occurrences; they do not assert that any group semantically supports a field.
+Native admission constructs canonical `source_group_ids`, resolves complete members
+in catalogue order, deduplicates legitimate overlaps into `S` and then derives
+exact lineage and citations. Several groups may jointly support one field and one
+group may support several fields. The model supplies no claim list or provenance.
+
+Each record task binds exactly one group natively and may return several records
+or an empty array. Its response remains content-only; canonical records inherit
+that group's complete ordered selection and retain exactly one `source_group_ids`
+occurrence. Empty output supplies no positive coverage and cannot bypass aggregate
+record families, entity membership, business mapping, exact coverage or review.
 
 Generation, source-review and repair responses reject `provenance` in every
-selected schema. The bound unit, current ledger and authorized repair target
+selected schema. Selected initial groups, the current ledger and authorized repair target
 supply claim identity; the response supplies business content, a semantic
-verdict, and any genuinely selectable source or loss location. Fixed diagnostic
-claims are constructed after a selected loss location. Source-only negative
+verdict, and any genuinely selectable source. Bound preservation assessments
+replace model-selected loss locations; diagnostic claims follow native attribution
+under §22.1. Source-only negative
 evidence constructs an empty canonical selection where its rule permits it.
 No response may add claims to a sibling or turn the eligible catalogue into
 support. Missing, stale, ambiguous or out-of-scope binding blocks or returns
@@ -82,11 +84,12 @@ This amends the earlier equality of model and canonical selection fields,
 while preserving `S`, `E`, `L` and their evidence bounds. Semantic grouping and
 generated meaning remain model-assisted and independently reviewed. Native
 group validation, source-review admission, exact coverage and publication
-remain separate gates. Value-only repair retains its original explicit and
-effective evidence bounds; changing a bound association requires upstream
-rework. Readback validates captured groups and recomputes lineage. The
+remain separate gates. Value-only repair retains its group association and original explicit and
+effective evidence bounds. Changing authored group membership requires separately
+authorized authored-unit rebuilding; no such permission is added here. Unresolved
+association defects block without being rerouted to an upstream producer. Readback validates captured groups and recomputes lineage. The
 cutover must update the closed schemas, parser, packet, repair, workflow
-progress, reference snapshot, `specification-state/v7`, renderers and tests
+progress, reference snapshot, the shared specification-state version, renderers and tests
 together, without a compatibility reader, second provenance store or new retry
 system.
 
@@ -94,44 +97,47 @@ The coordinated runtime cutover implements this amendment. Offline schema,
 repair, readback and workflow checks establish mechanical conformance; live
 semantic quality and reliability require separately approved execution.
 
-## Complete role-decision amendment (approved 9 October 2026)
+## Authored association amendment (approved 11 October 2026)
 
-One initial reconciliation role request assesses every registered `GenerationRole`.
-Its closed `role_decisions` map requires one property per role. Each decision is
-either `{"kind":"supported","signal_ids":[...]}` with a nonempty unique selection
-from the current eligible signal occurrence catalogue, or
-`{"kind":"unsupported"}` with no selection. Requiredness is mechanically checked
-against the existing role catalogue. Missing, unknown or duplicate role properties,
-empty positive selections, duplicate/ineligible IDs and the superseded sparse wire
-shape reject; no defaults, legacy reader or inferred selections apply. When no
-group is eligible, the selected schema permits only unsupported decisions.
+This supersedes the 9 October complete-role-decision wire contract, its independent
+role request, positive `generation_roles`, role-coverage gate and unsupported-role
+repair identity. Original captures retain their historical decoder and scores;
+production has no legacy reader, classifier fallback or dual binding registry.
 
-Native role admission shares the retained-claim eligibility owner and derives the
-existing positive group-role assignments in offered-group and registered-role
-order. It preserves many-to-many support and group boundaries, rejects duplicate
-IDs before conversion and validates the derived bindings through the existing
-validator. ID membership and complete representation do not prove semantic support.
-The reported unsupported verdict remains candidate data: it neither establishes a
-missing user fact nor authorizes clarification, `not_applicable`, a default binding
-or semantic correction. Mandatory positive coverage still blocks authoring through
-the existing shared source-binding gate.
+Initial attributed values use `{signal_ids:[...],value:BusinessValue}`. Brief
+requires title, description and goal; story requires its selected value; entities
+retain disposition and a selected, explained basis. Initial clarification questions
+use the same selected-group value with the existing reason and optional record
+kind. Their native scope resolves only selected question-eligible groups, never the
+whole available catalogue. Missing/duplicate/foreign/inactive group handles reject.
+Positive authored associations cannot select groups containing an `open_question`;
+question evidence has its distinct native eligibility. Other semantic categories
+are not categorically excluded. An empty retained catalogue rejects readiness
+before dispatch without fabricating a user gap, unsupported verdict or completion.
 
-Production, immutable protocol corrections and diagnostic calibration use the same
-current contract and admission owner. Existing correction bounds apply only to
-protocol rejection; a complete unsupported answer is structurally admissible.
-Upstream repair retires the role assessment, producer origin and derived bindings
-together before reassessment. Pending phases have no fabricated negative decisions.
-Canonical snapshots retain their positive roles; negative verdicts remain in the
-actual captured response, not a second persisted source of binding authority. This
-wire cutover introduces no new state version, repair target, retry policy or model
-slot. Historical captures remain immutable and their response contract must stay
-associated with the appropriate diagnostic decoder.
+Canonical `AttributedValue` and `RecordProposal` embed required `source_group_ids`.
+The captured group's occurrence identity is the association authority; claim lists
+and citations are checked native projections. General `Selection` and `Provenance`
+remain unchanged for source-only diagnostics and other authorized uses. Equal
+claim membership or equal displayed bytes cannot substitute for an occurrence.
+Readback resolves the current captured groups and rejects inconsistent projections;
+it never repairs corrupt stored authority with a fresh union.
 
-Offline conformance establishes these mechanics. Semantic omissions, explicit false
-unsupported verdicts and wrong selections must still be compared against baseline;
-complete live publication and rubric assessment establish production quality. This
-amendment accepts the contract change, not a demonstrated semantic improvement or
-the overall Proposed design.
+Protocol correction retains the selected initial schema, offered catalogue,
+ancestry and existing allowance. Value-only repairs return their unchanged compact
+content shape and preserve the old group association. Record insertion requires
+one explicitly bound accepted occurrence, not claim-list matching. Missing or
+ambiguous occurrence authority blocks. This adds no association-membership repair,
+user-answer permission, semantic retry, model slot or publication exception.
+
+Upstream change retires affected catalogues, authored associations, reviews and
+comparison evidence through existing dependent invalidation. Optional pre-generation
+preservation keeps its original-source assignment; it has no fabricated expected
+field association before content exists. Authoring, correction, review, repair,
+persistence and calibration share these current owners. Native admission proves
+occurrence membership and projections, not authored meaning. Separate live
+qualification must measure omitted obligations, wrong support, invented behavior,
+clarification quality, actual publication and rubric quality.
 
 ## Repair and validation
 
@@ -186,13 +192,18 @@ through the existing runner and stage gates. No new retry mechanism, schema
 registry, evidence store, provider mode or model prompt for reassembly is
 authorized.
 
-The R6 attribution amendment advances the shared state to
-`specification-state/v9`. Source-review findings distinguish explicit candidate
-loss from unresolved attribution. Upstream attribution retains the selected source
-lines and producer-loss comparison required by §22.1; candidate attribution retains
-subject-bound claims without an upstream comparison. Completed readback validates
-that evidence through the same owner as live collection. Earlier state versions reject.
-This changes neither `S`, `E`, `L` nor the exact-reference representation.
+The user-authorized FIX01-01 Phase 2 amendment supersedes the R6 culprit-selection
+contract and advances the shared state to `specification-state/v10`. Native-bound
+preservation comparisons derive attribution under §22.1. Findings retain canonical
+facts and comparison evidence; collection and readback reconstruct the same bindings
+and reject mismatched derived locations. Finding and comparison origins remain
+distinct. Earlier versions reject. This changes neither `S`, `E`, `L` nor exact
+reference representation or repair permissions.
+
+The approved 11 October authored-association cutover advances canonical content
+to `specification/v3` and both completed and clarification-pending state to
+`specification-state/v13`. Previous shapes/versions reject without migration;
+canonical reference snapshots no longer persist presentation roles.
 
 This decision records the runtime contract, not a claim that live quality
 evaluation has passed. The baseline and test checkpoints remain

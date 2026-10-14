@@ -118,11 +118,6 @@ fn validateRecords(allocator: std.mem.Allocator, value: Snapshot) !void {
     const signals = try a.alloc(r.SignalProposal, records.signals.len);
     for (records.signals, signals, 0..) |signal, *proposal, index| {
         proposal.* = .{ .claim_ids = signal.value.claim_ids, .content = @import("model_evidence.zig").content(signal.value.content) };
-        const roles = signal.value.generation_roles;
-        if (roles.len != 0 and !try @import("reference_support.zig").eligibleSelection(records.dispositions, signal.value.claim_ids)) return error.InvalidReferenceSnapshot;
-        for (roles, 0..) |role, role_index| for (roles[0..role_index]) |prior_role| {
-            if (role == prior_role) return error.InvalidReferenceSnapshot;
-        };
         if (signal.id.ordinal != index + 1 or try v.signalClaims(items, records.dispositions, proposal.claim_ids, allowed) != null or
             try v.contentIssue(items, proposal.claim_ids, proposal.content) != null or
             !v.signalSelectionAvailable(signals[0..index], index, proposal.claim_ids)) return error.InvalidReferenceSnapshot;

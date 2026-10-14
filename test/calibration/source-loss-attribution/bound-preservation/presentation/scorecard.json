@@ -1,0 +1,1250 @@
+{
+  "status": "completed_gate_failed",
+  "assessment": "Coding-agent manual semantic review of every actual response against frozen source lines and complete comparison members. Unblinded: arm names were visible during execution and assessment. Native admission is assessed separately and is not semantic proof. No model judges, retries, repairs or E2E.",
+  "trials": [
+    {
+      "id": "captured-story-baseline-1",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/captured-story.presentation-baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-preservation/captured-story.presentation-baseline.native-1.json",
+      "completed": true,
+      "schema_admitted": true,
+      "native_admitted": true,
+      "native_attribution": "candidate",
+      "semantic_verdicts_correct": true,
+      "evidence_adequate": true,
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertainty": false,
+      "meaning_evidence": "Both comparisons contain member 2, requiring the application to display Hello, World! when started. The explanation identifies member 2 and correctly treats the separate literal member as redundant; source line 6 supports that conclusion.",
+      "started_utc": "2026-10-10T09:27:33.697870+00:00",
+      "request_id": "2ab7be373577a9d52147580e9cd73ed5",
+      "provider_request_id": "chatcmpl-3b000aea-101c-410a-acbb-81b0da4bc281",
+      "stop": "stop",
+      "normalization": "removed_leading_brace_quote",
+      "input_tokens": 1953,
+      "output_tokens": 315,
+      "latency_ms": null,
+      "correct_attribution": true,
+      "run_id": "debugger-551fa90be8aa76cf1f6336b47b6ae0b1",
+      "provider_request_id_kind": "response body chat completion id; HTTP AWS request ID unavailable in debugger export",
+      "round_trip_ms": 1569,
+      "request_bytes": 10299,
+      "actual_verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "expected_verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "expected_attribution": "candidate",
+      "native_report_result": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "candidate": {}
+            }
+          }
+        }
+      },
+      "parsed_response": {
+        "assessments": [
+          {
+            "comparison_id": 1,
+            "result": "preserved",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "explanation": "The complete collection of members for comparison 1 includes the required meaning that the application must display \"Hello, World!\" (member 2). This satisfies the missing meaning in the fixed_finding.detail. The additional member 4, while redundant, does not weaken the expression of the required behavior."
+          },
+          {
+            "comparison_id": 2,
+            "result": "preserved",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3
+            ],
+            "explanation": "Comparison 2’s members collectively express the required meaning that the application must display \"Hello, World!\" (member 2). Thus the missing meaning is preserved even though member 4 is absent."
+          }
+        ]
+      },
+      "request_sha256": "a34f5df19cad6b687c3210d2934b663900e2dde39845e9b3f1b5eaf389c60ddc",
+      "response_sha256": "236d4e609d519e662e0ed71a6c0e2713ab2641ce79335769d1d8a98f4fee5718"
+    },
+    {
+      "id": "captured-story-candidate-1",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/captured-story.presentation-candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-preservation/captured-story.presentation-candidate.native-1.json",
+      "completed": true,
+      "schema_admitted": true,
+      "native_admitted": true,
+      "native_attribution": "unsupported_role",
+      "semantic_verdicts_correct": false,
+      "evidence_adequate": false,
+      "false_upstream": true,
+      "false_candidate": false,
+      "unnecessary_uncertainty": false,
+      "meaning_evidence": "Comparison 2 member 2 explicitly requires displaying Hello, World!, just as source line 6 does. The response falsely says this meaning is absent because the standalone literal member is absent. Native admission accepts the references and derives unsupported story-role loss; no upstream role loss actually exists.",
+      "started_utc": "2026-10-10T09:28:07.284651+00:00",
+      "request_id": "11e6918907ae36b28c007addd5f24e96",
+      "provider_request_id": "chatcmpl-73faaa4b-3208-4a44-b9cf-8629c0ba9d37",
+      "stop": "stop",
+      "normalization": "removed_leading_brace_quote",
+      "input_tokens": 1727,
+      "output_tokens": 334,
+      "latency_ms": null,
+      "correct_attribution": false,
+      "run_id": "debugger-551fa90be8aa76cf1f6336b47b6ae0b1",
+      "provider_request_id_kind": "response body chat completion id; HTTP AWS request ID unavailable in debugger export",
+      "round_trip_ms": 1574,
+      "request_bytes": 9216,
+      "actual_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "expected_verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "expected_attribution": "candidate",
+      "native_report_result": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "role_assignment": "primary_user_story"
+          }
+        }
+      },
+      "parsed_response": {
+        "assessments": [
+          {
+            "comparison_id": 1,
+            "result": "preserved",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "explanation": "The complete collection of members for comparison 1 includes the explicit string \"Hello, World!\" (member 4), which directly supplies the missing display text required by the source. Thus the missing meaning is preserved."
+          },
+          {
+            "comparison_id": 2,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3
+            ],
+            "explanation": "Comparison 2’s members omit the explicit string \"Hello, World!\". The missing meaning that the application must display this text is therefore absent from the complete collection, resulting in a lost assessment."
+          }
+        ]
+      },
+      "request_sha256": "df0bc4a15e3f8fb974975822948c7b30a05445dea6650ecaf610a52149e3bfb2",
+      "response_sha256": "cd18665b6c668b837f34ee3c4f9c292f555c46e0bb6c7559e0782871647eca74"
+    },
+    {
+      "id": "loan-story-candidate-1",
+      "case": "loan-story",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/loan-story.presentation-candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-preservation/loan-story.presentation-candidate.native-1.json",
+      "completed": true,
+      "schema_admitted": true,
+      "native_admitted": true,
+      "native_attribution": "unsupported_role",
+      "semantic_verdicts_correct": false,
+      "evidence_adequate": false,
+      "false_upstream": true,
+      "false_candidate": false,
+      "unnecessary_uncertainty": false,
+      "meaning_evidence": "Comparison 2 member 2 explicitly requires displaying MOCK Renewed!, just as source line 6 does. The response falsely says this meaning is absent because the standalone literal member is absent. Native admission accepts the references and derives unsupported story-role loss; no upstream role loss actually exists.",
+      "started_utc": "2026-10-10T09:28:27.627071+00:00",
+      "request_id": "60ee96a9499cfcef70581f7d23d098de",
+      "provider_request_id": "chatcmpl-f1569b0f-e3a6-4a09-9655-ee762a23fed4",
+      "stop": "stop",
+      "normalization": "removed_leading_brace_quote",
+      "input_tokens": 1597,
+      "output_tokens": 355,
+      "latency_ms": null,
+      "correct_attribution": false,
+      "run_id": "debugger-551fa90be8aa76cf1f6336b47b6ae0b1",
+      "provider_request_id_kind": "response body chat completion id; HTTP AWS request ID unavailable in debugger export",
+      "round_trip_ms": 1688,
+      "request_bytes": 8190,
+      "actual_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "expected_verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "expected_attribution": "candidate",
+      "native_report_result": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "role_assignment": "primary_user_story"
+          }
+        }
+      },
+      "parsed_response": {
+        "assessments": [
+          {
+            "comparison_id": 1,
+            "result": "preserved",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "explanation": "The complete collection of claims in comparison 1 includes the required confirmation text meaning \"MOCK Renewed!\", which is the missing meaning needed to satisfy the target purpose. The source lines 5‑7 provide the text for all four meanings, so the missing meaning is preserved."
+          },
+          {
+            "comparison_id": 2,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3
+            ],
+            "explanation": "Comparison 2’s collection lacks the required confirmation text meaning \"MOCK Renewed!\". Without this meaning the target purpose is not satisfied, so the missing meaning is lost."
+          }
+        ]
+      },
+      "request_sha256": "f67d275c4af9af2fac24b34a55a4428f9339ab208cd24698dd781a3c79d162d5",
+      "response_sha256": "e01f6dda5a500ade24d48e0792fd1f64267ed1a79aae55f2a321ce7d6fc3f5e6"
+    },
+    {
+      "id": "loan-story-baseline-1",
+      "case": "loan-story",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/loan-story.presentation-baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-preservation/loan-story.presentation-baseline.native-1.json",
+      "completed": true,
+      "schema_admitted": true,
+      "native_admitted": true,
+      "native_attribution": "unsupported_role",
+      "semantic_verdicts_correct": false,
+      "evidence_adequate": false,
+      "false_upstream": true,
+      "false_candidate": false,
+      "unnecessary_uncertainty": false,
+      "meaning_evidence": "Comparison 2 member 2 explicitly requires displaying MOCK Renewed!, just as source line 6 does. The response falsely says this meaning is absent because the standalone literal member is absent. Native admission accepts the references and derives unsupported story-role loss; no upstream role loss actually exists.",
+      "started_utc": "2026-10-10T09:28:48.055611+00:00",
+      "request_id": "4e6789bac971d0816a7e656cc0e7a398",
+      "provider_request_id": "chatcmpl-d3760a2f-0d26-498b-b6af-305c5ea7e7a9",
+      "stop": "stop",
+      "normalization": "removed_leading_brace_quote",
+      "input_tokens": 1874,
+      "output_tokens": 304,
+      "latency_ms": null,
+      "correct_attribution": false,
+      "run_id": "debugger-551fa90be8aa76cf1f6336b47b6ae0b1",
+      "provider_request_id_kind": "response body chat completion id; HTTP AWS request ID unavailable in debugger export",
+      "round_trip_ms": 1241,
+      "request_bytes": 9425,
+      "actual_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "expected_verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "expected_attribution": "candidate",
+      "native_report_result": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "role_assignment": "primary_user_story"
+          }
+        }
+      },
+      "parsed_response": {
+        "assessments": [
+          {
+            "comparison_id": 1,
+            "result": "preserved",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "explanation": "The complete collection of requirements in comparison 1 includes the confirmation text meaning \"MOCK Renewed!\", which is the missing meaning required by the target_purpose. All conditions and obligations are preserved."
+          },
+          {
+            "comparison_id": 2,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3
+            ],
+            "explanation": "Comparison 2 lacks the requirement meaning \"MOCK Renewed!\", which is the missing confirmation text that the target_purpose requires. Therefore the missing meaning is not expressed and the comparison is lost."
+          }
+        ]
+      },
+      "request_sha256": "3f6406a5188c9aef0aee6606a07b086b23121afaf5c54ff0202a6aab4fc8213f",
+      "response_sha256": "4617f46e4afb56ed60ed267474a619315a9b7bd54e5a9c30b57081e2d22b8705"
+    },
+    {
+      "id": "wrong-role-story-baseline-1",
+      "case": "wrong-role-story",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-baseline.response-1.json",
+      "native_report": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-baseline.native-1.json",
+      "completed": true,
+      "schema_admitted": true,
+      "native_admitted": true,
+      "native_attribution": "extraction_claim",
+      "semantic_verdicts_correct": false,
+      "evidence_adequate": false,
+      "false_upstream": true,
+      "false_candidate": false,
+      "unnecessary_uncertainty": false,
+      "meaning_evidence": "Comparison 1 member 1 expressly requires patient notification after cancellation. The explanation instead asks for the downstream allegation that the story omits notification, reverses the obligation, and falsely derives extraction loss. Comparison 2 genuinely lacks notification; its lost verdict does not rescue the first judgment.",
+      "started_utc": "2026-10-10T09:29:08.168730+00:00",
+      "request_id": "7c1b44c07c8bfa04514e9ac7117bec84",
+      "provider_request_id": "chatcmpl-d331b43e-a9e7-4676-9721-dd586e2e8ff0",
+      "stop": "stop",
+      "normalization": "removed_leading_brace_quote",
+      "input_tokens": 1408,
+      "output_tokens": 456,
+      "latency_ms": null,
+      "correct_attribution": false,
+      "run_id": "debugger-551fa90be8aa76cf1f6336b47b6ae0b1",
+      "provider_request_id_kind": "response body chat completion id; HTTP AWS request ID unavailable in debugger export",
+      "round_trip_ms": 1783,
+      "request_bytes": 7787,
+      "actual_verdicts": [
+        "lost",
+        "lost"
+      ],
+      "expected_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "expected_attribution": "unsupported_role",
+      "native_report_result": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "extraction_claim": {
+                "bytes": "chunk-1"
+              }
+            }
+          }
+        }
+      },
+      "parsed_response": {
+        "assessments": [
+          {
+            "comparison_id": 1,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 1,
+                  "last": 1
+                }
+              },
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 2,
+                  "last": 2
+                }
+              }
+            ],
+            "members": [
+              1,
+              2
+            ],
+            "explanation": "The complete collection in comparison 1 contains the requirement that the service must notify the patient after cancellation, which is the opposite of the missing meaning that the story omits such notification. The collection does not express the absence of notification, so the missing meaning is not preserved."
+          },
+          {
+            "comparison_id": 2,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 2,
+                  "last": 2
+                }
+              }
+            ],
+            "members": [
+              1
+            ],
+            "explanation": "Comparison 2 only includes the requirement to display clinic opening hours, providing no information about patient notification. Therefore the missing meaning that the story omits notifying the patient is not present in this collection."
+          }
+        ]
+      },
+      "request_sha256": "a2b2b4a6cbcd802f9d75f70ea44a0844ee91debc7769b9f41d35b207989c84c4",
+      "response_sha256": "411f6d0eaa77e0c1e0dd88d76d937508251f7624291af34ac95ffc390e1436b2"
+    },
+    {
+      "id": "wrong-role-story-candidate-1",
+      "case": "wrong-role-story",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-candidate.response-1.json",
+      "native_report": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-candidate.native-1.json",
+      "completed": true,
+      "schema_admitted": true,
+      "native_admitted": true,
+      "native_attribution": "unsupported_role",
+      "semantic_verdicts_correct": true,
+      "evidence_adequate": true,
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertainty": false,
+      "meaning_evidence": "Correctly distinguishes the notification obligation in comparison 1 member 1 from its absence in comparison 2 (opening hours only); cites source line 1 and the assigned local member IDs.",
+      "started_utc": "2026-10-10T09:29:28.729053+00:00",
+      "request_id": "b39d5dbf2fdc1d0259142bdbe4e36095",
+      "provider_request_id": "chatcmpl-aa1ac958-c014-4c78-b20c-cde99e12b259",
+      "stop": "stop",
+      "normalization": "removed_leading_brace_quote",
+      "input_tokens": 1237,
+      "output_tokens": 331,
+      "latency_ms": null,
+      "correct_attribution": true,
+      "run_id": "debugger-551fa90be8aa76cf1f6336b47b6ae0b1",
+      "provider_request_id_kind": "response body chat completion id; HTTP AWS request ID unavailable in debugger export",
+      "round_trip_ms": 1619,
+      "request_bytes": 6939,
+      "actual_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "expected_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "expected_attribution": "unsupported_role",
+      "native_report_result": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "role_assignment": "primary_user_story"
+          }
+        }
+      },
+      "parsed_response": {
+        "assessments": [
+          {
+            "comparison_id": 1,
+            "result": "preserved",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 1,
+                  "last": 1
+                }
+              }
+            ],
+            "members": [
+              1
+            ],
+            "explanation": "The complete collection of members in comparison 1 includes the required meaning \"MOCK After an appointment is cancelled, the service must notify the patient.\" which is the missing meaning in the target_purpose. The source span (chunk-1, line 1) directly supports this meaning, and the collection preserves the obligation and condition expressed in the source."
+          },
+          {
+            "comparison_id": 2,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 1,
+                  "last": 1
+                }
+              }
+            ],
+            "members": [
+              1
+            ],
+            "explanation": "Comparison 2’s sole member expresses only the meaning \"MOCK The service must display clinic opening hours.\" It lacks the required meaning about notifying the patient after cancellation. Therefore the missing meaning is not present in this collection, resulting in a lost assessment."
+          }
+        ]
+      },
+      "request_sha256": "4e92c68fa6e9c0fab49741c0286fec6accd12942f9abb3f67a5ab1862f26085d",
+      "response_sha256": "2df330206ef9f41dc2b968a9d011cbd925acb7538c0945a9aaf8c6fd30ff06f3"
+    },
+    {
+      "id": "captured-story-candidate-2",
+      "case": "captured-story",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/captured-story.presentation-candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-preservation/captured-story.presentation-candidate.native-2.json",
+      "completed": true,
+      "schema_admitted": true,
+      "native_admitted": true,
+      "native_attribution": "unresolved",
+      "semantic_verdicts_correct": false,
+      "evidence_adequate": false,
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertainty": true,
+      "meaning_evidence": "Both assigned collections contain the actor/action/condition/display obligation in member 2. The response nevertheless requires final-story narrative form, invents a confirming-startup result as necessary, and treats the absent standalone literal in comparison 2 as absent meaning. Native attribution safely remains unresolved, but the semantic judgments and explanations are incorrect.",
+      "started_utc": "2026-10-10T09:29:49.132683+00:00",
+      "request_id": "41663f365bdd242b53593a3161f8509c",
+      "provider_request_id": "chatcmpl-254b973f-136c-4f61-a3c9-4a166da46bed",
+      "stop": "stop",
+      "normalization": "removed_leading_brace_quote",
+      "input_tokens": 1727,
+      "output_tokens": 336,
+      "latency_ms": null,
+      "correct_attribution": false,
+      "run_id": "debugger-551fa90be8aa76cf1f6336b47b6ae0b1",
+      "provider_request_id_kind": "response body chat completion id; HTTP AWS request ID unavailable in debugger export",
+      "round_trip_ms": 1611,
+      "request_bytes": 9216,
+      "actual_verdicts": [
+        "lost",
+        "lost"
+      ],
+      "expected_verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "expected_attribution": "candidate",
+      "native_report_result": {
+        "admitted": true,
+        "attribution": {
+          "unresolved": {}
+        }
+      },
+      "parsed_response": {
+        "assessments": [
+          {
+            "comparison_id": 1,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "explanation": "The complete collection of meanings in comparison 1 includes the literal string \"Hello, World!\" but does not express the required narrative of the actor (the application), its action (displaying the greeting), and the intended result (confirming startup). The string alone does not convey the obligation or the context needed for the target purpose, so the missing meaning is not preserved."
+          },
+          {
+            "comparison_id": 2,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3
+            ],
+            "explanation": "Comparison 2 omits the literal string meaning that is necessary to convey the display requirement. Without that member, the narrative describing the system’s action and intended result cannot be fully expressed, so the missing meaning is lost."
+          }
+        ]
+      },
+      "request_sha256": "df0bc4a15e3f8fb974975822948c7b30a05445dea6650ecaf610a52149e3bfb2",
+      "response_sha256": "07d60f9de5c91cbbbb1a8088abd5d09d4e23ce01843fbf5539e98b489620673a"
+    },
+    {
+      "id": "captured-story-baseline-2",
+      "case": "captured-story",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/captured-story.presentation-baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-preservation/captured-story.presentation-baseline.native-2.json",
+      "completed": true,
+      "schema_admitted": true,
+      "native_admitted": true,
+      "native_attribution": "unsupported_role",
+      "semantic_verdicts_correct": false,
+      "evidence_adequate": false,
+      "false_upstream": true,
+      "false_candidate": false,
+      "unnecessary_uncertainty": false,
+      "meaning_evidence": "Comparison 2 member 2 explicitly requires displaying Hello, World!, just as source line 6 does. The response falsely says this meaning is absent because the standalone literal member is absent. Native admission accepts the references and derives unsupported story-role loss; no upstream role loss actually exists.",
+      "started_utc": "2026-10-10T09:30:09.664039+00:00",
+      "request_id": "788caabcbfebc9ec2470f77572413a90",
+      "provider_request_id": "chatcmpl-f69e0380-3ec3-4292-a99e-a07c940abba0",
+      "stop": "stop",
+      "normalization": "removed_leading_brace_quote",
+      "input_tokens": 1953,
+      "output_tokens": 290,
+      "latency_ms": null,
+      "correct_attribution": false,
+      "run_id": "debugger-551fa90be8aa76cf1f6336b47b6ae0b1",
+      "provider_request_id_kind": "response body chat completion id; HTTP AWS request ID unavailable in debugger export",
+      "round_trip_ms": 1458,
+      "request_bytes": 10299,
+      "actual_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "expected_verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "expected_attribution": "candidate",
+      "native_report_result": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "role_assignment": "primary_user_story"
+          }
+        }
+      },
+      "parsed_response": {
+        "assessments": [
+          {
+            "comparison_id": 1,
+            "result": "preserved",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "explanation": "The complete collection of members for comparison 1 includes the required meaning \"When started, the application must display `Hello, World!`\", which satisfies the missing display text requirement. The source lines 5‑7 explicitly state this obligation, and the member list preserves it."
+          },
+          {
+            "comparison_id": 2,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3
+            ],
+            "explanation": "Comparison 2’s member list omits the required meaning \"When started, the application must display `Hello, World!`\". The source lines 5‑7 contain this obligation, but it is not represented in the collection, so the missing meaning is not preserved."
+          }
+        ]
+      },
+      "request_sha256": "a34f5df19cad6b687c3210d2934b663900e2dde39845e9b3f1b5eaf389c60ddc",
+      "response_sha256": "f5fc2409dbe95b6bfd11cbd9aa743085909ee436af5d2a9211503106c069c13e"
+    },
+    {
+      "id": "loan-story-baseline-2",
+      "case": "loan-story",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/loan-story.presentation-baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-preservation/loan-story.presentation-baseline.native-2.json",
+      "completed": true,
+      "schema_admitted": true,
+      "native_admitted": true,
+      "native_attribution": "unsupported_role",
+      "semantic_verdicts_correct": false,
+      "evidence_adequate": false,
+      "false_upstream": true,
+      "false_candidate": false,
+      "unnecessary_uncertainty": false,
+      "meaning_evidence": "Comparison 2 member 2 explicitly requires displaying MOCK Renewed!, just as source line 6 does. The response falsely says this meaning is absent because the standalone literal member is absent. Native admission accepts the references and derives unsupported story-role loss; no upstream role loss actually exists.",
+      "started_utc": "2026-10-10T09:30:30.271316+00:00",
+      "request_id": "dde416523d9da11130db6acdc8905b0d",
+      "provider_request_id": "chatcmpl-9634edc4-7261-4989-ae28-f84b341a71f2",
+      "stop": "stop",
+      "normalization": "removed_leading_brace_quote",
+      "input_tokens": 1874,
+      "output_tokens": 320,
+      "latency_ms": null,
+      "correct_attribution": false,
+      "run_id": "debugger-551fa90be8aa76cf1f6336b47b6ae0b1",
+      "provider_request_id_kind": "response body chat completion id; HTTP AWS request ID unavailable in debugger export",
+      "round_trip_ms": 1543,
+      "request_bytes": 9425,
+      "actual_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "expected_verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "expected_attribution": "candidate",
+      "native_report_result": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "role_assignment": "primary_user_story"
+          }
+        }
+      },
+      "parsed_response": {
+        "assessments": [
+          {
+            "comparison_id": 1,
+            "result": "preserved",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "explanation": "The complete collection of requirements in comparison 1 includes the confirmation text meaning \"MOCK Renewed!\", which is the missing meaning required by the fixed_finding. The source lines 5‑7 provide the necessary context for all four meanings, so the missing meaning is preserved."
+          },
+          {
+            "comparison_id": 2,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3
+            ],
+            "explanation": "Comparison 2’s collection lacks the requirement meaning \"MOCK Renewed!\", which is the confirmation text that the fixed_finding indicates is missing. Therefore the missing meaning is lost in this comparison."
+          }
+        ]
+      },
+      "request_sha256": "3f6406a5188c9aef0aee6606a07b086b23121afaf5c54ff0202a6aab4fc8213f",
+      "response_sha256": "4e41438b6dcd57dabd0fbaf88ad54dbf13efdb499829299de72c6c8b8fa22334"
+    },
+    {
+      "id": "loan-story-candidate-2",
+      "case": "loan-story",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/loan-story.presentation-candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-preservation/loan-story.presentation-candidate.native-2.json",
+      "completed": true,
+      "schema_admitted": true,
+      "native_admitted": true,
+      "native_attribution": "unsupported_role",
+      "semantic_verdicts_correct": false,
+      "evidence_adequate": false,
+      "false_upstream": true,
+      "false_candidate": false,
+      "unnecessary_uncertainty": false,
+      "meaning_evidence": "Comparison 2 member 2 explicitly requires displaying MOCK Renewed!, just as source line 6 does. The response falsely says this meaning is absent because the standalone literal member is absent. Native admission accepts the references and derives unsupported story-role loss; no upstream role loss actually exists.",
+      "started_utc": "2026-10-10T09:30:50.540546+00:00",
+      "request_id": "0794a6c993f8a4e49f8093501ead3064",
+      "provider_request_id": "chatcmpl-c1fa16a0-7425-4863-b33b-f322be367489",
+      "stop": "stop",
+      "normalization": "removed_leading_brace_quote",
+      "input_tokens": 1597,
+      "output_tokens": 327,
+      "latency_ms": null,
+      "correct_attribution": false,
+      "run_id": "debugger-551fa90be8aa76cf1f6336b47b6ae0b1",
+      "provider_request_id_kind": "response body chat completion id; HTTP AWS request ID unavailable in debugger export",
+      "round_trip_ms": 1349,
+      "request_bytes": 8190,
+      "actual_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "expected_verdicts": [
+        "preserved",
+        "preserved"
+      ],
+      "expected_attribution": "candidate",
+      "native_report_result": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "role_assignment": "primary_user_story"
+          }
+        }
+      },
+      "parsed_response": {
+        "assessments": [
+          {
+            "comparison_id": 1,
+            "result": "preserved",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3,
+              4
+            ],
+            "explanation": "The complete collection of members in comparison 1 includes the required confirmation text meaning \"MOCK Renewed!\", which is the missing meaning needed to satisfy the target purpose. All conditions and obligations are represented, so the meaning is preserved."
+          },
+          {
+            "comparison_id": 2,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 5,
+                  "last": 7
+                }
+              }
+            ],
+            "members": [
+              1,
+              2,
+              3
+            ],
+            "explanation": "Comparison 2 lacks the member expressing the confirmation text meaning \"MOCK Renewed!\", which is the missing meaning required by the target purpose. Without this member the intended behavior is not fully expressed, so the meaning is lost."
+          }
+        ]
+      },
+      "request_sha256": "f67d275c4af9af2fac24b34a55a4428f9339ab208cd24698dd781a3c79d162d5",
+      "response_sha256": "cd26de352646a6d3da66e093f3d096e83387ccc41d8648edaf2003e8e812a00e"
+    },
+    {
+      "id": "wrong-role-story-candidate-2",
+      "case": "wrong-role-story",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.candidate.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-candidate.response-2.json",
+      "native_report": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-candidate.native-2.json",
+      "completed": true,
+      "schema_admitted": true,
+      "native_admitted": true,
+      "native_attribution": "unsupported_role",
+      "semantic_verdicts_correct": true,
+      "evidence_adequate": true,
+      "false_upstream": false,
+      "false_candidate": false,
+      "unnecessary_uncertainty": false,
+      "meaning_evidence": "Correctly distinguishes the notification obligation in comparison 1 member 1 from its absence in comparison 2 (opening hours only); cites source line 1 and the assigned local member IDs.",
+      "started_utc": "2026-10-10T09:31:10.919960+00:00",
+      "request_id": "9ae8b826b9040a7519037840e906cfd1",
+      "provider_request_id": "chatcmpl-68a3607e-fa61-463e-b655-a64ac7b2ca85",
+      "stop": "stop",
+      "normalization": "removed_leading_brace_quote",
+      "input_tokens": 1237,
+      "output_tokens": 321,
+      "latency_ms": null,
+      "correct_attribution": true,
+      "run_id": "debugger-551fa90be8aa76cf1f6336b47b6ae0b1",
+      "provider_request_id_kind": "response body chat completion id; HTTP AWS request ID unavailable in debugger export",
+      "round_trip_ms": 1404,
+      "request_bytes": 6939,
+      "actual_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "expected_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "expected_attribution": "unsupported_role",
+      "native_report_result": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "role_assignment": "primary_user_story"
+          }
+        }
+      },
+      "parsed_response": {
+        "assessments": [
+          {
+            "comparison_id": 1,
+            "result": "preserved",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 1,
+                  "last": 1
+                }
+              }
+            ],
+            "members": [
+              1
+            ],
+            "explanation": "The complete collection of members in comparison 1 includes the required meaning \"MOCK After an appointment is cancelled, the service must notify the patient.\" which is the missing meaning in the target_purpose. The source span (chunk-1, line 1) directly supports this meaning, and the member ID 1 is cited."
+          },
+          {
+            "comparison_id": 2,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 1,
+                  "last": 1
+                }
+              }
+            ],
+            "members": [
+              1
+            ],
+            "explanation": "Comparison 2’s sole member expresses only the meaning \"MOCK The service must display clinic opening hours.\" It does not contain the required meaning about notifying the patient after cancellation, so the missing meaning is absent in this collection."
+          }
+        ]
+      },
+      "request_sha256": "4e92c68fa6e9c0fab49741c0286fec6accd12942f9abb3f67a5ab1862f26085d",
+      "response_sha256": "111c311bc7dad5d18eb60453926a8b55487db1236cb97448b55f84fa2b85f5d0"
+    },
+    {
+      "id": "wrong-role-story-baseline-2",
+      "case": "wrong-role-story",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.baseline.edit.json",
+      "response_file": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-baseline.response-2.json",
+      "native_report": ".zig-cache/source-loss-preservation/wrong-role-story.presentation-baseline.native-2.json",
+      "completed": true,
+      "schema_admitted": true,
+      "native_admitted": true,
+      "native_attribution": "extraction_claim",
+      "semantic_verdicts_correct": false,
+      "evidence_adequate": false,
+      "false_upstream": true,
+      "false_candidate": false,
+      "unnecessary_uncertainty": false,
+      "meaning_evidence": "Comparison 1 member 1 expressly requires patient notification after cancellation. The explanation instead asks for the downstream allegation that the story omits notification, reverses the obligation, and falsely derives extraction loss. Comparison 2 genuinely lacks notification; its lost verdict does not rescue the first judgment.",
+      "started_utc": "2026-10-10T09:31:31.420450+00:00",
+      "request_id": "cf1c7e43406759d3167af466a97f0648",
+      "provider_request_id": "chatcmpl-856eff71-67ef-4a70-a2a7-a8fb919e7ca0",
+      "stop": "stop",
+      "normalization": "removed_leading_brace_quote",
+      "input_tokens": 1408,
+      "output_tokens": 345,
+      "latency_ms": null,
+      "correct_attribution": false,
+      "run_id": "debugger-551fa90be8aa76cf1f6336b47b6ae0b1",
+      "provider_request_id_kind": "response body chat completion id; HTTP AWS request ID unavailable in debugger export",
+      "round_trip_ms": 1694,
+      "request_bytes": 7787,
+      "actual_verdicts": [
+        "lost",
+        "lost"
+      ],
+      "expected_verdicts": [
+        "preserved",
+        "lost"
+      ],
+      "expected_attribution": "unsupported_role",
+      "native_report_result": {
+        "admitted": true,
+        "attribution": {
+          "established": {
+            "existing": {
+              "extraction_claim": {
+                "bytes": "chunk-1"
+              }
+            }
+          }
+        }
+      },
+      "parsed_response": {
+        "assessments": [
+          {
+            "comparison_id": 1,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 1,
+                  "last": 1
+                }
+              }
+            ],
+            "members": [
+              1
+            ],
+            "explanation": "The complete collection in comparison 1 contains the requirement that the service must notify the patient after a cancellation, but it does not express the missing meaning that the story omits this notification. The omission is not represented, so the missing meaning is lost."
+          },
+          {
+            "comparison_id": 2,
+            "result": "lost",
+            "sources": [
+              {
+                "chunk_id": {
+                  "bytes": "chunk-1"
+                },
+                "lines": {
+                  "first": 1,
+                  "last": 1
+                }
+              }
+            ],
+            "members": [
+              1
+            ],
+            "explanation": "Comparison 2 only includes the requirement about displaying clinic opening hours. It provides no information about notification after cancellation, so the missing meaning that the story omits this notification is absent and thus lost."
+          }
+        ]
+      },
+      "request_sha256": "a2b2b4a6cbcd802f9d75f70ea44a0844ee91debc7769b9f41d35b207989c84c4",
+      "response_sha256": "95139c33adc44111459481d4c150ba2725d503b67e67a0500c27b87e77cb5629"
+    }
+  ],
+  "manifest_sha256": "49a34540e0d650f01969abdefc476cd646454fee843ca7f75868e5761d52e991",
+  "physical_sends": 12,
+  "accounted_tokens": 23626,
+  "summary": {
+    "baseline": {
+      "trials": 6,
+      "completed": 6,
+      "schema_admitted": 6,
+      "native_admitted": 6,
+      "semantic_verdicts_correct": 1,
+      "correct_attribution": 1,
+      "evidence_adequate": 1,
+      "false_upstream": 5,
+      "false_candidate": 0,
+      "unnecessary_uncertainty": 0,
+      "input_tokens": 10470,
+      "output_tokens": 2030,
+      "request_bytes": 55022,
+      "round_trip_ms": 9288,
+      "median_round_trip_ms": 1556.0,
+      "normalizations": {
+        "removed_leading_brace_quote": 6
+      },
+      "case_correct": {
+        "captured-story": 1,
+        "loan-story": 0,
+        "wrong-role-story": 0
+      }
+    },
+    "candidate": {
+      "trials": 6,
+      "completed": 6,
+      "schema_admitted": 6,
+      "native_admitted": 6,
+      "semantic_verdicts_correct": 2,
+      "correct_attribution": 2,
+      "evidence_adequate": 2,
+      "false_upstream": 3,
+      "false_candidate": 0,
+      "unnecessary_uncertainty": 1,
+      "input_tokens": 9122,
+      "output_tokens": 2004,
+      "request_bytes": 48690,
+      "round_trip_ms": 9245,
+      "median_round_trip_ms": 1592.5,
+      "normalizations": {
+        "removed_leading_brace_quote": 6
+      },
+      "case_correct": {
+        "captured-story": 0,
+        "loan-story": 0,
+        "wrong-role-story": 2
+      }
+    }
+  },
+  "gates": {
+    "candidate_6_of_6_complete_schema_native_correct_adequate": false,
+    "no_false_upstream_or_candidate": false,
+    "both_genuine_role_loss_correct": true,
+    "strictly_more_correct_than_baseline": true,
+    "no_paired_case_regression": false
+  },
+  "gate_passed": false,
+  "production_promotion": "stopped; frozen gate failed",
+  "limitations": [
+    "Three development cases and two repetitions; no general reliability estimate.",
+    "Provider latency field unavailable; measured replay round trip excludes subsequent offline tests.",
+    "HTTP AWS request ID unavailable; returned chat-completion ID and internal call/run IDs retained.",
+    "Baseline/candidate order counterbalanced; provider seed/top-p absent and cache behavior uncontrolled."
+  ]
+}

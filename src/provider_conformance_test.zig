@@ -1071,7 +1071,7 @@ test "Bedrock capitalized messages preserve closed error classification for infe
     }
 }
 
-test "Bedrock inference serializes zero for every registered model and omits unsupported temperature" {
+test "Bedrock inference serializes 0.1 for every registered model and omits unsupported temperature" {
     const encoding = @import("adapters/provider/bedrock_request.zig");
     for (contracts.registry.entries) |contract| {
         for ([_]bool{ true, false }) |temperature_supported| {
@@ -1092,7 +1092,7 @@ test "Bedrock inference serializes zero for every registered model and omits uns
             var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = 32 }, false, null);
             defer parsed.deinit();
             if (temperature_supported) {
-                try std.testing.expectEqualStrings("0", parsed.value.object.get("temperature").?.number_string);
+                try std.testing.expectEqualStrings("0.1", parsed.value.object.get("temperature").?.number_string);
             } else try std.testing.expect(parsed.value.object.get("temperature") == null);
             const counted = try encoding.encode(std.testing.allocator, &fixture.base.request, .input_token_count);
             defer std.testing.allocator.free(counted);

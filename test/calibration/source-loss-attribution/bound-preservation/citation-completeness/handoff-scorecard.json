@@ -1,0 +1,2656 @@
+{
+  "status": "completed_semantic_handoff_gate_failed",
+  "date": "2026-10-11",
+  "manifest": {
+    "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/handoff.preparation.json",
+    "sha256": "f76bb58647d17a193650f34c675d1c10f07a9828326c9731cddb6edf4c4fd197",
+    "bytes": 34007
+  },
+  "execution": {
+    "path": "zig-out/source-loss-actual-review-comparison/run/results/execution.json",
+    "sha256": "7b822d04095dc3ae492fce1c4fffa0555a49f726adde1ab646f95c1c949bfb57",
+    "bytes": 88692
+  },
+  "settings": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "controls": {
+      "reasoning_effort": {
+        "present": true,
+        "value": "low"
+      },
+      "temperature": {
+        "present": true,
+        "value": 0
+      },
+      "max_completion_tokens": {
+        "present": true,
+        "value": 16384
+      },
+      "top_p": {
+        "present": false
+      },
+      "seed": {
+        "present": false
+      }
+    },
+    "response_mode": "native_schema"
+  },
+  "approval": {
+    "approved_maximum_physical_calls": 30,
+    "manifest_sha256": "f76bb58647d17a193650f34c675d1c10f07a9828326c9731cddb6edf4c4fd197",
+    "destination": {
+      "provider": "aws-bedrock",
+      "model": "openai.gpt-oss-20b-1:0",
+      "region": "ap-southeast-2"
+    },
+    "payload_scope": "synthetic/captured requirements, derived evidence, non-public project guidance and JSON schemas",
+    "user_approval": "Approve all 30 calls and these inputs to AWS Bedrock"
+  },
+  "prerequisite": {
+    "citation_manifest_sha256": "d206d8302fb71c4affa5bc0141304012be93df5409dd43cc7c6ea98d19f1b862",
+    "scorecard": {
+      "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/scorecard.json",
+      "sha256": "076cf9eda08c4f847b5bd11eb6c705351df04bda7b3bf6fefdc17570b6a98a0f",
+      "bytes": 247575
+    },
+    "results": {
+      "path": "test/calibration/source-loss-attribution/bound-preservation/citation-completeness/results.md",
+      "sha256": "5879366da2470278223b4a9fae7e0246543b7996a2793420ae4a94ed7e836da5",
+      "bytes": 6505
+    },
+    "execution_journal": {
+      "path": "zig-out/source-loss-citation-completeness-comparison/run/results/execution.json",
+      "sha256": "39029b1a3b17aa547d4d06cdbbe9e91c59482b74af4e68c51fa48aa55d058c5e",
+      "bytes": 161771
+    },
+    "candidate_quality_safety_gates_passed": true,
+    "assessment": "Root and independent reviewers assessed the completed76-call citation panel against its frozen gates: candidate38/38 complete relevant citations and correct verdicts,26/26 current-native admitted correct attributions, no safety/case regression; all approved physical exchanges retained. This binds the retained diagnostic qualification; it grants no source-review dispatch approval or semantic/E2E proof."
+  },
+  "assessment": {
+    "method": "Root plus two independent Codex subagents read all actual requests and responses. Unblinded model-assisted semantic assessment, not deterministic proof or independent human certification. Equivalent wording and faithful narrowing to a genuinely missing duty are accepted. No oracle obligations or source IDs were inserted into actual responses.",
+    "independent_records": [
+      {
+        "path": "zig-out/source-loss-actual-review-comparison/assessment-agent-a.json",
+        "sha256": "55d1ce8a942a7992a61b3dbca960775991863a306c1e7f877a1ed479390b95f3",
+        "bytes": 47583
+      },
+      {
+        "path": "zig-out/source-loss-actual-review-comparison/assessment-agent-b.json",
+        "sha256": "2dbbadc3a8baf7d437abef2d82806e0bdead8cda9e07939259b18b985bd94de8",
+        "bytes": 80612
+      }
+    ],
+    "disputes": [],
+    "limits": [
+      "One model/settings pair, two repetitions per assignment, mostly retained diagnostic regressions; not broad reliability or E2E evidence.",
+      "Current field descriptions and positive-evidence subset permission may leave semantic coverage ownership under-specified. This is a plausible contributing factor, not established model-internal causation.",
+      "The source-only and wrong-role scope ambiguity does not explain away definitive dropped-trigger and reverse-direction failures and does not change frozen acceptance gates."
+    ]
+  },
+  "origin_hash_semantics": "Retained native diagnostic receipt response_sha256 binds raw validation.model_text, not the HTTP provider body. Both model-text and provider-body hashes are retained independently. No accepted production execution origin is fabricated.",
+  "summary": {
+    "planned_physical_calls": 30,
+    "dispatched": 30,
+    "received": 30,
+    "json_schema_valid_after_existing_normalization": 30,
+    "native_mechanically_admitted": 30,
+    "omission_trials": 26,
+    "candidate_omission_kind_on_omission_trials": 19,
+    "faithful_missing_obligation_handoffs": 15,
+    "false_supported_on_omission_trials": 7,
+    "wrong_or_unfaithful_omission_targets": 4,
+    "finding_kind_correct": 21,
+    "supported_controls_correct": 2,
+    "supported_controls": 2,
+    "genuine_gap_controls_correct": 0,
+    "genuine_gap_controls": 2,
+    "false_omissions_on_controls": 2,
+    "actual_omission_assignments": 21,
+    "untrusted_assignments_from_false_gap_findings": 2,
+    "changed_admitted_obligation_or_source_ids": 0,
+    "assignments_from_actual_non_omission": 0,
+    "actual_non_omission_findings": 9,
+    "native_production_origins_fabricated": 0,
+    "downstream_loss_calls": 0,
+    "repairs": 0,
+    "e2e_runs": 0,
+    "input_tokens": 41072,
+    "output_tokens": 5080,
+    "actual_tokens": 46152,
+    "round_trip_ms_sum": 26898,
+    "provider_inference_latency_available": false
+  },
+  "frozen_criteria": {
+    "faithful_candidate_omission_obligations_required": 26,
+    "supported_controls_required": 2,
+    "genuine_gap_controls_required": 2,
+    "false_omissions_on_controls_allowed": 0,
+    "changed_admitted_obligation_or_source_selection_allowed": 0,
+    "loss_assignment_from_non_omission_allowed": 0,
+    "native_admission_and_schema_measured_separately": true,
+    "no_rejections_omitted_from_denominator": true,
+    "trigger_conditions_negation_strength_preserved": true
+  },
+  "gates": {
+    "faithful_obligations_26_of_26": false,
+    "supported_controls_2_of_2": true,
+    "genuine_gap_controls_2_of_2": false,
+    "zero_false_omissions_on_controls": false,
+    "unchanged_actual_admitted_values": true,
+    "no_assignment_from_actual_non_omission": true,
+    "semantic_acceptance": false,
+    "downstream_loss_or_e2e_qualified": false
+  },
+  "promotion": "Retain the qualified citation-purpose change. Stop the actual-review qualification chain: frozen semantic handoff gates failed. Derived packets are untrusted exports, not repair authorization. Review shared source-review purpose, direction and assigned coverage before separately approved further qualification.",
+  "trials": [
+    {
+      "trial_id": "captured-description-review-1",
+      "case": "captured-description",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "The reviewer identifies the incorrect display value, carries the literal greeting and startup trigger into a mandatory obligation, and selects its supporting original source. Its paraphrase upon startup is semantically equivalent; exact oracle wording is not required.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The supplied description claims that the application displays the JSON object {\"kind\":\"exact_copy\"} and outputs the current date and time in UTC. However, the source specifies that upon startup the application must display the literal string \"Hello, World!\" and must also output the current date and time in UTC. The description therefore omits the required display of \"Hello, World!\" and introduces an incorrect display value. This omission violates the source obligation that the application must display \"Hello, World!\".",
+        "missing_obligation": "The application must display the literal string \"Hello, World!\" upon startup."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "captured-description-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "f020a6f760d077fb264ef8fc924f0b3c",
+        "request_sha256": "048dee3167565bd34681d47341c781eec6f8f2e63ccea0939eec8c47fb0dc986",
+        "response_sha256": "dd44b6678ecb8f2d8cf9cb0ba875d516fac730e51e4170aacd452a9d931ef636"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-1.call.json",
+          "sha256": "1e380373802931c6b3ee9d5389c20604c904e674cd237fce48221577873ece03",
+          "bytes": 90074
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-1.request.json",
+          "sha256": "048dee3167565bd34681d47341c781eec6f8f2e63ccea0939eec8c47fb0dc986",
+          "bytes": 8853
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-1.response.json",
+          "sha256": "7f77be1a6bf2eff83b4d4de2bde4175a5be0c26ef0a46b83b27b233735e3c138",
+          "bytes": 1638
+        },
+        "raw_model_text_sha256": "dd44b6678ecb8f2d8cf9cb0ba875d516fac730e51e4170aacd452a9d931ef636",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-1.receipt.json",
+          "sha256": "af097832d4ff78cd3f3a70cf5f2ca6f3d8952501ee718f3fbabf8c2a5139935b",
+          "bytes": 4164
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-1.native.json",
+          "sha256": "f999dee864e9ad6420b74d2d4a0b9ccf4afab49ec7585da3cdda032830f1bb7a",
+          "bytes": 9500
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-1.derived-loss.edit.json",
+            "sha256": "fed1a38c189a642ba744c5e6827cb04f3724ef7116784d33c685d811eecf115d",
+            "bytes": 7906
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-1.derived-loss.request.json",
+            "sha256": "3c99dc8cde20843ee3a1304c2bd2f5bfce27c8cebd484df33c2e161c92df92d0",
+            "bytes": 9080
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1600,
+        "output_tokens": 240,
+        "round_trip_ms": 1187,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "loan-candidate-review-1",
+      "case": "loan-candidate",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "supported",
+      "classification_correct": false,
+      "faithful_missing_obligation": false,
+      "control_correct": null,
+      "explanation_adequate": false,
+      "assessment_rationale": "The candidate omits borrower eligibility and absence of reservation. The response repeats those conditions from the source while declaring the shorter candidate accurate; it does not establish that the conditions survived in the supplied subject. No missing_obligation is returned.",
+      "observed_response": {
+        "kind": "supported",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate description accurately reflects the source: it states that upon request the service renews a loan for seven days, matching the source’s requirement that the service must extend the due date by seven days when an eligible borrower requests renewal with no reservation."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": false,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": false,
+      "origin": {
+        "trial_id": "loan-candidate-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "5d3069496a6c2cbd59855a8713cb6ed6",
+        "request_sha256": "d9f0955f9ef378ffee6622e332aa765ee58c6049247e7e1614af97fd81c1f04a",
+        "response_sha256": "f6d3ee86b046abb46e445978da2b763e8d273619b93aee0b83c06ab1cda63b07"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/loan-candidate-review-1.call.json",
+          "sha256": "01487cd0bf26b559a782bd34a3e48e29c93847a979409f970a1c2594bdb3c651",
+          "bytes": 85734
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/loan-candidate-review-1.request.json",
+          "sha256": "d9f0955f9ef378ffee6622e332aa765ee58c6049247e7e1614af97fd81c1f04a",
+          "bytes": 7589
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/loan-candidate-review-1.response.json",
+          "sha256": "2a000abcef7e1d8885bffb1aaa2c1031bc51254e0905b1a0d348288e73a48adb",
+          "bytes": 998
+        },
+        "raw_model_text_sha256": "f6d3ee86b046abb46e445978da2b763e8d273619b93aee0b83c06ab1cda63b07",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/loan-candidate-review-1.receipt.json",
+          "sha256": "a201b3f64fa21a3a9b63c360c32db900272d85c510ce565eb76bc8259e093406",
+          "bytes": 2504
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/loan-candidate-review-1.native.json",
+          "sha256": "c1a3a33aa36396c3ae53ce79774bbfa8e496c2feb4e76822d2de293bcba199f6",
+          "bytes": 1110
+        },
+        "derived_loss_exports": []
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1259,
+        "output_tokens": 117,
+        "round_trip_ms": 845,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "extraction-inherited-review-1",
+      "case": "extraction-inherited",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "supported",
+      "classification_correct": false,
+      "faithful_missing_obligation": false,
+      "control_correct": null,
+      "explanation_adequate": false,
+      "assessment_rationale": "The reply checks the recording clause only and ignores the original pump shutdown/until-recovery requirement, absent from both extracted claims and the candidate description. It supplies no missing_obligation, so it cannot start the loss assessment required by the frozen case.",
+      "observed_response": {
+        "kind": "supported",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate description preserves the source meaning that the controller records each measurement, matching the source obligation that the controller must record each measurement."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": false,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": false,
+      "origin": {
+        "trial_id": "extraction-inherited-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "20d0eb79b7338d9b49b649dc3ccfd290",
+        "request_sha256": "e9ac3e43eab8e83924eb9ab5cd076bfa6bc23df7a871cc324cec50875c6946cf",
+        "response_sha256": "572b806e1cd1fdc7d22445250bd1a6cd2881702af1153be0acb4a33e6ceafe9c"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/extraction-inherited-review-1.call.json",
+          "sha256": "8d1c54602435f8d807639f79e6d4defe6f3671f826027516f32e01dfdcf1fc86",
+          "bytes": 86170
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/extraction-inherited-review-1.request.json",
+          "sha256": "e9ac3e43eab8e83924eb9ab5cd076bfa6bc23df7a871cc324cec50875c6946cf",
+          "bytes": 7876
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/extraction-inherited-review-1.response.json",
+          "sha256": "de05e7f1d80473a6fcd9ea72df68be0e5b607cdcf50e822431711b4692ee7fb6",
+          "bytes": 951
+        },
+        "raw_model_text_sha256": "572b806e1cd1fdc7d22445250bd1a6cd2881702af1153be0acb4a33e6ceafe9c",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/extraction-inherited-review-1.receipt.json",
+          "sha256": "cbe7e9cf41bb4e93b2dbc7fbae98a0485cc733dc8ec879dab78b1e6a7ea40687",
+          "bytes": 2695
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/extraction-inherited-review-1.native.json",
+          "sha256": "10924da833ea7da459a3a225dfcfe20f1abd604a4edd79b75e8f6b68ae07c2a2",
+          "bytes": 1014
+        },
+        "derived_loss_exports": []
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1327,
+        "output_tokens": 97,
+        "round_trip_ms": 734,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "fan-direct-signal-review-1",
+      "case": "fan-direct-signal",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "The reviewer correctly identifies the omitted operator-readiness condition and preserves both door closure and the permission restriction may restart only when readiness is confirmed. Dropping chamber from door is a contextual equivalent. It does not turn permission into a duty to restart.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The signal omits the requirement that the fan may restart only after the operator confirms readiness.",
+        "missing_obligation": "After the door closes, the fan may restart only when the operator confirms readiness."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "fan-direct-signal-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "8bbf24687426da487370454ee91dca6e",
+        "request_sha256": "e90e293bc9cd801784d683e53e8f271dee14f783ccbd0d420a8035dd1fa92fd4",
+        "response_sha256": "ff5636117a26b636d25478c8f8b385e2bbcbe4750f90d0548277f81332c2b547"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-1.call.json",
+          "sha256": "2f9bd81dca0ad4b9b585984c363bd4c01225afa278d433f13bdab9e9ca587724",
+          "bytes": 85652
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-1.request.json",
+          "sha256": "e90e293bc9cd801784d683e53e8f271dee14f783ccbd0d420a8035dd1fa92fd4",
+          "bytes": 7550
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-1.response.json",
+          "sha256": "ba031b56475c7e4f21f94e9c92445ab527edbfafd3bd44d8a1ad1289402d4ea5",
+          "bytes": 1090
+        },
+        "raw_model_text_sha256": "ff5636117a26b636d25478c8f8b385e2bbcbe4750f90d0548277f81332c2b547",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-1.receipt.json",
+          "sha256": "2b617953d5ce6225c39d7d848ae58171815ef0166d02afee7ea1af5cff64444d",
+          "bytes": 2408
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-1.native.json",
+          "sha256": "e99bcd14b081aca6d2dd8d85b4785cc266df85e45a3e7dd93cf0a1c0547f9d76",
+          "bytes": 4556
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-1.derived-loss.edit.json",
+            "sha256": "719848fc6383297a3268b343853bec8fbc2fa5b961d09c1496c937cfdf0494b4",
+            "bytes": 4890
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-1.derived-loss.request.json",
+            "sha256": "ba2154c03cc87bbbef6bcaab027703ddfca51f581c70997ee2f6dec189e989d2",
+            "bytes": 6062
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1259,
+        "output_tokens": 136,
+        "round_trip_ms": 785,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "joint-two-sources-review-1",
+      "case": "joint-two-sources",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "The reviewer correctly states that identity verification and payment confirmation are both necessary for parcel release, preserving the conjunctive restriction and selecting both original supporting sources.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1,
+          2
+        ],
+        "detail": "The candidate description omits the conditions required for parcel release that are present in the source material.",
+        "missing_obligation": "A parcel may be released only after the recipient identity is verified and payment confirmation is received."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "joint-two-sources-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "30836a1b3d7dd7d66f9bc3acdd59aa94",
+        "request_sha256": "17f5cde9e799d902f783aae4b3bc70c1c60cecc70e5004fe20a8c979fcb74a48",
+        "response_sha256": "f6a1cdacf1ee0d4a313708bec0a6cc6b7f96f0254edfa3174e61fe7a8666eff4"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-1.call.json",
+          "sha256": "5167c69df67c74ef6521b458cfc9c8ebb5447f24801779e3456cb0e925c65ee9",
+          "bytes": 86657
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-1.request.json",
+          "sha256": "17f5cde9e799d902f783aae4b3bc70c1c60cecc70e5004fe20a8c979fcb74a48",
+          "bytes": 7927
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-1.response.json",
+          "sha256": "1b4946431c8f5d708fd3c56bc5fef79dd0e1d05f4cbdff69a4e250dcdfbbd5e7",
+          "bytes": 1158
+        },
+        "raw_model_text_sha256": "f6a1cdacf1ee0d4a313708bec0a6cc6b7f96f0254edfa3174e61fe7a8666eff4",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-1.receipt.json",
+          "sha256": "25c0a54e28585320f5de3fa170d63bcf3ef05d4131aac63d4d06e5df011a77b7",
+          "bytes": 2800
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-1.native.json",
+          "sha256": "4ae7a690a607bf5baf682eff4164b612eaf3eddf7fe2fa3dd1a3a8ca84f5fdb3",
+          "bytes": 6716
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-1.derived-loss.edit.json",
+            "sha256": "980d02e34ee534cbba5257a9694212cfc9a6191fe2341c8512430b77eee8ec04",
+            "bytes": 5567
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-1.derived-loss.request.json",
+            "sha256": "3e6e98910d3453e72c5cf57eb35486a4ad32cb8fef5fea015956fa3f11c121b1",
+            "bytes": 6739
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1352,
+        "output_tokens": 142,
+        "round_trip_ms": 670,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "wrong-role-assignment-review-1",
+      "case": "wrong-role-assignment",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": false,
+      "control_correct": null,
+      "explanation_adequate": false,
+      "assessment_rationale": "The response targets opening-hours behavior already described by the candidate and alleges omission because its indicative description lacks the word must. It misses the genuinely absent cancellation-triggered notification requirement. Its emitted opening-hours requirement is source-grounded, but source-grounded wording alone does not make it an omitted obligation. Equivalent behavioral descriptions are allowed by the shared prompt.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate field states that the service displays the clinic opening hours, but it does not convey the obligation that the service must display them as required by the source.",
+        "missing_obligation": "The service must display the clinic opening hours."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "wrong-role-assignment-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "b59985cfd9015818a32b8fa70ea7c6d2",
+        "request_sha256": "9b29e6da859558e4ccbe20e6e41d335dab07e68b859e73e6c08d38db9bcc88de",
+        "response_sha256": "e4c0f3086d15d24892b9f6f3cded1daff7ac142e20f9c944b686e65c9b3f2b49"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-1.call.json",
+          "sha256": "2ecdf8e898cb83bdaa3a7be2d4cecb8e4a8725e8eff4bd3e4694adf240e82701",
+          "bytes": 86445
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-1.request.json",
+          "sha256": "9b29e6da859558e4ccbe20e6e41d335dab07e68b859e73e6c08d38db9bcc88de",
+          "bytes": 7878
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-1.response.json",
+          "sha256": "2ea11d5fed7596bec8d4e15934857974d186d5fb9f30f4c63a2abc2fe921facd",
+          "bytes": 1047
+        },
+        "raw_model_text_sha256": "e4c0f3086d15d24892b9f6f3cded1daff7ac142e20f9c944b686e65c9b3f2b49",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-1.receipt.json",
+          "sha256": "0b32a55c3f432884dd7b8d72fdf24a83f001ba41c66c98f1a3da37dad0cd4373",
+          "bytes": 2782
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-1.native.json",
+          "sha256": "b101df5b3eb49f8a9184a778e5770a46949ca7339ecaac7cd6a224b1606a880f",
+          "bytes": 6346
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-1.derived-loss.edit.json",
+            "sha256": "d099aa95bf799f7015378c077734646db0bd187a65e8a3bd1094fc71ce471c5d",
+            "bytes": 5660
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-1.derived-loss.request.json",
+            "sha256": "592b8e56d1fa90c158b8ea14eb9f19d8a4c8d1859f41c71f9755332ebd28baa6",
+            "bytes": 6834
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1331,
+        "output_tokens": 127,
+        "round_trip_ms": 801,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "unresolved-multiple-producers-review-1",
+      "case": "unresolved-multiple-producers",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "supported",
+      "classification_correct": false,
+      "faithful_missing_obligation": false,
+      "control_correct": null,
+      "explanation_adequate": false,
+      "assessment_rationale": "The subject only shows and records temperature; both eight-hour power-loss cooling and backup-cooling-failure alarm are absent. Original sources explicitly contain both, even though extracted claims omit them. Matching surviving clauses does not establish preservation of the assigned description.",
+      "observed_response": {
+        "kind": "supported",
+        "source_ids": [
+          1,
+          2
+        ],
+        "detail": "The description correctly reflects both source statements: the cabinet must show its temperature (source 1) and must record each temperature measurement (source 2)."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": false,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": false,
+      "origin": {
+        "trial_id": "unresolved-multiple-producers-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "9784add6acb81819ce52c425be9d59e8",
+        "request_sha256": "7a089b5211a294399acb882f3d667f08d89a2ad07714e220e3de7add16ebab8e",
+        "response_sha256": "15496c284be9c2d8d3f8969415b15fa390801c785d3fa9429aa563a173a546a2"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/unresolved-multiple-producers-review-1.call.json",
+          "sha256": "6d960760f90ff9d211875d64e42bbdd6ec5f4d3ff3ad76e6968f4437f8de93fb",
+          "bytes": 86346
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/unresolved-multiple-producers-review-1.request.json",
+          "sha256": "7a089b5211a294399acb882f3d667f08d89a2ad07714e220e3de7add16ebab8e",
+          "bytes": 7969
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/unresolved-multiple-producers-review-1.response.json",
+          "sha256": "53e582f0f7d55b244933bb1b040308cb37ebba30e2cb2d96c516133c21d9b2bc",
+          "bytes": 959
+        },
+        "raw_model_text_sha256": "15496c284be9c2d8d3f8969415b15fa390801c785d3fa9429aa563a173a546a2",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/unresolved-multiple-producers-review-1.receipt.json",
+          "sha256": "79e65347f7c9ffa3e9815cdcc66a11022fe1e81fef59618933bbb81e53428479",
+          "bytes": 2762
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/unresolved-multiple-producers-review-1.native.json",
+          "sha256": "fce2fa69722ac20e03a40361b05e13200f6cf4d505e7db3d092cc18224b724db",
+          "bytes": 1038
+        },
+        "derived_loss_exports": []
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1363,
+        "output_tokens": 112,
+        "round_trip_ms": 793,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "parking-candidate-review-1",
+      "case": "parking-candidate",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "Attempting payment does not preserve settled-payment prerequisite or failed-payment active-session rule. The actual missing obligation identifies both clauses with correct condition and strength; selected source 1 fully supports them.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate description states that a driver ends a parking session by attempting payment, but it does not convey that the session can only be ended after the payment has successfully settled. The source explicitly requires that a driver may end a parking session only after payment settles, and that a failed payment must leave the session active. This omission removes a critical obligation from the description.",
+        "missing_obligation": "A driver may end a parking session only after payment settles; a failed payment must leave the session active."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "parking-candidate-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "ef1afa227ca8e1b626faa2f0ad39ed48",
+        "request_sha256": "2b1c38e92718623c831cbae73d9dfa27908aaad4376230df5bf99308d865ed6a",
+        "response_sha256": "2b6a2e05407aad22f184a226f2a889d0f2d148d23bc73d9a36750449986cc10e"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-1.call.json",
+          "sha256": "56089554349c30d79c2d2afa90cb0b916dff6b5eb0fdf6862e5eee0ca3a38b38",
+          "bytes": 86674
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-1.request.json",
+          "sha256": "2b1c38e92718623c831cbae73d9dfa27908aaad4376230df5bf99308d865ed6a",
+          "bytes": 7545
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-1.response.json",
+          "sha256": "60ffef984ff1469736a49aa77ca1cf332851405c38bc233f11bfdad5adb87e80",
+          "bytes": 1454
+        },
+        "raw_model_text_sha256": "2b6a2e05407aad22f184a226f2a889d0f2d148d23bc73d9a36750449986cc10e",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-1.receipt.json",
+          "sha256": "af79d776a7d729661fe2286e6342b3d613e91df20b37c5aa32362063df54f8f5",
+          "bytes": 2743
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-1.native.json",
+          "sha256": "c7d3ca2814ca70ad2882594da76a364e938d407f962c221c3b7af2050a8f48a9",
+          "bytes": 5845
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-1.derived-loss.edit.json",
+            "sha256": "d6bca3a37df7b94e6779609d789e3371d0d1691d9cc4ddcabe8f09e8473dabc0",
+            "bytes": 5372
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-1.derived-loss.request.json",
+            "sha256": "86ee4f21992ced70d33b80c1d77ac8defa8588d5dbbce2a5ef3822964efee48e",
+            "bytes": 6544
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1247,
+        "output_tokens": 197,
+        "round_trip_ms": 842,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "captured-story-review-1",
+      "case": "captured-story",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "The standalone leading greeting and undefined kindexact_copy do not express correct startup-triggered display. The actual obligation correctly states must-display the exact greeting when started and cites its source.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate field omits the obligation that the application must display the exact string \"Hello, World!\" as specified in the source. The subject text instead references an undefined token \"kindexact_copy\", thereby failing to preserve the required display content.",
+        "missing_obligation": "The application must display the exact string \"Hello, World!\" when started."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "captured-story-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "194b6296b5df61ceadc3ea1bc7e5507e",
+        "request_sha256": "3b196fbf10f1a9e7564ea89fbaf8fd3c679fda4a5d1992663508376ea9e7f133",
+        "response_sha256": "d6751cf34192697b9ba7a8ec07b86ce35d974ebccea1caded9a636df28300237"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-1.call.json",
+          "sha256": "d7b17ed99a732c1eeceed2442f42128854770b382acad382ca0f8c142c228970",
+          "bytes": 90086
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-1.request.json",
+          "sha256": "3b196fbf10f1a9e7564ea89fbaf8fd3c679fda4a5d1992663508376ea9e7f133",
+          "bytes": 9038
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-1.response.json",
+          "sha256": "eeb549a443c74c06583b483437c0cbf2d9edf98d63eea9e8076945669f353616",
+          "bytes": 1858
+        },
+        "raw_model_text_sha256": "d6751cf34192697b9ba7a8ec07b86ce35d974ebccea1caded9a636df28300237",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-1.receipt.json",
+          "sha256": "a98ff276cf006f2ff4d71f98e093d83fca32a0eef89ec0839bef0777fc2c97f4",
+          "bytes": 4066
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-1.native.json",
+          "sha256": "ef6ed07e4c06081b2158e5997d0ba43ca95ad696a1a07b322500235f00e99c65",
+          "bytes": 11510
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-1.derived-loss.edit.json",
+            "sha256": "ba15c9bb4ef027d65ad0bfcb2a1324b6c445bc09f50541c39540355e933ff08a",
+            "bytes": 9261
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-1.derived-loss.request.json",
+            "sha256": "2301ccc647ab4ac7a03ac19f7876e6a519d4c1f4ddc4c8cdc8dbe4f83ed80bd1",
+            "bytes": 10435
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1642,
+        "output_tokens": 298,
+        "round_trip_ms": 1505,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "sterile-door-review-1",
+      "case": "sterile-door",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "Permitting unlock at any time violates no unlocking while pressurized. Must stay locked while pressurized is an acceptable equivalent preserving condition, negation and duty; dropping the MOCK marker does not change behavior.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate description states that the access door may unlock at any time, which conflicts with the source requirement that the door must remain locked while the sterilizer is pressurized. The source explicitly states that the door must not unlock during pressurization, a requirement that is omitted in the candidate description.",
+        "missing_obligation": "While the sterilizer is pressurized, its access door must stay locked."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "sterile-door-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "ee86496586a8b824ff7588605a8aee50",
+        "request_sha256": "ab030c2650ad50bb7360da4abfffbc6d2c7dd22bfcaf36b1722bd7094cade6e6",
+        "response_sha256": "e33596b891ed73569c822f7373ba10a18d3c1b69c679c9b34974d3d48df56bc6"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-1.call.json",
+          "sha256": "f33bc707c458abe472778adaf78ce68674e83d5e89d5b6e527bb4c0d04facda8",
+          "bytes": 85985
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-1.request.json",
+          "sha256": "ab030c2650ad50bb7360da4abfffbc6d2c7dd22bfcaf36b1722bd7094cade6e6",
+          "bytes": 7432
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-1.response.json",
+          "sha256": "11853b1ee28d350cf664b54c06a01c4608cd7862f00214854e7c43326a694260",
+          "bytes": 1235
+        },
+        "raw_model_text_sha256": "e33596b891ed73569c822f7373ba10a18d3c1b69c679c9b34974d3d48df56bc6",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-1.receipt.json",
+          "sha256": "60012db457a5211a250f2a984c7d8a85719b99906a57b51f263cd260ae4035d8",
+          "bytes": 2502
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-1.native.json",
+          "sha256": "7551c0dfb876022bb763cbfe7e2d0da58f73a4d1c392929fd5211643cdc58aac",
+          "bytes": 5393
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-1.derived-loss.edit.json",
+            "sha256": "c1b89ec80712a8180256c3970eb659855450f74429d659f908778ff030fb7065",
+            "bytes": 5023
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-1.derived-loss.request.json",
+            "sha256": "f55f47363533e5d57b4113728d39eeb4362fa1d5aeb177fa87d049faf3023f42",
+            "bytes": 6195
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1235,
+        "output_tokens": 166,
+        "round_trip_ms": 706,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "voucher-release-review-1",
+      "case": "voucher-release",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "The candidate already expresses cleared payment. Identifying only missing manager approval, supported by source 1 alone, is faithful narrowing; it need not repeat the earlier fixed conjunction or select already-preserved payment source 2.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate description omits the requirement that a manager must approve the voucher release, which is explicitly stated in source 1.",
+        "missing_obligation": "MOCK Voucher release requires manager approval."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "voucher-release-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "d9920d39a8340d9b97ed1a3d87ab46ce",
+        "request_sha256": "7b3871eef399462d5164814626347980adbd636d797c14b19ca1ee2a534ad818",
+        "response_sha256": "c2fd800fda1af1472bf4ae016805e0818943790ceed8d61a67e851045c1df62c"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-1.call.json",
+          "sha256": "9b3f3cd711f7c2dbb1989c47f803a5ae3718026e01eda13c498ddb30583c788a",
+          "bytes": 86444
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-1.request.json",
+          "sha256": "7b3871eef399462d5164814626347980adbd636d797c14b19ca1ee2a534ad818",
+          "bytes": 7858
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-1.response.json",
+          "sha256": "c8e27c3e02bf67239e45bf17b2ba7d4e19afd100c445b35b03238ced6b247206",
+          "bytes": 1178
+        },
+        "raw_model_text_sha256": "c2fd800fda1af1472bf4ae016805e0818943790ceed8d61a67e851045c1df62c",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-1.receipt.json",
+          "sha256": "7a70ee565a4cb01a0bf6dc93947f6a97571865da5f611c0125905ee8c4ac982e",
+          "bytes": 2687
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-1.native.json",
+          "sha256": "e5a2bcfa4f076859d8690093d7cc75510b174c4c1bbbecab02ece32bdca58e78",
+          "bytes": 6693
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-1.derived-loss.edit.json",
+            "sha256": "20d64e2d82581c71448de5d42aaa756b4744542d47aabaed91892424182c3d32",
+            "bytes": 5197
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-1.derived-loss.request.json",
+            "sha256": "1c176a1b569aa7253381e59c1b125ac4e7fabc7e7372c7b815af8e10a51acb10",
+            "bytes": 6371
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1341,
+        "output_tokens": 153,
+        "round_trip_ms": 988,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "dual-ready-review-1",
+      "case": "dual-ready",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "supported",
+      "classification_correct": false,
+      "faithful_missing_obligation": false,
+      "control_correct": null,
+      "explanation_adequate": false,
+      "assessment_rationale": "Payment-triggered display to payer is present, but inspection-triggered display to inspector is missing. Matching identical Ready text and payment behavior from source 1 cannot support the whole description against both assigned source obligations.",
+      "observed_response": {
+        "kind": "supported",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate description \"MOCK After successful payment, show MOCK Ready to the payer.\" matches the source 1 statement \"MOCK After payment succeeds, show `MOCK Ready` to the payer.\" and preserves the meaning, obligation, and role of showing the ready message to the payer after a successful payment. No source meaning is omitted or misrepresented."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": false,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": false,
+      "origin": {
+        "trial_id": "dual-ready-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "207a1a862e26942c45b397ec6c4149eb",
+        "request_sha256": "20493953b74bbda6d3859df7cd3d862028628bb2ad91ac71fe72753fa87f8a7d",
+        "response_sha256": "3bd356cbdc4ce722c1884469e8d5cd5976b1df2fdb97c7479916a337ca2a7c65"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/dual-ready-review-1.call.json",
+          "sha256": "28e62f6c30f9ed782b405b51816a054a65f06f7232740777cb9c34c242e32038",
+          "bytes": 89197
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/dual-ready-review-1.request.json",
+          "sha256": "20493953b74bbda6d3859df7cd3d862028628bb2ad91ac71fe72753fa87f8a7d",
+          "bytes": 8839
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/dual-ready-review-1.response.json",
+          "sha256": "df62debb27ac1a4db9c78fcfe492794a23f8d796174b425b2fb48d5f81acdae8",
+          "bytes": 1441
+        },
+        "raw_model_text_sha256": "3bd356cbdc4ce722c1884469e8d5cd5976b1df2fdb97c7479916a337ca2a7c65",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/dual-ready-review-1.receipt.json",
+          "sha256": "916e07889b10778b8bc731d652dee40ede984c3930abeed5838b7c97f3a1cba4",
+          "bytes": 3803
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/dual-ready-review-1.native.json",
+          "sha256": "0a827678aee76ae5cc524581fa47098d75dc2bcb1151f5d4858cbdce406db134",
+          "bytes": 1189
+        },
+        "derived_loss_exports": []
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1629,
+        "output_tokens": 216,
+        "round_trip_ms": 1186,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "smoke-exit-compound-review-1",
+      "case": "smoke-exit-compound",
+      "repetition": 1,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "Actual obligation correctly preserves alarm on smoke detection and unlocked exit while smoke persists. Both are supported by source 1; calibration logging source 2 is irrelevant to this omission. Noticing unsupported display in detail does not invalidate the faithfully stated actual missing obligations.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The supplied description states that the controller displays the smoke reading, but the source text does not mention any display behavior. The source explicitly requires that when smoke is detected the controller must sound the alarm, and while smoke persists it must keep the exit door unlocked. These obligations are not reflected in the candidate field.",
+        "missing_obligation": "When smoke is detected, the controller must sound the alarm. While smoke persists, the controller must keep the exit door unlocked."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "smoke-exit-compound-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "77a72addea84780b4f38843f102b330d",
+        "request_sha256": "1a5b3ab6b6732f3a9d82867733b5c73a705e52804c577ac1617fc94eebe62670",
+        "response_sha256": "cbe570840001280ffc593f58b4846ee84ad83f8558b8ab5b26255627427bc7fa"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-1.call.json",
+          "sha256": "93098e4b40e2e52db7a1a33174bee4d1e00d968b3f951275ace08a99ad9e4d9d",
+          "bytes": 89074
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-1.request.json",
+          "sha256": "1a5b3ab6b6732f3a9d82867733b5c73a705e52804c577ac1617fc94eebe62670",
+          "bytes": 8451
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-1.response.json",
+          "sha256": "6eb7e741e22f9034e4edc9e5d0196e8c30869854632b9157c67a40907da28489",
+          "bytes": 1894
+        },
+        "raw_model_text_sha256": "cbe570840001280ffc593f58b4846ee84ad83f8558b8ab5b26255627427bc7fa",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-1.receipt.json",
+          "sha256": "53a94e3d604920076c7a7a909e077d932c7e90f494029085fa662ad7401f2d1e",
+          "bytes": 3588
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-1.native.json",
+          "sha256": "ab27128503cd1d80bde5f7e5cd811d49cbf80a1a143385038d31e512fae7c6c3",
+          "bytes": 8137
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-1.derived-loss.edit.json",
+            "sha256": "2915506997968bd7f060593cbd0e17a45e15243fbf26194745c9570b04e7478c",
+            "bytes": 6162
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-1.derived-loss.request.json",
+            "sha256": "e98207fd5cd1f59988b6b699b0adbafd2dd8468183e27dd5af02074907b85d54",
+            "bytes": 7334
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1485,
+        "output_tokens": 286,
+        "round_trip_ms": 1323,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "handoff-supported-review-1",
+      "case": "handoff-supported",
+      "repetition": 1,
+      "expected_kind": "supported",
+      "observed_kind": "supported",
+      "classification_correct": true,
+      "faithful_missing_obligation": null,
+      "control_correct": true,
+      "explanation_adequate": true,
+      "assessment_rationale": "Candidate exactly preserves maintenance-triggered must-keep-locked requirement; supported is correct with source 1 and no obligation or loss assignment.",
+      "observed_response": {
+        "kind": "supported",
+        "source_ids": [
+          1
+        ],
+        "detail": "The source statement \"During maintenance, the access controller must keep the door locked.\" directly supports the candidate field description, preserving meaning, obligation, and role."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": false,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": false,
+      "origin": {
+        "trial_id": "handoff-supported-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "57d173c09fc716acc796c865035dcb33",
+        "request_sha256": "5ae198e9d6f2b27a047204fcb137319c367dd73a2d83d2e83dd5c7d93693bcb1",
+        "response_sha256": "17172ca935342f5ab8e9b6a5121dbce5c0f749f8cb77b426436e629caeabc348"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-supported-review-1.call.json",
+          "sha256": "b127939ebc6e61c9da2d5679e1a1ffe52370c7335c5b656fd76a0627495db2a2",
+          "bytes": 85053
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-supported-review-1.request.json",
+          "sha256": "5ae198e9d6f2b27a047204fcb137319c367dd73a2d83d2e83dd5c7d93693bcb1",
+          "bytes": 7432
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-supported-review-1.response.json",
+          "sha256": "709f336876ccb377529ba9961e99ce30c732be098dfdbbc197d18d6ed3790c1f",
+          "bytes": 816
+        },
+        "raw_model_text_sha256": "17172ca935342f5ab8e9b6a5121dbce5c0f749f8cb77b426436e629caeabc348",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-supported-review-1.receipt.json",
+          "sha256": "4d790c14fc2e07adbadf5e91f07a599ae6190436c4b20a1c3beb05835d8a0f22",
+          "bytes": 2257
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-supported-review-1.native.json",
+          "sha256": "bdc39daa9f002fcc99328e4cf1882fee298302eb89de36f0256c4642fd1ac5fc",
+          "bytes": 1016
+        },
+        "derived_loss_exports": []
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1222,
+        "output_tokens": 81,
+        "round_trip_ms": 591,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "handoff-source-gap-review-1",
+      "case": "handoff-source-gap",
+      "repetition": 1,
+      "expected_kind": "unsupported",
+      "observed_kind": "candidate_omission",
+      "classification_correct": false,
+      "faithful_missing_obligation": null,
+      "control_correct": false,
+      "explanation_adequate": false,
+      "assessment_rationale": "Source explicitly leaves release policy unselected. The candidate automatic unlock is unsupported; no source must-unlock duty exists. The reviewer nevertheless emits candidate_omission and promotes invented candidate behavior to a must obligation rather than requiring the missing release-policy decision.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The supplied description includes a post‑maintenance unlock behavior that is not present in the source. The source only specifies that the door must remain locked during maintenance and does not state what happens after maintenance.",
+        "missing_obligation": "After maintenance, the access controller must automatically unlock the door."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "handoff-source-gap-review-1",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "2cfe342a768f5f7aa672009efbc6c5dd",
+        "request_sha256": "ddcac3fd000a497587190e45adeb6b92d38453472941d5b06b7754aec13e04d6",
+        "response_sha256": "69a1cd4bbd8f858c94c6cd26304853edcb39e9731665b5bcf67f96deae8df230"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-1.call.json",
+          "sha256": "6695e72107acfbc33938586f6e10486bb9db19937d163415925bebb21adbbfbd",
+          "bytes": 85859
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-1.request.json",
+          "sha256": "ddcac3fd000a497587190e45adeb6b92d38453472941d5b06b7754aec13e04d6",
+          "bytes": 7552
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-1.response.json",
+          "sha256": "c2205c6bb0c6af0a521d1bff7e2c11944d2216d76533487bf31b22f5b02a2777",
+          "bytes": 1057
+        },
+        "raw_model_text_sha256": "69a1cd4bbd8f858c94c6cd26304853edcb39e9731665b5bcf67f96deae8df230",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-1.receipt.json",
+          "sha256": "abbc1b5edcfd6496c5a0696669cb1a9f9d00247e4d8fefaa68198cc845fa2e08",
+          "bytes": 2535
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-1.native.json",
+          "sha256": "c47ef0cf6895509ca6521e0ada981a8144f8196d59084d9f2f3352d9e32fd481",
+          "bytes": 5568
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-1.derived-loss.edit.json",
+            "sha256": "1ba045574fcdfc39ceafb87e4e372bd2a2b3fbe0fc3714d33deb6d7bb4f15fbd",
+            "bytes": 5267
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-1.derived-loss.request.json",
+            "sha256": "6b4de6258ec60e19770ff35d54379e89dd3f47a47714ae3a8b8b7bf1d3909a3c",
+            "bytes": 6439
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1244,
+        "output_tokens": 121,
+        "round_trip_ms": 909,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "captured-description-review-2",
+      "case": "captured-description",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "The reviewer identifies the incorrect display value, carries the literal greeting and startup trigger into a mandatory obligation, and selects its supporting original source. Its paraphrase upon startup is semantically equivalent; exact oracle wording is not required.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The supplied description claims that the application displays the JSON object {\"kind\":\"exact_copy\"} and outputs the current date and time in UTC. However, the source specifies that upon startup the application must display the literal string \"Hello, World!\" and must also output the current date and time in UTC. The description therefore omits the required display of \"Hello, World!\" and introduces an incorrect display value. This omission violates the source obligation that the application must display \"Hello, World!\".",
+        "missing_obligation": "The application must display the literal string \"Hello, World!\" upon startup."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "captured-description-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "23f5d383b46166d57043876e39df15b2",
+        "request_sha256": "048dee3167565bd34681d47341c781eec6f8f2e63ccea0939eec8c47fb0dc986",
+        "response_sha256": "dd44b6678ecb8f2d8cf9cb0ba875d516fac730e51e4170aacd452a9d931ef636"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-2.call.json",
+          "sha256": "b377700b7991c1e92fc9b5501e1e40eac36dd39ec0c115b61e3414048ed7e953",
+          "bytes": 90076
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-2.request.json",
+          "sha256": "048dee3167565bd34681d47341c781eec6f8f2e63ccea0939eec8c47fb0dc986",
+          "bytes": 8853
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-2.response.json",
+          "sha256": "d2c7e912fae70c5f324886742002c0960f1cff8eb5bf4396352e811df44cd6d1",
+          "bytes": 1638
+        },
+        "raw_model_text_sha256": "dd44b6678ecb8f2d8cf9cb0ba875d516fac730e51e4170aacd452a9d931ef636",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-2.receipt.json",
+          "sha256": "dce90ec17b7f5b645be2e1b95d85a78223306cfce84c845aed624341be438856",
+          "bytes": 4164
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-2.native.json",
+          "sha256": "8f6b7a1695d3841f39b8b4ae2ed9ade009fe04aec7ce9b05fb2af9da73146895",
+          "bytes": 9500
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-2.derived-loss.edit.json",
+            "sha256": "fed1a38c189a642ba744c5e6827cb04f3724ef7116784d33c685d811eecf115d",
+            "bytes": 7906
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-description-review-2.derived-loss.request.json",
+            "sha256": "3c99dc8cde20843ee3a1304c2bd2f5bfce27c8cebd484df33c2e161c92df92d0",
+            "bytes": 9080
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1600,
+        "output_tokens": 240,
+        "round_trip_ms": 1233,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "loan-candidate-review-2",
+      "case": "loan-candidate",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "The reviewer identifies absent eligibility/no-reservation conditions and carries the entire conditional mandatory seven-day due-date extension unchanged in meaning. It introduces no unsupported only-if prohibition.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate description omits the conditions that the borrower must be eligible and that the loan has no reservation, which are required by the source.",
+        "missing_obligation": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "loan-candidate-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "f8d60f480c6b42ff4d469efdc084df50",
+        "request_sha256": "d9f0955f9ef378ffee6622e332aa765ee58c6049247e7e1614af97fd81c1f04a",
+        "response_sha256": "e2c0444d2432c1479ce462240441c086c896aac1833a0e129cfe325d6158fab5"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/loan-candidate-review-2.call.json",
+          "sha256": "aab7ce8bbb4e24ef205c21b65b2fd6bca2e63c7eafc0507aaead35eec05b1113",
+          "bytes": 86202
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/loan-candidate-review-2.request.json",
+          "sha256": "d9f0955f9ef378ffee6622e332aa765ee58c6049247e7e1614af97fd81c1f04a",
+          "bytes": 7589
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/loan-candidate-review-2.response.json",
+          "sha256": "afb7da8ca903a279d874c222243a296ac7cb2179de0232f672875d944d51e6ec",
+          "bytes": 1372
+        },
+        "raw_model_text_sha256": "e2c0444d2432c1479ce462240441c086c896aac1833a0e129cfe325d6158fab5",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/loan-candidate-review-2.receipt.json",
+          "sha256": "98253b05398e2cbbf2bd3753aeafb3549a32eb126afd21f28d071a5819eb6a8f",
+          "bytes": 2536
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/loan-candidate-review-2.native.json",
+          "sha256": "795604280b77c3729baebd12bde26ef0757ee45e9ab890ed508c2eea1d28df3b",
+          "bytes": 5418
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/loan-candidate-review-2.derived-loss.edit.json",
+            "sha256": "63e4fdca21303ffadadc9635e292738310f18017989f0aa0ceeeca1f165671bc",
+            "bytes": 5210
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/loan-candidate-review-2.derived-loss.request.json",
+            "sha256": "b9945b1f01d05d07eecb0ed00c42a103d1535d1fd550cd70800d4d9455b5b4ef",
+            "bytes": 6382
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1259,
+        "output_tokens": 194,
+        "round_trip_ms": 736,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "extraction-inherited-review-2",
+      "case": "extraction-inherited",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "supported",
+      "classification_correct": false,
+      "faithful_missing_obligation": false,
+      "control_correct": null,
+      "explanation_adequate": false,
+      "assessment_rationale": "The reply again checks the recording clause only and ignores the original pump shutdown/until-recovery requirement, absent from both extracted claims and the candidate description. It supplies no missing_obligation, so it cannot start the loss assessment required by the frozen case.",
+      "observed_response": {
+        "kind": "supported",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate description preserves the source meaning that the controller records each measurement, matching the source obligation that the controller must record each measurement."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": false,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": false,
+      "origin": {
+        "trial_id": "extraction-inherited-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "20f93e8ec035447874b10286a2b89294",
+        "request_sha256": "e9ac3e43eab8e83924eb9ab5cd076bfa6bc23df7a871cc324cec50875c6946cf",
+        "response_sha256": "572b806e1cd1fdc7d22445250bd1a6cd2881702af1153be0acb4a33e6ceafe9c"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/extraction-inherited-review-2.call.json",
+          "sha256": "6a17ee622436f66813b1dd932d9e08f63dba455b068ccca87e9be6da70ec7a31",
+          "bytes": 86172
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/extraction-inherited-review-2.request.json",
+          "sha256": "e9ac3e43eab8e83924eb9ab5cd076bfa6bc23df7a871cc324cec50875c6946cf",
+          "bytes": 7876
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/extraction-inherited-review-2.response.json",
+          "sha256": "993c7fb5d7444527c6cefd60eca92631cf3aa828a0df8036ca72481134bf8b97",
+          "bytes": 951
+        },
+        "raw_model_text_sha256": "572b806e1cd1fdc7d22445250bd1a6cd2881702af1153be0acb4a33e6ceafe9c",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/extraction-inherited-review-2.receipt.json",
+          "sha256": "f2407125edf908e42bf28f8cb4196873cc33d8608b582c06d1954710c286bb2f",
+          "bytes": 2695
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/extraction-inherited-review-2.native.json",
+          "sha256": "06a9dc2d84393a748b3ba3d470ec976a6e7b9a60d1eda16892e0eba64b0831d8",
+          "bytes": 1014
+        },
+        "derived_loss_exports": []
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1327,
+        "output_tokens": 97,
+        "round_trip_ms": 760,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "fan-direct-signal-review-2",
+      "case": "fan-direct-signal",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "The reviewer correctly identifies the omitted operator-readiness condition and preserves both door closure and the permission restriction may restart only when readiness is confirmed. Dropping chamber from door is a contextual equivalent. It does not turn permission into a duty to restart.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The signal omits the requirement that the fan may restart only after the operator confirms readiness.",
+        "missing_obligation": "After the door closes, the fan may restart only when the operator confirms readiness."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "fan-direct-signal-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "7076c154c5f9e6fbacc6677ec58840de",
+        "request_sha256": "e90e293bc9cd801784d683e53e8f271dee14f783ccbd0d420a8035dd1fa92fd4",
+        "response_sha256": "ff5636117a26b636d25478c8f8b385e2bbcbe4750f90d0548277f81332c2b547"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-2.call.json",
+          "sha256": "4d606cbf74dc85af245503f5db67ae9aa68beee36a12f3a6531917b4ad239b07",
+          "bytes": 85654
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-2.request.json",
+          "sha256": "e90e293bc9cd801784d683e53e8f271dee14f783ccbd0d420a8035dd1fa92fd4",
+          "bytes": 7550
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-2.response.json",
+          "sha256": "5ee85dd3eef73f69ce26a4473f3a8686c91d38964c1e8c8328056c7452c093bc",
+          "bytes": 1090
+        },
+        "raw_model_text_sha256": "ff5636117a26b636d25478c8f8b385e2bbcbe4750f90d0548277f81332c2b547",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-2.receipt.json",
+          "sha256": "e482686fa8a309c641a444f46b9f0c86f7ed3581de193709a6c85fd65262e7c2",
+          "bytes": 2408
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-2.native.json",
+          "sha256": "2cf51134cb7ab6d93d6e4044928a338e1a9c576975f5e8ec810272a66198df8b",
+          "bytes": 4556
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-2.derived-loss.edit.json",
+            "sha256": "719848fc6383297a3268b343853bec8fbc2fa5b961d09c1496c937cfdf0494b4",
+            "bytes": 4890
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/fan-direct-signal-review-2.derived-loss.request.json",
+            "sha256": "ba2154c03cc87bbbef6bcaab027703ddfca51f581c70997ee2f6dec189e989d2",
+            "bytes": 6062
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1259,
+        "output_tokens": 136,
+        "round_trip_ms": 728,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "joint-two-sources-review-2",
+      "case": "joint-two-sources",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "The reviewer correctly states that identity verification and payment confirmation are both necessary for parcel release, preserving the conjunctive restriction and selecting both original supporting sources.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1,
+          2
+        ],
+        "detail": "The candidate description omits the conditions required for parcel release that are present in the source material.",
+        "missing_obligation": "A parcel may be released only after the recipient identity is verified and payment confirmation is received."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "joint-two-sources-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "00083367a2f8e710a51637c6f9252dc9",
+        "request_sha256": "17f5cde9e799d902f783aae4b3bc70c1c60cecc70e5004fe20a8c979fcb74a48",
+        "response_sha256": "f6a1cdacf1ee0d4a313708bec0a6cc6b7f96f0254edfa3174e61fe7a8666eff4"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-2.call.json",
+          "sha256": "6c246c94104e716cc42c96f2318e05f8ebd38ac1d3136934b078515f4e50928b",
+          "bytes": 86660
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-2.request.json",
+          "sha256": "17f5cde9e799d902f783aae4b3bc70c1c60cecc70e5004fe20a8c979fcb74a48",
+          "bytes": 7927
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-2.response.json",
+          "sha256": "0fb54a69704e05cfcfff533d54e9fcef31d31b0572f74a8475043e17ab3e6aef",
+          "bytes": 1159
+        },
+        "raw_model_text_sha256": "f6a1cdacf1ee0d4a313708bec0a6cc6b7f96f0254edfa3174e61fe7a8666eff4",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-2.receipt.json",
+          "sha256": "a883e474d8476806422d7673f2ed636bcd9d2e969d36101b7b3ffa0b0ba6779f",
+          "bytes": 2800
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-2.native.json",
+          "sha256": "a262752f94491246bfc2e08bd605bcab50292327ca819d86d2a2ad6664e26306",
+          "bytes": 6716
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-2.derived-loss.edit.json",
+            "sha256": "980d02e34ee534cbba5257a9694212cfc9a6191fe2341c8512430b77eee8ec04",
+            "bytes": 5567
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/joint-two-sources-review-2.derived-loss.request.json",
+            "sha256": "3e6e98910d3453e72c5cf57eb35486a4ad32cb8fef5fea015956fa3f11c121b1",
+            "bytes": 6739
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1352,
+        "output_tokens": 142,
+        "round_trip_ms": 824,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "wrong-role-assignment-review-2",
+      "case": "wrong-role-assignment",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": false,
+      "control_correct": null,
+      "explanation_adequate": false,
+      "assessment_rationale": "The response again targets already-described opening-hours behavior and alleges a missing modal word, while omitting cancellation-triggered patient notification. It is not credited as a faithful defect target merely because opening hours is also present in the original source.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate field states that the service displays the clinic opening hours, but it does not convey the obligation that the service must display them as required by the source.",
+        "missing_obligation": "The service must display the clinic opening hours."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "wrong-role-assignment-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "e4b4c3fab5ad419bffef18d7d3baeaf0",
+        "request_sha256": "9b29e6da859558e4ccbe20e6e41d335dab07e68b859e73e6c08d38db9bcc88de",
+        "response_sha256": "e4c0f3086d15d24892b9f6f3cded1daff7ac142e20f9c944b686e65c9b3f2b49"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-2.call.json",
+          "sha256": "b1e31b6a462fc9bfd2155a8d8b0fb7ffbdebf928ccb64eb7b8107acd0ae3052e",
+          "bytes": 86448
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-2.request.json",
+          "sha256": "9b29e6da859558e4ccbe20e6e41d335dab07e68b859e73e6c08d38db9bcc88de",
+          "bytes": 7878
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-2.response.json",
+          "sha256": "3848674cfca40534332207c8da46ff3af17996e0157912cdc21daa69235b4547",
+          "bytes": 1048
+        },
+        "raw_model_text_sha256": "e4c0f3086d15d24892b9f6f3cded1daff7ac142e20f9c944b686e65c9b3f2b49",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-2.receipt.json",
+          "sha256": "e59b3bb5ba75a5ee7a7202ca79b22cdb7afe0afa220f1703d84a634f1618a840",
+          "bytes": 2782
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-2.native.json",
+          "sha256": "9880838a71d61987b993b306e05db6ea0c01641e65d5e48fbd4542d95189f9de",
+          "bytes": 6346
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-2.derived-loss.edit.json",
+            "sha256": "d099aa95bf799f7015378c077734646db0bd187a65e8a3bd1094fc71ce471c5d",
+            "bytes": 5660
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/wrong-role-assignment-review-2.derived-loss.request.json",
+            "sha256": "592b8e56d1fa90c158b8ea14eb9f19d8a4c8d1859f41c71f9755332ebd28baa6",
+            "bytes": 6834
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1331,
+        "output_tokens": 127,
+        "round_trip_ms": 740,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "unresolved-multiple-producers-review-2",
+      "case": "unresolved-multiple-producers",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "supported",
+      "classification_correct": false,
+      "faithful_missing_obligation": false,
+      "control_correct": null,
+      "explanation_adequate": false,
+      "assessment_rationale": "The subject only shows and records temperature; both eight-hour power-loss cooling and backup-cooling-failure alarm are absent. Original sources explicitly contain both, even though extracted claims omit them. Matching surviving clauses does not establish preservation of the assigned description.",
+      "observed_response": {
+        "kind": "supported",
+        "source_ids": [
+          1,
+          2
+        ],
+        "detail": "The description correctly reflects both source statements: the cabinet must show its temperature (source 1) and must record each temperature measurement (source 2)."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": false,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": false,
+      "origin": {
+        "trial_id": "unresolved-multiple-producers-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "afa3faca0955eef9a99d3a330d846519",
+        "request_sha256": "7a089b5211a294399acb882f3d667f08d89a2ad07714e220e3de7add16ebab8e",
+        "response_sha256": "15496c284be9c2d8d3f8969415b15fa390801c785d3fa9429aa563a173a546a2"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/unresolved-multiple-producers-review-2.call.json",
+          "sha256": "5253585e10aafa759c17e7921d0705e5f5903f494dde39cb56097180c4bfa518",
+          "bytes": 86349
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/unresolved-multiple-producers-review-2.request.json",
+          "sha256": "7a089b5211a294399acb882f3d667f08d89a2ad07714e220e3de7add16ebab8e",
+          "bytes": 7969
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/unresolved-multiple-producers-review-2.response.json",
+          "sha256": "b245ae3ab8094a59f8d8a07cb67a963259cfc93296743b3661af862fc0a02ff7",
+          "bytes": 960
+        },
+        "raw_model_text_sha256": "15496c284be9c2d8d3f8969415b15fa390801c785d3fa9429aa563a173a546a2",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/unresolved-multiple-producers-review-2.receipt.json",
+          "sha256": "72f72fa6df2593f37e8da1e25a17eeb702dc225e8a60f4299e1828c92ba2b8b3",
+          "bytes": 2762
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/unresolved-multiple-producers-review-2.native.json",
+          "sha256": "5763ea6e0513b8bba6143ca8623cf95d3bce6a0a53f265a6055dfa74fb4899ea",
+          "bytes": 1038
+        },
+        "derived_loss_exports": []
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1363,
+        "output_tokens": 112,
+        "round_trip_ms": 608,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "parking-candidate-review-2",
+      "case": "parking-candidate",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "Attempting payment does not preserve settled-payment prerequisite or failed-payment active-session rule. The actual missing obligation identifies both clauses with correct condition and strength; selected source 1 fully supports them.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate description states that a driver ends a parking session by attempting payment, but it does not convey that the session can only be ended after the payment has successfully settled. The source explicitly requires that a driver may end a parking session only after payment settles, and that a failed payment must leave the session active. This omission removes a critical obligation from the description.",
+        "missing_obligation": "A driver may end a parking session only after payment settles; a failed payment must leave the session active."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "parking-candidate-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "9c746e7f0fa0e18c26615f7aeed56225",
+        "request_sha256": "2b1c38e92718623c831cbae73d9dfa27908aaad4376230df5bf99308d865ed6a",
+        "response_sha256": "2b6a2e05407aad22f184a226f2a889d0f2d148d23bc73d9a36750449986cc10e"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-2.call.json",
+          "sha256": "5e1df25a6ec07d874b04672449d63f222f886125e54b2ec6337117a31f28b9a5",
+          "bytes": 86676
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-2.request.json",
+          "sha256": "2b1c38e92718623c831cbae73d9dfa27908aaad4376230df5bf99308d865ed6a",
+          "bytes": 7545
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-2.response.json",
+          "sha256": "4251f27b8135e8f3a1b6db590a141f5866612ebe5dce39fdce9eea35866c6faf",
+          "bytes": 1454
+        },
+        "raw_model_text_sha256": "2b6a2e05407aad22f184a226f2a889d0f2d148d23bc73d9a36750449986cc10e",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-2.receipt.json",
+          "sha256": "4c5def037b47a5bc047710e151c4853e0288afa74f3a994013ceb06360ffece4",
+          "bytes": 2743
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-2.native.json",
+          "sha256": "90b2736381f5df9a94d3017806821fd2ccbb018d1c10593075f1b9f69998d14b",
+          "bytes": 5845
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-2.derived-loss.edit.json",
+            "sha256": "d6bca3a37df7b94e6779609d789e3371d0d1691d9cc4ddcabe8f09e8473dabc0",
+            "bytes": 5372
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/parking-candidate-review-2.derived-loss.request.json",
+            "sha256": "86ee4f21992ced70d33b80c1d77ac8defa8588d5dbbce2a5ef3822964efee48e",
+            "bytes": 6544
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1247,
+        "output_tokens": 197,
+        "round_trip_ms": 859,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "captured-story-review-2",
+      "case": "captured-story",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": false,
+      "control_correct": null,
+      "explanation_adequate": false,
+      "assessment_rationale": "Finding a greeting-display defect is legitimate, but the actual obligation drops the source condition when started. The detail additionally alleges absent UTC output although the subject explicitly mentions current UTC date/time. The subject uses should, so weakened obligation strength could merit review, but no such distinction is explained. Failure is based on definitive condition loss, not an exact wording rule or rejection of all UTC-related concern.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The supplied text claims that the application should display the string \"kindexact_copy\" when launched, but the source requires that the application display the literal string \"Hello, World!\". This discrepancy means the candidate omits the source obligation to display the correct string. The candidate also omits the obligation to output the current UTC date and time, which is explicitly stated in the source.",
+        "missing_obligation": "The application must display `Hello, World!` and output the current UTC date and time."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "captured-story-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "56257c003943926978f54212fddfa947",
+        "request_sha256": "3b196fbf10f1a9e7564ea89fbaf8fd3c679fda4a5d1992663508376ea9e7f133",
+        "response_sha256": "fedcffb42103aaee495043acca60523168cfe4bd00d95eb86b286be73ba275f2"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-2.call.json",
+          "sha256": "90961759a64e516e6dc7e72f95d849b4fea2d967a11c24155538d2552c63c8d5",
+          "bytes": 90201
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-2.request.json",
+          "sha256": "3b196fbf10f1a9e7564ea89fbaf8fd3c679fda4a5d1992663508376ea9e7f133",
+          "bytes": 9038
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-2.response.json",
+          "sha256": "9c8228abdc49f462441a96c82f1310a986aeaebfe6aad17d6afba01289da4677",
+          "bytes": 1675
+        },
+        "raw_model_text_sha256": "fedcffb42103aaee495043acca60523168cfe4bd00d95eb86b286be73ba275f2",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-2.receipt.json",
+          "sha256": "f3853ad6e4904b5a3257e8f04d52a83b3114ae6c166cb30e4eb00430c9f2c48c",
+          "bytes": 4216
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-2.native.json",
+          "sha256": "5373d1bba0d0135ee824ccc2a56d0b564b8d59b741ed0ba71954ee46feecb5a2",
+          "bytes": 11818
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-2.derived-loss.edit.json",
+            "sha256": "e1d3fb3896c32faa22d411b976665e53ac879d9a0c2a86437fb09e1d988eaccb",
+            "bytes": 9411
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/captured-story-review-2.derived-loss.request.json",
+            "sha256": "28f3514b5badf5c958e048f30b4ca7859ac5cb74c534f97371e433f025ba28b1",
+            "bytes": 10585
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1642,
+        "output_tokens": 265,
+        "round_trip_ms": 1207,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "sterile-door-review-2",
+      "case": "sterile-door",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "Permitting unlock at any time violates no unlocking while pressurized. Must stay locked while pressurized is an acceptable equivalent preserving condition, negation and duty; dropping the MOCK marker does not change behavior.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate description states that the access door may unlock at any time, which conflicts with the source requirement that the door must remain locked while the sterilizer is pressurized. The source explicitly states that the door must not unlock during pressurization, a requirement that is omitted in the candidate description.",
+        "missing_obligation": "While the sterilizer is pressurized, its access door must stay locked."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "sterile-door-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "cf29181b2ca8a9bb6c567334c5c8b70d",
+        "request_sha256": "ab030c2650ad50bb7360da4abfffbc6d2c7dd22bfcaf36b1722bd7094cade6e6",
+        "response_sha256": "e33596b891ed73569c822f7373ba10a18d3c1b69c679c9b34974d3d48df56bc6"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-2.call.json",
+          "sha256": "815ccf76df1f2dca798972142e937002d7733fb07d44bd9b161586537ff46dd7",
+          "bytes": 85985
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-2.request.json",
+          "sha256": "ab030c2650ad50bb7360da4abfffbc6d2c7dd22bfcaf36b1722bd7094cade6e6",
+          "bytes": 7432
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-2.response.json",
+          "sha256": "811f8193631d6579260137c5b51ca2795718e68b7b9b17405782e49ab797f900",
+          "bytes": 1235
+        },
+        "raw_model_text_sha256": "e33596b891ed73569c822f7373ba10a18d3c1b69c679c9b34974d3d48df56bc6",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-2.receipt.json",
+          "sha256": "27761521cb7e95dd2d3fcc999019ae2dbcac78fb9b5d9865e9bd6f5c4c2e5986",
+          "bytes": 2502
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-2.native.json",
+          "sha256": "3542e0702b6827f8c481207e996f27ac44a0c08e0c92e91ecdd801ca3ca7791e",
+          "bytes": 5393
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-2.derived-loss.edit.json",
+            "sha256": "c1b89ec80712a8180256c3970eb659855450f74429d659f908778ff030fb7065",
+            "bytes": 5023
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/sterile-door-review-2.derived-loss.request.json",
+            "sha256": "f55f47363533e5d57b4113728d39eeb4362fa1d5aeb177fa87d049faf3023f42",
+            "bytes": 6195
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1235,
+        "output_tokens": 166,
+        "round_trip_ms": 743,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "voucher-release-review-2",
+      "case": "voucher-release",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": true,
+      "control_correct": null,
+      "explanation_adequate": true,
+      "assessment_rationale": "The candidate already expresses cleared payment. Identifying only missing manager approval, supported by source 1 alone, is faithful narrowing; it need not repeat the earlier fixed conjunction or select already-preserved payment source 2.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate description omits the requirement that a manager must approve the voucher release, which is explicitly stated in source 1.",
+        "missing_obligation": "MOCK Voucher release requires manager approval."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "voucher-release-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "1ed10db78fde7ac82e8b9ffe2a9207f6",
+        "request_sha256": "7b3871eef399462d5164814626347980adbd636d797c14b19ca1ee2a534ad818",
+        "response_sha256": "c2fd800fda1af1472bf4ae016805e0818943790ceed8d61a67e851045c1df62c"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-2.call.json",
+          "sha256": "f6b74367340cf7fca952ffbbe67cff088180cdb4afe898f89cf4bf49570fe440",
+          "bytes": 86610
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-2.request.json",
+          "sha256": "7b3871eef399462d5164814626347980adbd636d797c14b19ca1ee2a534ad818",
+          "bytes": 7858
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-2.response.json",
+          "sha256": "6f4a95804fb59243cef33583ba02ce25ac979f2af9f0282f66dc514887078d67",
+          "bytes": 1344
+        },
+        "raw_model_text_sha256": "c2fd800fda1af1472bf4ae016805e0818943790ceed8d61a67e851045c1df62c",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-2.receipt.json",
+          "sha256": "b2e3ba7b3519f40c9d5fcd0f8034601d1c0864f1625650ff1bf09797bb038e9d",
+          "bytes": 2687
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-2.native.json",
+          "sha256": "16a8f2931f0f0d97dbc75c2337919de9acb104158c8f39e5f9c4226939ed661d",
+          "bytes": 6693
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-2.derived-loss.edit.json",
+            "sha256": "20d64e2d82581c71448de5d42aaa756b4744542d47aabaed91892424182c3d32",
+            "bytes": 5197
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/voucher-release-review-2.derived-loss.request.json",
+            "sha256": "1c176a1b569aa7253381e59c1b125ac4e7fabc7e7372c7b815af8e10a51acb10",
+            "bytes": 6371
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1341,
+        "output_tokens": 185,
+        "round_trip_ms": 1068,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "dual-ready-review-2",
+      "case": "dual-ready",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "supported",
+      "classification_correct": false,
+      "faithful_missing_obligation": false,
+      "control_correct": null,
+      "explanation_adequate": false,
+      "assessment_rationale": "Payment-triggered display to payer is present, but inspection-triggered display to inspector is missing. Matching identical Ready text and payment behavior from source 1 cannot support the whole description against both assigned source obligations.",
+      "observed_response": {
+        "kind": "supported",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate description \"MOCK After successful payment, show MOCK Ready to the payer.\" matches the source 1 statement \"MOCK After payment succeeds, show `MOCK Ready` to the payer.\" and preserves the meaning, obligation, and role of showing the ready message to the payer after a successful payment. No source meaning is omitted or misrepresented."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": false,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": false,
+      "origin": {
+        "trial_id": "dual-ready-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "f8dd192a4ed1860f3b6184bfd19b9784",
+        "request_sha256": "20493953b74bbda6d3859df7cd3d862028628bb2ad91ac71fe72753fa87f8a7d",
+        "response_sha256": "3bd356cbdc4ce722c1884469e8d5cd5976b1df2fdb97c7479916a337ca2a7c65"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/dual-ready-review-2.call.json",
+          "sha256": "9f81057c7ac3842b98c47db39c4f56b1a277f0d700be26dda609b2a5fb3d9511",
+          "bytes": 89197
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/dual-ready-review-2.request.json",
+          "sha256": "20493953b74bbda6d3859df7cd3d862028628bb2ad91ac71fe72753fa87f8a7d",
+          "bytes": 8839
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/dual-ready-review-2.response.json",
+          "sha256": "0a22c9713d9e7b7f4d762fd27067978f4b47c28c03a6d294728e9e04161f0214",
+          "bytes": 1441
+        },
+        "raw_model_text_sha256": "3bd356cbdc4ce722c1884469e8d5cd5976b1df2fdb97c7479916a337ca2a7c65",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/dual-ready-review-2.receipt.json",
+          "sha256": "107e3a881a14b27d171f1e2a02fa65e6ea07d3df33bd5865a635da0cc1bfaa16",
+          "bytes": 3803
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/dual-ready-review-2.native.json",
+          "sha256": "edc86a8211ef1f85e54d3891a5ad21896ca1f4f83ce593af32da85e50434245b",
+          "bytes": 1189
+        },
+        "derived_loss_exports": []
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1629,
+        "output_tokens": 216,
+        "round_trip_ms": 1020,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "smoke-exit-compound-review-2",
+      "case": "smoke-exit-compound",
+      "repetition": 2,
+      "expected_kind": "candidate_omission",
+      "observed_kind": "candidate_omission",
+      "classification_correct": true,
+      "faithful_missing_obligation": false,
+      "control_correct": null,
+      "explanation_adequate": false,
+      "assessment_rationale": "The reviewer reverses the comparison direction: the unsupported candidate display is treated as a required obligation missing from sources. Neither selected source supports must-display; actual alarm and unlocked-exit duties are not reported. Source 2 calibration logging is irrelevant.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1,
+          2
+        ],
+        "detail": "The candidate field states that the controller displays the smoke reading, but neither source 1 nor source 2 contains any requirement or description that the controller must display the smoke reading. Source 1 covers alarm sounding and door unlocking when smoke is detected, while source 2 covers logging the sensor calibration version. Therefore the obligation to display the smoke reading is omitted from the supplied sources.",
+        "missing_obligation": "The controller must display the smoke reading."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "smoke-exit-compound-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "0c6329efc70859d7ec0bf0bdc379fa34",
+        "request_sha256": "1a5b3ab6b6732f3a9d82867733b5c73a705e52804c577ac1617fc94eebe62670",
+        "response_sha256": "a95edd131059560d3729fbafb58db929387fd6a0136c13f6def7877e66fcc296"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-2.call.json",
+          "sha256": "80a77a340cda471d21eb9eea962d878e65551cc2be3125b085c15aed40d2adfc",
+          "bytes": 88652
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-2.request.json",
+          "sha256": "1a5b3ab6b6732f3a9d82867733b5c73a705e52804c577ac1617fc94eebe62670",
+          "bytes": 8451
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-2.response.json",
+          "sha256": "2511475ff478366a10e60a62304eb0ba6012988fd7b41713921d91b423ffa053",
+          "bytes": 1497
+        },
+        "raw_model_text_sha256": "a95edd131059560d3729fbafb58db929387fd6a0136c13f6def7877e66fcc296",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-2.receipt.json",
+          "sha256": "beff9af0e8e06f01f666d1c991c286717107e902958838b639ab0d5bfc287e5e",
+          "bytes": 3577
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-2.native.json",
+          "sha256": "c71c1bd25a38081a2d484debfa957f20b47a0e095bb6a5371ace53def11f688c",
+          "bytes": 8301
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-2.derived-loss.edit.json",
+            "sha256": "7f2725279f03352148fa60a08648a3f74cf9e109df3f22eb7939a81ea532707a",
+            "bytes": 6530
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/smoke-exit-compound-review-2.derived-loss.request.json",
+            "sha256": "20f9cd0cc322ea2158a29d502a6633c516d38d1e0589459712e977e45ed9c45b",
+            "bytes": 7702
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1485,
+        "output_tokens": 213,
+        "round_trip_ms": 973,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "handoff-supported-review-2",
+      "case": "handoff-supported",
+      "repetition": 2,
+      "expected_kind": "supported",
+      "observed_kind": "supported",
+      "classification_correct": true,
+      "faithful_missing_obligation": null,
+      "control_correct": true,
+      "explanation_adequate": true,
+      "assessment_rationale": "Candidate exactly preserves maintenance-triggered must-keep-locked requirement; supported is correct with source 1 and no obligation or loss assignment.",
+      "observed_response": {
+        "kind": "supported",
+        "source_ids": [
+          1
+        ],
+        "detail": "The source statement \"During maintenance, the access controller must keep the door locked.\" directly supports the candidate field description. No omission or conflict is present."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": false,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": false,
+      "origin": {
+        "trial_id": "handoff-supported-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "59ca71b02aff856833a4c47f8d87ad62",
+        "request_sha256": "5ae198e9d6f2b27a047204fcb137319c367dd73a2d83d2e83dd5c7d93693bcb1",
+        "response_sha256": "4c1c0209388630e1d10a6a19175d3dc1d7d35f8437bc9022d1d65b86911023cd"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-supported-review-2.call.json",
+          "sha256": "650bf043ad5caff752bf5b1c86170310afc51de53ad8545e41d9a8f535198cdf",
+          "bytes": 85036
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-supported-review-2.request.json",
+          "sha256": "5ae198e9d6f2b27a047204fcb137319c367dd73a2d83d2e83dd5c7d93693bcb1",
+          "bytes": 7432
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-supported-review-2.response.json",
+          "sha256": "0833dcd8561d26f5812eef5096be8571b65301c44a73727e4bdbce6328551d50",
+          "bytes": 811
+        },
+        "raw_model_text_sha256": "4c1c0209388630e1d10a6a19175d3dc1d7d35f8437bc9022d1d65b86911023cd",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-supported-review-2.receipt.json",
+          "sha256": "becf63d79691cd00003a0fb82b1e0ed0f10cbce7968cb9d8c594b34f8063f6eb",
+          "bytes": 2251
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-supported-review-2.native.json",
+          "sha256": "25d55c797f1185b38af25ac4c8fbd030120702ac35cfd036bdb250e4eec1f373",
+          "bytes": 1010
+        },
+        "derived_loss_exports": []
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1222,
+        "output_tokens": 80,
+        "round_trip_ms": 546,
+        "latency_ms": null
+      }
+    },
+    {
+      "trial_id": "handoff-source-gap-review-2",
+      "case": "handoff-source-gap",
+      "repetition": 2,
+      "expected_kind": "unsupported",
+      "observed_kind": "candidate_omission",
+      "classification_correct": false,
+      "faithful_missing_obligation": null,
+      "control_correct": false,
+      "explanation_adequate": false,
+      "assessment_rationale": "Source explicitly leaves release policy unselected. The candidate automatic unlock is unsupported; no source must-unlock duty exists. The reviewer nevertheless emits candidate_omission and promotes invented candidate behavior to a must obligation rather than requiring the missing release-policy decision.",
+      "observed_response": {
+        "kind": "candidate_omission",
+        "source_ids": [
+          1
+        ],
+        "detail": "The candidate field adds a post‑maintenance unlock behavior that is not present in the source. The source only specifies that the door must remain locked during maintenance and does not state what happens after maintenance. Therefore the candidate introduces a new obligation not supported by the source.",
+        "missing_obligation": "After maintenance, the access controller must unlock the door."
+      },
+      "protocol": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "normalization": "removed_leading_brace_quote"
+      },
+      "native_admitted": true,
+      "admitted_omission": true,
+      "admitted_obligation_and_source_ids_unchanged": true,
+      "assignment_constructed_from_actual_values": true,
+      "origin": {
+        "trial_id": "handoff-source-gap-review-2",
+        "parent_run": "RUN-a8204eab393239c09cb75264943ca0d0",
+        "parent_call": "request-15-inference-1",
+        "replay_run": "debugger-9e577102a8fee28d62f1746712dc7332",
+        "replay_id": "5f2d25bbd27b7001fb7323e2459e7ba3",
+        "request_sha256": "ddcac3fd000a497587190e45adeb6b92d38453472941d5b06b7754aec13e04d6",
+        "response_sha256": "f15848927cacb9daff5df44319ca6418b3d356c52c676d850b734330289416a2"
+      },
+      "native_origin_available": false,
+      "evidence": {
+        "call": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-2.call.json",
+          "sha256": "bc063e2e37008d14d2e8928d9d7debd77c45cf0da5a0cc2247cd340a516749d9",
+          "bytes": 86512
+        },
+        "request": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-2.request.json",
+          "sha256": "ddcac3fd000a497587190e45adeb6b92d38453472941d5b06b7754aec13e04d6",
+          "bytes": 7552
+        },
+        "provider_response": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-2.response.json",
+          "sha256": "f7fd3106439cb179f52379857cfdbf965cab12a8b2764e1b086fc82c6be84ada",
+          "bytes": 1590
+        },
+        "raw_model_text_sha256": "f15848927cacb9daff5df44319ca6418b3d356c52c676d850b734330289416a2",
+        "receipt": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-2.receipt.json",
+          "sha256": "494d71ac19efabd4bccd0a8929668177282a5e350b482ce3d6e659636348a640",
+          "bytes": 2593
+        },
+        "native_report": {
+          "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-2.native.json",
+          "sha256": "ad0750f2cfcfac3d977e1c18cd1b4f74afc25e6747be29eacffd9a7af8e2fc4a",
+          "bytes": 5684
+        },
+        "derived_loss_exports": [
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-2.derived-loss.edit.json",
+            "sha256": "98c081475ac958d04a5b1b82b131ce2f7521e6598dff77a47e6e2812dbd38ed4",
+            "bytes": 5325
+          },
+          {
+            "path": "zig-out/source-loss-actual-review-comparison/run/results/handoff-source-gap-review-2.derived-loss.request.json",
+            "sha256": "781435351ffd1808da3e535fdf43aff3b1dfa0adc9952e055261164bb574db4d",
+            "bytes": 6497
+          }
+        ]
+      },
+      "downstream_loss_dispatched": false,
+      "cost": {
+        "input_tokens": 1244,
+        "output_tokens": 221,
+        "round_trip_ms": 988,
+        "latency_ms": null
+      }
+    }
+  ]
+}

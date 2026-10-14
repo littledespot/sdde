@@ -13,7 +13,7 @@ pub const Action = struct {
         };
         @import("../../domain/specification_repair.zig").retainGroupTarget(proposed, &result) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
         return switch (result) {
-            .valid => |checked| .{ .valid = .{ .unit = checked.unit, .response = checked.response, .origins = proposed.origins, .last_repair = proposed.last_repair } },
+            .valid => |checked| .{ .valid = try session.admit(allocator, current, context, .{ .unit = checked.unit, .response = checked.response, .origins = proposed.origins, .last_repair = proposed.last_repair }) },
             .invalid => |issue| .{ .invalid = .{ .owner = try session.owner(allocator, current), .revision = proposed.revision, .last_repair = proposed.last_repair, .origin = proposed.origins.at(issue.field), .issue = issue, .dependencies = try @import("../../domain/specification_candidate_context.zig").snapshot(allocator, current, context, proposed) } },
         };
     }

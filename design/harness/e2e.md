@@ -387,6 +387,16 @@ The snapshot permits source reconstruction when complete, not a guarantee of an
 identical binary or future provider response. Exact request replay remains a
 separate byte-equality check and rejects redacted parents.
 
+Harness reports and captured inputs use ordinary typed JSON serialization, including
+fractional evaluator temperatures, rubric thresholds and scores. They are diagnostic
+projections; the engine's integer-only canonical state contract does not apply.
+The saver renders both report views before writing, preserves exclusive creation
+and durable writes, and releases its intermediate buffers. A report-file failure
+leaves the workflow status and cause unchanged: the CLI prints the workflow result,
+separately reports the finalization error and potentially incomplete files, and exits
+unsuccessfully even if generation and evaluation succeeded. It does not retry writes
+or rerun the workflow/evaluator to repair reporting.
+
 `total_token_budget`, `retry_settings` and `attempts` project the executed graph
 and native accounting. Per-call usage survives budget rejection before candidate
 text projection. `exchange_evidence` links retained response bytes and distinguishes

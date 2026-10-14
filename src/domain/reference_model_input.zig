@@ -48,7 +48,7 @@ pub fn reconciliationPhasePacket(allocator: std.mem.Allocator, prior: @import("r
     const ids = switch (prior) {
         .dispositions => current.partition.group.claim_ids,
         .signals => |value| try @import("reference_reconciliation_projection.zig").signalClaimIds(allocator, value),
-        .roles, .conflicts => &.{},
+        .conflicts => &.{},
     };
     defer if (prior == .signals) allocator.free(ids);
     const assignment: Constraint.Assignment = switch (prior) {
@@ -108,9 +108,7 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     if (presentation == .shared) return selected;
     defer packets.release(selected);
     const assignment = presentation.composed.assignment;
-    const context_body = if (assignment == .roles) roles: {
-        break :roles try @import("model_candidate_json.zig").encode(RoleContext, scratch, try roleContext(scratch));
-    } else other: {
+    const context_body = other: {
         const constraints = try reconciliationGuidance(scratch, input.purpose, .{ .assignment = assignment });
         if (assignment == .conflicts) {
             const conflict_context = .{ .constraints = constraints };
@@ -159,43 +157,6 @@ pub fn withSemanticChoices(a: std.mem.Allocator, packet: *const packets.Packet, 
     const definition_id: schema.DefinitionId = .{ .bytes = if (assignment == .summary) "summary" else "signals_assignment" };
     return packets.withIntegerChoices(a, narrowed, &.{.{ .target = .{ .path = &.{ .{ .property = field }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = definition_id, .allowed = ids, .collection = .unique_subset }});
 }
-/// Closed readback of the production role packet, for diagnostic evaluation only.
-pub const RoleContext = struct { constraints: []const Guidance, role_definitions: []const RoleDefinition };
-pub const RoleInput = struct {
-    claims: []const projection.Claim,
-    citations: []const extraction.Citation,
-    preserved_tokens: []const projection.Token,
-    passive_literals: []const literals.Record,
-    assignment: RoleContext,
-    accepted: @import("reference_role_assignment.zig").Facts,
-};
-pub const RoleDefinition = struct { role: reconciliation.GenerationRole, purpose: []const u8 };
-
-/// One presentation of the registered purposes and native role-admission rule.
-/// The caller owns constraints, role_definitions and each definition's purpose.
-pub fn roleContext(a: std.mem.Allocator) (std.mem.Allocator.Error || error{InvalidReferenceReconciliation})!RoleContext {
-    var scratch: std.heap.ArenaAllocator = .init(a);
-    defer scratch.deinit();
-    const constraints = try reconciliationGuidance(a, .global, .{ .assignment = .roles });
-    errdefer a.free(constraints);
-    const definitions = try a.alloc(RoleDefinition, std.meta.tags(reconciliation.GenerationRole).len);
-    errdefer a.free(definitions);
-    var initialized: usize = 0;
-    errdefer for (definitions[0..initialized]) |definition| a.free(definition.purpose);
-    for (std.meta.tags(reconciliation.GenerationRole), definitions) |role, *definition| {
-        const purpose = role.purpose(scratch.allocator()) catch |err| return switch (err) {
-            error.OutOfMemory => error.OutOfMemory,
-            error.InvalidRequiredAuthority => error.InvalidReferenceReconciliation,
-        };
-        definition.* = .{
-            .role = role,
-            .purpose = try a.dupe(u8, purpose),
-        };
-        initialized += 1;
-    }
-    return .{ .constraints = constraints, .role_definitions = definitions };
-}
-
 /// Availability projects existing evidence, not semantics or a second registry.
 /// Reference text has no exact-copy variant; its owner leaves that choice alone.
 pub fn withTextChoices(a: std.mem.Allocator, packet: *const packets.Packet, passive: []const i64, exact_copy: []const i64) packets.Error!*packets.Packet {

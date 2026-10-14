@@ -18,8 +18,9 @@
 
 - The originating step declares the repository slot, prompt, result
   schema and optional input resource once. The user-approved 2026-09-19 amendment
-  in §12.5 makes temperature engine-owned: `0` when the registered model supports
-  it, omitted otherwise; workflow temperature parameters reject.
+  in §12.5 makes temperature engine-owned. The user-approved 2026-10-11 amendment
+  replaces its fixed value `0` with `0.1` when the registered model supports it,
+  omitted otherwise; workflow temperature parameters reject.
 - The user-directed 2026-09-21 amendment makes the required per-model `json`
   boolean in `.sddproviders.json` the sole response-mode selector. `true` selects
   native schema output, `false` prompt-only; registered capabilities still constrain

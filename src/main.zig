@@ -59,7 +59,10 @@ pub fn main(init: std.process.Init) !void {
             if (reason == .retry_limit) {
                 const failure = reason.retry_limit;
                 try writeFailure(init.io, try std.fmt.allocPrint(init.arena.allocator(), "RetryLimitExhausted: {s}; retry-limit={d}; completed executions={d}", .{ failure.operation().bytes, failure.limit.value, failure.completed_executions }));
-            } else try writeFailure(init.io, reason.diagnostic());
+            } else {
+                try writeFailure(init.io, reason.diagnostic());
+                if (reason == .model_capture) try writeFailure(init.io, try std.json.Stringify.valueAlloc(init.arena.allocator(), reason.model_capture, .{}));
+            }
             std.process.exit(1);
         },
         .invocation_invalid => {

@@ -1,0 +1,23 @@
+{
+  "status": "unscored_no_live_calls",
+  "logical_trials": 24,
+  "physical_sends": 28,
+  "completed": null,
+  "native_admitted": null,
+  "invalid_associations": null,
+  "wrong_selections": null,
+  "false_missing_authority": null,
+  "faithful_clarifications": null,
+  "field_purpose_adequate": null,
+  "collection_obligations_preserved": null,
+  "altered_conditions_or_strength": null,
+  "unsupported_additions": null,
+  "exact_literal_duties_preserved": null,
+  "actual_input_tokens": null,
+  "actual_output_tokens": null,
+  "transport_elapsed_ns": null,
+  "end_to_end_elapsed_ns": null,
+  "not_sent": null,
+  "gate": "unqualified",
+  "trials": []
+}

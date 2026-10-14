@@ -57,7 +57,7 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
         } else if (target.record >= records.len or decision != .not_applicable or records[target.record].content != .entity) return error.InvalidSpecificationRepair;
         const assigned = try session.currentBinding(allocator, current, context);
         if (assigned != .records) return error.InvalidSpecificationRepair;
-        return authorizeGroup(allocator, owner, candidate, facts, target, .{ .membership = .{ .disposition = decision, .fixed_provenance = if (missing) assigned.records.selection else records[target.record].provenance } }, rejection, missing);
+        return authorizeGroup(allocator, owner, candidate, facts, target, .{ .membership = .{ .disposition = decision, .fixed_provenance = if (missing) assigned.records.selection else records[target.record].provenance, .fixed_source_group_ids = if (missing) try allocator.dupe(@import("reference_reconciliation.zig").SignalId, &.{assigned.records.signal}) else records[target.record].source_group_ids } }, rejection, missing);
     }
     if (rejection.issue.field != .target) return error.InvalidSpecificationRepair;
     if (rejection.issue.blocked != null) return error.UnsafeSpecificationRepair;
@@ -315,7 +315,7 @@ pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_
         .attributed => blk: {
             if (authorization.operation != .replace or authorization.operation.replace != .attributed) return error.InvalidSpecificationRepair;
             const value = try codec.decode(g.spec.Wire.AttributedValue, allocator, canonical);
-            break :blk .{ .attributed = .{ .value = value.value, .provenance = authorization.operation.replace.attributed.provenance } };
+            break :blk .{ .attributed = .{ .value = value.value, .source_group_ids = authorization.operation.replace.attributed.source_group_ids, .provenance = authorization.operation.replace.attributed.provenance } };
         },
         .record => blk: {
             const value = try codec.decode(g.spec.Wire.RecordProposal, allocator, canonical);
@@ -328,7 +328,8 @@ pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_
                 },
                 .delete => return error.InvalidSpecificationRepair,
             };
-            break :blk .{ .record = .{ .content = value.content, .provenance = selected } };
+            const groups = if (authorization.operation == .replace) authorization.operation.replace.record.source_group_ids else authorization.rule.group.?.membership.fixed_source_group_ids;
+            break :blk .{ .record = .{ .content = value.content, .source_group_ids = groups, .provenance = selected } };
         },
     };
 }
@@ -354,6 +355,8 @@ pub fn merge(allocator: std.mem.Allocator, current: session.Session, context: p.
         switch (group) {
             .membership => |membership| {
                 if (proposed != .record or !g.spec.entityMembershipSatisfied(membership.disposition, @intFromBool(proposed.record.content == .entity))) return error.InvalidSpecificationRepair;
+                if (membership.fixed_source_group_ids.len != proposed.record.source_group_ids.len) return error.InvalidSpecificationRepair;
+                for (membership.fixed_source_group_ids, proposed.record.source_group_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationRepair;
                 if (membership.fixed_provenance) |fixed| if (!try atomic.equal(allocator, .{ .provenance = fixed }, .{ .provenance = proposed.record.provenance })) return error.InvalidSpecificationRepair;
             },
         }

@@ -44,12 +44,12 @@ pub fn sourceChoices(allocator: std.mem.Allocator, sources: r.evidence.Inputs) s
 }
 
 /// The same facts constrain admission and describe evidence selection to a model.
-pub const selection_instruction: []const u8 = "Select a source when needed. The bound subject fixes claim evidence; source-only omissions have no claim selection. Eligibility alone is not support.";
-pub const Minimum = enum { optional, claim_required, claim_or_source_required };
+pub const selection_instruction: []const u8 = "For an omission, select the sources supporting the missing meaning. The bound subject fixes claim evidence; source-only omissions have no claim selection. Eligibility alone is not support.";
+pub const Minimum = enum { optional, claim_required, claim_or_source_required, source_required };
 pub fn minimum(finding: a.Finding) Minimum {
     return switch (finding) {
         .supported => .claim_required,
-        .candidate_omission => .claim_or_source_required,
+        .candidate_omission => .source_required,
         .ambiguous, .conflicting, .unsupported, .inconclusive => .optional,
     };
 }
@@ -86,7 +86,7 @@ pub const Requirements = struct {
     pub fn rule(self: Requirements, finding: a.Finding, loss: @import("source_omission.zig").Location) Rule {
         const diagnostic = if (finding == .candidate_omission and @import("source_omission.zig").isUpstream(loss)) @import("source_omission.zig").diagnosticClaims(self.records, loss) else null;
         return .{
-            .minimum = if (diagnostic != null and diagnostic.?.len != 0) .claim_required else if (self.source_preservation and finding == .supported) .claim_or_source_required else minimum(finding),
+            .minimum = if (self.source_preservation and finding == .supported) .claim_or_source_required else minimum(finding),
             .claims = if (diagnostic) |claims| .{ .exact = claims } else if (self.positive_claims == .exact_set) .{ .exact = self.eligible_claim_ids } else .{ .eligible = self.eligible_claim_ids },
             .eligible_source_ids = self.eligible_source_ids,
             .provenance = if (finding == .candidate_omission and diagnostic != null) null else if (finding != .supported and self.positive_claims == .eligible_subset and !self.candidate_bound) .{ .claim_ids = &.{}, .citation_ids = &.{}, .clarification_response_ids = &.{} } else if (self.supported_provenance) |value| value else if (finding == .candidate_omission and self.positive_claims == .exact_set) null else null,
@@ -109,16 +109,16 @@ pub fn requirements(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.e
             else => .eligible_subset,
         },
         .supported_provenance = try expectedProvenance(allocator, inputs, sources, id),
-        .candidate_bound = inputs.specification != null or (inputs.brief != null and id.unit == .feature and (id.slot == .description or id.slot == .primary_goal)),
+        .candidate_bound = inputs.specification != null or @import("specification_authority.zig").featureField(inputs, id) != null,
         .source_preservation = id.unit == .source,
     };
 }
-pub const Issue = enum { invalid_finding, invalid_loss, stale_authority, invalid_sources, ineligible_claim, invalid_selection, missing_claims, missing_evidence, wrong_claim_set, wrong_candidate_provenance };
+pub const Issue = enum { invalid_finding, invalid_obligation, invalid_loss, stale_authority, invalid_sources, ineligible_claim, invalid_selection, missing_claims, missing_evidence, wrong_claim_set, wrong_candidate_provenance };
 pub const Rejection = struct { issue: Issue, rule: Rule };
 pub const Admission = union(enum) { accepted: a.ReviewEvidence, rejected: Rejection };
 
 /// Evidence checks are independent of detail/applicability checks in collection.
-pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, id: a.Id, finding: a.Finding, proposed: spec.Selection, source_ids: []const SourceId, detail: []const u8, loss: @import("source_omission.zig").Location, comparison: ?@import("source_omission.zig").Comparison) Error!Admission {
+pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, id: a.Id, finding: a.Finding, proposed: spec.Selection, source_ids: []const SourceId, detail: []const u8, missing_obligation: ?[]const u8, loss: @import("source_omission.zig").Location, comparison: ?@import("source_omission.zig").comparisons.Evidence) Error!Admission {
     const records = inputs.references orelse return error.InvalidRequiredAuthority;
     const required = try requirements(allocator, inputs, sources, id);
     const rule = required.rule(finding, loss);
@@ -128,6 +128,7 @@ pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence
         const snapshot = @import("atomic_repair.zig").snapshot;
         if (!std.meta.eql(try snapshot(r.evidence.Inputs, allocator, original), try snapshot(r.evidence.Inputs, allocator, sources))) return reject(.stale_authority, rule);
     }
+    if (!validObligation(finding, missing_obligation)) return reject(.invalid_obligation, rule);
     if (!records.items.state_id.eql(sources.corpus.state_id) or !a.contains(a.Authority, inputs.authorities, .{ .reference = records.items.state_id })) return reject(.stale_authority, rule);
     r.unique(SourceId, source_ids) catch return reject(.invalid_sources, rule);
     for (source_ids) |selected| if (!r.contains(SourceId, rule.eligible_source_ids, selected)) return reject(.invalid_sources, rule);
@@ -142,11 +143,12 @@ pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence
     switch (rule.minimum) {
         .claim_required => if (proposed.claim_ids.len == 0) return reject(.missing_claims, rule),
         .claim_or_source_required => if (proposed.claim_ids.len == 0 and source_ids.len == 0) return reject(.missing_evidence, rule),
+        .source_required => if (source_ids.len == 0) return reject(.missing_evidence, rule),
         .optional => {},
     }
     if (rule.claims == .exact) r.sameSet(r.ClaimId, rule.claims.exact, proposed.claim_ids) catch return reject(.wrong_claim_set, rule);
     if (rule.provenance) |expected| sameProvenance(expected, provenance) catch return reject(.wrong_candidate_provenance, rule);
-    const review: a.ReviewEvidence = .{ .loss = loss, .loss_comparison = comparison, .detail = detail, .provenance = provenance, .source_ids = source_ids };
+    const review: a.ReviewEvidence = .{ .loss = loss, .preservation = comparison, .detail = detail, .missing_obligation = missing_obligation, .provenance = provenance, .source_ids = source_ids };
     @import("source_omission.zig").validate(allocator, inputs, sources, id, finding, review, loss) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else reject(.invalid_loss, rule);
     return .{ .accepted = review };
 }
@@ -157,36 +159,11 @@ fn selection(value: spec.Provenance) spec.Selection {
     return .{ .claim_ids = value.claim_ids, .clarification_response_ids = value.clarification_response_ids };
 }
 pub fn expectedProvenance(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, id: a.Id) Error!?spec.Provenance {
-    // A brief-only title remains bound to reconciled title roles until the
-    // assembled candidate supplies display_name; displaying it grants no authority.
-    if (id.slot != .display_name or inputs.specification != null) {
-        if (@import("specification_authority.zig").featureField(inputs, id)) |value| return try effectiveAttributed(allocator, value);
-    }
+    // Actual admitted values own their source association even before complete
+    // assembly. Displaying the brief never promotes an eligible catalogue.
+    if (@import("specification_authority.zig").featureField(inputs, id)) |value| return try effectiveAttributed(allocator, value);
     if (inputs.specification) |content| if (try candidateProvenance(allocator, content, id)) |candidate| return candidate;
-    // Pre-generation source review uses the roles chosen and validated during
-    // reconciliation. The eligible catalogue alone cannot establish support.
-    if (id.unit == .feature) {
-        const role: ?r.GenerationRole = switch (id.slot) {
-            .display_name => .title,
-            .description => .description,
-            .primary_goal => .primary_goal,
-            .primary_user_story => .primary_user_story,
-            .entities => .entity_basis,
-            .acceptance_criteria, .functional_requirements, .scenario_coverage => .records,
-            else => null,
-        };
-        if (role) |selected| {
-            const records = inputs.references orelse return error.InvalidRequiredAuthority;
-            if (records.signals.len == 0) return null;
-            const chosen = @import("specification_source_binding.zig").roleClaims(allocator, records, sources, selected) catch |err| return switch (err) {
-                error.OutOfMemory => error.OutOfMemory,
-                error.InvalidSpecificationBinding => return null,
-                else => error.InvalidRequiredAuthority,
-            };
-            const resolved = refs.select(allocator, records.items, sources, chosen.claim_ids) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
-            return .{ .claim_ids = resolved.claim_ids, .citation_ids = resolved.citation_ids, .clarification_response_ids = &.{} };
-        }
-    }
+    _ = sources;
     return null;
 }
 
@@ -218,6 +195,14 @@ pub fn detailRule(finding: a.Finding) DetailRule {
 pub fn validDetail(finding: a.Finding, detail: []const u8) bool {
     return detailRule(finding).accepts(detail);
 }
+pub const obligation_instruction = "For candidate_omission, state only the omitted source obligation in missing_obligation. Preserve its conditions, negation, obligation strength and exact values. Keep the defect explanation in detail. Other findings omit missing_obligation.";
+
+/// Mechanical shape validation only; faithfulness to sources remains model-assisted.
+pub fn validObligation(finding: a.Finding, missing_obligation: ?[]const u8) bool {
+    if (finding != .candidate_omission) return missing_obligation == null;
+    const value = missing_obligation orelse return false;
+    return @import("clarification_inputs.zig").validText(value, @import("clarification_inputs.zig").max_text_bytes);
+}
 pub fn questionRequired(finding: a.Finding) bool {
     return switch (finding) {
         .supported, .candidate_omission, .inconclusive => false,
@@ -239,7 +224,7 @@ pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evide
     if (review.principle_citations.len != 0 or review.principle_registry != null) return error.InvalidRequiredAuthority;
     if (!validDetail(evidence.finding, review.detail)) return error.InvalidRequiredAuthority;
     if (questionIssue(evidence.finding, review.question) != null) return error.InvalidRequiredAuthority;
-    const result = try admit(allocator, inputs, sources, evidence.requirement, evidence.finding, .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, review.source_ids, review.detail, review.loss orelse return error.InvalidRequiredAuthority, review.loss_comparison);
+    const result = try admit(allocator, inputs, sources, evidence.requirement, evidence.finding, .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, review.source_ids, review.detail, review.missing_obligation, review.loss orelse return error.InvalidRequiredAuthority, review.preservation);
     if (result != .accepted) return error.InvalidRequiredAuthority;
     try sameProvenance(result.accepted.provenance, review.provenance);
     if (evidence.method != .model_assisted) return error.InvalidRequiredAuthority;

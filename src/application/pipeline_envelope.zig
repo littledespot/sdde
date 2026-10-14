@@ -5,6 +5,7 @@ const std = @import("std");
 const gate = @import("../domain/workflow_gate.zig");
 const workflow = @import("../domain/workflow.zig");
 const reference = @import("../domain/execution_reference.zig");
+const outcomes = @import("../domain/workflow_outcome_association.zig");
 
 pub const Error = data.EnvelopeError;
 
@@ -39,12 +40,15 @@ pub const PipelineEnvelope = struct {
     scope: ?reference.Ref = null,
     occurrence_count: u64 = 0,
     records: std.ArrayList(*const Record) = .empty,
+    /// Reference-only continuation control; native values retain authority.
+    outcomes: outcomes.State,
 
     pub fn init(allocator: std.mem.Allocator, schemas: []const data.Schema) PipelineEnvelope {
-        return .{ .allocator = allocator, .schemas = schemas };
+        return .{ .allocator = allocator, .schemas = schemas, .outcomes = .init(allocator) };
     }
 
     pub fn deinit(self: *PipelineEnvelope) void {
+        self.outcomes.deinit();
         for (self.records.items) |record| self.releaseRecord(record);
         self.records.deinit(self.allocator);
         for (&self.slots) |*slot| {

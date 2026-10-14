@@ -1,4 +1,5 @@
-//! Execution-local business units. Model content never selects IDs or successors.
+//! Execution-local business units. Native code owns identities and dispatch;
+//! authored source-group selections remain untrusted candidate data.
 const std = @import("std");
 const g = @import("specification_generation.zig");
 const p = @import("specification_provenance.zig");
@@ -22,6 +23,21 @@ pub const Session = struct {
 };
 pub const Error = @import("strict_json.zig").Error || g.Error || packets.Error || binding.Error;
 
+/// One native population covers the narrative units and every retained group.
+/// Repairs of already completed units do not reopen this authoring pass.
+pub fn iterationProgress(current: Session) Error!struct { limit: usize, position: usize } {
+    if (current.record_group_count == 0 or current.completed > unit_count or current.record_cursor > current.record_group_count) return error.InvalidSpecificationUnit;
+    if (current.completed < records_index) {
+        if (current.record_cursor != 0 or current.record_batches.len != 0) return error.InvalidSpecificationUnit;
+    } else if (current.record_batches.len != current.record_cursor or
+        (current.completed == records_index and current.record_cursor == current.record_group_count) or
+        (current.completed == unit_count and current.record_cursor != current.record_group_count)) return error.InvalidSpecificationUnit;
+    return .{
+        .limit = std.math.add(usize, records_index, current.record_group_count) catch return error.InvalidSpecificationUnit,
+        .position = if (current.completed < records_index) current.completed else std.math.add(usize, records_index, current.record_cursor) catch return error.InvalidSpecificationUnit,
+    };
+}
+
 pub fn unit(index: usize) error{InvalidSpecificationUnit}!g.Unit {
     return switch (index) {
         0 => .brief,
@@ -38,8 +54,8 @@ pub fn initialize(a: std.mem.Allocator, feature: @import("feature_identity.zig")
     if (@import("feature_identity.zig").FeatureId.parse(feature.bytes) == null or !p.generationReady(context.references)) return error.InvalidSpecificationUnit;
     _ = try p.items(context);
     const records = @import("reference_support.zig").records(context.references);
-    const missing = try binding.missingRoles(records, context.inputs);
-    if (missing.count() != 0) return .{ .blocked = try binding.rejection(a, context.references, missing) };
+    if (try binding.recordCount(records) == 0) return .{ .blocked = try binding.rejection(a, context.references) };
+    try binding.validate(records, context.inputs);
     return .{ .ready = .{ .feature = feature, .reference_state = context.inputs.corpus.state_id, .record_group_count = try binding.recordCount(records) } };
 }
 
@@ -47,6 +63,54 @@ pub fn currentBinding(a: std.mem.Allocator, current: Session, context: p.Context
     if (!current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
     if (current.record_group_count != try binding.recordCount(@import("reference_support.zig").records(context.references))) return error.InvalidSpecificationUnit;
     return binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, try unit(current.completed), current.record_cursor);
+}
+
+/// A checked batch retains the native dispatch occurrence even when it is empty.
+/// It cannot be inferred later from its authored records or equal claim sets.
+pub fn admit(a: std.mem.Allocator, current: Session, context: p.Context, checked: g.Checked) Error!g.Checked {
+    if (!std.meta.eql(checked.unit, try unit(current.completed))) return error.InvalidSpecificationUnit;
+    if (checked.unit != .records) return checked;
+    const assigned = try currentBinding(a, current, context);
+    defer a.free(assigned.records.selection.claim_ids);
+    if (checked.response == .clarification) {
+        const groups = checked.response.clarification.question.source_group_ids;
+        if (groups.len != 1 or groups[0].ordinal != assigned.records.signal.ordinal or checked.record_assignment != null) return error.InvalidSpecificationUnit;
+        return checked;
+    }
+    if (checked.response != .content or checked.response.content != .records) return error.InvalidSpecificationUnit;
+    try checkBatchGroup(checked, assigned.records.signal);
+    const fact: g.RecordAssignment = .{ .reference_state = current.reference_state, .group_index = current.record_cursor, .source_group_id = assigned.records.signal, .references = try referenceSnapshot(a, context) };
+    if (checked.record_assignment) |prior| if (!sameAssignment(prior, fact)) return error.InvalidSpecificationUnit;
+    var result = checked;
+    result.record_assignment = fact;
+    return result;
+}
+
+fn sameAssignment(left: g.RecordAssignment, right: g.RecordAssignment) bool {
+    return left.reference_state.eql(right.reference_state) and left.group_index == right.group_index and left.source_group_id.ordinal == right.source_group_id.ordinal and std.meta.eql(left.references, right.references);
+}
+
+fn referenceSnapshot(a: std.mem.Allocator, context: p.Context) Error!@import("atomic_repair.zig").Snapshot {
+    const facts = try p.dependencies(a, context);
+    defer a.free(facts.lineage.history);
+    return @import("atomic_repair.zig").snapshot(p.Dependencies, a, facts);
+}
+
+fn checkBatchGroup(checked: g.Checked, group: @import("reference_reconciliation.zig").SignalId) Error!void {
+    if (checked.unit != .records or checked.response != .content or checked.response.content != .records) return error.InvalidSpecificationUnit;
+    for (checked.response.content.records) |record| if (record.source_group_ids.len != 1 or record.source_group_ids[0].ordinal != group.ordinal) return error.InvalidSpecificationUnit;
+}
+
+pub fn validateRecordAssignments(a: std.mem.Allocator, current: Session, context: p.Context) Error!void {
+    if (!current.reference_state.eql(context.inputs.corpus.state_id) or current.record_group_count == 0 or current.record_group_count != try binding.recordCount(@import("reference_support.zig").records(context.references)) or current.record_cursor != current.record_group_count or current.record_batches.len != current.record_group_count) return error.InvalidSpecificationUnit;
+    const references = try referenceSnapshot(a, context);
+    for (current.record_batches, 0..) |batch, index| {
+        const assigned = try binding.record(a, @import("reference_support.zig").records(context.references), context.inputs, index);
+        defer a.free(assigned.records.selection.claim_ids);
+        const fact = batch.record_assignment orelse return error.InvalidSpecificationUnit;
+        if (!sameAssignment(fact, .{ .reference_state = current.reference_state, .group_index = index, .source_group_id = assigned.records.signal, .references = references })) return error.InvalidSpecificationUnit;
+        try checkBatchGroup(batch, assigned.records.signal);
+    }
 }
 
 pub fn owner(allocator: std.mem.Allocator, current: Session) Error!identity.ImmutableUnitOwnerId {
@@ -79,7 +143,7 @@ pub const PacketOptions = struct {
 /// Present the aggregate contract without imposing a floor on each source group.
 const RecordRequirements = struct {
     scope: enum { assembled_specification } = .assembled_specification,
-    required_families: []const g.spec.Kind = &g.spec.required_record_families,
+    required_families: []const g.spec.Kind,
 };
 
 /// Repair retains all source claims but offers exact-copy choices only from the
@@ -126,7 +190,9 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     const assigned: ?binding.Guidance = if (index < current.completed) null else try binding.guidance(a, try binding.forUnit(a, @import("reference_support.zig").records(context.references), context.inputs, selected, current.record_cursor), if (options.task != null) .repair else .authoring, requirements.items, record_kinds.items);
     var contextual_requirements: std.ArrayList(projection.Requirement) = .empty;
     for (requirements.items) |requirement| {
-        if (assigned) |selection| if (binding.assigns(selection, requirement.claim_id)) continue;
+        if (assigned) |selection| {
+            if (selected != .records or binding.assigns(selection, requirement.claim_id)) continue;
+        }
         // Exact occurrences have one display catalogue; they are not additional
         // behavioral requirements merely because their bytes are preserved.
         if ((try @import("reference_reconciliation.zig").item(all, requirement.claim_id)).claim.content == .preserved_token) continue;
@@ -139,8 +205,10 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         }).scopes
     else
         scopes.items;
+    const source_groups = if (assigned != null and selected != .records) try binding.groupGuidance(a, @import("reference_support.zig").records(context.references), requirements.items) else &.{};
     const payload = .{
         .source_assignment = assigned,
+        .source_groups = source_groups,
         .context_requirements = contextual_requirements.items,
         .preserved_tokens = exact_choices.items,
         .sources = try @import("model_evidence.zig").sources(a, context.inputs),
@@ -180,7 +248,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     const passive_ids = try input.passiveIds(a, payload.passive_literals);
     if (selected == .records) {
         if (assigned != null and options.task == null) {
-            const contextual = try packets.withContext(RecordRequirements, allocator, result, "record_requirements", .{});
+            const contextual = try packets.withContext(RecordRequirements, allocator, result, "record_requirements", .{ .required_families = g.spec.assemblyRequiredRecordFamilies(entity_decision.?.disposition) });
             packets.release(result);
             result = contextual;
         }
@@ -191,7 +259,44 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     }
     const fixed = try packets.withExcludedVariants(allocator, result, excluded);
     defer packets.release(fixed);
-    return input.withTextChoices(allocator, fixed, passive_ids, exact_ids);
+    const choices = try input.withTextChoices(allocator, fixed, passive_ids, exact_ids);
+    defer packets.release(choices);
+    if (options.task != null or index < current.completed) return packets.withRestrictions(allocator, choices, choices.excludedVariants(), choices.integerChoices());
+    return withGroupChoices(allocator, choices, context, selected, current.record_cursor);
+}
+
+fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, context: p.Context, selected: g.Unit, cursor: usize) Error!*packets.Packet {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const records = @import("reference_support.zig").records(context.references);
+    const positive = try binding.catalogue(a, records, .content);
+    const questions = try binding.catalogue(a, records, .question);
+    var question_ids: std.ArrayList(i64) = .empty;
+    if (selected == .records) {
+        try question_ids.append(a, (try binding.record(a, records, context.inputs, cursor)).records.signal.ordinal);
+    } else for (questions) |group| try question_ids.append(a, group.signal_id.ordinal);
+    const positive_ids = try a.alloc(i64, positive.len);
+    for (positive, positive_ids) |group, *id| id.* = group.signal_id.ordinal;
+    var choices: std.ArrayList(@import("model_result_schema.zig").IntegerChoice) = .empty;
+    try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "question" }, .{ .property = "signal_ids" } } }, .allowed = question_ids.items, .collection = .unique_subset });
+    if (selected != .records and positive_ids.len != 0) switch (selected) {
+        .brief => inline for (.{ "title", "description", "primary_goal" }) |field| {
+            try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = field }, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset });
+        },
+        .primary_user_story => try choices.append(a, .{ .target = .{ .tagged = .{ .kind = "primary_user_story", .field = "signal_ids" } }, .allowed = positive_ids, .collection = .unique_subset }),
+        .entities => try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "basis" }, .{ .property = "signal_ids" } } }, .allowed = positive_ids, .collection = .unique_subset }),
+        .records => unreachable,
+    };
+    const narrowed = try packets.withIntegerChoices(allocator, base, choices.items);
+    defer packets.release(narrowed);
+    if (selected != .records and positive_ids.len == 0) {
+        const excluded = try a.alloc(@import("model_result_schema.zig").ExcludedVariant, base.excludedVariants().len + 1);
+        @memcpy(excluded[0..base.excludedVariants().len], base.excludedVariants());
+        excluded[excluded.len - 1] = .{ .kind = @tagName(std.meta.activeTag(selected)) };
+        return packets.withExcludedVariants(allocator, narrowed, excluded);
+    }
+    return packets.withRestrictions(allocator, narrowed, narrowed.excludedVariants(), narrowed.integerChoices());
 }
 
 /// A value-only repair cannot borrow choices from unchanged sibling evidence.
@@ -266,6 +371,9 @@ pub fn appendBound(a: std.mem.Allocator, current: Session, checked: g.Checked) E
     if (checked.unit != .records or checked.response != .content or checked.response.content != .records or
         current.record_group_count == 0 or current.record_cursor >= current.record_group_count or
         current.record_batches.len != current.record_cursor) return error.InvalidSpecificationUnit;
+    const fact = checked.record_assignment orelse return error.InvalidSpecificationUnit;
+    if (!fact.reference_state.eql(current.reference_state) or fact.group_index != current.record_cursor or fact.source_group_id.ordinal == 0) return error.InvalidSpecificationUnit;
+    try checkBatchGroup(checked, fact.source_group_id);
     const batches = try a.alloc(g.Checked, current.record_batches.len + 1);
     @memcpy(batches[0..current.record_batches.len], current.record_batches);
     batches[current.record_batches.len] = checked;
@@ -289,6 +397,7 @@ pub fn appendBound(a: std.mem.Allocator, current: Session, checked: g.Checked) E
         }
     }
     var combined = checked;
+    combined.record_assignment = null;
     combined.response.content.records = records;
     combined.origins = .{ .fields = origins };
     return append(next, combined);
@@ -314,7 +423,7 @@ pub fn checkConsistency(a: std.mem.Allocator, current: Session, checked: g.Check
         if (first == null) first = index;
     };
     if (proposed == .records) {
-        for (current.record_batches) |batch| for (batch.response.content.records) |record| if (record.content == .entity) {
+        if (current.completed == records_index) for (current.record_batches) |batch| for (batch.response.content.records) |record| if (record.content == .entity) {
             count += 1;
         };
         if (entities.disposition == .required and count == 0 and current.record_cursor + 1 < current.record_group_count) return null;
@@ -332,6 +441,7 @@ pub fn checkConsistency(a: std.mem.Allocator, current: Session, checked: g.Check
 
 pub fn assemble(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: Session) Error!@import("specification_identity.zig").Assigned {
     if (current.completed != unit_count or !current.reference_state.eql(context.inputs.corpus.state_id)) return error.InvalidSpecificationUnit;
+    try validateRecordAssignments(allocator, current, context);
     var records: std.ArrayList(g.spec.RecordProposal) = .empty;
     for (current.units, 0..) |entry, index| {
         const checked = entry orelse return error.InvalidSpecificationUnit;

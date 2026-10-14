@@ -4,7 +4,7 @@ version: 1
 shortcode: SGEN
 invoke: specify-invocation
 policy: core.specification-output@1
-start: toolchain
+start: review-history
 resources:
   protocol-prompt: spec/protocol.prompt.md
   extraction-content-prompt: spec/extraction-content.prompt.md
@@ -17,7 +17,6 @@ resources:
   reconciliation-summary: spec/reconciliation-summary.composition.json
   dispositions-prompt: spec/reconciliation-dispositions.prompt.md
   signals-prompt: spec/reconciliation-signals.prompt.md
-  roles-prompt: spec/reconciliation-roles.prompt.md
   conflicts-prompt: spec/reconciliation-conflicts.prompt.md
   generation-prompt: spec/generation.prompt.md
   story-prompt: spec/story.prompt.md
@@ -31,6 +30,9 @@ resources:
   principle-prompt: spec/principle.prompt.md
   support-schema: spec/support.schema.json
 steps:
+  review-history:
+    use: initialize-specification-review-history
+    on: {ok: toolchain, failed: end.failed}
   toolchain:
     call: prepare-toolchain
     on:
@@ -89,14 +91,15 @@ steps:
     use: build-specification-authority-requirements
     on: {ok: review-source, blocked: end.blocked}
   review-source:
-    call: review-source
-    with: {retry-limit: 2}
-    on:
-      ok: source-authority
-      invalid: end.invalid
-      blocked: end.blocked
-      failed: end.failed
-      cancelled: end.cancelled
+    use: initialize-specification-review
+    on: {ok: assess-source, failed: end.failed}
+  assess-source:
+    call: review-source-support
+    with: {prompt: support-prompt, retry-limit: 2}
+    on: {ok: apply-source, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+  apply-source:
+    use: apply-specification-support
+    on: {ok: source-authority, failed: end.failed}
   source-authority:
     call: authority-gate
     on:
@@ -553,30 +556,10 @@ subgraphs:
         on: {ok: validate-dispositions, failed: end.failed}
       validate-signals:
         use: validate-reference-signal-proposals
-        on: {ok: check-roles, invalid: authorize-signals-repair, failed: end.failed}
-      check-roles:
-        use: check-reference-reconciliation-phase
-        with: {phase: signals}
-        on: {ok: build-roles, more: validate-roles, failed: end.failed}
-      build-roles:
-        use: build-reference-roles-assignment
-        on: {ok: request-roles, failed: end.failed}
-      request-roles:
-        call: model-request
-        with: {slot: spec_generation, prompt: roles-prompt, schema: reconciliation-schema, selection: input, retry-limit: 2}
-        on: {ok: collect-roles, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      collect-roles:
-        use: collect-reference-roles-candidate
-        on: {ok: release-roles, failed: end.failed}
-      release-roles:
-        call: release-request
-        on: {ok: validate-dispositions, failed: end.failed}
-      validate-roles:
-        use: validate-reference-role-assignments
-        on: {ok: check-conflicts, invalid: end.invalid, failed: end.failed}
+        on: {ok: check-conflicts, invalid: authorize-signals-repair, failed: end.failed}
       check-conflicts:
         use: check-reference-reconciliation-phase
-        with: {phase: roles}
+        with: {phase: signals}
         on: {ok: build-conflicts, more: validate-conflicts, failed: end.failed}
       build-conflicts:
         use: build-reference-conflicts-assignment
@@ -641,19 +624,6 @@ subgraphs:
         use: merge-reference-reconciliation-repair
         with: {retry-limit: 128}
         on: {ok: end.ok, failed: end.failed}
-  review-source:
-    start: initialize
-    steps:
-      initialize:
-        use: initialize-specification-review
-        on: {ok: review, failed: end.failed}
-      review:
-        call: review-support
-        with: {prompt: support-prompt, retry-limit: {param: retry-limit}}
-        on: {ok: apply, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
-      apply:
-        use: apply-specification-support
-        on: {ok: end.ok, failed: end.failed}
   review-candidate:
     start: project
     steps:
@@ -664,20 +634,60 @@ subgraphs:
         use: initialize-specification-review
         on: {ok: source, failed: end.failed}
       source:
-        call: review-support
+        call: review-source-support
         with: {prompt: support-prompt, retry-limit: 1}
         on: {ok: advance, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
       advance:
         use: advance-specification-review
         on: {ok: apply, more: policy, failed: end.failed}
       policy:
-        call: review-support
+        call: assess-support
         with: {prompt: principle-prompt, retry-limit: 1}
-        on: {ok: advance, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+        on: {ok: policy-progress, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+      policy-progress:
+        use: check-specification-support-localization
+        on: {ok: advance, more: policy, invalid: end.invalid}
       apply:
         use: apply-specification-support
         on: {ok: end.ok, failed: end.failed}
-  review-support:
+  review-source-support:
+    start: reuse
+    steps:
+      reuse:
+        use: reuse-specification-review
+        with:
+          slot: spec_generation
+          prompt: {param: prompt}
+          protocol-prompt: protocol-prompt
+          result-schema: support-schema
+          result-selection: input
+        on: {ok: end.ok, more: assess, failed: end.failed}
+      assess:
+        call: assess-support
+        with: {prompt: {param: prompt}, retry-limit: {param: retry-limit}}
+        on: {ok: check-localization, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}
+      check-localization:
+        use: check-specification-support-localization
+        on: {ok: end.ok, more: reuse, invalid: loss-input}
+      loss-input:
+        use: build-specification-support-loss-input
+        on: {ok: loss-model, failed: end.failed}
+      loss-model:
+        call: model-request
+        with:
+          slot: spec_generation
+          prompt: loss-prompt
+          schema: support-schema
+          selection: input
+          retry-limit: 1
+        on: {ok: loss-collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
+      loss-collect:
+        use: collect-specification-support-loss
+        on: {ok: loss-release, more: loss-release, invalid: end.invalid, failed: end.failed}
+      loss-release:
+        call: release-request
+        on: {ok: check-localization, failed: end.failed}
+  assess-support:
     start: input
     steps:
       input:
@@ -697,28 +707,7 @@ subgraphs:
         on: {ok: release, more: release, invalid: authorize, failed: end.failed}
       release:
         call: release-request
-        on: {ok: check-localization, failed: end.failed}
-      check-localization:
-        use: check-specification-support-localization
-        on: {ok: end.ok, more: input, invalid: loss-input}
-      loss-input:
-        use: build-specification-support-loss-input
-        on: {ok: loss-model, failed: end.failed}
-      loss-model:
-        call: model-request
-        with:
-          slot: spec_generation
-          prompt: loss-prompt
-          schema: support-schema
-          selection: input
-          retry-limit: 1
-        on: {ok: loss-collect, invalid: end.invalid, failed: end.failed, cancelled: end.cancelled}
-      loss-collect:
-        use: collect-specification-support-loss
-        on: {ok: loss-release, more: loss-release, invalid: end.invalid, failed: end.failed}
-      loss-release:
-        call: release-request
-        on: {ok: check-localization, failed: end.failed}
+        on: {ok: end.ok, failed: end.failed}
       authorize:
         use: authorize-specification-support-repair
         on: {ok: retire, more: merge, blocked: end.blocked, failed: end.failed}

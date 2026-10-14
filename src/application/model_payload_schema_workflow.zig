@@ -36,6 +36,7 @@ pub const Validate = struct {
         .produces = Action.contract.produces,
         .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
         .side_effect = Action.contract.side_effect,
+        .outcome_association = .{ .request_admission = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .model_envelope_result, .result = .model_payload_schema_result } },
     };
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -65,6 +66,7 @@ pub const Admit = struct {
         .produces = Action.contract.produces,
         .outcomes = &.{ .ok, .invalid, .failed, .cancelled },
         .side_effect = Action.contract.side_effect,
+        .outcome_association = .{ .request_admission = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_invocation_validation_result, .result = .model_payload_schema_result } },
     };
     allocator: std.mem.Allocator,
     action: Action = .{},

@@ -1,0 +1,277 @@
+[
+  {
+    "id": "startup-display",
+    "fixture": {
+      "id": "startup-display",
+      "cohort": "development",
+      "sources": [
+        "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n- Must also output date and time in UTC\n"
+      ],
+      "claims": [
+        {
+          "source": 1,
+          "text": "The application must start successfully.",
+          "first": 5,
+          "last": 5
+        },
+        {
+          "source": 1,
+          "text": "When started, the application must display the specified greeting.",
+          "first": 6,
+          "last": 6
+        },
+        {
+          "source": 1,
+          "text": "The application must also output date and time in UTC.",
+          "first": 7,
+          "last": 7
+        }
+      ],
+      "description": "MOCK Controlled seed used only for offline context construction.",
+      "missing": "",
+      "missing_obligation": "",
+      "mode": "candidate",
+      "grouping": "combined",
+      "source_group_ids": [
+        1
+      ],
+      "verdicts": [],
+      "expected": "",
+      "source_path": "stories.md",
+      "target": null,
+      "candidate_file": null,
+      "signal_text": null
+    },
+    "source_file": "test/e2e/wf-001-hello-world/reference/stories.md",
+    "groups": [
+      1
+    ],
+    "seed": {
+      "title": "MOCK Startup display",
+      "description": "MOCK On startup the application starts successfully, displays the supplied greeting and outputs UTC date and time.",
+      "primary_goal": "MOCK Present the greeting and UTC time on successful startup.",
+      "story": "MOCK As a user, I start the application so that it starts successfully, displays the supplied greeting and outputs UTC date and time.",
+      "entity_disposition": "not_applicable",
+      "entity_basis": "MOCK Startup, greeting display and UTC time output need no business entity records.",
+      "given": "MOCK The application is ready to start.",
+      "when": "MOCK The user starts the application.",
+      "then": "MOCK Startup succeeds and the supplied greeting and UTC date and time are displayed.",
+      "functional_requirement": "MOCK On startup the application must start successfully, display the supplied greeting and output UTC date and time.",
+      "entity_name": null
+    },
+    "expectation": {
+      "obligations": [
+        "successful startup",
+        "greeting display when started",
+        "date and time output in UTC"
+      ],
+      "support_examples": [
+        1
+      ],
+      "entity_decision": "not_applicable",
+      "literal": "Hello, World!",
+      "gap": null,
+      "forbidden": [
+        "unstated greeting-before-time sequence",
+        "new entity requirements",
+        "unsupported prerequisites"
+      ]
+    },
+    "record_seeds": [
+      {
+        "group_id": 1,
+        "given": "MOCK The application is ready to start.",
+        "when": "MOCK The user starts the application.",
+        "then": "MOCK Startup succeeds and the supplied greeting and UTC date and time are displayed.",
+        "functional_requirement": "MOCK On startup the application must start successfully, display the supplied greeting and output UTC date and time.",
+        "entity_name": null
+      },
+      {
+        "group_id": 2,
+        "given": null,
+        "when": null,
+        "then": null,
+        "functional_requirement": null,
+        "entity_name": null
+      }
+    ]
+  },
+  {
+    "id": "equipment-joint-support",
+    "fixture": {
+      "id": "equipment-joint-support",
+      "cohort": "development",
+      "sources": [
+        "MOCK An equipment register must retain equipment identifiers and inspection results.\n",
+        "MOCK When an inspection fails, the register must mark that equipment unavailable until a later successful inspection.\n"
+      ],
+      "claims": [
+        {
+          "source": 1,
+          "text": "MOCK An equipment register must retain equipment identifiers and inspection results.",
+          "first": 1,
+          "last": 1
+        },
+        {
+          "source": 2,
+          "text": "MOCK When an inspection fails, the register must mark that equipment unavailable until a later successful inspection.",
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "description": "MOCK Controlled seed used only for offline context construction.",
+      "missing": "",
+      "missing_obligation": "",
+      "mode": "candidate",
+      "grouping": "per_source",
+      "source_group_ids": [
+        1,
+        2
+      ],
+      "verdicts": [],
+      "expected": "",
+      "source_path": null,
+      "target": null,
+      "candidate_file": null,
+      "signal_text": null
+    },
+    "source_file": null,
+    "groups": [
+      1,
+      2
+    ],
+    "seed": {
+      "title": "MOCK Equipment inspections",
+      "description": "MOCK The register retains equipment identifiers and inspection results; failed inspections keep equipment unavailable until a later successful inspection.",
+      "primary_goal": "MOCK Record inspections and prevent availability after a failed inspection until a successful inspection.",
+      "story": "MOCK As an operator, I record inspections so that equipment with failed inspections remains unavailable until a later successful inspection.",
+      "entity_disposition": "required",
+      "entity_basis": "MOCK Equipment and inspection results are business data whose association and availability are required.",
+      "given": "MOCK An equipment item is recorded in the register.",
+      "when": "MOCK An inspection result is recorded.",
+      "then": "MOCK The equipment identifier and inspection result are retained.",
+      "functional_requirement": "MOCK The register must retain equipment identifiers and inspection results.",
+      "entity_name": "MOCK Equipment"
+    },
+    "expectation": {
+      "obligations": [
+        "retain equipment identifiers and inspection results",
+        "mark failed-inspection equipment unavailable",
+        "remain unavailable until later successful inspection"
+      ],
+      "support_examples": [
+        1,
+        2
+      ],
+      "entity_decision": "required",
+      "literal": null,
+      "gap": null,
+      "forbidden": [
+        "availability after failure without successful inspection",
+        "inspection result unrelated to equipment",
+        "record group 1 invents group 2 duty"
+      ]
+    },
+    "record_seeds": [
+      {
+        "group_id": 1,
+        "given": "MOCK An equipment item is recorded in the register.",
+        "when": "MOCK An inspection result is recorded.",
+        "then": "MOCK The equipment identifier and inspection result are retained.",
+        "functional_requirement": "MOCK The register must retain equipment identifiers and inspection results.",
+        "entity_name": "MOCK Equipment"
+      },
+      {
+        "group_id": 2,
+        "given": "MOCK Equipment has failed an inspection.",
+        "when": "MOCK Its availability is checked before a later successful inspection.",
+        "then": "MOCK The equipment remains unavailable.",
+        "functional_requirement": "MOCK When an inspection fails, that equipment must remain unavailable until a later successful inspection.",
+        "entity_name": null
+      }
+    ]
+  },
+  {
+    "id": "renewal-information-gap",
+    "fixture": {
+      "id": "renewal-information-gap",
+      "cohort": "development",
+      "sources": [
+        "MOCK A library must track loans and their return deadlines.\nMOCK Eligible renewals extend the return deadline; the extension duration is undecided.\n"
+      ],
+      "claims": [
+        {
+          "source": 1,
+          "text": "MOCK The library must track loans and return deadlines.",
+          "first": 1,
+          "last": 1
+        },
+        {
+          "source": 1,
+          "text": "MOCK Eligible renewals extend the return deadline, but the extension duration is undecided.",
+          "first": 2,
+          "last": 2
+        }
+      ],
+      "description": "MOCK Controlled seed used only for offline context construction.",
+      "missing": "",
+      "missing_obligation": "",
+      "mode": "candidate",
+      "grouping": "combined",
+      "source_group_ids": [
+        1
+      ],
+      "verdicts": [],
+      "expected": "",
+      "source_path": null,
+      "target": null,
+      "candidate_file": null,
+      "signal_text": null
+    },
+    "source_file": null,
+    "groups": [
+      1
+    ],
+    "seed": {
+      "title": "MOCK Loan renewal",
+      "description": "MOCK The library tracks loans and return deadlines; eligible renewal extends the deadline but the extension duration remains undecided.",
+      "primary_goal": "MOCK Track loans and renew eligible deadlines once the extension duration is specified.",
+      "story": "MOCK As a borrower, I renew an eligible loan so that its return deadline is extended; the extension duration requires a decision.",
+      "entity_disposition": "required",
+      "entity_basis": "MOCK Loans and their return deadlines are business data used by eligible renewals.",
+      "given": "MOCK The loan is eligible for renewal.",
+      "when": "MOCK The borrower requests renewal.",
+      "then": "MOCK The return deadline is extended by the duration that remains to be specified.",
+      "functional_requirement": "MOCK The library must track loans and return deadlines and extend eligible renewal deadlines by the still-undecided duration.",
+      "entity_name": "MOCK Loan"
+    },
+    "expectation": {
+      "obligations": [
+        "track loans and return deadlines",
+        "eligible renewal extends return deadline",
+        "extension duration explicitly undecided"
+      ],
+      "support_examples": [
+        1
+      ],
+      "entity_decision": "required",
+      "literal": null,
+      "gap": "extension duration",
+      "forbidden": [
+        "invent a number of days",
+        "turn supplied eligibility into a new missing user decision",
+        "drop loans or return deadlines"
+      ]
+    },
+    "record_seeds": [
+      {
+        "group_id": 1,
+        "given": "MOCK The loan is eligible for renewal.",
+        "when": "MOCK The borrower requests renewal.",
+        "then": "MOCK The return deadline is extended by the duration that remains to be specified.",
+        "functional_requirement": "MOCK The library must track loans and return deadlines and extend eligible renewal deadlines by the still-undecided duration.",
+        "entity_name": "MOCK Loan"
+      }
+    ]
+  }
+]

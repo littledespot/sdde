@@ -1,0 +1,1150 @@
+{
+  "status": "completed_manual_semantic_review_candidate_unqualified",
+  "assessment": "Repository-source and field-purpose review by the implementation agents, not a deterministic semantic proof or external model judge. Criteria remain the pre-dispatch README and approved case labels.",
+  "baseline": "None for authored content. The historical 22-call role task is different; no paired quality-improvement estimate is claimed.",
+  "settings": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0.1,
+    "response_mode": "native_schema",
+    "max_output_tokens": 16384,
+    "seed": "absent",
+    "top_p": "absent"
+  },
+  "logical_trials": 24,
+  "physical_sends": 28,
+  "completed": 24,
+  "completed_physical": 28,
+  "native_admitted": 20,
+  "native_rejected": 4,
+  "invalid_associations": 0,
+  "wrong_fixed_group_ownership": {
+    "count": 2,
+    "denominator": 6,
+    "scope": "logical record collection trials; equipment only"
+  },
+  "token_only_support_scope_ambiguous": {
+    "count": 2,
+    "denominator": 6
+  },
+  "false_missing_authority": 0,
+  "faithful_clarifications": {
+    "count": 0,
+    "denominator": 0,
+    "note": "No clarification or inconclusive response was returned. Absence is not automatically a semantic failure when the known task can be drafted."
+  },
+  "field_purpose_judgments": {
+    "pass": 19,
+    "fail": 4,
+    "weak": 1
+  },
+  "meaning_judgments": {
+    "pass": 15,
+    "fail": 8,
+    "weak": 1
+  },
+  "record_collection_gate_pass": {
+    "count": 0,
+    "denominator": 6,
+    "note": "Two startup trials fail assigned field purposes; four other trials omit required entity records. Business clauses surviving elsewhere do not establish correct field or source-association semantics."
+  },
+  "entity_decision_accuracy": {
+    "count": 6,
+    "denominator": 6,
+    "basis_weak": 1
+  },
+  "altered_conditions_or_strength": 3,
+  "unsupported_additions": 3,
+  "literal_observations": {
+    "startup_briefs_correct_visible_literal": 2,
+    "startup_stories_correct_native_literal": 2,
+    "startup_records_repeat_1": "No greeting literal in either batch; full-specification aggregate exact coverage is unmeasured.",
+    "startup_records_repeat_2": "Correct engine-restored literal in business-group fields, but literal-only fields fail behavioral purposes.",
+    "full_specification_exact_preservation": "not_measured"
+  },
+  "uncertainty": {
+    "renewal_briefs_duration_not_expressed": 2,
+    "renewal_stories_duration_explicit": 2,
+    "renewal_record_repeat_1": "Known eligibility and undecided duration retained in FR; AC eligibility omitted.",
+    "renewal_record_repeat_2": "Undecided duration converted into unsupported processing ban.",
+    "invented_numeric_duration": 0
+  },
+  "actual_input_tokens": 38370,
+  "actual_output_tokens": 3950,
+  "actual_input_plus_output_tokens": 42320,
+  "transport_elapsed_ns": null,
+  "sum_replay_end_to_end_elapsed_ns": 27178441958,
+  "timing_note": "Sum of measured loopback replay durations, not entire panel wall-clock or an isolated provider transport measure.",
+  "not_sent": 0,
+  "uncertain_delivery": 0,
+  "extra_calls_retries_repairs_judges_reviews_e2e": 0,
+  "gate": "unqualified",
+  "receiver_recheck": {
+    "dispatch_preparation_sha256": "63edf233d6669ee964b30f19fe4a9624d6411dbe7a489cff9c48725deb12e7cd",
+    "admission_preparation_sha256": "5c67255acce7c66ef7bfa84a93290a83a84c44cc2dc33d9bc95b1b48783cb8b9",
+    "model_facing_requests_identical": true,
+    "unchanged_receipts": 28,
+    "initial_native_result": "17/24, superseded incomplete diagnostic receiver; retained unchanged in receiver-recheck/original-admission.json",
+    "current_native_result": "20/24 after existing production singleton construction, without response or policy changes",
+    "evidence_directory": "zig-out/phase5-authoring-associations/receiver-recheck"
+  },
+  "live_evidence_directory": "zig-out/phase5-authoring-associations",
+  "native_workflow_origin_available": false,
+  "publication_repair_or_rubric_evidence": false,
+  "trials": [
+    {
+      "id": "startup-display-brief-1",
+      "physical_ordinals": [
+        1
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "The title names the feature; description and goal jointly retain successful startup, greeting and UTC date/time. Immediate in the goal is a possible timing embellishment, not scored here as an imposed behavioral condition."
+      ],
+      "review_projection_packets": 3,
+      "actual_input_tokens": 1215,
+      "actual_output_tokens": 192,
+      "sum_replay_elapsed_ns": 1318746250,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "b84ad5324ed3df19d57d47d54aec1a56"
+        }
+      ],
+      "evidence": [
+        "01-startup-display-brief-1-brief.response.json"
+      ]
+    },
+    {
+      "id": "startup-display-brief-2",
+      "physical_ordinals": [
+        2
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Successful startup is retained jointly through the goal; the description need not repeat every clause."
+      ],
+      "review_projection_packets": 3,
+      "actual_input_tokens": 1215,
+      "actual_output_tokens": 187,
+      "sum_replay_elapsed_ns": 1121893625,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "3f1cada14854fc1e89a743bc61b2a948"
+        }
+      ],
+      "evidence": [
+        "02-startup-display-brief-2-brief.response.json"
+      ]
+    },
+    {
+      "id": "startup-display-primary_user_story-1",
+      "physical_ordinals": [
+        3
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "A system-centered narrative preserves all three duties and the exact greeting. No actor template is required."
+      ],
+      "review_projection_packets": 1,
+      "actual_input_tokens": 947,
+      "actual_output_tokens": 90,
+      "sum_replay_elapsed_ns": 866183708,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "43e0d87773ef056db92896207250acac"
+        }
+      ],
+      "evidence": [
+        "03-startup-display-primary_user_story-1-primary_user_story.response.json"
+      ]
+    },
+    {
+      "id": "startup-display-primary_user_story-2",
+      "physical_ordinals": [
+        4
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "fail",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": true,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "The narrative preserves the supplied duties but invents a console program and immediate printing. Neither is required by the source."
+      ],
+      "review_projection_packets": 1,
+      "actual_input_tokens": 947,
+      "actual_output_tokens": 127,
+      "sum_replay_elapsed_ns": 1020678959,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "17d1a61db1a483f417d08a2e81431cf3"
+        }
+      ],
+      "evidence": [
+        "04-startup-display-primary_user_story-2-primary_user_story.response.json"
+      ]
+    },
+    {
+      "id": "startup-display-entities-1",
+      "physical_ordinals": [
+        5
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Correct not_applicable decision with a reason distinguishing displayed values from business entities."
+      ],
+      "review_projection_packets": 1,
+      "actual_input_tokens": 1037,
+      "actual_output_tokens": 193,
+      "sum_replay_elapsed_ns": 1147428500,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "dd2ed076af47b14ff03f7528356ab54b"
+        }
+      ],
+      "evidence": [
+        "05-startup-display-entities-1-entities.response.json"
+      ]
+    },
+    {
+      "id": "startup-display-entities-2",
+      "physical_ordinals": [
+        6
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Correct not_applicable decision; the explanation identifies functional display behavior and why the token is not an entity."
+      ],
+      "review_projection_packets": 1,
+      "actual_input_tokens": 1037,
+      "actual_output_tokens": 172,
+      "sum_replay_elapsed_ns": 1057152667,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "80d48aa5dabd6c1eead36e8c62c86ba9"
+        }
+      ],
+      "evidence": [
+        "06-startup-display-entities-2-entities.response.json"
+      ]
+    },
+    {
+      "id": "startup-display-records-1",
+      "physical_ordinals": [
+        7,
+        8
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "scope_ambiguous",
+      "meaning_judgment": "fail",
+      "field_purpose_judgment": "fail",
+      "altered_condition_or_strength": true,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "The acceptance criterion puts successful startup in given before when the application is started, assuming the outcome it should test. Its functional requirements retain the business duties. Neither record batch supplies the exact greeting; this is a record-level observation, not proof that a complete specification would lose the literal. The token-only batch also authors business duties from visible context; its ownership is ambiguous because the same original source remains authoritative."
+      ],
+      "review_projection_packets": 10,
+      "actual_input_tokens": 4424,
+      "actual_output_tokens": 307,
+      "sum_replay_elapsed_ns": 2153802084,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "5567efcae4a984fc3aa7d96e9c030e31"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "4c6b9921fae6e2eb1a6c8186749c3e13"
+        }
+      ],
+      "evidence": [
+        "07-startup-display-records-1-records-1.response.json",
+        "08-startup-display-records-1-records-2.response.json"
+      ]
+    },
+    {
+      "id": "startup-display-records-2",
+      "physical_ordinals": [
+        9,
+        10
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "scope_ambiguous",
+      "meaning_judgment": "fail",
+      "field_purpose_judgment": "fail",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Group 1 supplies only the exact greeting as given, when, then and functional requirement text. Correct literal text does not fulfil any of those behavioral field purposes. Group 2 contains greeting/time behavior but does not establish successful startup. Token-only contextual ownership remains a separate ambiguity."
+      ],
+      "review_projection_packets": 10,
+      "actual_input_tokens": 4424,
+      "actual_output_tokens": 228,
+      "sum_replay_elapsed_ns": 1768641291,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "779570290a87ab48ee5995f658cc3d68"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "7c147a8c10fd8e6e26db1eb1740ecd6d"
+        }
+      ],
+      "evidence": [
+        "09-startup-display-records-2-records-1.response.json",
+        "10-startup-display-records-2-records-2.response.json"
+      ]
+    },
+    {
+      "id": "equipment-joint-support-brief-1",
+      "physical_ordinals": [
+        11
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Jointly selects both business groups and preserves identifier/result retention and unavailable-until-success behavior."
+      ],
+      "review_projection_packets": 3,
+      "actual_input_tokens": 1041,
+      "actual_output_tokens": 186,
+      "sum_replay_elapsed_ns": 1036936375,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "013d7ea70bdeaafee4db7ede3d34d61b"
+        }
+      ],
+      "evidence": [
+        "11-equipment-joint-support-brief-1-brief.response.json"
+      ]
+    },
+    {
+      "id": "equipment-joint-support-brief-2",
+      "physical_ordinals": [
+        12
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Joint support and an abstract feature goal are adequate; individual fields need not repeat every duty."
+      ],
+      "review_projection_packets": 3,
+      "actual_input_tokens": 1041,
+      "actual_output_tokens": 218,
+      "sum_replay_elapsed_ns": 1222983125,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "cd2a57b40dd939f238c48c401b335e74"
+        }
+      ],
+      "evidence": [
+        "12-equipment-joint-support-brief-2-brief.response.json"
+      ]
+    },
+    {
+      "id": "equipment-joint-support-primary_user_story-1",
+      "physical_ordinals": [
+        13
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "A coherent system-centered narrative preserves both source groups and the successful-inspection release condition."
+      ],
+      "review_projection_packets": 1,
+      "actual_input_tokens": 833,
+      "actual_output_tokens": 77,
+      "sum_replay_elapsed_ns": 624900292,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "4311325ae4beb083a6a6a01922a48a1c"
+        }
+      ],
+      "evidence": [
+        "13-equipment-joint-support-primary_user_story-1-primary_user_story.response.json"
+      ]
+    },
+    {
+      "id": "equipment-joint-support-primary_user_story-2",
+      "physical_ordinals": [
+        14
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Preserves retention and failed-inspection availability behavior without requiring an invented user persona."
+      ],
+      "review_projection_packets": 1,
+      "actual_input_tokens": 833,
+      "actual_output_tokens": 77,
+      "sum_replay_elapsed_ns": 577437833,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "0e885642b85f231e7ec9ad6d26f78a40"
+        }
+      ],
+      "evidence": [
+        "14-equipment-joint-support-primary_user_story-2-primary_user_story.response.json"
+      ]
+    },
+    {
+      "id": "equipment-joint-support-entities-1",
+      "physical_ordinals": [
+        15
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Correct required decision with a rationale based on identifiers, results and equipment availability state."
+      ],
+      "review_projection_packets": 1,
+      "actual_input_tokens": 929,
+      "actual_output_tokens": 110,
+      "sum_replay_elapsed_ns": 867587875,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "d068f0b00de60f2f615f177c6cdef3bb"
+        }
+      ],
+      "evidence": [
+        "15-equipment-joint-support-entities-1-entities.response.json"
+      ]
+    },
+    {
+      "id": "equipment-joint-support-entities-2",
+      "physical_ordinals": [
+        16
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Correct required decision and meaningful explanation covering both sources."
+      ],
+      "review_projection_packets": 1,
+      "actual_input_tokens": 929,
+      "actual_output_tokens": 110,
+      "sum_replay_elapsed_ns": 920927083,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "773ca42bc0f0db0fce275c27aaac27ba"
+        }
+      ],
+      "evidence": [
+        "16-equipment-joint-support-entities-2-entities.response.json"
+      ]
+    },
+    {
+      "id": "equipment-joint-support-records-1",
+      "physical_ordinals": [
+        17,
+        18
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "rejected",
+      "native_issue": {
+        "detail": "The fixed entity decision requires at least one entity record; none was supplied.",
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "unit": {}
+        },
+        "rule": "entity_membership",
+        "observed": null,
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": {
+          "disposition": "required",
+          "entity_count": 0
+        },
+        "native_error": null
+      },
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "wrong_owner",
+      "meaning_judgment": "fail",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "The group-1 acceptance criterion and functional requirement describe group-2 failed-inspection availability behavior; group 1 does not express its own retention duty. Group 2 contains retention behavior, but correct prose elsewhere does not repair the wrong fixed association. Both physical batches omit entity records despite required entity disposition. E123/PASS/FAIL are treated as illustrative scenario values, not automatically new global rules."
+      ],
+      "review_projection_packets": 0,
+      "actual_input_tokens": 4040,
+      "actual_output_tokens": 314,
+      "sum_replay_elapsed_ns": 2186132916,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "8309f40a23443df0689bccc73428e50c"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "c90b8f0ff6d56f14170e90459e840b3c"
+        }
+      ],
+      "evidence": [
+        "17-equipment-joint-support-records-1-records-1.response.json",
+        "18-equipment-joint-support-records-1-records-2.response.json"
+      ]
+    },
+    {
+      "id": "equipment-joint-support-records-2",
+      "physical_ordinals": [
+        19,
+        20
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "rejected",
+      "native_issue": {
+        "detail": "The fixed entity decision requires at least one entity record; none was supplied.",
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "unit": {}
+        },
+        "rule": "entity_membership",
+        "observed": null,
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": {
+          "disposition": "required",
+          "entity_count": 0
+        },
+        "native_error": null
+      },
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "wrong_owner",
+      "meaning_judgment": "fail",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Group 1 has a correct retention functional requirement but its acceptance criterion still tests the other group's failure/availability behavior. Both batches omit required entity records. Illustrative inspection values are not counted as policy invention."
+      ],
+      "review_projection_packets": 0,
+      "actual_input_tokens": 4040,
+      "actual_output_tokens": 282,
+      "sum_replay_elapsed_ns": 1956962708,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "5cc1efefd3d875de29b7cf814463b18b"
+        },
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "a007bf0c955ed02299cfa478569dba8f"
+        }
+      ],
+      "evidence": [
+        "19-equipment-joint-support-records-2-records-1.response.json",
+        "20-equipment-joint-support-records-2-records-2.response.json"
+      ]
+    },
+    {
+      "id": "renewal-information-gap-brief-1",
+      "physical_ordinals": [
+        21
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "fail",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": true,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Loan-period recording and automatic update on approval add implementation/behavior not supplied by tracking loans and deadlines with eligible renewals. The book-specific goal also narrows the unstated item scope. Undecided duration is not expressed; absence of a duration statement alone is not the gate failure."
+      ],
+      "review_projection_packets": 3,
+      "actual_input_tokens": 1009,
+      "actual_output_tokens": 180,
+      "sum_replay_elapsed_ns": 1111845917,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "336e18d91508628b13e50b863d2335ed"
+        }
+      ],
+      "evidence": [
+        "21-renewal-information-gap-brief-1-brief.response.json"
+      ]
+    },
+    {
+      "id": "renewal-information-gap-brief-2",
+      "physical_ordinals": [
+        22
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "A legitimate abstract brief preserves loan/deadline tracking and eligible extension. It does not invent a duration. An undecided duration need not prevent drafting the known high-level behavior."
+      ],
+      "review_projection_packets": 3,
+      "actual_input_tokens": 1009,
+      "actual_output_tokens": 151,
+      "sum_replay_elapsed_ns": 915836125,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "bd0e9253a1d9f6b4ac83cbbe894e41f0"
+        }
+      ],
+      "evidence": [
+        "22-renewal-information-gap-brief-2-brief.response.json"
+      ]
+    },
+    {
+      "id": "renewal-information-gap-primary_user_story-1",
+      "physical_ordinals": [
+        23
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Preserves known behavior, eligibility and the explicitly undecided duration."
+      ],
+      "review_projection_packets": 1,
+      "actual_input_tokens": 805,
+      "actual_output_tokens": 90,
+      "sum_replay_elapsed_ns": 543671958,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "a894ae4f6df7e9068cdff754fcdfc83d"
+        }
+      ],
+      "evidence": [
+        "23-renewal-information-gap-primary_user_story-1-primary_user_story.response.json"
+      ]
+    },
+    {
+      "id": "renewal-information-gap-primary_user_story-2",
+      "physical_ordinals": [
+        24
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Preserves eligibility and duration uncertainty without inventing a number of days. Generic patron wording is not treated as a mandatory persona policy."
+      ],
+      "review_projection_packets": 1,
+      "actual_input_tokens": 805,
+      "actual_output_tokens": 91,
+      "sum_replay_elapsed_ns": 800808875,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "ea2171ab5393003094ec446b047508e3"
+        }
+      ],
+      "evidence": [
+        "24-renewal-information-gap-primary_user_story-2-primary_user_story.response.json"
+      ]
+    },
+    {
+      "id": "renewal-information-gap-entities-1",
+      "physical_ordinals": [
+        25
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "weak",
+      "field_purpose_judgment": "weak",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "The required decision is correct. Basis copies the original tracked-data requirement but leaves the decision rationale implicit; this is weaker than repetition 2, not an incorrect entity decision. MOCK appears in the supplied original source and is not itself a semantic defect."
+      ],
+      "review_projection_packets": 1,
+      "actual_input_tokens": 901,
+      "actual_output_tokens": 153,
+      "sum_replay_elapsed_ns": 968154667,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "e9981319d72c4784b49c44ded943fa60"
+        }
+      ],
+      "evidence": [
+        "25-renewal-information-gap-entities-1-entities.response.json"
+      ]
+    },
+    {
+      "id": "renewal-information-gap-entities-2",
+      "physical_ordinals": [
+        26
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "pass",
+      "field_purpose_judgment": "pass",
+      "altered_condition_or_strength": false,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Correct required decision with an explicit tracking/relationship rationale. This decision does not establish that a particular entity design is uniquely required."
+      ],
+      "review_projection_packets": 1,
+      "actual_input_tokens": 901,
+      "actual_output_tokens": 114,
+      "sum_replay_elapsed_ns": 845912167,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "5527653aeb93126f55790fb0cec09281"
+        }
+      ],
+      "evidence": [
+        "26-renewal-information-gap-entities-2-entities.response.json"
+      ]
+    },
+    {
+      "id": "renewal-information-gap-records-1",
+      "physical_ordinals": [
+        27
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "rejected",
+      "native_issue": {
+        "detail": "The fixed entity decision requires at least one entity record; none was supplied.",
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "unit": {}
+        },
+        "rule": "entity_membership",
+        "observed": null,
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": {
+          "disposition": "required",
+          "entity_count": 0
+        },
+        "native_error": null
+      },
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "fail",
+      "field_purpose_judgment": "fail",
+      "altered_condition_or_strength": true,
+      "unsupported_addition": false,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "The acceptance criterion renews any loan without eligibility, while the functional requirement preserves eligible renewal. Correct qualification in the FR does not make the unconditional AC faithful. No entity record is supplied despite required disposition. The undecided duration remains explicit."
+      ],
+      "review_projection_packets": 0,
+      "actual_input_tokens": 2004,
+      "actual_output_tokens": 140,
+      "sum_replay_elapsed_ns": 1008959333,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "876335be18868c1fadf824e3e065c34e"
+        }
+      ],
+      "evidence": [
+        "27-renewal-information-gap-records-1-records-1.response.json"
+      ]
+    },
+    {
+      "id": "renewal-information-gap-records-2",
+      "physical_ordinals": [
+        28
+      ],
+      "completion": "completed",
+      "wire_schema": "valid",
+      "native_admission": "rejected",
+      "native_issue": {
+        "detail": "The fixed entity decision requires at least one entity record; none was supplied.",
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "unit": {}
+        },
+        "rule": "entity_membership",
+        "observed": null,
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": {
+          "disposition": "required",
+          "entity_count": 0
+        },
+        "native_error": null
+      },
+      "native_rejection": null,
+      "structural_association_invalid": false,
+      "support_judgment": "supported",
+      "meaning_judgment": "fail",
+      "field_purpose_judgment": "fail",
+      "altered_condition_or_strength": true,
+      "unsupported_addition": true,
+      "false_missing_authority": false,
+      "clarification": false,
+      "findings": [
+        "Invents active/not-returned prerequisites and a ban on processing renewals until the duration is specified. The AC grants a new deadline while the FR prohibits processing, and source eligibility is lost. No entity record is supplied. An unknown duration does not authorize the new prohibition."
+      ],
+      "review_projection_packets": 0,
+      "actual_input_tokens": 2004,
+      "actual_output_tokens": 161,
+      "sum_replay_elapsed_ns": 1134857625,
+      "origins": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-de062d7114e57d05e715566d7f9a6fc1",
+          "id": "da41e1549730e94769d9b92c2008afa0"
+        }
+      ],
+      "evidence": [
+        "28-renewal-information-gap-records-2-records-1.response.json"
+      ]
+    }
+  ]
+}

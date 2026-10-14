@@ -124,40 +124,82 @@ Typed content covers these concerns; each concern does not require a separate ca
   Existing source review must distinguish a path-valued requirement from a filename
   substituted for the behavior described in that file; confirmed candidate loss
   follows existing repair/failure routing, never missing-user-information routing.
-- Focused source review sends one bound requirement at a time. Its closed response
-  contains the semantic finding, explanation, required question and genuinely
-  selectable source evidence. Independent feature fields carry only the assigned
+- Focused source review retains one finding for each bound requirement. The
+  task-authorized Phase 4 transport/lifecycle amendment (11 October 2026) permits
+  one acceptance-criterion record assignment to batch its three existing Given,
+  When and Then requirements. Production selects this assignment only at that
+  record's first Given requirement, with all three current native IDs present.
+  Under the task-authorized Phase 6 amendment (11 October 2026), a complete
+  unchanged source assignment may instead be re-admitted from the current
+  execution's native receipt through an explicit workflow transition. All three
+  AC members are reused together; no unassessed member is supplied. The collector
+  retains canonical order and accepts a mixture of retained and newly assessed
+  assignments only through its existing native evidence validator. Current
+  candidate authority is rebuilt for the current revision. Broad collection,
+  entity and fallback context remains part of equality; sibling changes invalidate
+  record assignments. Principle context is not narrowed and policy review reruns.
+  See [§22.4](22-repair.md#224-repair-request-and-response) for origin, lifetime and
+  conservative retention exclusions. Full coverage, authority and publication
+  checks remain mandatory.
+  The direct `finding` assignment remains a singleton for the comparison baseline,
+  other subjects and narrow finding repair; principle review remains separate.
+  The record response is a closed `findings` array whose entries contain
+  `requirement_ordinal` and `value`, the existing closed source-finding value.
+  Exactly one entry must bind to each assigned native requirement. Missing,
+  duplicate, foreign, partial or wrong-record membership rejects before any
+  member is appended; response order cannot choose canonical ledger order.
+  Each finding is independently validated with its current field purpose and
+  evidence rule before the next assignment. A whole-record pass cannot supply
+  unassessed field findings or replace acceptance/scenario collection coverage.
+  The three per-finding origins may reference the same actual accepted call;
+  batching does not create child calls or new origin authority. This amendment
+  retains requiredness, field repair permissions and failure precedence. Mechanical
+  batching does not establish semantic equivalence or justify promotion without
+  the separate Phase 11 comparison.
+  Each closed finding contains the semantic finding, explanation, required question
+  and genuinely selectable source evidence. A source `candidate_omission` also requires an
+  explicit `missing_obligation`: the omitted source requirement, preserving its
+  conditions, negation and obligation strength, separately from the defect
+  explanation. Its selected sources support that statement; native admission
+  checks the binding and shape without deciding semantic faithfulness. Other
+  findings and principle reviews do not acquire this field.
+  Independent feature fields carry only the assigned
   field's resolved text and provenance, its purpose and complete original source
-  evidence. Record-field review selects through the canonical value lens and
+  evidence. Their assessment covers represented behavior and its qualifying
+  conditions; it does not require repeating unrelated feature duties.
+  Record-field review selects through the canonical value lens and
   retains that record's siblings; its task explains the selected field's purpose.
+  Sibling fields may jointly supply conditions and results. Collection review
+  checks complete source-required coverage of its assigned purpose across the
+  selected members, including obligations absent from current claim associations.
+  The shared descriptive owner presents these scopes and distinguishes original
+  source obligations from candidate assertions and derived evidence. This
+  presentation neither assigns new duties nor changes evidence eligibility.
   Signal review presents the selected native signal and any resolved exact value.
   Exact and passive references resolve through the canonical text projector.
   These read-only assignments do not certify support or alter evidence eligibility.
-  Coverage assessments retain surrounding candidate context. Separate loss
-  localization supplies the resolved target, surrounding business values and each
-  producer beside its actual output, without a support-assessment instruction.
-  Ineligible producers remain supporting evidence with no selectable location.
-  It compares the fixed alleged loss with captured producers and
-  reports `candidate` when meaning survives upstream and
-  is missing from the generated subject, or `unlocalized` when ownership is uncertain.
-  Initial findings and authorized review corrections reuse this projection.
-  A candidate-omission finding triggers a separate
-  loss-location call with the finding fixed; that call cannot revise the verdict.
-  A selected upstream location also supplies a source selection and a comparison
-  explaining what that producer failed to preserve. Native admission resolves the
-  selection through the existing source-line validator and verifies its association
-  with the selected producer. The comparison is retained with review evidence;
-  valid coordinates and nonempty explanation do not prove semantic loss.
-  `candidate` and `unlocalized` have no upstream comparison and preserve the
-  existing candidate-local repair or failure decision. The engine validates the location, comparison and
-  complete review before repair or publication.
+  Coverage assessments retain surrounding candidate context. A candidate omission
+  triggers the separate bound-preservation comparison in [§22.1](22-repair.md).
+  When a record response contains several omissions, the engine selects the
+  earliest canonical omission without retained preservation evidence, localizes
+  it through one complete comparison assignment, then selects the next. Every
+  other finding, origin and completed comparison remains unchanged; no later
+  review assignment proceeds while a current omission awaits localization.
+  Its packet presents that unchanged obligation as the single comparison target,
+  numbered source lines and assigned original-claim collections. The resolved
+  subject, diagnostic explanation, final-field purpose and producer outputs remain
+  supporting context. Upstream collections need not have final-field form or
+  describe the downstream defect. Every
+  comparison receives one evidenced `preserved`, `lost` or `uncertain` assessment;
+  native code derives attribution without allowing a new verdict or culprit choice.
+  The complete review and retained comparison must revalidate before repair or
+  publication. Valid coordinates and fluent explanations are not semantic proof.
   For a positive finding with a fixed claim set, the engine
   supplies that set from the current requirement rule; the response omits
   `provenance` and is rejected if it echoes it. The engine constructs invariant
   empty clarification-response IDs and unlocalized loss. Selectable source
-  choices remain explicit. For candidate omission, the separately selected loss
-  location determines whether its diagnostic claims are constructed or selected;
-  the closed decoder enforces that conditional rule before admission. The full
+  choices remain explicit. For candidate omission, the natively derived producer determines its diagnostic
+  claims; the closed comparison response cannot select that producer or claims. The full
   canonical review is validated before it contributes to clarification, repair
   or publication.
 - There is no unreferenced command description to use as provenance.
@@ -166,53 +208,55 @@ Typed content covers these concerns; each concern does not require a separate ca
   `then` value; the model does not supply Markdown labels or combine the three values into
   free-form prose.
 
-The approved ADR 0020 successor binds source-obligation groups from validated
-reconciliation signals before model authoring. Signal grouping and authoring-role
-assignment are separate model calls. One initial role request returns a closed
-`role_decisions` object with one required property per registered `GenerationRole`:
-`supported` with nonempty unique `signal_ids`, or `unsupported` without selections.
-The schema and typed map are checked against that shared catalogue; omitted,
-unknown or duplicate roles, malformed branches and duplicate/ineligible selections
-reject. Native admission derives the existing positive group-role assignments in
-offered-group and registered-role order. A group may support several roles and a
-role several groups; this conversion preserves group boundaries and does not infer
-semantic support. An empty eligible catalogue admits only unsupported decisions.
-Reconciliation assignments use ADR 0016's native assignment contexts over one
-complete evidence catalogue. Role assignment receives only its exact-group rule
-and role purposes projected from the shared requirement descriptions; summary,
-disposition, signal and conflict rules remain with their own assignments.
-An admitted unsupported verdict is a model candidate, not proof of a user
-information gap, clarification authority or an entity `not_applicable` result.
-Unsupported roles remain unassigned in canonical signals and mandatory coverage
-still blocks authoring through the shared source-binding gate. Protocol correction
-retains the same complete decision contract, evidence and existing allowance;
-an unsupported verdict grants no semantic retry.
-Role packets and admission use the same retained-claim support rule as source
-binding and canonical readback. A historical or mixed inactive group cannot
-acquire authoring roles; native choice projection retains original group handles
-and complete source evidence under [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md).
-Upstream changes retire the complete role assessment, its producer origin and all
-derived assignments together. Pending decisions cannot default to unsupported;
-unchanged canonical persistence retains positive roles, while captured response
-evidence retains the reported negative verdicts. Structural completeness does not
-establish semantic accuracy or improved live outcomes; compare omissions, false
-unsupported verdicts and wrong selections before promotion, then verify actual
-publication and rubric quality under §28.
-Shared field purposes describe derivation from source-backed behavior, not a
-requirement for a ready-made title, goal or story in the source. Role assignment
-assesses each purpose using explicit or necessarily implied meaning; it cannot
-invent an actor, benefit or entity merely to fill coverage.
-No context-only literal is promoted to behavior merely to fill a role.
-Record authoring runs per bound group and may
-return several requirements. Generation presents each bound field's shared
-purpose beside its resolved claim meanings and identities. Repair presents only
-the authorized replacement purpose. Remaining eligible meanings and original
-sources retain context; citation bookkeeping remains native.
-This presentation does not reselect support or establish semantic adequacy.
-The engine constructs canonical `S` and derives
-exact dependencies and citations. Generation, source-review and repair
-responses contain no `provenance`; unbound or stale assignments block or return
-to source reconciliation, never to a user missing-information form. Completed
+The approved [ADR 0020 authored-association amendment](../decisions/0020-derived-exact-reference-lineage.md#authored-association-amendment-approved-11-october-2026)
+couples semantic support selection with the existing authoring assignments. There
+is no independent presentation-role classifier or mandatory role-prebinding gate.
+A current complete reconciled reference state with a nonempty retained group
+catalogue admits generation; missing or stale authority is an engine rejection,
+not a human information gap.
+
+Each initial attributed value returns nonempty unique `signal_ids` with its
+`BusinessValue`. Native admission resolves the selected canonical group
+occurrences into required `source_group_ids`, their complete ordered claim union
+`S`, exact dependencies and citations. Joint support and legitimate overlaps are
+permitted; repeated, foreign, mixed-inactive or stale groups reject. A larger
+catalogue is availability, not semantic support. Positive associations cannot map
+open questions; initial clarification questions have a separate native eligibility
+scope and select only their actual evidence. Existing missing/ambiguous/conflicting
+reasons and inconclusive outcomes remain. A question does not establish a genuine
+user gap merely by having valid IDs. Shared field purposes describe derivation
+from source-backed behavior, not a demand for prewritten titles, goals or stories.
+Do not invent an actor, benefit or entity to fill a field.
+
+Record authoring binds one complete retained group and may return multiple records
+or none. Responses remain content-only; every admitted record inherits that group's
+complete selection and exactly one group occurrence. The shared finite native
+iteration contract in §6 fixes the population at three narrative assignments plus
+the actual retained group count and advances once per admitted assignment, even
+for an empty record array. It grants traversal only for committed progress and
+does not enlarge retry limits. Existing aggregate required families, entity
+membership, claim mapping, exact-token coverage and semantic review still apply.
+An empty collection contributes no positive coverage.
+The model-facing `record_requirements` projects those same native assembly rules:
+AC and FR are required, with entity records also required when the accepted entity
+decision requires them. Its scope is `assembled_specification`; an individual
+group may remain empty, including after earlier groups have satisfied a family.
+This presentation introduces no per-group minimum or new repair permission.
+
+Initial brief/story/entity responses and clarification questions select groups;
+fixed value and record repairs do not. Protocol correction preserves the initial
+catalogue and schema. Value-only repair preserves the existing authored association,
+`S`, effective evidence bounds, siblings, revision and retry identity. Changing
+group membership requires separately authorized authored-unit rebuilding, which
+this amendment does not add. An unresolved association blocks; it cannot be
+rerouted to extraction, grouping or a removed role producer. Record insertion
+requires an explicitly bound accepted occurrence, not equal claim-list matching.
+Upstream changes invalidate affected groups, authored associations and dependent
+review/attribution evidence. Canonical readback recomputes projections from captured
+groups and rejects inconsistency; no parallel binding store or legacy reader applies.
+Native shape and membership checks do not establish semantic adequacy. Generation,
+source review and repair responses contain no `provenance`.
+Completed
 `reference-context.md` displays each generated record ID with its effective
 claim-to-citation occurrence edges and captured source spans. This read-only
 view adds no selection or stored authority; pending output has no generated
@@ -222,8 +266,8 @@ source associations, never inferred from headings or claim ordinals.
 For each feature-brief or specification unit, the declared model operation returns content, an identifiable clarification need, or an inconclusive interpretation. Inconclusive interpretation fails; it is not missing user information. The engine accepts neither hedged invented content nor a magic placeholder such as “TBD.” Mechanically invalid output uses atomic repair/retry; missing domain knowledge does not.
 
 - **Consolidated generation (user-directed simplification, 25 September 2026):**
-  the shipped workflow requests the brief, primary story, entity applicability and
-  complete record collection in four sequential assignments through one shared
+  the shipped workflow requests brief, primary story, entity applicability and
+  records as four sequential task types through one shared
   generation subgraph. Narrative, applicability and record drafting receive their
   purpose-specific configured authoring prompts. Native repairs receive the
   configured repair prompt and the selected field/record purpose from the existing
@@ -241,9 +285,18 @@ For each feature-brief or specification unit, the declared model operation retur
   the same eligibility decision, including the accepted entity applicability.
   Source evidence and native repair dependencies
   remain complete; packet presentation does not change semantic review or retry policy.
-  Authoring packets resolve bound requirement meanings beside each field purpose.
-  Remaining eligible meanings stay in a separate context projection without
-  repeating assigned claims. Original sources remain available; citation
+  Authoring packets resolve offered complete group requirements beside field
+  purposes; initial values select their support while drafting. Record packets
+  retain their fixed group and separate remaining context without repeating assigned claims.
+  Shared guidance names `source_assignment.requirements` as the batch's duties;
+  `context_requirements` and prior drafts help interpret them without substituting
+  another group's independent obligation or changing fixed repair evidence.
+  A preserved-token occurrence retains its cited source context, including the
+  source-required use and conditions of that value. Token membership alone neither
+  establishes semantic entailment nor requires an empty batch. It does not assign
+  every other duty in the source to that group. No category-based skip or context
+  prohibition is introduced; semantic support remains subject to original-source
+  review. Original sources remain available; citation
   coordinates, extractor metadata and redundant token IDs remain native.
   Exact choices expose their eligible claim occurrence, literal and source through
   one reference-owned projection. ADR 0020 constructs a sole eligible exact-copy
@@ -272,7 +325,7 @@ For each feature-brief or specification unit, the declared model operation retur
   questions into a new generic subject. This changes no clarification admission rule.
 
 - **Draft-first sequencing (user-approved simplification, 24 September 2026):**
-  complete validated references with at least one selectable retained claim admit
+  complete validated references with a nonempty selectable retained group catalogue admit
   execution-local section generation without a
   model review of specification fields that do not yet exist. The existing source
   review/repair route still handles blocked references or absence of selectable
@@ -280,8 +333,8 @@ For each feature-brief or specification unit, the declared model operation retur
   provenance owner's eligibility rule; it cannot certify source meaning or create
   a clarification.
   Generation and its selected repairs receive original sources through the shared
-  evidence projection, retained claims/citations and exact tokens; a second signal
-  rendering is unnecessary in those requests. Original text is context, not a new
+  evidence projection, retained claims/citations and exact tokens; the native group catalogue exposes selectable complete members without
+  adding a second semantic authority. Original text is context, not a new
   provenance selection or permission to cite a discarded claim.
 - [ADR 0021](../decisions/0021-optional-source-preservation-review.md) adds the
   opt-in `validation.sourcePreservationCheck` before generation-ready sources

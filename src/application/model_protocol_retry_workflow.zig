@@ -6,7 +6,7 @@ const execution = @import("../domain/workflow_execution.zig");
 const identity = @import("../domain/model_request_identity.zig");
 pub const Build = struct {
     pub const Action = @import("../actions/model/build_model_protocol_retry.zig").Action;
-    pub const contract: @import("../domain/workflow_operation.zig").Contract = .{ .id = Action.contract.id, .kind = .step, .requires = Action.contract.requires, .replaces = Action.contract.replaces, .invalidates = Action.contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none };
+    pub const contract: @import("../domain/workflow_operation.zig").Contract = .{ .id = Action.contract.id, .kind = .step, .requires = Action.contract.requires, .replaces = Action.contract.replaces, .invalidates = Action.contract.invalidates, .outcomes = &.{ .ok, .failed }, .side_effect = .none, .outcome_association = .{ .request_protocol = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .model_payload_schema_result, .result = .prepared_model_request } } };
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -48,7 +48,7 @@ pub const Build = struct {
 };
 pub const Check = struct {
     pub const Action = @import("../actions/model/check_model_request_phase.zig").Action;
-    pub const contract: @import("../domain/workflow_operation.zig").Contract = .{ .id = Action.contract.id, .kind = .step, .requires = Action.contract.requires, .outcomes = &.{ .ok, .more, .failed }, .side_effect = .none };
+    pub const contract: @import("../domain/workflow_operation.zig").Contract = .{ .id = Action.contract.id, .kind = .step, .requires = Action.contract.requires, .outcomes = &.{ .ok, .more, .failed }, .side_effect = .none, .outcome_association = .{ .preserve = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .model_request_identity_ledger } } };
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const current = try requests.readCurrent(&input.step.data, requests.prepared_schema);

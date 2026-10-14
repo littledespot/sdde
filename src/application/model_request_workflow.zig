@@ -21,7 +21,7 @@ pub const validated_schema = values.schema(.validated_model_request, handoff.Req
 pub const prepared_schema = values.schema(.prepared_model_request, handoff.Request, 1, null).captured();
 pub const schemas = [_]data.Schema{ ledger_schema, assigned_schema, validated_schema, prepared_schema, packet_schema };
 
-const preparation_parameters = [_]operation.ParameterDescriptor{
+pub const preparation_parameters = [_]operation.ParameterDescriptor{
     .{ .id = "slot", .kind = .model_slot, .required = true, .workflow_definition_safe = true },
     .{ .id = "prompt", .kind = .resource, .resource_kind = .prompt, .required = true, .workflow_definition_safe = true },
     .{ .id = "context", .kind = .resource, .resource_kind = .prompt, .required = false, .workflow_definition_safe = true },
@@ -138,18 +138,28 @@ pub const Build = struct {
     }
 };
 
-const Selection = struct {
+pub const Selection = struct {
     value: handoff.Selection,
     owned_packet: ?*const packets.Packet = null,
-    fn deinit(self: Selection) void {
+    pub fn deinit(self: Selection) void {
         if (self.owned_packet) |packet| packets.release(packet);
     }
 };
 
 fn selections(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: operations.StepInput) operations.Error!Selection {
+    const packet = if (step.data.contains(.model_input_packet)) values.read(&step.data, packet_schema, packets.Packet) catch |operation_error| return operation_error else null;
+    return selectInput(allocator, scratch, step, packet);
+}
+
+/// A pure selection for a reconstructed native assignment. This neither assigns
+/// a logical request nor supplies a provider invocation capability.
+pub fn selectionForPacket(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: operations.StepInput, packet: *const packets.Packet) operations.Error!Selection {
+    return selectInput(allocator, scratch, step, packet);
+}
+
+fn selectInput(allocator: std.mem.Allocator, scratch: std.mem.Allocator, step: operations.StepInput, packet: ?*const packets.Packet) operations.Error!Selection {
     if (!@import("../domain/workflow_model.zig").validResultSelection(step.step.parameters)) return error.OperationExecutionFailed;
     const selected = step.model_binding orelse return error.OperationExecutionFailed;
-    const packet = if (step.data.contains(.model_input_packet)) values.read(&step.data, packet_schema, packets.Packet) catch |operation_error| return operation_error else null;
     const static_input = resource(step, "input");
     if (packet != null and static_input != null) return error.OperationExecutionFailed;
     var selection: handoff.ResultSelection = .resource;

@@ -16,6 +16,56 @@ const config =
     \\{"schema":"json-composition/v1","result":"result","parts":{"value":{"paths":["/value"]}}}
 ;
 
+test "composition binding query requires current base epoch and exact prerequisites without mutation" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var adapter: schema_adapter.Adapter = .{};
+    const canonical = try adapter.compiler().compile(a,
+        \\{"type":"object","properties":{"seed":{"type":"integer","minimum":0,"maximum":10},"derived":{"type":"integer","minimum":0,"maximum":10}},"required":["seed","derived"],"additionalProperties":false}
+    );
+    const plan = try adapter.compiler().compileComposition(a,
+        \\{"schema":"json-composition/v1","result":"result","parts":{"seed":{"paths":["/seed"]},"derived":{"paths":["/derived"],"requires":["seed"]}}}
+    , canonical);
+    const ledger = try identity.createInitial(std.testing.allocator, .all());
+    defer identity.deinitOwner(ledger);
+    const other_ledger = try identity.createInitial(std.testing.allocator, .all());
+    defer identity.deinitOwner(other_ledger);
+    const base = try packets.create(std.testing.allocator, "{}", .workflow_step, .initial_generation, null);
+    defer packets.release(base);
+    const foreign = try packets.create(std.testing.allocator, "{}", .workflow_step, .initial_generation, null);
+    defer packets.release(foreign);
+    const initial = try runtime.State.init(a, plan, base, identity.ledger(ledger).stageRunEpochId());
+    const first = try initial.select(a, 0);
+    var native: std.json.ObjectMap = .{};
+    try native.put(a, "seed", .{ .integer = 1 });
+    const current = try initial.retainNative(a, first, .{ .object = native });
+    const bound = try current.select(a, 1);
+    const entries = current.entries;
+    const snapshot = current.getEntry(0).?.nativeSnapshot().?;
+    try std.testing.expect(current.validBinding(bound));
+    try std.testing.expect(!initial.validBinding(bound));
+    const projected = try current.packet(std.testing.allocator, bound);
+    defer packets.release(projected);
+    try std.testing.expect(projected != base);
+    try std.testing.expect(bound.base == base);
+    var stale = bound;
+    stale.base = foreign;
+    try std.testing.expect(!current.validBinding(stale));
+    stale = bound;
+    stale.epoch = identity.ledger(other_ledger).stageRunEpochId();
+    try std.testing.expect(!current.validBinding(stale));
+    stale = bound;
+    const prerequisites = try a.dupe(runtime.Prerequisite, bound.prerequisites);
+    prerequisites[0].native_snapshot.?.bytes[0] ^= 1;
+    stale.prerequisites = prerequisites;
+    try std.testing.expect(!current.validBinding(stale));
+    try std.testing.expect(current.entries.ptr == entries.ptr);
+    try std.testing.expectEqualDeep(snapshot, current.getEntry(0).?.nativeSnapshot().?);
+    try std.testing.expect(current.getEntry(1) == null);
+    try std.testing.expect(current.validBinding(bound));
+}
+
 test "composition selects native assignment contexts without filtering evidence or changing authority" {
     try assignmentContexts(std.testing.allocator);
     try std.testing.checkAllAllocationFailures(std.testing.allocator, assignmentContexts, .{});

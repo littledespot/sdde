@@ -1,11 +1,24 @@
-Locate the omission in fixed_review; do not reassess that finding. Compare the
-missing meaning with loss_sources, producers[].output and the resolved subject.
-Only a producer with a non-null location can be selected for upstream loss;
-other producer outputs are supporting evidence only.
-Return candidate when the evidence shows the meaning survived through the upstream
-outputs and is missing only from the candidate. Return localized only for an
-established upstream defect: copy that producer's location, cite its source lines,
-and explain what its output lost in
-comparison.producer_loss. A defect in the candidate is not evidence of loss at
-an upstream producer. Eligible locations and matching IDs do not prove loss.
-Return unlocalized when the supplied evidence cannot establish the owner.
+For each comparisons[].members collection, does it preserve
+fixed_finding.missing_obligation? This supplied source obligation is the single
+comparison target. Each comparison is a complete upstream claims collection.
+supporting_evidence provides diagnostic detail, final-field purpose and producer
+context; do not infer a different obligation from them or assess them as another
+collection. Its deficient_subject has already been judged deficient. Upstream
+claims need not be written as the final field or describe its defect.
+
+Return one assessment per comparison: preserved when its complete collection
+expresses the supplied obligation; lost when that obligation is absent
+or weakened; uncertain when the evidence cannot establish either. Judge expressed
+meaning, allowing equivalent wording and joint support, regardless of how it is
+divided or categorized: a value already expressed in a requirement needs no
+separate member. A value alone does not express its required
+behavior. Preserve conditions, negation and obligation strength. Cite original-source
+spans that collectively support the entire supplied obligation, including its
+conditions, negation and obligation strength. Use multiple spans when necessary;
+omit unrelated spans. Briefly explain where that meaning survives or what is missing
+from the complete assigned collection. Empty collections cannot be preserved.
+Do not select a culprit or repair operation.
+
+comparison_id identifies the complete native-assigned collection in comparisons[].id;
+the response does not select its members. Source spans select sources[].chunk_id and inclusive
+first/last IDs from its lines. Supporting evidence supplies no selectable IDs.

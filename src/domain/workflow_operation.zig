@@ -37,6 +37,7 @@ pub const Contract = struct {
     side_effect: pipeline.SideEffect,
     runner_accounting: pipeline.RunnerAccountingCapability = .none,
     repair_role: @import("workflow_retry.zig").Role = .none,
+    outcome_association: @import("workflow_outcome_association.zig").Descriptor = .independent,
     gates: []const []const u8 = &.{},
     retry_limit: ?RetryLimitDescriptor = null,
     iteration: ?@import("workflow_iteration.zig").Descriptor = null,

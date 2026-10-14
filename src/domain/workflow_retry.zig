@@ -235,6 +235,32 @@ pub const State = struct {
         return if (self.suspendsParent()) self.active.?.permit else null;
     }
 
+    /// A child may continue its exact active repair while native dependent
+    /// validation suspends its parents. This query grants no resolution.
+    pub fn permitsContinuation(self: *const State, current: Permit, pending: Key) bool {
+        const active = self.active orelse return false;
+        if (active.phase != .authorized or !std.meta.eql(active.permit, current)) return false;
+        if (std.meta.eql(active.permit.key, pending)) return true;
+        for (self.deferred.items) |parent| {
+            if (parent.phase != .merged or parent.phase.merged.validation != .dependent_review) return false;
+            if (std.meta.eql(parent.permit.key, pending)) return true;
+        }
+        return false;
+    }
+
+    /// Regeneration may derive current dependent candidates while this exact
+    /// merged repair awaits full review. This query grants no resolution.
+    pub fn permitsDependentContinuation(self: *const State, current: Permit, pending: Key) bool {
+        const active = self.currentDependentPermit() orelse return false;
+        if (!std.meta.eql(active, current)) return false;
+        if (std.meta.eql(active.key, pending)) return true;
+        for (self.deferred.items) |parent| {
+            if (parent.phase != .merged or parent.phase.merged.validation != .dependent_review) return false;
+            if (std.meta.eql(parent.permit.key, pending)) return true;
+        }
+        return false;
+    }
+
     pub fn completedAttempts(self: *const State, operation_id: workflow.WorkflowStepId, key: Key) u64 {
         return self.completed(operation_id, .{ .defect = key });
     }

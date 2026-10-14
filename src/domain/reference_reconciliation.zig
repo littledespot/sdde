@@ -103,46 +103,12 @@ pub const ClaimDispositionProposal = struct {
         } };
     }
 };
-/// Semantic uses of an already selected source-obligation group. These are
-/// assignments for Spec authoring, not additional reference identities.
-pub const GenerationRole = enum {
-    title,
-    description,
-    primary_goal,
-    primary_user_story,
-    entity_basis,
-    records,
-
-    /// Presentation reuses registered field purposes; no role eligibility or
-    /// requiredness policy is established here.
-    pub fn purpose(self: GenerationRole, allocator: std.mem.Allocator) @import("required_authority.zig").Error![]const u8 {
-        const authority = @import("required_authority.zig");
-        const descriptions = @import("required_authority_description.zig");
-        if (self == .records) return descriptions.records(allocator);
-        const slot: authority.Slot = switch (self) {
-            .title => .display_name,
-            .description => .description,
-            .primary_goal => .primary_goal,
-            .primary_user_story => .primary_user_story,
-            .entity_basis => .entities,
-            .records => unreachable,
-        };
-        return descriptions.task(allocator, .{ .kind = if (self == .entity_basis) .entity_applicability else .feature_intent, .unit = .{ .feature = .singleton }, .slot = slot });
-    }
-};
 pub const SignalProposal = struct { claim_ids: []const ClaimId, content: ContentProposal };
 pub const SignalSelectionId = struct {
     ordinal: u32,
     pub const model_scalar = "ordinal";
 };
-/// Complete model assessment; every registered role is required on the wire.
-pub const RoleDecision = union(enum) {
-    supported: struct { signal_ids: []const SignalSelectionId },
-    unsupported: struct {},
-};
-pub const RoleDecisions = std.enums.EnumFieldStruct(GenerationRole, RoleDecision, null);
-pub const RoleAssignment = struct { signal_id: SignalSelectionId, generation_roles: []const GenerationRole };
-pub const ValidatedSignal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: Content, generation_roles: []const GenerationRole };
+pub const ValidatedSignal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: Content };
 pub const ConflictKind = enum { mutually_exclusive, precedence_missing, value_mismatch, scope_mismatch };
 pub const ConflictProposal = struct {
     claim_ids: []const ClaimId,
@@ -150,10 +116,10 @@ pub const ConflictProposal = struct {
     summary: text.ReferenceSemanticText,
 };
 pub const ValidatedConflict = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, kind: ConflictKind, summary: text.ValidatedReferenceSemanticText, resolution: enum { unresolved } };
-pub const Proposal = struct { conflict_groups: []const @import("reference_conflict_groups.zig").Group = &.{}, claim_dispositions: []const ClaimDispositionProposal, signals: []const SignalProposal, role_decisions: ?RoleDecisions = null, conflicts: []const ConflictProposal };
+pub const Proposal = struct { conflict_groups: []const @import("reference_conflict_groups.zig").Group = &.{}, claim_dispositions: []const ClaimDispositionProposal, signals: []const SignalProposal, conflicts: []const ConflictProposal };
 pub const diagnostic = @import("reference_reconciliation_diagnostic.zig");
 pub const Raw = struct { source: diagnostic.Source = .{}, input: Input, bytes: []const u8 };
-pub const Phase = enum { dispositions, signals, signals_with_conflicts, roles, complete };
+pub const Phase = enum { dispositions, signals, complete };
 pub const Parsed = struct { phase: Phase = .complete, source: diagnostic.Source = .{}, input: Input, proposal: union(enum) { summary: SummaryProposal, global: Proposal }, carried_from: ?SummaryId = null };
 pub const CheckedSummary = struct { input: Input, statements: []const ValidatedStatement, projection: SummaryProjection, validation: @import("atomic_repair.zig").Snapshot };
 pub const SummaryAssignment = struct { checked: CheckedSummary, id: SummaryId, statement_ids: []const StatementId, next_statement_ordinal: u32 };

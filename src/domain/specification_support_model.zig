@@ -32,11 +32,12 @@ pub const Decision = enum {
 };
 pub const Canonical = struct {
     loss: loss = .{ .unlocalized = .{} },
-    loss_comparison: ?@import("source_omission.zig").Comparison = null,
+    preservation: ?@import("source_omission.zig").comparisons.Evidence = null,
     kind: Decision,
     provenance: @import("specification.zig").Selection,
     source_ids: []const SourceId,
     detail: []const u8,
+    missing_obligation: ?[]const u8 = null,
     question: ?[]const u8 = null,
 };
 
@@ -47,7 +48,23 @@ pub fn fixedClaims(required: evidence.Requirements) ?[]const r.ClaimId {
 const Positive = struct { source_ids: []const SourceId, detail: []const u8 };
 const Question = struct { source_ids: []const SourceId, detail: []const u8, question: []const u8 };
 const Explanation = struct { source_ids: []const SourceId, detail: []const u8 };
-const Omission = struct { source_ids: []const SourceId, detail: []const u8 };
+const Omission = struct { source_ids: []const SourceId, detail: []const u8, missing_obligation: []const u8 };
+pub const Detail = struct { detail: []const u8, missing_obligation: ?[]const u8 = null, question: ?[]const u8 = null };
+
+/// Decode the selected correction shape without permitting a missing obligation
+/// or admitting omission-only fields into another retained finding.
+pub fn decodeDetail(a_alloc: std.mem.Allocator, bytes: []const u8, decision: Decision) json.Error!Detail {
+    if (decision == .candidate_omission) {
+        const value = try codec.decode(struct { detail: []const u8, missing_obligation: []const u8 }, a_alloc, bytes);
+        return .{ .detail = value.detail, .missing_obligation = value.missing_obligation };
+    }
+    if (evidence.questionRequired(decision.finding())) {
+        const value = try codec.decode(struct { detail: []const u8, question: []const u8 }, a_alloc, bytes);
+        return .{ .detail = value.detail, .question = value.question };
+    }
+    const value = try codec.decode(struct { detail: []const u8 }, a_alloc, bytes);
+    return .{ .detail = value.detail };
+}
 
 pub const Value = union(enum) {
     supported: Positive,
@@ -58,6 +75,11 @@ pub const Value = union(enum) {
     inconclusive: Explanation,
     not_applicable: Positive,
 };
+
+/// Complete findings for one native record assignment. The model may reorder
+/// entries, but cannot choose which required fields are assessed.
+pub const BatchFinding = struct { requirement_ordinal: u32, value: Value };
+pub const Batch = struct { findings: []const BatchFinding };
 
 /// Resolve only subject-bound or diagnostic claims. An unlocalized negative
 /// finding may use source-only evidence, never an arbitrary eligible subset.
@@ -73,7 +95,10 @@ fn claimsFor(required: evidence.Requirements, kind: Decision, location: loss) js
 }
 
 pub fn decode(a_alloc: std.mem.Allocator, bytes: []const u8, required: evidence.Requirements) json.Error!Canonical {
-    const value = try codec.decode(Value, a_alloc, bytes);
+    return canonical(try codec.decode(Value, a_alloc, bytes), required);
+}
+
+pub fn canonical(value: Value, required: evidence.Requirements) json.Error!Canonical {
     const kind: Decision = switch (value) {
         inline else => |_, tag| @field(Decision, @tagName(tag)),
     };
@@ -83,29 +108,16 @@ pub fn decode(a_alloc: std.mem.Allocator, bytes: []const u8, required: evidence.
     return switch (value) {
         .supported, .not_applicable => |positive| .{ .kind = kind, .provenance = selected, .source_ids = positive.source_ids, .detail = positive.detail },
         .ambiguous, .conflicting, .unsupported => |negative| .{ .kind = kind, .provenance = selected, .source_ids = negative.source_ids, .detail = negative.detail, .question = negative.question },
-        .candidate_omission => |negative| .{ .kind = kind, .provenance = selected, .source_ids = negative.source_ids, .detail = negative.detail, .loss = location },
+        .candidate_omission => |negative| .{ .kind = kind, .provenance = selected, .source_ids = negative.source_ids, .detail = negative.detail, .missing_obligation = negative.missing_obligation, .loss = location },
         .inconclusive => |negative| .{ .kind = kind, .provenance = selected, .source_ids = negative.source_ids, .detail = negative.detail },
     };
 }
 
-pub fn bindLoss(required: evidence.Requirements, value: Canonical, assessment: @import("source_omission.zig").Assessment) json.Error!Canonical {
-    if (value.kind != .candidate_omission) return error.InvalidJsonDocument;
+pub fn bindLoss(required: evidence.Requirements, value: Canonical, location: loss, proof: @import("source_omission.zig").comparisons.Evidence) json.Error!Canonical {
+    if (value.kind != .candidate_omission or !evidence.validObligation(value.kind.finding(), value.missing_obligation)) return error.InvalidJsonDocument;
     var bound = value;
-    switch (assessment) {
-        .unlocalized => {
-            bound.loss = .{ .unlocalized = .{} };
-            bound.loss_comparison = null;
-        },
-        .candidate => {
-            bound.loss = .{ .candidate = .{} };
-            bound.loss_comparison = null;
-        },
-        .localized => |selected| {
-            if (!@import("source_omission.zig").isUpstream(selected.location)) return error.InvalidJsonDocument;
-            bound.loss = selected.location;
-            bound.loss_comparison = selected.comparison;
-        },
-    }
+    bound.loss = location;
+    bound.preservation = proof;
     bound.provenance.claim_ids = try claimsFor(required, .candidate_omission, bound.loss);
     return bound;
 }
@@ -114,6 +126,7 @@ pub fn bindLoss(required: evidence.Requirements, value: Canonical, assessment: @
 /// Production admission always decodes and validates the response again.
 pub fn encode(a_alloc: std.mem.Allocator, value: Canonical, required: evidence.Requirements) json.Error![]const u8 {
     _ = required;
+    if (!evidence.validObligation(value.kind.finding(), value.missing_obligation)) return error.InvalidJsonDocument;
     const positive: Positive = .{ .source_ids = value.source_ids, .detail = value.detail };
     const selected: Value = switch (value.kind) {
         .supported => .{ .supported = positive },
@@ -121,7 +134,7 @@ pub fn encode(a_alloc: std.mem.Allocator, value: Canonical, required: evidence.R
         .ambiguous => .{ .ambiguous = .{ .source_ids = value.source_ids, .detail = value.detail, .question = value.question orelse "" } },
         .conflicting => .{ .conflicting = .{ .source_ids = value.source_ids, .detail = value.detail, .question = value.question orelse "" } },
         .unsupported => .{ .unsupported = .{ .source_ids = value.source_ids, .detail = value.detail, .question = value.question orelse "" } },
-        .candidate_omission => .{ .candidate_omission = .{ .source_ids = value.source_ids, .detail = value.detail } },
+        .candidate_omission => .{ .candidate_omission = .{ .source_ids = value.source_ids, .detail = value.detail, .missing_obligation = value.missing_obligation.? } },
         .inconclusive => .{ .inconclusive = .{ .source_ids = value.source_ids, .detail = value.detail } },
     };
     return codec.encode(Value, a_alloc, selected);

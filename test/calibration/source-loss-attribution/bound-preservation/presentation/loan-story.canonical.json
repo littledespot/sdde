@@ -1,0 +1,412 @@
+{
+  "brief": {
+    "description": {
+      "provenance": {
+        "citation_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "claim_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "MOCK Renew an eligible loan, display \"MOCK Renewed!\" and show its new return deadline."
+            }
+          }
+        ]
+      }
+    },
+    "primary_goal": {
+      "provenance": {
+        "citation_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "claim_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "MOCK Let a borrower confirm renewal and read the new return deadline."
+            }
+          }
+        ]
+      }
+    },
+    "title": {
+      "provenance": {
+        "citation_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "claim_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "MOCK Loan renewal"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "candidate": {
+    "display_name": {
+      "provenance": {
+        "citation_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "claim_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "MOCK Loan renewal"
+            }
+          }
+        ]
+      }
+    },
+    "entities": {
+      "basis": {
+        "provenance": {
+          "citation_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "claim_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "clarification_response_ids": []
+        },
+        "value": {
+          "segments": [
+            {
+              "literal": {
+                "value": "MOCK The loan and borrower are business entities relevant to renewal."
+              }
+            }
+          ]
+        }
+      },
+      "disposition": "required"
+    },
+    "primary_user_story": {
+      "provenance": {
+        "citation_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          },
+          {
+            "ordinal": 4
+          }
+        ],
+        "claim_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "exact_copy": {
+              "claim_id": {
+                "ordinal": 4
+              }
+            }
+          },
+          {
+            "literal": {
+              "value": "MOCK As a borrower, I renew an eligible loan and see "
+            }
+          },
+          {
+            "literal": {
+              "value": "kind"
+            }
+          },
+          {
+            "literal": {
+              "value": "exact_copy"
+            }
+          },
+          {
+            "literal": {
+              "value": " and the new return deadline."
+            }
+          }
+        ]
+      }
+    },
+    "records": [
+      {
+        "id": {
+          "kind": "acceptance_criterion",
+          "ordinal": 1
+        },
+        "proposal": {
+          "content": {
+            "acceptance_criterion": {
+              "given": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "MOCK An eligible loan exists."
+                    }
+                  }
+                ]
+              },
+              "then": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "MOCK The service renews the loan, displays \"MOCK Renewed!\" and shows the new return deadline."
+                    }
+                  }
+                ]
+              },
+              "when": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "MOCK The borrower renews it."
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "provenance": {
+            "citation_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 2
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "claim_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 2
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "clarification_response_ids": []
+          }
+        }
+      },
+      {
+        "id": {
+          "kind": "functional_requirement",
+          "ordinal": 1
+        },
+        "proposal": {
+          "content": {
+            "functional_requirement": {
+              "text": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "MOCK After eligible loan renewal display \"MOCK Renewed!\" and the new return deadline."
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "provenance": {
+            "citation_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 2
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "claim_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 2
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "clarification_response_ids": []
+          }
+        }
+      },
+      {
+        "id": {
+          "kind": "entity",
+          "ordinal": 1
+        },
+        "proposal": {
+          "content": {
+            "entity": {
+              "name": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "MOCK Loan"
+                    }
+                  }
+                ]
+              },
+              "business_meaning": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "MOCK An eligible loan can be renewed and has a return deadline."
+                    }
+                  }
+                ]
+              },
+              "relationships": []
+            }
+          },
+          "provenance": {
+            "claim_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "citation_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "clarification_response_ids": []
+          }
+        }
+      }
+    ]
+  }
+}

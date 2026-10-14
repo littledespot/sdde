@@ -18,10 +18,13 @@ pub const Output = struct {
     }
 
     pub fn save(self: Output, io: std.Io, allocator: std.mem.Allocator, report: c.Report) !void {
-        const json = try @import("../../../src/domain/canonical_json.zig").encode(c.Report, allocator, report);
+        const json = try std.json.Stringify.valueAlloc(allocator, report, .{ .whitespace = .indent_2 });
+        defer allocator.free(json);
+        const markdown = try renderMarkdown(allocator, report);
+        defer allocator.free(markdown);
         try self.json.writeStreamingAll(io, json);
         try self.json.sync(io);
-        try self.markdown.writeStreamingAll(io, try renderMarkdown(allocator, report));
+        try self.markdown.writeStreamingAll(io, markdown);
         try self.markdown.sync(io);
     }
 };
@@ -222,7 +225,9 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
         "Compare runs with the same source, rubric revision and model settings, and retain failures and low scores. " ++
         "The report does not automatically tune or approve the workflow.\n\n");
     if (report.evaluation) |evaluation| {
-        try writer.writeAll(try @import("../report.zig").markdown(allocator, evaluation));
+        const assessment = try @import("../report.zig").markdown(allocator, evaluation);
+        defer allocator.free(assessment);
+        try writer.writeAll(assessment);
     } else {
         try writer.writeAll("No rubric grade is available. The published/scored baseline is incomplete.\n");
     }

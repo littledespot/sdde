@@ -1,0 +1,202 @@
+[
+  {
+    "id": "captured-launch-record",
+    "cohort": "development",
+    "retained_case": "captured-story",
+    "fixture": null,
+    "record": null,
+    "expectation": {
+      "given": "Do not claim missing greeting or UTC behavior from the launch-state field. Judge its actual assigned precondition separately.",
+      "when": "The actual launch trigger is retained.",
+      "then": "Successful startup, Hello World display and current UTC date/time are retained in the consequence.",
+      "joint_meaning": "The captured AC distributes launch context, trigger and three visible consequences. Concatenated wording is assessed for meaning, not exact-copy serialization permission.",
+      "forbidden": [
+        "fill all three findings with a record pass",
+        "demand Hello World display in Given",
+        "replace literal behavior with serializer tags"
+      ]
+    }
+  },
+  {
+    "id": "loan-distributed-record",
+    "cohort": "development",
+    "retained_case": "loan-candidate",
+    "fixture": null,
+    "record": {
+      "given": "The borrower is eligible and the loan has no reservation.",
+      "when": "The borrower requests renewal.",
+      "then": "The service extends the due date by seven days."
+    },
+    "expectation": {
+      "given": "supported: eligibility and absence of a reservation are preserved.",
+      "when": "supported: the renewal request is the trigger.",
+      "then": "supported: the consequence preserves the seven-day extension using sibling conditions.",
+      "joint_meaning": "Equivalent whole-record meaning preserves all renewal conditions without repeating them in Then.",
+      "forbidden": [
+        "demand Given conditions again in Then",
+        "turn an already supplied reservation rule into a user question"
+      ]
+    }
+  },
+  {
+    "id": "loan-missing-condition-record",
+    "cohort": "development",
+    "retained_case": "loan-candidate",
+    "fixture": null,
+    "record": {
+      "given": "The borrower is eligible.",
+      "when": "The borrower requests renewal.",
+      "then": "The service extends the due date by seven days."
+    },
+    "expectation": {
+      "given": "candidate_omission: the no-reservation precondition belongs to the selected Given.",
+      "when": "supported: the renewal trigger remains.",
+      "then": "supported: the extension consequence remains; the missing Given condition must not become a duplicate Then defect.",
+      "joint_meaning": "The group must preserve the distinct genuine Given defect and the two supported fields.",
+      "forbidden": [
+        "broad pass hides the missing condition",
+        "copy the Given omission to When or Then",
+        "invent a missing source decision"
+      ]
+    }
+  },
+  {
+    "id": "customs-negation-record",
+    "cohort": "development",
+    "retained_case": null,
+    "fixture": {
+      "id": "customs-negation-record",
+      "cohort": "development",
+      "sources": [
+        "For a restricted shipment without customs clearance, dispatch must not occur.\n"
+      ],
+      "claims": [
+        {
+          "source": 1,
+          "text": "For a restricted shipment without customs clearance, dispatch must not occur.",
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "description": "Restricted shipments cannot be dispatched without customs clearance.",
+      "missing": "MOCK unused loss premise",
+      "missing_obligation": "MOCK unused loss premise",
+      "mode": "candidate",
+      "verdicts": [],
+      "expected": "unlocalized",
+      "target": null,
+      "candidate_file": null,
+      "source_path": null,
+      "signal_text": null
+    },
+    "record": {
+      "given": "The shipment is restricted.",
+      "when": "Dispatch is requested without customs clearance.",
+      "then": "Dispatch is refused."
+    },
+    "expectation": {
+      "given": "supported: the restricted-shipment condition is retained.",
+      "when": "supported: the trigger includes missing clearance.",
+      "then": "supported: refusal retains the prohibition with sibling conditions.",
+      "joint_meaning": "A prohibition and its distributed conditions survive an unrelated coherent record.",
+      "forbidden": [
+        "drop not or missing-clearance meaning",
+        "demand every condition in every field",
+        "ask the user whether clearance is required"
+      ]
+    }
+  },
+  {
+    "id": "pump-multiple-defects-record",
+    "cohort": "development",
+    "retained_case": null,
+    "fixture": {
+      "id": "pump-multiple-defects-record",
+      "cohort": "development",
+      "sources": [
+        "If a pump is overheating and inspection is incomplete, starting it must be refused until an inspector clears it.\n"
+      ],
+      "claims": [
+        {
+          "source": 1,
+          "text": "If a pump is overheating and inspection is incomplete, starting it must be refused until an inspector clears it.",
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "description": "Overheating pumps with incomplete inspection cannot start before inspector clearance.",
+      "missing": "MOCK unused loss premise",
+      "missing_obligation": "MOCK unused loss premise",
+      "mode": "candidate",
+      "verdicts": [],
+      "expected": "unlocalized",
+      "target": null,
+      "candidate_file": null,
+      "source_path": null,
+      "signal_text": null
+    },
+    "record": {
+      "given": "The pump is available.",
+      "when": "Starting the pump is requested.",
+      "then": "The controller logs the request."
+    },
+    "expectation": {
+      "given": "candidate_omission: the overheating and incomplete-inspection conditions are absent from Given.",
+      "when": "supported: a pump-start request remains the trigger.",
+      "then": "candidate_omission: refusing startup until inspector clearance is absent from Then.",
+      "joint_meaning": "Two independently attributable field defects require two retained findings and serialized complete loss assignments. A valid trigger must remain intact.",
+      "forbidden": [
+        "return only the first omission",
+        "overwrite the second pending defect after localization",
+        "report logging as equivalent to refusing startup",
+        "use a broad record repair to alter the valid trigger"
+      ]
+    }
+  },
+  {
+    "id": "reserved-parcel-clearance-record",
+    "cohort": "reserved_qualification",
+    "retained_case": null,
+    "fixture": {
+      "id": "reserved-parcel-clearance-record",
+      "cohort": "development",
+      "sources": [
+        "When a parcel's seal is broken, dispatch must not proceed until a receiving clerk records a replacement seal.\n"
+      ],
+      "claims": [
+        {
+          "source": 1,
+          "text": "When a parcel's seal is broken, dispatch must not proceed until a receiving clerk records a replacement seal.",
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "description": "Broken-seal parcels remain blocked from dispatch until the receiving clerk records a replacement seal.",
+      "missing": "MOCK unused loss premise",
+      "missing_obligation": "MOCK unused loss premise",
+      "mode": "candidate",
+      "verdicts": [],
+      "expected": "unlocalized",
+      "target": null,
+      "candidate_file": null,
+      "source_path": null,
+      "signal_text": null
+    },
+    "record": {
+      "given": "The parcel's seal is broken.",
+      "when": "Dispatch is requested.",
+      "then": "Dispatch is blocked for one minute."
+    },
+    "expectation": {
+      "given": "supported: the broken-seal condition remains.",
+      "when": "supported: dispatch is the trigger.",
+      "then": "candidate_omission: blocking must continue until a receiving clerk records a replacement seal; one minute does not preserve this condition.",
+      "joint_meaning": "This reserved assignment tests a retained prohibition with a changed terminating condition. Score the actual duty identified, not exact wording.",
+      "forbidden": [
+        "infer automatic release is authorized",
+        "ask the user to restate the supplied clerk-clearance condition",
+        "repeat the missing duration condition as a defect of Given"
+      ]
+    }
+  }
+]

@@ -1,0 +1,565 @@
+{
+  "parent": {
+    "artifact_root": "zig-out/e2e-spec/2026-10-10T02-17-38Z-e9ca8a70c7f7cb4c45f002ba9ded8dee/evidence/generation/call-000014",
+    "run": "RUN-ebb17bc64a64a01ef7d1134b87e37f35",
+    "call": "request-14-inference-1",
+    "context_sha256": "94aa8a6d66eda6302bedd06db458986ca0139944491c9cb700e9499939cc1902",
+    "request_sha256": "a358ab4d2d09a49c88d96f5dd90d251be70fde8ca3e207f050b972e41bf731f5",
+    "response_sha256": "88ebb9eeeb1200f6d5393e520144c980a22669206bfa390efe03f8b04bdf3ea8",
+    "selected_schema_sha256": "35997abd4ae43ef4284a52a00f1bb0bfeb1043652199e70b2eef92b85544ca47",
+    "authored_description_origin_call": 8
+  },
+  "settings": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0,
+    "max_output_tokens": 16384,
+    "response_mode": "native_schema"
+  },
+  "maximum_physical_calls": 32,
+  "repetitions_per_case_arm": 2,
+  "retries_corrections_repairs_judges_e2e": 0,
+  "quality_gate": {
+    "candidate_completed_schema_and_native_minimum": 15,
+    "candidate_false_upstream_maximum": 0,
+    "candidate_false_candidate_maximum": 0,
+    "extraction_correct_required": 2,
+    "direct_signal_correct_required": 2,
+    "wrong_role_correct_required": 2,
+    "unresolved_owner_safe_required": 2,
+    "candidate_defects_correct_minimum": 7,
+    "candidate_unnecessary_uncertain_maximum": 1,
+    "candidate_evidence_adequate_minimum": 14,
+    "correct_attribution_improvement_minimum": 2,
+    "no_case_accuracy_regression": true
+  },
+  "status": "prepared_not_run",
+  "paths_base": "..",
+  "comparison_factor": "shared loss-request presentation: assessed scope, one member-ID namespace and one source-line convention; same native assignment and response contract",
+  "baseline": {
+    "manifest": "comparison.json",
+    "manifest_sha256": "6b1695b85f509438059b71f591a9dd8bfe799ec5ea7d4ce99e81e7659e61154d",
+    "arm": "candidate",
+    "native_admission": "required for both arms"
+  },
+  "limitations": [
+    "All eight cases have now been observed; this is a regression comparison, not a new holdout.",
+    "Changes are assessed as a presentation bundle, not evidence of a single causal sentence.",
+    "No E2E publication or recovery result follows from diagnostic success."
+  ],
+  "cases": [
+    {
+      "id": "captured-description",
+      "expected": "candidate",
+      "expected_comparisons": [
+        "preserved",
+        "preserved"
+      ],
+      "cohort": "development",
+      "native_packet_sha256": "9d1d2e3eaad22db2c24ac43bf9e2ce87a309ce3d3bb37bfc6e83d27a49ad8026",
+      "edits": {
+        "baseline": {
+          "path": "captured-description.candidate.edit.json",
+          "sha256": "7a6eb547ce2c8739b21e62a3a8c7e888dd2b99642b6596aa0213ead14f4da106",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 9012,
+          "provider_request_path": "captured-description.candidate.request.json",
+          "provider_request_sha256": "88125adb088ca7bc70b71806ebcab6246eb96d8ade026fe34f8deff0de33f5e1",
+          "provider_request_bytes": 13792
+        },
+        "candidate": {
+          "path": "projection/captured-description.candidate.edit.json",
+          "sha256": "7bf049b854c0edcdae5f7f8f41db000b04d6c5333a85efe1391a9b08586e30b4",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 4498,
+          "provider_request_path": "projection/captured-description.candidate.request.json",
+          "provider_request_sha256": "7fe45bd13f372887375980f50fb5785155f5f510e1a0bf8c0d062c974157774c",
+          "provider_request_bytes": 8753
+        }
+      }
+    },
+    {
+      "id": "loan-candidate",
+      "expected": "candidate",
+      "expected_comparisons": [
+        "preserved"
+      ],
+      "cohort": "development",
+      "native_packet_sha256": "19f0fd51cbf07859aca7c35a5c36b6f546e1392dcee46a8a35e453c22f832f8c",
+      "edits": {
+        "baseline": {
+          "path": "loan-candidate.candidate.edit.json",
+          "sha256": "5ad39d6990381b99209bd6073abda0ade30cc71540a142d0f6e727a29872e59d",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 3549,
+          "provider_request_path": "loan-candidate.candidate.request.json",
+          "provider_request_sha256": "8ca0ff4bbc265cb713afc9d6e53024c47eb5c60ec4297f3247e92f3de6da94ef",
+          "provider_request_bytes": 7473
+        },
+        "candidate": {
+          "path": "projection/loan-candidate.candidate.edit.json",
+          "sha256": "300d7bf43b90aa5420274e1d3f3fe16ff180487a42b79385f261fb2f6519726b",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 2036,
+          "provider_request_path": "projection/loan-candidate.candidate.request.json",
+          "provider_request_sha256": "fb8ea82d1059eccba7a39b5eabeaef871bb83f07645f64644b87728275c54451",
+          "provider_request_bytes": 5923
+        }
+      }
+    },
+    {
+      "id": "extraction-inherited",
+      "expected": "extraction_claim",
+      "expected_comparisons": [
+        "lost",
+        "lost"
+      ],
+      "cohort": "development",
+      "native_packet_sha256": "697c63cb60d21919914c604ab82ea1ecf07140c1c4eff800c7d6fa1219e29b3b",
+      "edits": {
+        "baseline": {
+          "path": "extraction-inherited.candidate.edit.json",
+          "sha256": "71e89e21e7097c6a3b88a7a3ccc54d771de7507f5d79bcdf5f6050e5af074d50",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 4718,
+          "provider_request_path": "extraction-inherited.candidate.request.json",
+          "provider_request_sha256": "54323b4142d2324835d6c847c7e3c36b6fb4f234e15dc7cd77f53213a184afeb",
+          "provider_request_bytes": 8901
+        },
+        "candidate": {
+          "path": "projection/extraction-inherited.candidate.edit.json",
+          "sha256": "e80cd7ba51baf43f745c99c85f3f4fe00a584b7242a28f9e3dda5fab1dd1f737",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 2446,
+          "provider_request_path": "projection/extraction-inherited.candidate.request.json",
+          "provider_request_sha256": "9b6e712fb89889024bba29a4c38df10cf400f42f8a675a7e858b0a8b248f2573",
+          "provider_request_bytes": 6449
+        }
+      }
+    },
+    {
+      "id": "fan-direct-signal",
+      "expected": "reconciliation_signal",
+      "expected_comparisons": [
+        "preserved"
+      ],
+      "cohort": "development",
+      "native_packet_sha256": "f00d49343adf73051f3f4756ab2505bbe46e2ef6b733a8f5d2c47c363789689a",
+      "edits": {
+        "baseline": {
+          "path": "fan-direct-signal.candidate.edit.json",
+          "sha256": "4155bbd9c0ff8d9e5f89ba0769531818deff75873c3fca990ddd67a486fc665d",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 3396,
+          "provider_request_path": "fan-direct-signal.candidate.request.json",
+          "provider_request_sha256": "b76d34263783bc5bcd5300fde49cc275f378872163473901a3869ea1bd5ec09e",
+          "provider_request_bytes": 7320
+        },
+        "candidate": {
+          "path": "projection/fan-direct-signal.candidate.edit.json",
+          "sha256": "1dd5d3f880f8937d4ddcac94a0f68336dd0f2b3505bee638452e6c31ff7070d8",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 1802,
+          "provider_request_path": "projection/fan-direct-signal.candidate.request.json",
+          "provider_request_sha256": "f5b9290a64f0491c995dab4fb52193e71b3bb401c0696c3b738b066fdfc40783",
+          "provider_request_bytes": 5683
+        }
+      }
+    },
+    {
+      "id": "joint-two-sources",
+      "expected": "candidate",
+      "expected_comparisons": [
+        "preserved"
+      ],
+      "cohort": "known_regression",
+      "native_packet_sha256": "4b9f48df7e1ca92edbaf62616af604b84861a0867a8c8e734074ba6365c746a4",
+      "edits": {
+        "baseline": {
+          "path": "joint-two-sources.candidate.edit.json",
+          "sha256": "9599e32482e991765d420ab8b9cdf6cdaf8022c15213a9f59dabd09bd3e685ce",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 4788,
+          "provider_request_path": "joint-two-sources.candidate.request.json",
+          "provider_request_sha256": "0380d3cae7295796ad38cc03d6f8288c88b90308108612c7885160e180979cf0",
+          "provider_request_bytes": 8956
+        },
+        "candidate": {
+          "path": "projection/joint-two-sources.candidate.edit.json",
+          "sha256": "9d4a0aef38743dc16ffae10a11883a51d257fda5de400fece60e8bd46b06ac96",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 2460,
+          "provider_request_path": "projection/joint-two-sources.candidate.request.json",
+          "provider_request_sha256": "616acba382dd8cd925fd93bbf4c42e7edada8b1605c9b3038d117af2ee4b55f3",
+          "provider_request_bytes": 6440
+        }
+      }
+    },
+    {
+      "id": "wrong-role-assignment",
+      "expected": "unsupported_role",
+      "expected_comparisons": [
+        "preserved",
+        "lost"
+      ],
+      "cohort": "known_regression",
+      "native_packet_sha256": "538977a95399e54637902cf5ff335a61505035f3ea2619d4e2e10b16358e9267",
+      "edits": {
+        "baseline": {
+          "path": "wrong-role-assignment.candidate.edit.json",
+          "sha256": "3cc92a70b33fc2f676528882361772cbace2ff753dabbbbec35be1e8f34e593d",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 4868,
+          "provider_request_path": "wrong-role-assignment.candidate.request.json",
+          "provider_request_sha256": "f9f1675787595908253a02ce2d2151202aa6d2cd705dbd83cb69d05c47db594a",
+          "provider_request_bytes": 9044
+        },
+        "candidate": {
+          "path": "projection/wrong-role-assignment.candidate.edit.json",
+          "sha256": "a225bed44f0b5388dc232e58000e6d90f659f7ca178d656f6340a05abb7b12a4",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 2515,
+          "provider_request_path": "projection/wrong-role-assignment.candidate.request.json",
+          "provider_request_sha256": "25a9b3c986c2bc9174d1aafe70748b3e85254dd8e84315f03959fe7a174ae3de",
+          "provider_request_bytes": 6511
+        }
+      }
+    },
+    {
+      "id": "unresolved-multiple-producers",
+      "expected": "unlocalized",
+      "expected_comparisons": [
+        "lost"
+      ],
+      "cohort": "known_regression",
+      "native_packet_sha256": "6d2e12437c568f7edba0214a5c087d82387d62243a2a45cb8ad19b75b7018fb2",
+      "edits": {
+        "baseline": {
+          "path": "unresolved-multiple-producers.candidate.edit.json",
+          "sha256": "5a0b2dc380579e75525fd02abe50c947e97a71b1ba496216d74c968e87bdf5d7",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 4722,
+          "provider_request_path": "unresolved-multiple-producers.candidate.request.json",
+          "provider_request_sha256": "68bb40c92487509fb482ce90c53bee78beea060b9220882ce4d8f2dca3f6d206",
+          "provider_request_bytes": 8904
+        },
+        "candidate": {
+          "path": "projection/unresolved-multiple-producers.candidate.edit.json",
+          "sha256": "24cf8b17ba74f063ed355ab8648ce649dc7fe6b3c79da643b03f92bab8210865",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 2474,
+          "provider_request_path": "projection/unresolved-multiple-producers.candidate.request.json",
+          "provider_request_sha256": "3a95ac24161ac698b8d950fa9611aaf22d32a999a79c4ed64216ef0b2ec073e5",
+          "provider_request_bytes": 6468
+        }
+      }
+    },
+    {
+      "id": "parking-candidate",
+      "expected": "candidate",
+      "expected_comparisons": [
+        "preserved"
+      ],
+      "cohort": "known_regression",
+      "native_packet_sha256": "9705db5bf0f7d9b89851687e4c4712142413c1b8d7b59bd1854eff3876383a20",
+      "edits": {
+        "baseline": {
+          "path": "parking-candidate.candidate.edit.json",
+          "sha256": "3d961f0ea999a43b336572916f5323de9655a3d69942eefabd941a3997dc4ffb",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 3454,
+          "provider_request_path": "parking-candidate.candidate.request.json",
+          "provider_request_sha256": "2fa29aa8eb3d36b4cb87f0a97a7ced65f32bb751ded632344452dbe4365b0b01",
+          "provider_request_bytes": 7378
+        },
+        "candidate": {
+          "path": "projection/parking-candidate.candidate.edit.json",
+          "sha256": "b7df18093ca9991f6c64a52236b012a772a1d2f4aa741d24586ea0a44c98355c",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1164,
+          "evidence_bytes": 1986,
+          "provider_request_path": "projection/parking-candidate.candidate.request.json",
+          "provider_request_sha256": "6899980e4d3d578c752be17ba14e9c843b2587abaea7d6cb2025d40570587694",
+          "provider_request_bytes": 5873
+        }
+      }
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-description-baseline-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "captured-description.candidate.edit.json"
+    },
+    {
+      "id": "captured-description-candidate-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "projection/captured-description.candidate.edit.json"
+    },
+    {
+      "id": "loan-candidate-baseline-1",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "loan-candidate.candidate.edit.json"
+    },
+    {
+      "id": "loan-candidate-candidate-1",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "projection/loan-candidate.candidate.edit.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "extraction-inherited.candidate.edit.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "projection/extraction-inherited.candidate.edit.json"
+    },
+    {
+      "id": "fan-direct-signal-baseline-1",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "fan-direct-signal.candidate.edit.json"
+    },
+    {
+      "id": "fan-direct-signal-candidate-1",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "projection/fan-direct-signal.candidate.edit.json"
+    },
+    {
+      "id": "joint-two-sources-baseline-1",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "joint-two-sources.candidate.edit.json"
+    },
+    {
+      "id": "joint-two-sources-candidate-1",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "projection/joint-two-sources.candidate.edit.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "wrong-role-assignment.candidate.edit.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "projection/wrong-role-assignment.candidate.edit.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "unresolved-multiple-producers.candidate.edit.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "projection/unresolved-multiple-producers.candidate.edit.json"
+    },
+    {
+      "id": "parking-candidate-baseline-1",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "parking-candidate.candidate.edit.json"
+    },
+    {
+      "id": "parking-candidate-candidate-1",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "projection/parking-candidate.candidate.edit.json"
+    },
+    {
+      "id": "captured-description-candidate-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "projection/captured-description.candidate.edit.json"
+    },
+    {
+      "id": "captured-description-baseline-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "captured-description.candidate.edit.json"
+    },
+    {
+      "id": "loan-candidate-candidate-2",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "projection/loan-candidate.candidate.edit.json"
+    },
+    {
+      "id": "loan-candidate-baseline-2",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "loan-candidate.candidate.edit.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "projection/extraction-inherited.candidate.edit.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "extraction-inherited.candidate.edit.json"
+    },
+    {
+      "id": "fan-direct-signal-candidate-2",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "projection/fan-direct-signal.candidate.edit.json"
+    },
+    {
+      "id": "fan-direct-signal-baseline-2",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "fan-direct-signal.candidate.edit.json"
+    },
+    {
+      "id": "joint-two-sources-candidate-2",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "projection/joint-two-sources.candidate.edit.json"
+    },
+    {
+      "id": "joint-two-sources-baseline-2",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "joint-two-sources.candidate.edit.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "projection/wrong-role-assignment.candidate.edit.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "wrong-role-assignment.candidate.edit.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "projection/unresolved-multiple-producers.candidate.edit.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "unresolved-multiple-producers.candidate.edit.json"
+    },
+    {
+      "id": "parking-candidate-candidate-2",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "projection/parking-candidate.candidate.edit.json"
+    },
+    {
+      "id": "parking-candidate-baseline-2",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "parking-candidate.candidate.edit.json"
+    }
+  ],
+  "sources": [
+    {
+      "path": "src/domain/source_omission_binding.zig",
+      "sha256": "ebdd6afd0895dfbbe44dc1778e3021b01d5c2811b1527a463968d61bac8b080f"
+    },
+    {
+      "path": "src/domain/source_omission_comparison.zig",
+      "sha256": "faa301380d3b9a8be93ba43a7ec065dab1625d9c2d8c8a5cf90250f4157f232c"
+    },
+    {
+      "path": "src/domain/specification_support.zig",
+      "sha256": "7d3c4bcf49341ad1c27020ceee132ef7e40048f6c7b5bd78173c39c2290dddeb"
+    },
+    {
+      "path": "src/domain/source_omission_context.zig",
+      "sha256": "f7c7628ee879fb385239ebb25af50764cc71bab86f077a63ed5666141c6b9694"
+    },
+    {
+      "path": "design/workflows/spec/support-loss.prompt.md",
+      "sha256": "05814f717734cc13292bf0d8ffab15d1a8c41c496cdda200aad61583ad013118"
+    },
+    {
+      "path": "design/workflows/spec/support.schema.json",
+      "sha256": "f8285e781065ec47defd8175245613ad7ca489b119cb6543195744502d59bec3"
+    },
+    {
+      "path": "src/test_fixtures/source_loss_calibration.zig",
+      "sha256": "8a8e67c672140bd80328f54f6eecae93e35dc800590d270a0e0606d8015cf992"
+    },
+    {
+      "path": "test/calibration/source-loss-attribution/bound-preservation/cases.json",
+      "sha256": "d9307e093705b966e65e6e645560767b98131d040ea8e73685392345f05bb58c"
+    }
+  ]
+}

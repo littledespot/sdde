@@ -193,6 +193,12 @@ pub const State = struct {
     pub fn getEntry(self: State, index: usize) ?Entry {
         return if (index < self.entries.len) self.entries[index] else null;
     }
+    /// Validate the current native association without creating a projection,
+    /// allocating storage or changing any retained prerequisite.
+    pub fn validBinding(self: State, binding: Binding) bool {
+        self.checkBinding(binding) catch return false;
+        return true;
+    }
     fn checkBinding(self: State, binding: Binding) Error!void {
         if (!binding.valid() or binding.plan != self.plan or binding.base != self.base or !binding.epoch.eql(self.epoch)) return error.InvalidCompositionBinding;
         var expected: usize = 0;

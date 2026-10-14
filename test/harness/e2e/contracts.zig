@@ -76,6 +76,7 @@ pub const Status = enum {
 pub const TerminalRejection = struct {
     kind: std.meta.Tag(@import("../../../src/domain/workflow_execution.zig").Rejection),
     detail: ?[]const u8 = null,
+    capture_failure: ?@import("../../../src/domain/model_capture_failure.zig").Failure = null,
 
     pub fn fromNative(value: @import("../../../src/domain/workflow_execution.zig").Rejection) TerminalRejection {
         return .{ .kind = std.meta.activeTag(value), .detail = switch (value) {
@@ -83,8 +84,9 @@ pub const TerminalRejection = struct {
             .logging => |reason| @tagName(reason),
             .token_budget => |reason| @errorName(reason),
             .operation_failed => value.diagnostic(),
+            .model_capture => |reason| reason.diagnostic(),
             .authority, .cancelled, .deadline_exhausted, .retry_limit => null,
-        } };
+        }, .capture_failure = if (value == .model_capture) value.model_capture else null };
     }
 };
 pub const Attempt = struct {

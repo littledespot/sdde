@@ -212,7 +212,7 @@ test "Specify projects registered native fields and complete reference obligatio
     const spec = @import("domain/specification.zig");
     const value: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "Supported business value" } }} };
     const provenance: spec.Provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} };
-    const attributed: spec.AttributedValue = .{ .value = value, .provenance = provenance };
+    const attributed: spec.AttributedValue = .{ .value = value, .source_group_ids = &.{accounted.records.signals[0].id}, .provenance = provenance };
     var content: spec.IdentifiedContent = .{ .display_name = attributed, .primary_user_story = attributed, .entities = .{ .disposition = .not_applicable, .basis = attributed }, .records = &.{} };
     const empty = try project.execute(allocator, before.feature, accounted, content, null);
     try std.testing.expectEqual(before.seeds.len, empty.seeds.len);
@@ -222,7 +222,7 @@ test "Specify projects registered native fields and complete reference obligatio
         inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
             @field(fields, field.name) = if (field.type == spec.BusinessValue) value else &.{ value, value };
         }
-        records[index] = .{ .id = .{ .kind = kind, .ordinal = 1 }, .proposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), fields), .provenance = provenance } };
+        records[index] = .{ .id = .{ .kind = kind, .ordinal = 1 }, .proposal = .{ .content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), fields), .source_group_ids = attributed.source_group_ids, .provenance = provenance } };
     }
     content.records = records;
     const after = try project.execute(allocator, before.feature, accounted, content, null);

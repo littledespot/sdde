@@ -1,0 +1,110 @@
+[
+  {
+    "id": "captured-story",
+    "cohort": "development",
+    "sources": [
+      "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n- Must also output date and time in UTC\n"
+    ],
+    "source_path": "stories.md",
+    "claims": [
+      {
+        "source": 1,
+        "text": "The application must start successfully.",
+        "first": 5,
+        "last": 5
+      },
+      {
+        "source": 1,
+        "text": "When started, the application must display `Hello, World!`.",
+        "first": 6,
+        "last": 6
+      },
+      {
+        "source": 1,
+        "text": "The application must also output the date and time in UTC.",
+        "first": 7,
+        "last": 7
+      }
+    ],
+    "description": "When started, the application displays \"Hello, World!\" and outputs the current date and time in UTC.",
+    "missing": "The supplied subject omits the requirement that the application display the string \"Hello, World!\" as specified in the source. The source explicitly states that upon startup the application must display \"Hello, World!\" and output the current UTC date and time. The subject instead references an undefined token \"kindexact_copy\", thereby leaving the intended display text unrepresented.",
+    "mode": "candidate",
+    "target": "primary_user_story",
+    "candidate_file": "test/calibration/source-loss-attribution/bound-preservation/presentation/captured-story.canonical.json",
+    "signal_text": "The application must start successfully.When started, the application must display `Hello, World!`.The application must also output the date and time in UTC.",
+    "verdicts": [
+      "preserved",
+      "preserved"
+    ],
+    "expected": "candidate"
+  },
+  {
+    "id": "loan-story",
+    "cohort": "development",
+    "sources": [
+      "# MOCK Loan renewal\n\n## Requirements\n\n- MOCK Renew an eligible loan.\n- MOCK After renewal display `MOCK Renewed!`.\n- MOCK Show the new return deadline.\n"
+    ],
+    "source_path": "stories.md",
+    "claims": [
+      {
+        "source": 1,
+        "text": "MOCK Renew an eligible loan.",
+        "first": 5,
+        "last": 5
+      },
+      {
+        "source": 1,
+        "text": "MOCK After renewal display `MOCK Renewed!`.",
+        "first": 6,
+        "last": 6
+      },
+      {
+        "source": 1,
+        "text": "MOCK Show the new return deadline.",
+        "first": 7,
+        "last": 7
+      }
+    ],
+    "description": "MOCK Renew an eligible loan and show its result.",
+    "missing": "MOCK The story substitutes kindexact_copy for the confirmation text required after loan renewal.",
+    "mode": "candidate",
+    "target": "primary_user_story",
+    "candidate_file": "test/calibration/source-loss-attribution/bound-preservation/presentation/loan-story.canonical.json",
+    "verdicts": [
+      "preserved",
+      "preserved"
+    ],
+    "expected": "candidate"
+  },
+  {
+    "id": "wrong-role-story",
+    "cohort": "development",
+    "sources": [
+      "MOCK After an appointment is cancelled, the service must notify the patient.\nMOCK The service must display clinic opening hours.\n"
+    ],
+    "claims": [
+      {
+        "source": 1,
+        "text": "MOCK After an appointment is cancelled, the service must notify the patient.",
+        "first": 1,
+        "last": 1
+      },
+      {
+        "source": 1,
+        "text": "MOCK The service must display clinic opening hours.",
+        "first": 2,
+        "last": 2
+      }
+    ],
+    "description": "MOCK The service displays clinic opening hours.",
+    "missing": "MOCK The story omits notifying the patient after appointment cancellation.",
+    "mode": "second_role",
+    "target": "primary_user_story",
+    "candidate_file": "test/calibration/source-loss-attribution/bound-preservation/presentation/wrong-role-story.canonical.json",
+    "verdicts": [
+      "preserved",
+      "lost"
+    ],
+    "expected": "unsupported_role"
+  }
+]

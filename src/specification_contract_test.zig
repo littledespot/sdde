@@ -101,11 +101,7 @@ test "closed specification parsing cleans up every allocation failure" {
     try testing.checkAllAllocationFailures(testing.allocator, parseAllocated, .{});
 }
 
-test "editable specification round-trips every record family and exact code spans" {
-    try roundTrip(testing.allocator);
-}
-
-test "specification codec cleans up every allocation failure" {
+test "editable specification round-trips every family and exact spans with allocation cleanup" {
     try testing.checkAllAllocationFailures(testing.allocator, roundTrip, .{});
 }
 
@@ -259,6 +255,7 @@ fn parseAllocated(allocator: std.mem.Allocator) !void {
 fn proposal() spec.ContentProposal {
     const value: spec.AttributedValue = .{
         .value = .{ .segments = &.{.{ .literal = .{ .value = "Reference-grounded content" } }} },
+        .source_group_ids = &.{.{ .ordinal = 1 }},
         .provenance = .{ .claim_ids = &.{.{ .ordinal = 1 }}, .citation_ids = &.{.{ .ordinal = 1 }}, .clarification_response_ids = &.{} },
     };
     return .{ .display_name = value, .primary_user_story = value, .records = &.{}, .entities = .{ .disposition = .not_applicable, .basis = value } };

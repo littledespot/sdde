@@ -1,0 +1,3118 @@
+{
+  "schema": "phase5-role-representation-scorecard/v1",
+  "status": "completed_historical_diagnostic_not_authoring_qualification",
+  "labels": {
+    "status": "reviewed",
+    "reviewer": "User; explicit approval of Phase 5 proposed diagnostic labels, recorded 2026-10-12T21:24:39.515611Z",
+    "authority": "Explicit user approval of the previously proposed labels; no independent expert review is claimed. Label-derived counts are diagnostic judgments, not deterministic semantic proof."
+  },
+  "settings": {
+    "grant": "User explicitly approved both Phase 5 panels, all 50 physical diagnostic sends, proposed diagnostic labels, and these synthetic/captured payloads to AWS Bedrock. This subpanel consumes at most 22 of those sends.",
+    "labels_reviewed_by": "User; explicit approval of Phase 5 proposed diagnostic labels, recorded 2026-10-12T21:24:39.515611Z",
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0.1,
+    "response_mode": "native_schema",
+    "max_output_tokens": 16384,
+    "maximum_physical_calls": 22,
+    "actual_token_stop": 150000,
+    "retries_repairs_corrections_judges_e2e": 0
+  },
+  "summary": {
+    "declared_trials": 22,
+    "actual_provider_sends": 22,
+    "received_exchanges": 22,
+    "usage_known_trials": 22,
+    "native_scored": 21,
+    "protocol_rejected": 1,
+    "native_rejected": 0,
+    "operational_failures": 0,
+    "exact_label_cases": 11,
+    "required_roles": 114,
+    "missing_supported_roles": 28,
+    "false_unsupported_roles": 28,
+    "assigned_pairs": 104,
+    "unsupported_pairs": 14,
+    "wrong_basis_pairs": 12,
+    "input_tokens": 36410,
+    "output_tokens": 3289,
+    "total_tokens": 39699,
+    "semantic_repeat_pairs": 10,
+    "semantic_repeat_variation_pairs": 4,
+    "admission_repeat_variation_pairs": 1,
+    "retries_repairs_corrections_judges_e2e": 0
+  },
+  "case_metrics": [
+    {
+      "case": "captured-four-negative-latest",
+      "family": "captured-startup",
+      "declared_trials": 2,
+      "scored_trials": 2,
+      "exact_label_cases": 0,
+      "counts": {
+        "required_roles": 12,
+        "missing_supported_roles": 4,
+        "false_unsupported_roles": 4,
+        "assigned_pairs": 14,
+        "unsupported_pairs": 6,
+        "wrong_basis_pairs": 6
+      },
+      "semantic_repeat_variation": true,
+      "admission_repeat_variation": false,
+      "input_tokens": 3338,
+      "output_tokens": 443
+    },
+    {
+      "case": "captured-four-negative-preceding",
+      "family": "captured-startup",
+      "declared_trials": 2,
+      "scored_trials": 2,
+      "exact_label_cases": 0,
+      "counts": {
+        "required_roles": 12,
+        "missing_supported_roles": 8,
+        "false_unsupported_roles": 8,
+        "assigned_pairs": 4,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0
+      },
+      "semantic_repeat_variation": false,
+      "admission_repeat_variation": false,
+      "input_tokens": 3342,
+      "output_tokens": 352
+    },
+    {
+      "case": "captured-supported-control",
+      "family": "captured-startup",
+      "declared_trials": 2,
+      "scored_trials": 2,
+      "exact_label_cases": 2,
+      "counts": {
+        "required_roles": 12,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 12,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0
+      },
+      "semantic_repeat_variation": false,
+      "admission_repeat_variation": false,
+      "input_tokens": 3738,
+      "output_tokens": 359
+    },
+    {
+      "case": "startup-whole-chunk",
+      "family": "startup-representation",
+      "declared_trials": 2,
+      "scored_trials": 2,
+      "exact_label_cases": 0,
+      "counts": {
+        "required_roles": 12,
+        "missing_supported_roles": 10,
+        "false_unsupported_roles": 10,
+        "assigned_pairs": 2,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0
+      },
+      "semantic_repeat_variation": true,
+      "admission_repeat_variation": false,
+      "input_tokens": 3420,
+      "output_tokens": 272
+    },
+    {
+      "case": "startup-separate-lines",
+      "family": "startup-representation",
+      "declared_trials": 2,
+      "scored_trials": 2,
+      "exact_label_cases": 1,
+      "counts": {
+        "required_roles": 12,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 18,
+        "unsupported_pairs": 6,
+        "wrong_basis_pairs": 6
+      },
+      "semantic_repeat_variation": true,
+      "admission_repeat_variation": false,
+      "input_tokens": 3820,
+      "output_tokens": 356
+    },
+    {
+      "case": "lamp-whole-chunk",
+      "family": "lamp-representation",
+      "declared_trials": 2,
+      "scored_trials": 2,
+      "exact_label_cases": 1,
+      "counts": {
+        "required_roles": 12,
+        "missing_supported_roles": 6,
+        "false_unsupported_roles": 6,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0
+      },
+      "semantic_repeat_variation": true,
+      "admission_repeat_variation": false,
+      "input_tokens": 3008,
+      "output_tokens": 249
+    },
+    {
+      "case": "lamp-separate-lines",
+      "family": "lamp-representation",
+      "declared_trials": 2,
+      "scored_trials": 2,
+      "exact_label_cases": 2,
+      "counts": {
+        "required_roles": 12,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 12,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0
+      },
+      "semantic_repeat_variation": false,
+      "admission_repeat_variation": false,
+      "input_tokens": 3408,
+      "output_tokens": 218
+    },
+    {
+      "case": "parcel-whole-chunk",
+      "family": "parcel-representation",
+      "declared_trials": 2,
+      "scored_trials": 2,
+      "exact_label_cases": 2,
+      "counts": {
+        "required_roles": 12,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 12,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0
+      },
+      "semantic_repeat_variation": false,
+      "admission_repeat_variation": false,
+      "input_tokens": 3056,
+      "output_tokens": 230
+    },
+    {
+      "case": "parcel-separate-lines",
+      "family": "parcel-representation",
+      "declared_trials": 2,
+      "scored_trials": 2,
+      "exact_label_cases": 2,
+      "counts": {
+        "required_roles": 12,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 12,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0
+      },
+      "semantic_repeat_variation": false,
+      "admission_repeat_variation": false,
+      "input_tokens": 3456,
+      "output_tokens": 206
+    },
+    {
+      "case": "implementation-only-insufficient",
+      "family": "insufficient-implementation",
+      "declared_trials": 2,
+      "scored_trials": 1,
+      "exact_label_cases": 1,
+      "counts": {
+        "required_roles": 0,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 0,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0
+      },
+      "semantic_repeat_variation": false,
+      "admission_repeat_variation": true,
+      "input_tokens": 2972,
+      "output_tokens": 216
+    },
+    {
+      "case": "constraint-only-partial-support",
+      "family": "insufficient-interaction",
+      "declared_trials": 2,
+      "scored_trials": 2,
+      "exact_label_cases": 0,
+      "counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 12,
+        "unsupported_pairs": 2,
+        "wrong_basis_pairs": 0
+      },
+      "semantic_repeat_variation": false,
+      "admission_repeat_variation": false,
+      "input_tokens": 2852,
+      "output_tokens": 388
+    }
+  ],
+  "by_role": {
+    "title": {
+      "required_roles": 20,
+      "missing_supported_roles": 6,
+      "false_unsupported_roles": 6,
+      "assigned_pairs": 16,
+      "unsupported_pairs": 2,
+      "wrong_basis_pairs": 2
+    },
+    "description": {
+      "required_roles": 18,
+      "missing_supported_roles": 2,
+      "false_unsupported_roles": 2,
+      "assigned_pairs": 20,
+      "unsupported_pairs": 2,
+      "wrong_basis_pairs": 2
+    },
+    "primary_goal": {
+      "required_roles": 18,
+      "missing_supported_roles": 2,
+      "false_unsupported_roles": 2,
+      "assigned_pairs": 20,
+      "unsupported_pairs": 2,
+      "wrong_basis_pairs": 2
+    },
+    "primary_user_story": {
+      "required_roles": 18,
+      "missing_supported_roles": 6,
+      "false_unsupported_roles": 6,
+      "assigned_pairs": 16,
+      "unsupported_pairs": 4,
+      "wrong_basis_pairs": 2
+    },
+    "entity_basis": {
+      "required_roles": 20,
+      "missing_supported_roles": 6,
+      "false_unsupported_roles": 6,
+      "assigned_pairs": 16,
+      "unsupported_pairs": 2,
+      "wrong_basis_pairs": 2
+    },
+    "records": {
+      "required_roles": 20,
+      "missing_supported_roles": 6,
+      "false_unsupported_roles": 6,
+      "assigned_pairs": 16,
+      "unsupported_pairs": 2,
+      "wrong_basis_pairs": 2
+    }
+  },
+  "representation_pairs": [
+    {
+      "family": "startup-representation",
+      "arms": [
+        {
+          "representation": "whole-chunk",
+          "case": "startup-whole-chunk",
+          "declared_trials": 2,
+          "exact_label_cases": 0,
+          "counts": {
+            "required_roles": 12,
+            "missing_supported_roles": 10,
+            "false_unsupported_roles": 10,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          "input_tokens": 3420,
+          "output_tokens": 272
+        },
+        {
+          "representation": "separate-lines",
+          "case": "startup-separate-lines",
+          "declared_trials": 2,
+          "exact_label_cases": 1,
+          "counts": {
+            "required_roles": 12,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 18,
+            "unsupported_pairs": 6,
+            "wrong_basis_pairs": 6
+          },
+          "input_tokens": 3820,
+          "output_tokens": 356
+        }
+      ]
+    },
+    {
+      "family": "lamp-representation",
+      "arms": [
+        {
+          "representation": "whole-chunk",
+          "case": "lamp-whole-chunk",
+          "declared_trials": 2,
+          "exact_label_cases": 1,
+          "counts": {
+            "required_roles": 12,
+            "missing_supported_roles": 6,
+            "false_unsupported_roles": 6,
+            "assigned_pairs": 6,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          "input_tokens": 3008,
+          "output_tokens": 249
+        },
+        {
+          "representation": "separate-lines",
+          "case": "lamp-separate-lines",
+          "declared_trials": 2,
+          "exact_label_cases": 2,
+          "counts": {
+            "required_roles": 12,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 12,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          "input_tokens": 3408,
+          "output_tokens": 218
+        }
+      ]
+    },
+    {
+      "family": "parcel-representation",
+      "arms": [
+        {
+          "representation": "whole-chunk",
+          "case": "parcel-whole-chunk",
+          "declared_trials": 2,
+          "exact_label_cases": 2,
+          "counts": {
+            "required_roles": 12,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 12,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          "input_tokens": 3056,
+          "output_tokens": 230
+        },
+        {
+          "representation": "separate-lines",
+          "case": "parcel-separate-lines",
+          "declared_trials": 2,
+          "exact_label_cases": 2,
+          "counts": {
+            "required_roles": 12,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 12,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          "input_tokens": 3456,
+          "output_tokens": 206
+        }
+      ]
+    }
+  ],
+  "trials": [
+    {
+      "ordinal": 1,
+      "case": "captured-four-negative-latest",
+      "family": "captured-startup",
+      "scheduled_repetition": 1,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 12,
+        "unsupported_pairs": 6,
+        "wrong_basis_pairs": 6,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 1
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 1
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 1
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 1
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 1
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 1
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1,
+            2
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1,
+            2
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1,
+            2
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1,
+            2
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1,
+            2
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1,
+            2
+          ]
+        }
+      },
+      "input_tokens": 1669,
+      "output_tokens": 266,
+      "elapsed_ns": 1248005208,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-25Z-bb5a6a3642720658bc299195a379a9b0/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-25Z-bb5a6a3642720658bc299195a379a9b0/logs/debugger/8c06f68e6aecb4237f26967daaf33d5b.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-25Z-bb5a6a3642720658bc299195a379a9b0/logs/debugger/8c06f68e6aecb4237f26967daaf33d5b.response.json",
+      "provider_body_sha256": "7d1fab77bbd560ff4baaa42c6998d491413691d1f79db73ea67628c434cdd722",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 2,
+      "case": "captured-four-negative-latest",
+      "family": "captured-startup",
+      "scheduled_repetition": 2,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 4,
+        "false_unsupported_roles": 4,
+        "assigned_pairs": 2,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "unsupported"
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "unsupported"
+        },
+        "entity_basis": {
+          "kind": "unsupported"
+        },
+        "records": {
+          "kind": "unsupported"
+        }
+      },
+      "input_tokens": 1669,
+      "output_tokens": 177,
+      "elapsed_ns": 1091507500,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-27Z-ed7bd12a300d63ddf7b03153c2169423/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-27Z-ed7bd12a300d63ddf7b03153c2169423/logs/debugger/394f65e6df2f08a5c71cf5cbbcbb31f4.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-27Z-ed7bd12a300d63ddf7b03153c2169423/logs/debugger/394f65e6df2f08a5c71cf5cbbcbb31f4.response.json",
+      "provider_body_sha256": "7d1fab77bbd560ff4baaa42c6998d491413691d1f79db73ea67628c434cdd722",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 3,
+      "case": "captured-four-negative-preceding",
+      "family": "captured-startup",
+      "scheduled_repetition": 1,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 4,
+        "false_unsupported_roles": 4,
+        "assigned_pairs": 2,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "unsupported"
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "unsupported"
+        },
+        "entity_basis": {
+          "kind": "unsupported"
+        },
+        "records": {
+          "kind": "unsupported"
+        }
+      },
+      "input_tokens": 1671,
+      "output_tokens": 181,
+      "elapsed_ns": 932794000,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-28Z-0cd42ff641c498018cfc528c2d13a13b/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-28Z-0cd42ff641c498018cfc528c2d13a13b/logs/debugger/6d7e614949ff9adf1bed1710a34d4467.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-28Z-0cd42ff641c498018cfc528c2d13a13b/logs/debugger/6d7e614949ff9adf1bed1710a34d4467.response.json",
+      "provider_body_sha256": "1257ad06c5df0220f6a51573d9d7c5f8cd0bff658317efb2c5f27cc5f6eb365d",
+      "parent_run": "RUN-d9038e02f38db84cc14443480c6d0662",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-d9038e02f38db84cc14443480c6d0662",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 4,
+      "case": "captured-four-negative-preceding",
+      "family": "captured-startup",
+      "scheduled_repetition": 2,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 4,
+        "false_unsupported_roles": 4,
+        "assigned_pairs": 2,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "unsupported"
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "unsupported"
+        },
+        "entity_basis": {
+          "kind": "unsupported"
+        },
+        "records": {
+          "kind": "unsupported"
+        }
+      },
+      "input_tokens": 1671,
+      "output_tokens": 171,
+      "elapsed_ns": 861725750,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-29Z-e527ba60bd6b887b25992da1900c8c71/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-29Z-e527ba60bd6b887b25992da1900c8c71/logs/debugger/1382a1395e41d0c8d761222ad84d21cb.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-29Z-e527ba60bd6b887b25992da1900c8c71/logs/debugger/1382a1395e41d0c8d761222ad84d21cb.response.json",
+      "provider_body_sha256": "1257ad06c5df0220f6a51573d9d7c5f8cd0bff658317efb2c5f27cc5f6eb365d",
+      "parent_run": "RUN-d9038e02f38db84cc14443480c6d0662",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-d9038e02f38db84cc14443480c6d0662",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 5,
+      "case": "captured-supported-control",
+      "family": "captured-startup",
+      "scheduled_repetition": 1,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        }
+      },
+      "input_tokens": 1869,
+      "output_tokens": 181,
+      "elapsed_ns": 893142250,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-30Z-0800c20e3049b9b320a7e0891013c085/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-30Z-0800c20e3049b9b320a7e0891013c085/logs/debugger/1ff91b9ce6df4d71403d0b9af72fccf9.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-30Z-0800c20e3049b9b320a7e0891013c085/logs/debugger/1ff91b9ce6df4d71403d0b9af72fccf9.response.json",
+      "provider_body_sha256": "e992c6ab67a8e6081392374ee768eda07299d2551ac9a8f01a932197f426e823",
+      "parent_run": "RUN-97279dcdf824fc2622d889dcaf595f5b",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-97279dcdf824fc2622d889dcaf595f5b",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 6,
+      "case": "captured-supported-control",
+      "family": "captured-startup",
+      "scheduled_repetition": 2,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        }
+      },
+      "input_tokens": 1869,
+      "output_tokens": 178,
+      "elapsed_ns": 928827416,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-32Z-3a16c53bf883172e4e97661e2c7ec683/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-32Z-3a16c53bf883172e4e97661e2c7ec683/logs/debugger/3e7d0af7b2e0fdeba317c786e1bc3709.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-32Z-3a16c53bf883172e4e97661e2c7ec683/logs/debugger/3e7d0af7b2e0fdeba317c786e1bc3709.response.json",
+      "provider_body_sha256": "e992c6ab67a8e6081392374ee768eda07299d2551ac9a8f01a932197f426e823",
+      "parent_run": "RUN-97279dcdf824fc2622d889dcaf595f5b",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-97279dcdf824fc2622d889dcaf595f5b",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 7,
+      "case": "startup-whole-chunk",
+      "family": "startup-representation",
+      "scheduled_repetition": 1,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 4,
+        "false_unsupported_roles": 4,
+        "assigned_pairs": 2,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "unsupported"
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "unsupported"
+        },
+        "entity_basis": {
+          "kind": "unsupported"
+        },
+        "records": {
+          "kind": "unsupported"
+        }
+      },
+      "input_tokens": 1710,
+      "output_tokens": 160,
+      "elapsed_ns": 819766125,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-33Z-ce6cb22c5b47009b1931509d89b30d6b/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-33Z-ce6cb22c5b47009b1931509d89b30d6b/logs/debugger/b634f29a7744b950e331e65405cb1cea.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-33Z-ce6cb22c5b47009b1931509d89b30d6b/logs/debugger/b634f29a7744b950e331e65405cb1cea.response.json",
+      "provider_body_sha256": "6d901ba442587de564558ec3dfc9c7dd9104fe7568b20d89a6345706826de3f6",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 8,
+      "case": "startup-whole-chunk",
+      "family": "startup-representation",
+      "scheduled_repetition": 2,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 6,
+        "false_unsupported_roles": 6,
+        "assigned_pairs": 0,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "unsupported"
+        },
+        "description": {
+          "kind": "unsupported"
+        },
+        "primary_goal": {
+          "kind": "unsupported"
+        },
+        "primary_user_story": {
+          "kind": "unsupported"
+        },
+        "entity_basis": {
+          "kind": "unsupported"
+        },
+        "records": {
+          "kind": "unsupported"
+        }
+      },
+      "input_tokens": 1710,
+      "output_tokens": 112,
+      "elapsed_ns": 665975666,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-33Z-9290b7d5eddfb1c039502ba8dcf45b6b/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-33Z-9290b7d5eddfb1c039502ba8dcf45b6b/logs/debugger/f22ef7dc7f02cfb67ac17d385082b668.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-33Z-9290b7d5eddfb1c039502ba8dcf45b6b/logs/debugger/f22ef7dc7f02cfb67ac17d385082b668.response.json",
+      "provider_body_sha256": "6d901ba442587de564558ec3dfc9c7dd9104fe7568b20d89a6345706826de3f6",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 9,
+      "case": "startup-separate-lines",
+      "family": "startup-representation",
+      "scheduled_repetition": 1,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 12,
+        "unsupported_pairs": 6,
+        "wrong_basis_pairs": 6,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 1
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 1
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 1
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 1
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 1
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 2,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 1
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1,
+            2
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1,
+            2
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1,
+            2
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1,
+            2
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1,
+            2
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1,
+            2
+          ]
+        }
+      },
+      "input_tokens": 1910,
+      "output_tokens": 180,
+      "elapsed_ns": 766778167,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-34Z-5be8916f6fcdbf8bb58df517ec8aeb34/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-34Z-5be8916f6fcdbf8bb58df517ec8aeb34/logs/debugger/5bbb98861ef467a8f5e6f55554a6d0e4.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-34Z-5be8916f6fcdbf8bb58df517ec8aeb34/logs/debugger/5bbb98861ef467a8f5e6f55554a6d0e4.response.json",
+      "provider_body_sha256": "8381f063f9a9b197ef8d5bfa0dddb483cb414e75545958d9281f20041f764931",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 10,
+      "case": "startup-separate-lines",
+      "family": "startup-representation",
+      "scheduled_repetition": 2,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        }
+      },
+      "input_tokens": 1910,
+      "output_tokens": 176,
+      "elapsed_ns": 881475958,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-35Z-1621da4e1fd061649fc628cbfacac5c0/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-35Z-1621da4e1fd061649fc628cbfacac5c0/logs/debugger/635a2c0ecd446ca6b952561b46d938d5.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-35Z-1621da4e1fd061649fc628cbfacac5c0/logs/debugger/635a2c0ecd446ca6b952561b46d938d5.response.json",
+      "provider_body_sha256": "8381f063f9a9b197ef8d5bfa0dddb483cb414e75545958d9281f20041f764931",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 11,
+      "case": "lamp-whole-chunk",
+      "family": "lamp-representation",
+      "scheduled_repetition": 1,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 6,
+        "false_unsupported_roles": 6,
+        "assigned_pairs": 0,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 1,
+            "false_unsupported_roles": 1,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "unsupported"
+        },
+        "description": {
+          "kind": "unsupported"
+        },
+        "primary_goal": {
+          "kind": "unsupported"
+        },
+        "primary_user_story": {
+          "kind": "unsupported"
+        },
+        "entity_basis": {
+          "kind": "unsupported"
+        },
+        "records": {
+          "kind": "unsupported"
+        }
+      },
+      "input_tokens": 1504,
+      "output_tokens": 133,
+      "elapsed_ns": 606971833,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-36Z-b2bdb5839c13e0fd1496bda42ac6c9aa/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-36Z-b2bdb5839c13e0fd1496bda42ac6c9aa/logs/debugger/a7f5f60209b42abf045a31bed06cd83d.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-36Z-b2bdb5839c13e0fd1496bda42ac6c9aa/logs/debugger/a7f5f60209b42abf045a31bed06cd83d.response.json",
+      "provider_body_sha256": "17cbf9c17c439914f3be3dc686ab66af6ccf3d76b198e8a66046d03dc0350f3b",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 12,
+      "case": "lamp-whole-chunk",
+      "family": "lamp-representation",
+      "scheduled_repetition": 2,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        }
+      },
+      "input_tokens": 1504,
+      "output_tokens": 116,
+      "elapsed_ns": 706205666,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-37Z-1750cdacd39553d322a49e0793791c32/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-37Z-1750cdacd39553d322a49e0793791c32/logs/debugger/c9a4b7cc3cdb7091c96793dfaa0ada7c.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-37Z-1750cdacd39553d322a49e0793791c32/logs/debugger/c9a4b7cc3cdb7091c96793dfaa0ada7c.response.json",
+      "provider_body_sha256": "17cbf9c17c439914f3be3dc686ab66af6ccf3d76b198e8a66046d03dc0350f3b",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 13,
+      "case": "lamp-separate-lines",
+      "family": "lamp-representation",
+      "scheduled_repetition": 1,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        }
+      },
+      "input_tokens": 1704,
+      "output_tokens": 103,
+      "elapsed_ns": 705615625,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-38Z-dd027188f6505e9f8fb009c4ebb4503f/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-38Z-dd027188f6505e9f8fb009c4ebb4503f/logs/debugger/c2e4ef8a635d8cf689f37dcb24a5aa90.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-38Z-dd027188f6505e9f8fb009c4ebb4503f/logs/debugger/c2e4ef8a635d8cf689f37dcb24a5aa90.response.json",
+      "provider_body_sha256": "e8d7bb69771c2810d1792476ec4f281b62d0892d582badcff8dad25d09d492bb",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 14,
+      "case": "lamp-separate-lines",
+      "family": "lamp-representation",
+      "scheduled_repetition": 2,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        }
+      },
+      "input_tokens": 1704,
+      "output_tokens": 115,
+      "elapsed_ns": 722619000,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-38Z-64f2d7e0319c3067eb9e8084e689bf19/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-38Z-64f2d7e0319c3067eb9e8084e689bf19/logs/debugger/b2009a4ead715e5ae443a508b07a1f91.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-38Z-64f2d7e0319c3067eb9e8084e689bf19/logs/debugger/b2009a4ead715e5ae443a508b07a1f91.response.json",
+      "provider_body_sha256": "e8d7bb69771c2810d1792476ec4f281b62d0892d582badcff8dad25d09d492bb",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 15,
+      "case": "parcel-whole-chunk",
+      "family": "parcel-representation",
+      "scheduled_repetition": 1,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        }
+      },
+      "input_tokens": 1528,
+      "output_tokens": 115,
+      "elapsed_ns": 656602583,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-39Z-4ec71ec084839da64f956d9d1cd2676f/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-39Z-4ec71ec084839da64f956d9d1cd2676f/logs/debugger/e4c9fd41d22344c0112e70081fc1dd90.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-39Z-4ec71ec084839da64f956d9d1cd2676f/logs/debugger/e4c9fd41d22344c0112e70081fc1dd90.response.json",
+      "provider_body_sha256": "6b2e1774392358b3003ce7cc51b657f51a5cfe3048a7f821308a2018c9900f50",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 16,
+      "case": "parcel-whole-chunk",
+      "family": "parcel-representation",
+      "scheduled_repetition": 2,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        }
+      },
+      "input_tokens": 1528,
+      "output_tokens": 115,
+      "elapsed_ns": 477679167,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-40Z-bc7bbfda1782cfa070493758e8cf5feb/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-40Z-bc7bbfda1782cfa070493758e8cf5feb/logs/debugger/59813a58b1f9038ae07d7cedab6d165d.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-40Z-bc7bbfda1782cfa070493758e8cf5feb/logs/debugger/59813a58b1f9038ae07d7cedab6d165d.response.json",
+      "provider_body_sha256": "6b2e1774392358b3003ce7cc51b657f51a5cfe3048a7f821308a2018c9900f50",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 17,
+      "case": "parcel-separate-lines",
+      "family": "parcel-representation",
+      "scheduled_repetition": 1,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        }
+      },
+      "input_tokens": 1728,
+      "output_tokens": 103,
+      "elapsed_ns": 499962916,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-41Z-1a8f9487cabd94bf9b2708ba108e1096/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-41Z-1a8f9487cabd94bf9b2708ba108e1096/logs/debugger/e2dac98b2417add3b21e081866a25292.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-41Z-1a8f9487cabd94bf9b2708ba108e1096/logs/debugger/e2dac98b2417add3b21e081866a25292.response.json",
+      "provider_body_sha256": "ad38157e72fb2bc0243f465b99e2f61a12904bb04226ad3adfa9a64f975259db",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 18,
+      "case": "parcel-separate-lines",
+      "family": "parcel-representation",
+      "scheduled_repetition": 2,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 6,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        }
+      },
+      "input_tokens": 1728,
+      "output_tokens": 103,
+      "elapsed_ns": 484623334,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-41Z-20fe38dda8aa9fc7bfe9cdb73475355a/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-41Z-20fe38dda8aa9fc7bfe9cdb73475355a/logs/debugger/9a4938c5dc56a0571e8de685f8c654da.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-41Z-20fe38dda8aa9fc7bfe9cdb73475355a/logs/debugger/9a4938c5dc56a0571e8de685f8c654da.response.json",
+      "provider_body_sha256": "ad38157e72fb2bc0243f465b99e2f61a12904bb04226ad3adfa9a64f975259db",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 19,
+      "case": "implementation-only-insufficient",
+      "family": "insufficient-implementation",
+      "scheduled_repetition": 1,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 0,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 0,
+        "unsupported_pairs": 0,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 0,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 0,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 0,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 0,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 0,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 0,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 0,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "unsupported"
+        },
+        "description": {
+          "kind": "unsupported"
+        },
+        "primary_goal": {
+          "kind": "unsupported"
+        },
+        "primary_user_story": {
+          "kind": "unsupported"
+        },
+        "entity_basis": {
+          "kind": "unsupported"
+        },
+        "records": {
+          "kind": "unsupported"
+        }
+      },
+      "input_tokens": 1486,
+      "output_tokens": 123,
+      "elapsed_ns": 508353917,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-42Z-738b20956e9ff5d2a750b1a7ad25d4e7/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-42Z-738b20956e9ff5d2a750b1a7ad25d4e7/logs/debugger/9164106f6fc3c9214cac256fe870c861.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-42Z-738b20956e9ff5d2a750b1a7ad25d4e7/logs/debugger/9164106f6fc3c9214cac256fe870c861.response.json",
+      "provider_body_sha256": "7e7bc28812fbe73cea7c5c9895d854fb09082df01b0ce09fe3f5996897ace187",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 20,
+      "case": "implementation-only-insufficient",
+      "family": "insufficient-implementation",
+      "scheduled_repetition": 2,
+      "native_report_repetition": 1,
+      "outcome": "protocol_rejected",
+      "validation": {
+        "extraction": "invalid",
+        "json": "unavailable",
+        "schema": "unavailable",
+        "reason": "missing_final_text"
+      },
+      "decision_coverage": null,
+      "scored_counts": null,
+      "role_decisions": null,
+      "input_tokens": 1486,
+      "output_tokens": 93,
+      "elapsed_ns": 514159708,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-42Z-3bc8b9c163f32104be485bf92bb46df6/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-42Z-3bc8b9c163f32104be485bf92bb46df6/logs/debugger/5d8adf640ee2c5f92e154d212f930029.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-42Z-3bc8b9c163f32104be485bf92bb46df6/logs/debugger/5d8adf640ee2c5f92e154d212f930029.response.json",
+      "provider_body_sha256": "7e7bc28812fbe73cea7c5c9895d854fb09082df01b0ce09fe3f5996897ace187",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 21,
+      "case": "constraint-only-partial-support",
+      "family": "insufficient-interaction",
+      "scheduled_repetition": 1,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 3,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 1,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 0,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 0,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 0,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        }
+      },
+      "input_tokens": 1426,
+      "output_tokens": 194,
+      "elapsed_ns": 951818542,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-43Z-8fe60652422e70d52855a619b0d39cda/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-43Z-8fe60652422e70d52855a619b0d39cda/logs/debugger/db063c4f740d729e932340d69acd359f.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-43Z-8fe60652422e70d52855a619b0d39cda/logs/debugger/db063c4f740d729e932340d69acd359f.response.json",
+      "provider_body_sha256": "99dcec7f3282f9968e6115efa06aedb32a0e326c4b035b8e4df7ef5202d3d136",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    },
+    {
+      "ordinal": 22,
+      "case": "constraint-only-partial-support",
+      "family": "insufficient-interaction",
+      "scheduled_repetition": 2,
+      "native_report_repetition": 1,
+      "outcome": "scored",
+      "validation": {
+        "extraction": "valid",
+        "json": "valid",
+        "schema": "valid",
+        "reason": null
+      },
+      "decision_coverage": {
+        "required_decisions": 6,
+        "missing_decisions": 0
+      },
+      "scored_counts": {
+        "required_roles": 3,
+        "missing_supported_roles": 0,
+        "false_unsupported_roles": 0,
+        "assigned_pairs": 6,
+        "unsupported_pairs": 1,
+        "wrong_basis_pairs": 0,
+        "by_role": [
+          {
+            "role": "title",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "description",
+            "required_roles": 0,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_goal",
+            "required_roles": 0,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "primary_user_story",
+            "required_roles": 0,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 1,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "entity_basis",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          },
+          {
+            "role": "records",
+            "required_roles": 1,
+            "missing_supported_roles": 0,
+            "false_unsupported_roles": 0,
+            "assigned_pairs": 1,
+            "unsupported_pairs": 0,
+            "wrong_basis_pairs": 0
+          }
+        ]
+      },
+      "role_decisions": {
+        "title": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "description": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_goal": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "primary_user_story": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "entity_basis": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        },
+        "records": {
+          "kind": "supported",
+          "signal_ids": [
+            1
+          ]
+        }
+      },
+      "input_tokens": 1426,
+      "output_tokens": 194,
+      "elapsed_ns": 908561833,
+      "report": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-44Z-1915df5909743862633cc1403fb774ad/report.json",
+      "request_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-44Z-1915df5909743862633cc1403fb774ad/logs/debugger/9ca1f9adaf81af89aec0d63c5dffdb6a.request.json",
+      "response_receipt": "zig-out/phase5-role-representation/baseline/workspace/zig-out/phase5-role-reviewed/live-capable/2026-10-12T21-36-44Z-1915df5909743862633cc1403fb774ad/logs/debugger/9ca1f9adaf81af89aec0d63c5dffdb6a.response.json",
+      "provider_body_sha256": "99dcec7f3282f9968e6115efa06aedb32a0e326c4b035b8e4df7ef5202d3d136",
+      "parent_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "parent_call": "request-6-inference-1",
+      "original_run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+      "original_call": "request-6-inference-1"
+    }
+  ],
+  "frozen_original_preparation": "test/calibration/authoring-roles/representation-control/preparation.json",
+  "amended_approved_preparation": "zig-out/phase5-role-representation/approved-live-preparation.json",
+  "dispatch_journal": "zig-out/phase5-role-representation/live-capable-dispatch-journal.json",
+  "zero_network_initial_process": "zig-out/phase5-role-representation/live-dispatch-journal.json",
+  "zero_network_analysis": "zig-out/phase5-role-representation/transport-analysis.json",
+  "conclusion": "Separate-line claims reduced false unsupported decisions in these three same-source controls, but introduced disallowed support selections in one startup repeat and did not eliminate unchanged-repeat variability. This historical classifier panel does not measure the current authoring replacement or publication/rubric quality."
+}

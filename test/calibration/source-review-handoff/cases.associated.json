@@ -1,0 +1,381 @@
+[
+  {
+    "id": "captured-description",
+    "cohort": "development",
+    "retained_case": "captured-description",
+    "fixture": null,
+    "expectation": {
+      "discovery": "candidate_omission",
+      "meaning": "When started, the application must display Hello, World!.",
+      "attribution": "For a faithful missing required startup display value, the original extraction and assigned producers preserve the duty and the current description loses it: candidate-local. Judge the actual identified duty; do not manufacture an omitted UTC duty that is represented. Native attribution is not repair permission.",
+      "preserve": [
+        "assigned native duty and trigger",
+        "source occurrences, condition, negation and strength",
+        "complete comparison collections"
+      ],
+      "forbidden": [
+        "replace reviewer obligation with this expectation",
+        "force expected attribution",
+        "infer repair permission from a label"
+      ]
+    },
+    "target_slot": null
+  },
+  {
+    "id": "loan-candidate",
+    "cohort": "development",
+    "retained_case": "loan-candidate",
+    "fixture": null,
+    "expectation": {
+      "discovery": "candidate_omission",
+      "meaning": "When an eligible borrower requests renewal of a loan with no reservation, the service must extend its due date by seven days.",
+      "attribution": "For a faithful identified eligibility condition, no-reservation condition, or their combined renewal duty, the original claim and producers preserve it and the current field loses it: candidate-local. A faithful partial condition finding is separate from complete omitted-condition coverage. Native attribution is not repair permission.",
+      "preserve": [
+        "assigned native duty and trigger",
+        "source occurrences, condition, negation and strength",
+        "complete comparison collections"
+      ],
+      "forbidden": [
+        "replace reviewer obligation with this expectation",
+        "force expected attribution",
+        "infer repair permission from a label"
+      ]
+    },
+    "target_slot": null
+  },
+  {
+    "id": "extraction-inherited",
+    "cohort": "development",
+    "retained_case": "extraction-inherited",
+    "fixture": null,
+    "expectation": {
+      "discovery": "candidate_omission",
+      "meaning": "The whole functional-requirements collection records measurements but omits both stopping the pump below the minimum until level recovery and displaying the measured level. Preserve both absent source duties; do not require the local recording description to repeat them.",
+      "attribution": "Derive expected loss from the actual faithful duty identified. Pump shutdown below the minimum/until recovery is absent from extraction; measured-level display survives extraction and the records-role assignment but is missing from the current FR collection, so it is candidate-local. A display-only finding must not be scored as extraction loss. A combined finding spans distinct losses: assess every complete comparison judgment for that actual combination, and accept only the single native owner or unresolved result justified by the current complete evidence. Do not substitute, split or force the historical extraction_claim label; attribution is not repair permission.",
+      "preserve": [
+        "assigned native duty and trigger",
+        "source occurrences, condition, negation and strength",
+        "complete comparison collections",
+        "whole functional-requirements collection covers all original feature behavior; do not misapply this finding to the retained description field",
+        "pump must stop below the minimum and remain stopped until recovery",
+        "controller must display the measured level"
+      ],
+      "forbidden": [
+        "replace reviewer obligation with this expectation",
+        "force expected attribution",
+        "infer repair permission from a label",
+        "claim a local field owns unrelated whole-feature duties"
+      ]
+    },
+    "target_slot": "functional_requirements"
+  },
+  {
+    "id": "fan-direct-signal",
+    "cohort": "development",
+    "retained_case": "fan-direct-signal",
+    "fixture": null,
+    "expectation": {
+      "discovery": "candidate_omission",
+      "meaning": "After the chamber door closes, the fan may restart only when the operator confirms readiness.",
+      "attribution": "For the faithful operator-confirmation restart duty, the original extracted claim preserves it and the current assigned signal loses it: reconciliation-signal loss. Judge any other actual identified duty against its own original/producer/signal evidence rather than reusing this owner automatically. Native attribution is not repair permission.",
+      "preserve": [
+        "assigned native duty and trigger",
+        "source occurrences, condition, negation and strength",
+        "complete comparison collections"
+      ],
+      "forbidden": [
+        "replace reviewer obligation with this expectation",
+        "force expected attribution",
+        "infer repair permission from a label"
+      ]
+    },
+    "target_slot": null
+  },
+  {
+    "id": "joint-two-sources",
+    "cohort": "development",
+    "retained_case": "joint-two-sources",
+    "fixture": null,
+    "expectation": {
+      "discovery": "candidate_omission",
+      "meaning": "Parcel release requires both recipient identity verification and payment confirmation.",
+      "attribution": "Identity verification and payment confirmation are both preserved by their original extracted claims and producers and both absent from the represented release condition: candidate-local for either faithful duty or their combination. Score a faithful single-condition finding separately from complete two-condition coverage. Native attribution is not repair permission.",
+      "preserve": [
+        "assigned native duty and trigger",
+        "source occurrences, condition, negation and strength",
+        "complete comparison collections"
+      ],
+      "forbidden": [
+        "replace reviewer obligation with this expectation",
+        "force expected attribution",
+        "infer repair permission from a label"
+      ]
+    },
+    "target_slot": null
+  },
+  {
+    "id": "unresolved-multiple-producers",
+    "cohort": "development",
+    "retained_case": "unresolved-multiple-producers",
+    "fixture": null,
+    "expectation": {
+      "discovery": "candidate_omission",
+      "meaning": "During power loss, the cabinet must keep medicine cold for eight hours, and an alarm must sound if backup cooling fails.",
+      "attribution": "Eight-hour cooling and the backup-failure alarm are absent from extraction in different source chunks. Judge the actual faithful duty and actual source IDs: a single-duty finding may have a unique native producer, while the combined finding crosses distinct producers and must not be assigned an arbitrary chunk. Score the complete comparison meanings first and accept only the exact current native owner or unresolved result they justify. Do not force unlocalized for a faithful single-duty finding or invent one repair permission for a multi-producer combination.",
+      "preserve": [
+        "assigned native duty and trigger",
+        "source occurrences, condition, negation and strength",
+        "complete comparison collections",
+        "whole functional-requirements collection covers all original feature behavior; do not misapply this finding to the retained description field"
+      ],
+      "forbidden": [
+        "replace reviewer obligation with this expectation",
+        "force expected attribution",
+        "infer repair permission from a label",
+        "claim a local field owns unrelated whole-feature duties"
+      ]
+    },
+    "target_slot": "functional_requirements"
+  },
+  {
+    "id": "sterile-door",
+    "cohort": "development",
+    "retained_case": "sterile-door",
+    "fixture": null,
+    "expectation": {
+      "discovery": "candidate_omission",
+      "meaning": "MOCK The access door must not unlock while the sterilizer is pressurized.",
+      "attribution": "candidate is a scoring expectation, never permission; unresolved is permitted when evidence cannot establish one owner.",
+      "preserve": [
+        "assigned native duty and trigger",
+        "source occurrences, condition, negation and strength",
+        "complete comparison collections"
+      ],
+      "forbidden": [
+        "replace reviewer obligation with this expectation",
+        "force expected attribution",
+        "infer repair permission from a label"
+      ]
+    },
+    "target_slot": null
+  },
+  {
+    "id": "dual-ready",
+    "cohort": "development",
+    "retained_case": "dual-ready",
+    "fixture": null,
+    "expectation": {
+      "discovery": "candidate_omission",
+      "meaning": "MOCK After inspection is approved, show MOCK Ready to the inspector.",
+      "attribution": "The inspector-after-approval occurrence is preserved by its distinct source claim and records-role evidence but missing from the current FR collection: candidate-local. The payer-after-payment occurrence is already represented; alleging it missing is harmful discovery rather than an attribution improvement. Equal label text does not merge the occurrences, and native attribution is not repair permission.",
+      "preserve": [
+        "assigned native duty and trigger",
+        "source occurrences, condition, negation and strength",
+        "complete comparison collections",
+        "whole functional-requirements collection covers all original feature behavior; do not misapply this finding to the retained description field"
+      ],
+      "forbidden": [
+        "replace reviewer obligation with this expectation",
+        "force expected attribution",
+        "infer repair permission from a label",
+        "claim a local field owns unrelated whole-feature duties"
+      ]
+    },
+    "target_slot": "functional_requirements"
+  },
+  {
+    "id": "grounded-shutter-control",
+    "cohort": "development",
+    "retained_case": null,
+    "fixture": {
+      "id": "grounded-shutter-control",
+      "cohort": "development",
+      "sources": [
+        "While maintenance is active, the safety shutter must remain closed.\n"
+      ],
+      "claims": [
+        {
+          "source": 1,
+          "text": "While maintenance is active, the safety shutter must remain closed.",
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "description": "The safety shutter remains closed throughout active maintenance.",
+      "missing": "MOCK unused oracle field; must not reach the actual handoff",
+      "missing_obligation": "MOCK unused oracle field; must not reach the actual handoff",
+      "mode": "candidate",
+      "verdicts": [],
+      "expected": "unlocalized",
+      "target": null,
+      "candidate_file": null,
+      "source_path": null,
+      "signal_text": null,
+      "grouping": "combined",
+      "source_group_ids": [
+        1
+      ]
+    },
+    "expectation": {
+      "discovery": "supported",
+      "meaning": "The assigned field preserves the continuing closed-state requirement during maintenance.",
+      "attribution": "No loss request for supported, genuine gap or inconclusive. An incorrect admitted omission is retained and scored as harm.",
+      "preserve": [
+        "while maintenance is active",
+        "must remain closed"
+      ],
+      "forbidden": [
+        "invent a missing opening procedure",
+        "candidate_omission for an already preserved duty"
+      ]
+    },
+    "target_slot": null
+  },
+  {
+    "id": "missing-release-rule-control",
+    "cohort": "development",
+    "retained_case": null,
+    "fixture": {
+      "id": "missing-release-rule-control",
+      "cohort": "development",
+      "sources": [
+        "After maintenance, the door must be released under the approved release rule, which does not specify a trigger or authorizer.\n"
+      ],
+      "claims": [
+        {
+          "source": 1,
+          "text": "After maintenance, the door must be released under the approved release rule, which does not specify a trigger or authorizer.",
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "description": "After maintenance, the door is released under the approved release rule.",
+      "missing": "MOCK unused oracle field; must not reach the actual handoff",
+      "missing_obligation": "MOCK unused oracle field; must not reach the actual handoff",
+      "mode": "candidate",
+      "verdicts": [],
+      "expected": "unlocalized",
+      "target": null,
+      "candidate_file": null,
+      "source_path": null,
+      "signal_text": null,
+      "grouping": "combined",
+      "source_group_ids": [
+        1
+      ]
+    },
+    "expectation": {
+      "discovery": "unsupported",
+      "meaning": "The original assigned release duty lacks a usable release trigger and authorizer; ask an actionable question about that user choice instead of inventing an omitted source rule.",
+      "attribution": "No loss request for supported, genuine gap or inconclusive. An incorrect admitted omission is retained and scored as harm.",
+      "preserve": [
+        "after maintenance",
+        "required release rule"
+      ],
+      "forbidden": [
+        "invent a release event",
+        "candidate_omission for a source obligation never supplied"
+      ]
+    },
+    "target_slot": null
+  },
+  {
+    "id": "uncertain-acknowledgment-control",
+    "cohort": "development",
+    "retained_case": null,
+    "fixture": {
+      "id": "uncertain-acknowledgment-control",
+      "cohort": "development",
+      "sources": [
+        "Restart is allowed only after the operator acknowledgment has been recorded.\n"
+      ],
+      "claims": [
+        {
+          "source": 1,
+          "text": "Restart is allowed only after the operator acknowledgment has been recorded.",
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "description": "The restart record includes the operator acknowledgment.",
+      "missing": "MOCK unused oracle field; must not reach the actual handoff",
+      "missing_obligation": "MOCK unused oracle field; must not reach the actual handoff",
+      "mode": "candidate",
+      "verdicts": [],
+      "expected": "unlocalized",
+      "target": null,
+      "candidate_file": null,
+      "source_path": null,
+      "signal_text": null,
+      "grouping": "combined",
+      "source_group_ids": [
+        1
+      ]
+    },
+    "expectation": {
+      "discovery": "inconclusive",
+      "meaning": "If the wording alone cannot establish whether recording precedes restart, report unresolved entailment without inventing a missing user policy; a reviewer that can establish the temporal loss must instead identify that exact source duty and be scored by adjudication.",
+      "attribution": "Supported or inconclusive output prepares no loss request. If independent adjudication establishes that the actual reviewer faithfully identifies the source-stated recording-before-restart condition as lost, assess the unchanged finding through the complete assignment; the loss is candidate-local because extraction preserves the condition. An unproven omitted-condition allegation is harmful discovery, and an invented user-choice question is not a substitute. Native attribution is not repair permission.",
+      "preserve": [
+        "operator acknowledgment",
+        "recording before restart is the source-stated condition"
+      ],
+      "forbidden": [
+        "invent a user decision",
+        "change acknowledged event or order",
+        "force uncertainty when the temporal loss is established"
+      ]
+    },
+    "target_slot": null
+  },
+  {
+    "id": "reserved-reagent-clearance",
+    "cohort": "reserved_qualification",
+    "retained_case": null,
+    "fixture": {
+      "id": "reserved-reagent-clearance",
+      "cohort": "development",
+      "sources": [
+        "If reagent temperature rises above the permitted limit, the batch must be quarantined until a supervisor clears it.\n"
+      ],
+      "claims": [
+        {
+          "source": 1,
+          "text": "If reagent temperature rises above the permitted limit, the batch must be quarantined until a supervisor clears it.",
+          "first": 1,
+          "last": 1
+        }
+      ],
+      "description": "After a temperature excursion, quarantine ends when the temperature returns within limits.",
+      "missing": "MOCK unused oracle field; must not reach the actual handoff",
+      "missing_obligation": "MOCK unused oracle field; must not reach the actual handoff",
+      "mode": "candidate",
+      "verdicts": [],
+      "expected": "unlocalized",
+      "target": null,
+      "candidate_file": null,
+      "source_path": null,
+      "signal_text": null,
+      "grouping": "combined",
+      "source_group_ids": [
+        1
+      ]
+    },
+    "expectation": {
+      "discovery": "candidate_omission",
+      "meaning": "A temperature excursion requires continuing quarantine until supervisor clearance; temperature recovery alone must not replace the release condition.",
+      "attribution": "For the faithful continuing-quarantine/until-supervisor-clearance duty, the original claim and producers preserve it while the represented field substitutes temperature recovery: candidate-local. The actual finding must preserve the excursion trigger and clearance condition; no expected wording or attribution may replace it. Native attribution is not repair permission.",
+      "preserve": [
+        "temperature rises above permitted limit",
+        "must be quarantined",
+        "until supervisor clearance"
+      ],
+      "forbidden": [
+        "substitute temperature recovery for clearance",
+        "invent a source gap",
+        "tune on qualification outputs"
+      ]
+    },
+    "target_slot": null
+  }
+]

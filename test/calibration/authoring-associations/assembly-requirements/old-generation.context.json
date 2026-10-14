@@ -1,0 +1,8 @@
+{
+  "business_value": "An ordered array of fragments concatenated into one field value. Construct the value to fulfil its assigned field purpose, preserving source-backed conditions and obligations. Surrounding text supplies any explanation or behavioral meaning the field requires.",
+  "exact_copy": "When reproducing a supplied preserved_tokens literal, insert an exact_copy object instead of typing the literal inside a string. Put any surrounding prose in separate string fragments. Include claim_id only when the selected schema requires it.",
+  "references": "Reference objects insert supplied display values; they do not explain their use or authorize operations.",
+  "sources": "Original sources establish meaning; code samples remain context. Supplied groups expose complete retained requirements. When the schema requests signal_ids, select only groups that support the value's assigned purpose; several groups may jointly support it. Availability is not support. A record's requirements are fixed by its one assigned group. Do not invent decisions.",
+  "clarification": "A missing user decision: state known facts, the choice, its impact and the expected answer. Missing prewritten sections are not user decisions.",
+  "inconclusive": "Unresolved interpretation of the supplied evidence."
+}

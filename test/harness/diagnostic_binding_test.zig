@@ -20,7 +20,7 @@ const captured: debug.Description = .{
     .protocol_prompt = @import("../../src/domain/model_controls.zig").response_format_guidance,
     .schema = "MOCK captured schema",
     .response_mode = .native_schema,
-    .controls = .{ .temperature = .zero, .max_output_tokens = .{ .value = 4096 } },
+    .controls = .{ .temperature = .fixed, .max_output_tokens = .{ .value = 4096 } },
     .reasoning_effort = "medium",
     .operation_kind = .inference,
 };

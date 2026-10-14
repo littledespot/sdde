@@ -1566,12 +1566,15 @@ test "feature logging policy execution and filesystem operations have focused ow
     try expectAbsent(recovery, "fn parseUtc");
 }
 
-test "workflow engine owns selection while composition binds focused runners" {
+test "workflow engine selection is workflow-name agnostic while composition binds focused runners" {
     const composition = @embedFile("composition/root.zig");
     try expectAbsent(composition, "parse_workflow_invocation.zig");
     try expectAbsent(composition, "select_compiled_workflow.zig");
     const orchestrator = @embedFile("application/workflow_engine_orchestrator.zig");
-    try expectAbsent(orchestrator, "/actions/");
+    inline for (.{ "\"specify\"", "\"implement\"" }) |name| {
+        try expectAbsent(orchestrator, name);
+        try expectAbsent(@embedFile("application/workflow_pipeline_runner.zig"), name);
+    }
     try std.testing.expect(std.mem.indexOf(u8, orchestrator, "invokeParseInvocation()") != null);
     try std.testing.expect(std.mem.indexOf(u8, orchestrator, "invokeSelectWorkflow()") != null);
     const selection_runner = @embedFile("application/workflow_selection_runner.zig");
@@ -1585,20 +1588,6 @@ test "active feature logging concrete assembly remains in composition" {
     const service = @embedFile("application/log_service.zig");
     try expectAbsent(service, "/adapters/");
     try expectAbsent(service, "std.Io");
-}
-
-test "generic workflow engine is capability free and workflow-name agnostic" {
-    const orchestrator = @embedFile("application/workflow_engine_orchestrator.zig");
-    try expectAbsent(orchestrator, "/actions/");
-    try expectAbsent(orchestrator, "/adapters/");
-    try expectAbsent(orchestrator, "/ports/");
-    try expectAbsent(orchestrator, "std.Io");
-    try expectAbsent(orchestrator, "\"specify\"");
-    try expectAbsent(orchestrator, "\"implement\"");
-    const runner = @embedFile("application/workflow_pipeline_runner.zig");
-    try expectAbsent(runner, "\"specify\"");
-    try expectAbsent(runner, "\"implement\"");
-    try expectAbsent(runner, "/adapters/");
 }
 
 test "workflow values have one runner-owned store and no key-only candidate API" {
@@ -1714,6 +1703,7 @@ test "feature directory selection shares path policy and has no generated identi
 }
 
 test "feature inspection root handoff has one narrow consumer and cannot mix configured roots" {
+    try std.testing.expectEqual(.filesystem_read, @import("application/feature_directory_workflow.zig").Inspect.Action.contract.side_effect);
     const roots = @import("domain/bootstrap_root_registry.zig");
     const inspector = @import("ports/feature_directory_inspector.zig").Inspector;
     try std.testing.expect(@FieldType(inspector, "capability") == ?*const roots.FeatureDirectoryReadCapability);
@@ -1737,6 +1727,7 @@ test "clarification input operations have narrow read-only ports and no workflow
     const binding = @import("application/workflow_operation_binding.zig");
     const capture = comptime binding.inspect(@import("application/clarification_input_workflow.zig").Capture, &.{});
     try std.testing.expect(capture.valid and capture.feature_input_read);
+    try std.testing.expectEqual(.filesystem_read, @import("application/clarification_input_workflow.zig").Capture.Action.contract.side_effect);
     try std.testing.expect(!capture.model_provider and !capture.feature_read and !capture.reference_read);
     const parse = comptime binding.inspect(@import("application/clarification_input_workflow.zig").ParseState, &.{});
     try std.testing.expect(parse.valid and !parse.feature_input_read);

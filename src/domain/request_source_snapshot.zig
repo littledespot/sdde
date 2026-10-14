@@ -17,6 +17,7 @@ pub const Selection = struct {
     // Decoded JSON pointer segments, not guessed property names.
     paths: []const []const []const u8,
 };
+pub const CaptureRejection = enum { missing_composition_resource, missing_step, missing_source_chain, missing_resource, missing_resource_path, invalid_source_encoding };
 pub const Snapshot = struct {
     version: enum { @"request-source/v1" } = .@"request-source/v1",
     workflow: []const u8,

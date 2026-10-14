@@ -67,7 +67,7 @@ pub fn checkRecords(allocator: std.mem.Allocator, references: @import("reference
             },
             .preserved_token => |token| token.value.kind != .business_exact_string,
         };
-        if (item.claim.content == .model and item.claim.content.model == .open_question and targets.items.len != 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .open_question_mapped, .targets = targets.items } };
+        if (!spec.permitsPositiveMapping(item.claim.content) and targets.items.len != 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .open_question_mapped, .targets = targets.items } };
         if (targets.items.len == 0 and (!context_only or signals.items.len == 0)) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = if (context_only) .missing_context_mapping else .missing_business_mapping, .targets = targets.items } };
         try accounts.append(allocator, .{ .claim_id = item.claim.id, .disposition = if (targets.items.len != 0) .{ .mapped = targets.items } else .{ .context_only = signals.items } });
         if (item.claim.content == .preserved_token) {

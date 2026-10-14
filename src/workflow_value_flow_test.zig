@@ -33,7 +33,7 @@ const gate_contract: gate.Contract = .{
 
 test "unrelated YAML workflows carry typed invocation values through replacement and branch merges" {
     inline for (.{ linear_yaml, branching_yaml }) |yaml| {
-        inline for (.{ workflow.OutcomeTag.ok, .invalid }) |branch| {
+        inline for (.{ workflow.OutcomeTag.ok, .more }) |branch| {
             var control: Control = .{ .branch = branch };
             var fixture = try Fixture.init(&control, yaml);
             defer fixture.deinit();
@@ -131,15 +131,26 @@ test "unrelated YAML workflows enforce current evidence and cannot route around 
             defer runner.deinit();
             var children: EngineBindings = .{ .runner = &runner, .graph = fixture.graph };
             const expected: workflow.OutcomeTag = if (decision == .accepted) .ok else .blocked;
-            try std.testing.expectEqual(expected, engine.run(children.bind()).executionStatus().?);
+            const result = engine.run(children.bind());
+            try std.testing.expectEqual(expected, result.executionStatus().?);
+            if (decision == .rejected) try std.testing.expectEqual(gate.Rejection.rejected_evidence, result.execution_rejected.gate);
             try std.testing.expectEqual(@as(usize, if (decision == .accepted) 1 else 0), control.observations);
         }
     }
+    var control: Control = .{};
+    const bypass_yaml = try std.mem.replaceOwned(u8, std.testing.allocator, guarded_yaml, "  validate: { use: test.validate, on: { ok: guarded, blocked: end.blocked } }", "  validate: { use: test.validate, on: { ok: guarded, blocked: bypass } }\n  bypass: { use: test.observe, on: { ok: end.ok } }");
+    defer std.testing.allocator.free(bypass_yaml);
+    try std.testing.expectError(error.WorkflowGraphCompileInvalid, Fixture.init(&control, bypass_yaml));
 }
 
 test "authority replacement invalidates evidence even for identical bytes and explicit validation renews it" {
     var control: Control = .{};
-    var fixture = try Fixture.init(&control, guarded_yaml);
+    var entries = operation_entries;
+    entries[6].contract.parameters = &.{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = 1 }};
+    entries[6].contract.retry_limit = .{ .maximum = 1 };
+    const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, guarded_yaml, "use: test.validate, on:", "use: test.validate, with: { retry-limit: 1 }, on:");
+    defer std.testing.allocator.free(yaml);
+    var fixture = try Fixture.initWithEntries(&control, yaml, &entries);
     defer fixture.deinit();
     var runner = fixture.runner(&control);
     defer runner.deinit();
@@ -259,7 +270,7 @@ test "gate registration rejects ambiguous issuers missing authority and invalid 
 
 test "compiler requires explicit evidence production before protected operations" {
     var control: Control = .{};
-    const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, guarded_yaml, "  normalize: { use: test.normalize, on: { ok: validate } }\n  validate: { use: test.validate, on: { ok: guarded, blocked: bypass } }", "  normalize: { use: test.normalize, on: { ok: guarded } }");
+    const yaml = try std.mem.replaceOwned(u8, std.testing.allocator, guarded_yaml, "  normalize: { use: test.normalize, on: { ok: validate } }\n  validate: { use: test.validate, on: { ok: guarded, blocked: end.blocked } }", "  normalize: { use: test.normalize, on: { ok: guarded } }");
     defer std.testing.allocator.free(yaml);
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, Fixture.init(&control, yaml));
 }
@@ -429,15 +440,19 @@ const Fixture = struct {
     registry: registry_module.Registry,
 
     fn init(control: *Control, yaml: []const u8) !Fixture {
+        return initWithEntries(control, yaml, &operation_entries);
+    }
+
+    fn initWithEntries(control: *Control, yaml: []const u8, registered: []const registry_module.Entry) !Fixture {
         var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
         errdefer arena.deinit();
-        const entries = try arena.allocator().dupe(registry_module.Entry, &operation_entries);
+        const entries = try arena.allocator().dupe(registry_module.Entry, registered);
         for (entries) |*entry| entry.binding.context = control;
         const registry: registry_module.Registry = .{
             .operations = entries,
             .data_schemas = &schemas,
             .gates = &.{gate_contract},
-            .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{.ok}, .total_model_token_budget = .{ .value = 100 } }},
+            .policies = &.{.{ .id = "test.safe@1", .allowed_capabilities = &.{}, .allowed_terminal_outcomes = &.{ .ok, .blocked }, .total_model_token_budget = .{ .value = 100 } }},
         };
         var parser: parser_adapter.Adapter = .{};
         const raw = try (parse.Action{ .parser = parser.parser() }).execute(arena.allocator(), &.{.{ .ordinal = 1, .bytes = yaml }});
@@ -488,7 +503,7 @@ const operation_entries = [_]registry_module.Entry{
     .{ .contract = .{ .id = "test.input", .kind = .invocation, .produces = &.{.workflow_invocation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.invoke) },
     .{ .contract = .{ .id = "test.normalize", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.canonical_log_level}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.normalize) },
     .{ .contract = .{ .id = "test.replace", .kind = .step, .optional = &.{.canonical_log_level}, .replaces = &.{.canonical_log_level}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.replace) },
-    .{ .contract = .{ .id = "test.route", .kind = .step, .requires = &.{.workflow_invocation}, .optional = &.{.canonical_log_level}, .outcomes = &.{ .ok, .invalid }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.route) },
+    .{ .contract = .{ .id = "test.route", .kind = .step, .requires = &.{.workflow_invocation}, .optional = &.{.canonical_log_level}, .outcomes = &.{ .ok, .more }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.route) },
     .{ .contract = .{ .id = "test.observe", .kind = .step, .requires = &.{.canonical_log_level}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.observe) },
     .{ .contract = .{ .id = "test.clear", .kind = .step, .invalidates = &.{.workflow_invocation}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.clear) },
     .{ .contract = .{ .id = "test.validate", .kind = .step, .requires = &.{.workflow_invocation}, .produces = &.{.workflow_operation_registry_evidence}, .outcomes = &.{ .ok, .blocked }, .side_effect = .none }, .binding = @import("application/workflow_operation_binding.zig").bind(Control, null, Control.validate) },
@@ -505,9 +520,8 @@ const guarded_yaml =
     \\start: normalize
     \\steps:
     \\  normalize: { use: test.normalize, on: { ok: validate } }
-    \\  validate: { use: test.validate, on: { ok: guarded, blocked: bypass } }
-    \\  guarded: { use: test.guarded, on: { ok: end.ok, blocked: bypass } }
-    \\  bypass: { use: test.observe, on: { ok: end.ok } }
+    \\  validate: { use: test.validate, on: { ok: guarded, blocked: end.blocked } }
+    \\  guarded: { use: test.guarded, on: { ok: end.ok, blocked: end.blocked } }
 ;
 
 const linear_yaml =
@@ -534,7 +548,7 @@ const branching_yaml =
     \\policy: test.safe@1
     \\start: route
     \\steps:
-    \\  route: { use: test.route, on: { ok: left, invalid: right } }
+    \\  route: { use: test.route, on: { ok: left, more: right } }
     \\  left: { use: test.normalize, on: { ok: observe } }
     \\  right: { use: test.normalize, on: { ok: observe } }
     \\  observe: { use: test.observe, on: { ok: clear } }

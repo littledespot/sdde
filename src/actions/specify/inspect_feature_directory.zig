@@ -10,7 +10,7 @@ pub const Action = struct {
         .kind = .action,
         .requires = &.{.relative_feature_directory},
         .produces = &.{.feature_directory},
-        .side_effect = .none,
+        .side_effect = .filesystem_read,
     };
 
     pub fn execute(self: Action, allocator: std.mem.Allocator, selector: feature.Selector) source.Error!feature.Directory {

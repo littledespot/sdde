@@ -1,0 +1,578 @@
+{
+  "status": "prepared_not_run",
+  "comparison_factor": "complete attribution contract bundle; no single-sentence causal claim",
+  "baseline_revision": "79b4ddc2d0970ea6215b65a567c7067bfc6efd43",
+  "baseline": "predecessor culprit-selection presentation reconstructed for these controlled native states; historical results unchanged",
+  "parent": {
+    "artifact_root": "zig-out/e2e-spec/2026-10-10T02-17-38Z-e9ca8a70c7f7cb4c45f002ba9ded8dee/evidence/generation/call-000014",
+    "run": "RUN-ebb17bc64a64a01ef7d1134b87e37f35",
+    "call": "request-14-inference-1",
+    "context_sha256": "94aa8a6d66eda6302bedd06db458986ca0139944491c9cb700e9499939cc1902",
+    "request_sha256": "a358ab4d2d09a49c88d96f5dd90d251be70fde8ca3e207f050b972e41bf731f5",
+    "response_sha256": "88ebb9eeeb1200f6d5393e520144c980a22669206bfa390efe03f8b04bdf3ea8",
+    "selected_schema_sha256": "35997abd4ae43ef4284a52a00f1bb0bfeb1043652199e70b2eef92b85544ca47",
+    "authored_description_origin_call": 8
+  },
+  "settings": {
+    "provider": "aws-bedrock",
+    "model": "openai.gpt-oss-20b-1:0",
+    "region": "ap-southeast-2",
+    "reasoning_effort": "low",
+    "temperature": 0,
+    "max_output_tokens": 16384,
+    "response_mode": "native_schema"
+  },
+  "maximum_physical_calls": 32,
+  "repetitions_per_case_arm": 2,
+  "retries_corrections_repairs_judges_e2e": 0,
+  "cases": [
+    {
+      "id": "captured-description",
+      "cohort": "development",
+      "expected": "candidate",
+      "expected_comparisons": [
+        "preserved",
+        "preserved"
+      ],
+      "native_packet_sha256": "9d1d2e3eaad22db2c24ac43bf9e2ce87a309ce3d3bb37bfc6e83d27a49ad8026",
+      "edits": {
+        "baseline": {
+          "path": "captured-description.baseline.edit.json",
+          "sha256": "333ef53d0db06d7d30ce8bee93c2bacb7641714195b9da5b58a0644740f64b82",
+          "schema_sha256": "0c754b50b088a6a6d23e4504c03fc7515e99f042903f6f78768a79746f274c1a",
+          "prompt_bytes": 797,
+          "evidence_bytes": 7829,
+          "schema_bytes": 1420,
+          "provider_request_path": "captured-description.baseline.request.json",
+          "provider_request_sha256": "6623b459268ebcb8f438118a4d4ff3de585c9efaa52dc98e1f2dc31fdb6cb231",
+          "provider_request_bytes": 13095
+        },
+        "candidate": {
+          "path": "captured-description.candidate.edit.json",
+          "sha256": "7a6eb547ce2c8739b21e62a3a8c7e888dd2b99642b6596aa0213ead14f4da106",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 9012,
+          "schema_bytes": 1074,
+          "provider_request_path": "captured-description.candidate.request.json",
+          "provider_request_sha256": "88125adb088ca7bc70b71806ebcab6246eb96d8ade026fe34f8deff0de33f5e1",
+          "provider_request_bytes": 13792
+        }
+      }
+    },
+    {
+      "id": "loan-candidate",
+      "cohort": "development",
+      "expected": "candidate",
+      "expected_comparisons": [
+        "preserved"
+      ],
+      "native_packet_sha256": "19f0fd51cbf07859aca7c35a5c36b6f546e1392dcee46a8a35e453c22f832f8c",
+      "edits": {
+        "baseline": {
+          "path": "loan-candidate.baseline.edit.json",
+          "sha256": "9879202dab92fae962cce4a2c2f6b62c77c9ee84e84b6dc0d80db035370c5fbc",
+          "schema_sha256": "33ffce3d865c7009c6359cddb38df1fce34a09bd3507b874d3a9f3ef63ea2358",
+          "prompt_bytes": 797,
+          "evidence_bytes": 3098,
+          "schema_bytes": 1418,
+          "provider_request_path": "loan-candidate.baseline.request.json",
+          "provider_request_sha256": "5ef83f38ddb433c2adec062961526d188689b499cd62c0b35a76765ed17c91d6",
+          "provider_request_bytes": 7602
+        },
+        "candidate": {
+          "path": "loan-candidate.candidate.edit.json",
+          "sha256": "5ad39d6990381b99209bd6073abda0ade30cc71540a142d0f6e727a29872e59d",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 3549,
+          "schema_bytes": 1072,
+          "provider_request_path": "loan-candidate.candidate.request.json",
+          "provider_request_sha256": "8ca0ff4bbc265cb713afc9d6e53024c47eb5c60ec4297f3247e92f3de6da94ef",
+          "provider_request_bytes": 7473
+        }
+      }
+    },
+    {
+      "id": "extraction-inherited",
+      "cohort": "development",
+      "expected": "extraction_claim",
+      "expected_comparisons": [
+        "lost",
+        "lost"
+      ],
+      "native_packet_sha256": "697c63cb60d21919914c604ab82ea1ecf07140c1c4eff800c7d6fa1219e29b3b",
+      "edits": {
+        "baseline": {
+          "path": "extraction-inherited.baseline.edit.json",
+          "sha256": "6ad8a2ef52b26882f87346102f4015fb48f26957f8d6b5d691fe540cccfaee97",
+          "schema_sha256": "0c754b50b088a6a6d23e4504c03fc7515e99f042903f6f78768a79746f274c1a",
+          "prompt_bytes": 797,
+          "evidence_bytes": 4029,
+          "schema_bytes": 1420,
+          "provider_request_path": "extraction-inherited.baseline.request.json",
+          "provider_request_sha256": "c1a5a0fce263da3be4562fd680438ca68725f234e5239dcb88cb5308ccb42455",
+          "provider_request_bytes": 8754
+        },
+        "candidate": {
+          "path": "extraction-inherited.candidate.edit.json",
+          "sha256": "71e89e21e7097c6a3b88a7a3ccc54d771de7507f5d79bcdf5f6050e5af074d50",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 4718,
+          "schema_bytes": 1074,
+          "provider_request_path": "extraction-inherited.candidate.request.json",
+          "provider_request_sha256": "54323b4142d2324835d6c847c7e3c36b6fb4f234e15dc7cd77f53213a184afeb",
+          "provider_request_bytes": 8901
+        }
+      }
+    },
+    {
+      "id": "fan-direct-signal",
+      "cohort": "development",
+      "expected": "reconciliation_signal",
+      "expected_comparisons": [
+        "preserved"
+      ],
+      "native_packet_sha256": "f00d49343adf73051f3f4756ab2505bbe46e2ef6b733a8f5d2c47c363789689a",
+      "edits": {
+        "baseline": {
+          "path": "fan-direct-signal.baseline.edit.json",
+          "sha256": "ddd83d857eb0d93e1a427c1d44a7f0e0860b36447671ec6bfe0bac85f9ddf739",
+          "schema_sha256": "33ffce3d865c7009c6359cddb38df1fce34a09bd3507b874d3a9f3ef63ea2358",
+          "prompt_bytes": 797,
+          "evidence_bytes": 2952,
+          "schema_bytes": 1418,
+          "provider_request_path": "fan-direct-signal.baseline.request.json",
+          "provider_request_sha256": "7689999b218ed94645a3777a3fa0be1993c899b6fa7a674fc4b16697b62cd4c5",
+          "provider_request_bytes": 7458
+        },
+        "candidate": {
+          "path": "fan-direct-signal.candidate.edit.json",
+          "sha256": "4155bbd9c0ff8d9e5f89ba0769531818deff75873c3fca990ddd67a486fc665d",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 3396,
+          "schema_bytes": 1072,
+          "provider_request_path": "fan-direct-signal.candidate.request.json",
+          "provider_request_sha256": "b76d34263783bc5bcd5300fde49cc275f378872163473901a3869ea1bd5ec09e",
+          "provider_request_bytes": 7320
+        }
+      }
+    },
+    {
+      "id": "joint-two-sources",
+      "cohort": "unused",
+      "expected": "candidate",
+      "expected_comparisons": [
+        "preserved"
+      ],
+      "native_packet_sha256": "4b9f48df7e1ca92edbaf62616af604b84861a0867a8c8e734074ba6365c746a4",
+      "edits": {
+        "baseline": {
+          "path": "joint-two-sources.baseline.edit.json",
+          "sha256": "656b0a2e7e9d6210ecedcc6a692372cab903cb38cb0f3e70ab6711a876c940fa",
+          "schema_sha256": "33ffce3d865c7009c6359cddb38df1fce34a09bd3507b874d3a9f3ef63ea2358",
+          "prompt_bytes": 797,
+          "evidence_bytes": 4329,
+          "schema_bytes": 1418,
+          "provider_request_path": "joint-two-sources.baseline.request.json",
+          "provider_request_sha256": "cfbd938d33d69604e51b2496170a38f3488016c64fadcb2a0b4c0161f2342ee4",
+          "provider_request_bytes": 9073
+        },
+        "candidate": {
+          "path": "joint-two-sources.candidate.edit.json",
+          "sha256": "9599e32482e991765d420ab8b9cdf6cdaf8022c15213a9f59dabd09bd3e685ce",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 4788,
+          "schema_bytes": 1072,
+          "provider_request_path": "joint-two-sources.candidate.request.json",
+          "provider_request_sha256": "0380d3cae7295796ad38cc03d6f8288c88b90308108612c7885160e180979cf0",
+          "provider_request_bytes": 8956
+        }
+      }
+    },
+    {
+      "id": "wrong-role-assignment",
+      "cohort": "unused",
+      "expected": "unsupported_role",
+      "expected_comparisons": [
+        "preserved",
+        "lost"
+      ],
+      "native_packet_sha256": "538977a95399e54637902cf5ff335a61505035f3ea2619d4e2e10b16358e9267",
+      "edits": {
+        "baseline": {
+          "path": "wrong-role-assignment.baseline.edit.json",
+          "sha256": "9c44a861d80c44bb3f52873a9b6f2a29907d460f3f587531864692fcd3a30594",
+          "schema_sha256": "0c754b50b088a6a6d23e4504c03fc7515e99f042903f6f78768a79746f274c1a",
+          "prompt_bytes": 797,
+          "evidence_bytes": 4143,
+          "schema_bytes": 1420,
+          "provider_request_path": "wrong-role-assignment.baseline.request.json",
+          "provider_request_sha256": "067c963b5604f5a3bef6e41b3ade32b619747dc2fdecf98bd61b3ebe6d6654e3",
+          "provider_request_bytes": 8861
+        },
+        "candidate": {
+          "path": "wrong-role-assignment.candidate.edit.json",
+          "sha256": "3cc92a70b33fc2f676528882361772cbace2ff753dabbbbec35be1e8f34e593d",
+          "schema_sha256": "75c5e4b57f3a05138641b3e70c5b655dbe66078adc5ae2a7f098b99c4de8d66c",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 4868,
+          "schema_bytes": 1074,
+          "provider_request_path": "wrong-role-assignment.candidate.request.json",
+          "provider_request_sha256": "f9f1675787595908253a02ce2d2151202aa6d2cd705dbd83cb69d05c47db594a",
+          "provider_request_bytes": 9044
+        }
+      }
+    },
+    {
+      "id": "unresolved-multiple-producers",
+      "cohort": "unused",
+      "expected": "unlocalized",
+      "expected_comparisons": [
+        "lost"
+      ],
+      "native_packet_sha256": "6d2e12437c568f7edba0214a5c087d82387d62243a2a45cb8ad19b75b7018fb2",
+      "edits": {
+        "baseline": {
+          "path": "unresolved-multiple-producers.baseline.edit.json",
+          "sha256": "5ee2caa07978a5d5819ce8a5b14728ad7dd5cea5d0a78ec87a8c76a0a6a9ddf2",
+          "schema_sha256": "33ffce3d865c7009c6359cddb38df1fce34a09bd3507b874d3a9f3ef63ea2358",
+          "prompt_bytes": 797,
+          "evidence_bytes": 4293,
+          "schema_bytes": 1418,
+          "provider_request_path": "unresolved-multiple-producers.baseline.request.json",
+          "provider_request_sha256": "c91efe4c7d766878a269035a6bcc826b419830cbcc241ac17f2fd104f8d913b0",
+          "provider_request_bytes": 9051
+        },
+        "candidate": {
+          "path": "unresolved-multiple-producers.candidate.edit.json",
+          "sha256": "5a0b2dc380579e75525fd02abe50c947e97a71b1ba496216d74c968e87bdf5d7",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 4722,
+          "schema_bytes": 1072,
+          "provider_request_path": "unresolved-multiple-producers.candidate.request.json",
+          "provider_request_sha256": "68bb40c92487509fb482ce90c53bee78beea060b9220882ce4d8f2dca3f6d206",
+          "provider_request_bytes": 8904
+        }
+      }
+    },
+    {
+      "id": "parking-candidate",
+      "cohort": "unused",
+      "expected": "candidate",
+      "expected_comparisons": [
+        "preserved"
+      ],
+      "native_packet_sha256": "9705db5bf0f7d9b89851687e4c4712142413c1b8d7b59bd1854eff3876383a20",
+      "edits": {
+        "baseline": {
+          "path": "parking-candidate.baseline.edit.json",
+          "sha256": "26e8c9dcde9b174baa452be0cbe5e9348283898fe406be071a69605857597bc6",
+          "schema_sha256": "33ffce3d865c7009c6359cddb38df1fce34a09bd3507b874d3a9f3ef63ea2358",
+          "prompt_bytes": 797,
+          "evidence_bytes": 3018,
+          "schema_bytes": 1418,
+          "provider_request_path": "parking-candidate.baseline.request.json",
+          "provider_request_sha256": "807cecadff39165ce1b10bc11d1e503038e72e268fe47541082ca46c9d9d550a",
+          "provider_request_bytes": 7522
+        },
+        "candidate": {
+          "path": "parking-candidate.candidate.edit.json",
+          "sha256": "3d961f0ea999a43b336572916f5323de9655a3d69942eefabd941a3997dc4ffb",
+          "schema_sha256": "d22d84538fd0ae1ff9bfb8ed114c01cdb65fe10e37e54b9db981414777f7f197",
+          "prompt_bytes": 1003,
+          "evidence_bytes": 3454,
+          "schema_bytes": 1072,
+          "provider_request_path": "parking-candidate.candidate.request.json",
+          "provider_request_sha256": "2fa29aa8eb3d36b4cb87f0a97a7ced65f32bb751ded632344452dbe4365b0b01",
+          "provider_request_bytes": 7378
+        }
+      }
+    }
+  ],
+  "trials": [
+    {
+      "id": "captured-description-baseline-1",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "captured-description.baseline.edit.json"
+    },
+    {
+      "id": "captured-description-candidate-1",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "captured-description.candidate.edit.json"
+    },
+    {
+      "id": "loan-candidate-baseline-1",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "loan-candidate.baseline.edit.json"
+    },
+    {
+      "id": "loan-candidate-candidate-1",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "loan-candidate.candidate.edit.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-1",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "extraction-inherited.baseline.edit.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-1",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "extraction-inherited.candidate.edit.json"
+    },
+    {
+      "id": "fan-direct-signal-baseline-1",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "fan-direct-signal.baseline.edit.json"
+    },
+    {
+      "id": "fan-direct-signal-candidate-1",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "fan-direct-signal.candidate.edit.json"
+    },
+    {
+      "id": "joint-two-sources-baseline-1",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "joint-two-sources.baseline.edit.json"
+    },
+    {
+      "id": "joint-two-sources-candidate-1",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "joint-two-sources.candidate.edit.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-1",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "wrong-role-assignment.baseline.edit.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-1",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "wrong-role-assignment.candidate.edit.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "unresolved-multiple-producers.baseline.edit.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-1",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "unresolved-multiple-producers.candidate.edit.json"
+    },
+    {
+      "id": "parking-candidate-baseline-1",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 1,
+      "edit": "parking-candidate.baseline.edit.json"
+    },
+    {
+      "id": "parking-candidate-candidate-1",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 1,
+      "edit": "parking-candidate.candidate.edit.json"
+    },
+    {
+      "id": "captured-description-candidate-2",
+      "case": "captured-description",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "captured-description.candidate.edit.json"
+    },
+    {
+      "id": "captured-description-baseline-2",
+      "case": "captured-description",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "captured-description.baseline.edit.json"
+    },
+    {
+      "id": "loan-candidate-candidate-2",
+      "case": "loan-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "loan-candidate.candidate.edit.json"
+    },
+    {
+      "id": "loan-candidate-baseline-2",
+      "case": "loan-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "loan-candidate.baseline.edit.json"
+    },
+    {
+      "id": "extraction-inherited-candidate-2",
+      "case": "extraction-inherited",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "extraction-inherited.candidate.edit.json"
+    },
+    {
+      "id": "extraction-inherited-baseline-2",
+      "case": "extraction-inherited",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "extraction-inherited.baseline.edit.json"
+    },
+    {
+      "id": "fan-direct-signal-candidate-2",
+      "case": "fan-direct-signal",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "fan-direct-signal.candidate.edit.json"
+    },
+    {
+      "id": "fan-direct-signal-baseline-2",
+      "case": "fan-direct-signal",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "fan-direct-signal.baseline.edit.json"
+    },
+    {
+      "id": "joint-two-sources-candidate-2",
+      "case": "joint-two-sources",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "joint-two-sources.candidate.edit.json"
+    },
+    {
+      "id": "joint-two-sources-baseline-2",
+      "case": "joint-two-sources",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "joint-two-sources.baseline.edit.json"
+    },
+    {
+      "id": "wrong-role-assignment-candidate-2",
+      "case": "wrong-role-assignment",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "wrong-role-assignment.candidate.edit.json"
+    },
+    {
+      "id": "wrong-role-assignment-baseline-2",
+      "case": "wrong-role-assignment",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "wrong-role-assignment.baseline.edit.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-candidate-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "unresolved-multiple-producers.candidate.edit.json"
+    },
+    {
+      "id": "unresolved-multiple-producers-baseline-2",
+      "case": "unresolved-multiple-producers",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "unresolved-multiple-producers.baseline.edit.json"
+    },
+    {
+      "id": "parking-candidate-candidate-2",
+      "case": "parking-candidate",
+      "arm": "candidate",
+      "repetition": 2,
+      "edit": "parking-candidate.candidate.edit.json"
+    },
+    {
+      "id": "parking-candidate-baseline-2",
+      "case": "parking-candidate",
+      "arm": "baseline",
+      "repetition": 2,
+      "edit": "parking-candidate.baseline.edit.json"
+    }
+  ],
+  "quality_gate": {
+    "candidate_completed_schema_and_native_minimum": 15,
+    "candidate_false_upstream_maximum": 0,
+    "candidate_false_candidate_maximum": 0,
+    "extraction_correct_required": 2,
+    "direct_signal_correct_required": 2,
+    "wrong_role_correct_required": 2,
+    "unresolved_owner_safe_required": 2,
+    "candidate_defects_correct_minimum": 7,
+    "candidate_unnecessary_uncertain_maximum": 1,
+    "candidate_evidence_adequate_minimum": 14,
+    "correct_attribution_improvement_minimum": 2,
+    "no_case_accuracy_regression": true
+  },
+  "limitations": [
+    "Two repetitions are a small pilot, not reliability proof.",
+    "Unused means no prior live trial or prompt tuning with these four cases; assessor sees labels. Not blinded external holdout.",
+    "Native admission of retired baseline is not executed; baseline schema, offered identities, spans and semantic evidence are assessed separately.",
+    "No repairs, E2E publication or rubric evaluation.",
+    "Captured case reconstructs source claims, literal and deficient description through current native owners; it is not a byte-identical replay of historical native state."
+  ],
+  "sources": [
+    {
+      "path": "src/domain/source_omission_binding.zig",
+      "sha256": "ebdd6afd0895dfbbe44dc1778e3021b01d5c2811b1527a463968d61bac8b080f"
+    },
+    {
+      "path": "src/domain/source_omission_comparison.zig",
+      "sha256": "faa301380d3b9a8be93ba43a7ec065dab1625d9c2d8c8a5cf90250f4157f232c"
+    },
+    {
+      "path": "src/domain/specification_support.zig",
+      "sha256": "775f7d81cb1ffa488a1ecb7d21178916ce61b8e44729b93fc1a06bdbd1793ec6"
+    },
+    {
+      "path": "src/domain/source_omission_context.zig",
+      "sha256": "f9f8d34754c63c1985081d6f9f99c38e86bc1abd2e2d1407a294d72e0ceb0c1b"
+    },
+    {
+      "path": "design/workflows/spec/support-loss.prompt.md",
+      "sha256": "703fcbac43df2a668fe51fa05150fd7a1d03abf782c3c53a254ace0121a1122a"
+    },
+    {
+      "path": "design/workflows/spec/support.schema.json",
+      "sha256": "f8285e781065ec47defd8175245613ad7ca489b119cb6543195744502d59bec3"
+    },
+    {
+      "path": "src/test_fixtures/source_loss_calibration.zig",
+      "sha256": "3157bb141a3e08509a399957bd84f2cd6ce3d13199c294d7caf4c9087f8678ca"
+    },
+    {
+      "path": "test/calibration/source-loss-attribution/bound-preservation/cases.json",
+      "sha256": "d9307e093705b966e65e6e645560767b98131d040ea8e73685392345f05bb58c"
+    }
+  ]
+}

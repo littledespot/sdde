@@ -9,7 +9,18 @@ const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
 pub const schema = values.schema(.specification_coverage_repair, owned.Value, 1, null).captured();
 pub const schemas = [_]data.Schema{schema};
+
+pub fn authorizationBlocked(view: *const data.View) values.Error!bool {
+    const value = try values.read(view, schema, owned.Value);
+    if (!owned.retainsCurrentInputs(value, view)) return error.InvalidCandidatePayload;
+    return switch (owned.payload(value).*) {
+        .coverage_repair => |decision| decision == .blocked,
+        else => error.InvalidCandidatePayload,
+    };
+}
+
 pub const Authorize = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .specification_generation_session, .evidence = .specification_coverage, .result = .specification_coverage_repair } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const Action = @import("../actions/specification/authorize_specification_coverage_repair.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
@@ -28,6 +39,7 @@ pub const Authorize = struct {
     }
 };
 pub const Merge = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_merge = .{ .kind = .candidate, .subject = .specification_generation_session, .evidence = .specification_coverage_repair, .result = .specification_generation_session } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge;
     pub const Action = @import("../actions/specification/merge_specification_coverage_repair.zig").Action;
     pub const parameters = [_]@import("../domain/workflow_operation.zig").ParameterDescriptor{.{ .id = "retry-limit", .kind = .integer, .required = true, .workflow_definition_safe = true, .integer_min = 0, .integer_max = std.math.maxInt(u32) }};

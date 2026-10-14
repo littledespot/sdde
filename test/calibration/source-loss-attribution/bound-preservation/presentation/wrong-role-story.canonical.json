@@ -1,0 +1,241 @@
+{
+  "brief": {
+    "description": {
+      "provenance": {
+        "claim_ids": [
+          {
+            "ordinal": 2
+          }
+        ],
+        "citation_ids": [
+          {
+            "ordinal": 2
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "MOCK The service displays clinic opening hours."
+            }
+          }
+        ]
+      }
+    },
+    "primary_goal": {
+      "provenance": {
+        "claim_ids": [
+          {
+            "ordinal": 2
+          }
+        ],
+        "citation_ids": [
+          {
+            "ordinal": 2
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "MOCK The service displays clinic opening hours."
+            }
+          }
+        ]
+      }
+    },
+    "title": {
+      "provenance": {
+        "claim_ids": [
+          {
+            "ordinal": 2
+          }
+        ],
+        "citation_ids": [
+          {
+            "ordinal": 2
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "MOCK The service displays clinic opening hours."
+            }
+          }
+        ]
+      }
+    }
+  },
+  "candidate": {
+    "display_name": {
+      "provenance": {
+        "claim_ids": [
+          {
+            "ordinal": 2
+          }
+        ],
+        "citation_ids": [
+          {
+            "ordinal": 2
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "MOCK The service displays clinic opening hours."
+            }
+          }
+        ]
+      }
+    },
+    "entities": {
+      "basis": {
+        "provenance": {
+          "claim_ids": [
+            {
+              "ordinal": 2
+            }
+          ],
+          "citation_ids": [
+            {
+              "ordinal": 2
+            }
+          ],
+          "clarification_response_ids": []
+        },
+        "value": {
+          "segments": [
+            {
+              "literal": {
+                "value": "MOCK The service displays clinic opening hours."
+              }
+            }
+          ]
+        }
+      },
+      "disposition": "not_applicable"
+    },
+    "primary_user_story": {
+      "provenance": {
+        "claim_ids": [
+          {
+            "ordinal": 2
+          }
+        ],
+        "citation_ids": [
+          {
+            "ordinal": 2
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "MOCK The service displays clinic opening hours."
+            }
+          }
+        ]
+      }
+    },
+    "records": [
+      {
+        "id": {
+          "kind": "acceptance_criterion",
+          "ordinal": 1
+        },
+        "proposal": {
+          "content": {
+            "acceptance_criterion": {
+              "given": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "MOCK The service displays clinic opening hours."
+                    }
+                  }
+                ]
+              },
+              "then": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "MOCK The service displays clinic opening hours."
+                    }
+                  }
+                ]
+              },
+              "when": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "MOCK The service displays clinic opening hours."
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "provenance": {
+            "claim_ids": [
+              {
+                "ordinal": 2
+              }
+            ],
+            "citation_ids": [
+              {
+                "ordinal": 2
+              }
+            ],
+            "clarification_response_ids": []
+          }
+        }
+      },
+      {
+        "id": {
+          "kind": "functional_requirement",
+          "ordinal": 1
+        },
+        "proposal": {
+          "content": {
+            "functional_requirement": {
+              "text": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "MOCK The service displays clinic opening hours."
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "provenance": {
+            "claim_ids": [
+              {
+                "ordinal": 2
+              }
+            ],
+            "citation_ids": [
+              {
+                "ordinal": 2
+              }
+            ],
+            "clarification_response_ids": []
+          }
+        }
+      }
+    ]
+  }
+}

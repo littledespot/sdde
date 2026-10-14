@@ -88,6 +88,7 @@ pub const CompiledStep = struct {
     side_effect: pipeline.SideEffect,
     runner_accounting: pipeline.RunnerAccountingCapability = .none,
     repair_role: workflow_retry.Role = .none,
+    outcome_association: @import("workflow_outcome_association.zig").Descriptor = .independent,
     gates: []const @import("workflow_gate.zig").Contract,
     capabilities: []const []const u8,
     retry_authority: ?workflow_retry.CompiledAuthority,

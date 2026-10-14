@@ -19,6 +19,7 @@ pub const coverage_schema = values.schema(.specification_coverage, owned.Value, 
 pub const schemas = [_]data.Schema{ session_schema, raw_schema, parsed_schema, checked_schema, ids_schema, coverage_schema };
 
 pub const SourceReadiness = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .authority, .subject = .accounted_reference_reconciliation, .evidence = .accounted_reference_reconciliation } };
     pub const Action = @import("../actions/specification/check_specification_source_readiness.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
     action: Action = .{},
@@ -29,7 +30,9 @@ pub const SourceReadiness = struct {
 };
 
 pub const Initialize = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .authority, .subject = .accounted_reference_reconciliation, .evidence = .specification_generation_session, .result = .specification_generation_session } };
     pub const Action = @import("../actions/specification/initialize_specification_generation.zig").Action;
+    pub const iteration: @import("../domain/workflow_iteration.zig").Descriptor = .{ .kind = .initialize, .scope = .accounted_reference_reconciliation, .progress = .specification_generation_session };
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .blocked, .failed };
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -44,7 +47,10 @@ pub const Initialize = struct {
             .ready => |current| .{ .session = current },
             .blocked => |gap| .{ .binding_rejected = gap },
         };
-        return publish(self.allocator, session_schema, owner, if (result == .ready) .ok else .blocked);
+        const progress = if (result == .ready) try session.iterationProgress(result.ready) else null;
+        var output = try publish(self.allocator, session_schema, owner, if (result == .ready) .ok else .blocked);
+        if (progress) |ready| output.iteration = .{ .limit = ready.limit, .before = 0, .after = ready.position };
+        return output;
     }
 };
 pub const Check = struct {
@@ -80,6 +86,7 @@ pub const Collect = struct {
     }
 };
 pub const Parse = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .observe = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .parsed_specification_unit } };
     pub const Action = @import("../actions/specification/parse_specification_unit.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };
     allocator: std.mem.Allocator,
@@ -99,6 +106,7 @@ pub const Parse = struct {
     }
 };
 pub const Validate = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_validate = .{ .kind = .candidate, .subject = .parsed_specification_unit, .evidence = .validated_specification_unit, .result = .validated_specification_unit } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const Action = @import("../actions/specification/validate_specification_unit.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .needs_user, .failed };
@@ -123,6 +131,7 @@ pub const Validate = struct {
 };
 pub const Advance = struct {
     pub const Action = @import("../actions/specification/advance_specification_generation.zig").Action;
+    pub const iteration: @import("../domain/workflow_iteration.zig").Descriptor = .{ .kind = .advance, .scope = .accounted_reference_reconciliation, .progress = .specification_generation_session };
     allocator: std.mem.Allocator,
     action: Action = .{},
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
@@ -130,14 +139,17 @@ pub const Advance = struct {
         const checked = owned.read(&input.step.data, checked_schema, .checked) catch |operation_error| return operation_error;
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
+        const before = try session.iterationProgress(try readSession(&input.step.data));
         owner.payload = .{ .session = self.action.execute(owner.arena.allocator(), try readSession(&input.step.data), checked) catch |operation_error| return operation_error };
+        const after = try session.iterationProgress(owner.payload.session);
         var delta: pipeline.NodeDelta = .{};
         delta.data_replacements[@intFromEnum(session_schema.key)] = values.adopt(self.allocator, session_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
-        return .{ .outcome = .ok, .delta = delta };
+        return .{ .outcome = .ok, .delta = delta, .iteration = .{ .limit = after.limit, .before = before.position, .after = after.position } };
     }
 };
 pub const Assemble = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .specification_generation_session, .evidence = .specification_generation_session, .result = .identified_specification_content } };
     pub const Action = @import("../actions/specification/assemble_specification_content.zig").Action;
     allocator: std.mem.Allocator,
     action: Action,
@@ -158,6 +170,7 @@ pub const Assemble = struct {
     }
 };
 pub const ValidateCoverage = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_validate = .{ .kind = .candidate, .subject = .specification_generation_session, .evidence = .specification_coverage, .result = .specification_coverage } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .validate;
     pub const Action = @import("../actions/specification/validate_specification_coverage.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .invalid, .failed };

@@ -20,6 +20,7 @@ pub const Terminate = struct {
         .outcomes = &selection.termination_outcomes,
         .side_effect = Action.contract.side_effect,
         .runner_accounting = Action.contract.runner_accounting,
+        .outcome_association = .{ .preserve = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_authorization_result, .result = .terminal_provider_operation } },
     };
     action: Action = .{},
 

@@ -43,6 +43,7 @@ pub const AssignCandidates = struct {
     }
 };
 pub const AssignTokens = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .validated_reference_selections, .evidence = .validated_reference_selections, .result = .preserved_token_identities } };
     pub const Action = @import("../actions/reference/assign_preserved_token_identities.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -56,6 +57,7 @@ pub const AssignTokens = struct {
     }
 };
 pub const BuildClaims = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .preserved_token_identities, .evidence = .preserved_token_identities, .result = .prepared_reference_claims } };
     pub const Action = @import("../actions/reference/build_preserved_token_claims.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},

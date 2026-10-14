@@ -1,0 +1,58 @@
+{
+  "status": "non_dispatched_shared_contract_decision_probes",
+  "bundled_with_presentation_comparison": false,
+  "mechanical_evidence_only": true,
+  "probes": [
+    {
+      "card": "D7",
+      "id": "pure_candidate_addition",
+      "original": "During maintenance, keep the access door locked.",
+      "candidate": "During maintenance, keep the access door locked. Also track every visitor.",
+      "finding_contract": "No faithful closed candidate-addition finding exists. candidate_omission requires a nonblank source-grounded missing_obligation. unsupported requires a genuine original-source user decision and a question.",
+      "result": "specific shared taxonomy/repair decision required; no fabricated obligation/question or forced wire label"
+    },
+    {
+      "card": "D7",
+      "id": "retained_restriction_and_contradiction",
+      "original": "The door must not unlock while pressurized.",
+      "candidate": "The door must not unlock while pressurized; it also unlocks during pressurization.",
+      "finding_contract": "The source prohibition is retained, so pure absence is not the complete fault. conflicting denotes an unresolved original-source choice, not contradictory candidate assertions.",
+      "result": "specific shared taxonomy/precedence/repair decision required"
+    },
+    {
+      "card": "D7",
+      "id": "genuine_original_conflict",
+      "original": [
+        "During pressure, the door must remain locked.",
+        "During pressure, the door must unlock."
+      ],
+      "candidate": "No release policy selected.",
+      "finding_contract": "conflicting with the actual user choice is structurally representable for ordinary source review; source-preservation review forbids question findings.",
+      "result": "existing wire shape demonstrable, semantic truth requires independent source assessment"
+    },
+    {
+      "card": "D8",
+      "id": "pure_original_policy_gap",
+      "original": "Keep the door locked during maintenance. The release policy is undecided.",
+      "candidate": "No release event is selected.",
+      "finding_contract": "unsupported/ambiguous with the actual missing release-policy question is structurally representable; no missing must-unlock obligation.",
+      "result": "existing wire shape demonstrable"
+    },
+    {
+      "card": "D8",
+      "id": "unresolved_entailment",
+      "original": "A source meaning remains unclear to the reviewer without an identifiable missing user decision.",
+      "candidate": "No invented policy choice.",
+      "finding_contract": "inconclusive carries detail and no question. Unknown question field is rejected.",
+      "result": "existing wire shape demonstrable; no invented user choice"
+    },
+    {
+      "card": "D8",
+      "id": "mixed_gap_and_addition",
+      "original": "Keep the door locked during maintenance. Release policy is undecided.",
+      "candidate": "Preserve maintenance lock and invent automatic unlocking.",
+      "finding_contract": "One selected finding cannot faithfully express independent missing-original authority and definite candidate addition without a shared precedence/repair decision.",
+      "result": "specific shared decision pending; excluded from dispatch-ready candidate panel"
+    }
+  ]
+}

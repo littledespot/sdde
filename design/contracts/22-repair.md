@@ -45,8 +45,8 @@ reassessment remains a separate unapproved decision in FIX_002.
 
 **ADR 0022 reference handoff amendment (approved 6 October 2026):** use native
 occurrence-bound selections and group catalogues in initial and repaired
-reconciliation. Signal changes retire dependent roles; disposition changes retire
-affected signals while preserving independent groups. Rebuild through the same
+reconciliation. Signal changes retire dependent authored associations; disposition
+changes retire affected signals while preserving independent groups. Rebuild through the same
 validated phases before canonical identity assignment and full-candidate checks.
 Mandatory exact-token content is reconstructed from the authorized source claim,
 without a model call. Summary ordering and retry occurrence identity are separate;
@@ -61,35 +61,103 @@ dependencies, rather than borrowing a broader initial authoring selection.
 Completed specification units use the authorized repair target and current review
 evidence; their packets do not reuse a consumed authoring assignment. Pending
 authoring still binds and validates its current source group.
-Record omission insertion must retain one accepted group's complete ordered
-selection under ADR 0020, using the same binding check as canonical readback.
-Aggregate evidence from several groups cannot authorize an invented association
-or a cross-group insertion; it remains an unsafe candidate repair.
+Initial attributed authoring selects complete accepted group occurrences together
+with content under ADR 0020. Fixed repairs retain required canonical
+`source_group_ids`; their wire responses stay value/content-only. Value-only repair
+cannot change group IDs, explicit `S`, effective evidence bounds or siblings.
+A lost obligation outside that association has an explicit unresolved-association
+outcome and blocks; this amendment adds no membership-changing rebuild permission.
+It cannot blame extraction, grouping or the removed presentation-role producer.
+Record omission insertion must bind one current accepted group occurrence and its
+complete ordered selection through the same resolver as canonical readback.
+Equal claim membership does not identify the group occurrence. Missing, ambiguous
+or foreign occurrence authority blocks; aggregate evidence from several groups
+cannot authorize an invented association or cross-group insertion.
 
-Loss localization retains the fixed review verdict. The existing loss validator
-derives mechanically available producer locations from captured sources and
-reference records; packet guidance and the existing schema restrictions reuse
-those facts. Availability does not establish a semantic defect or grant repair
-authority. Localization has its own producer-comparison assignment, without a
-support-assessment instruction. It supplies resolved candidate business values,
-numbered source lines and each producer alongside its actual output. Only eligible
-producers carry selectable locations; other outputs remain supporting evidence.
-It cannot reopen the fixed finding. `candidate` attributes the defect to the
-generated subject while meaning survives upstream; `unlocalized` leaves ownership
-unresolved. Candidate attribution requires current subject-bound claim evidence,
-but those mechanical joins do not prove semantic survival. A localized producer
-supplies its exact diagnostic claims, including the one discarded claim of a disposition,
-independently of positive field provenance. A localized answer must also supply
-captured source lines and an explanation of the selected producer's loss. The
-existing source-selection validator resolves those lines; loss admission verifies
-the source/producer association and retains the comparison with the finding.
-Initial collection, correction, repair authorization and persisted review readback
-enforce the same evidence contract. A location alone cannot authorize upstream
-repair. Valid source coordinates do not prove the explanation's semantic truth.
-The `candidate` and `unlocalized` answers carry no upstream comparison and use the
-existing candidate-local repair or failure path. Neither authorizes upstream
-rebuilding. Candidate repair also rejects an explicitly upstream-localized finding.
-This adds no reviewer, verdict reassessment, retry allowance or repair permission.
+An omission must identify nonempty authorized sources at review admission, even
+when its subject also fixes claim evidence. Loss comparison retains that admitted
+omission, its subject, detail, selected sources and revision.
+
+**Explicit source-obligation handoff (approved 10 October 2026):** the existing
+source reviewer supplies a required nonblank `missing_obligation` for
+`candidate_omission`. This is a direct statement of the omitted source requirement,
+including its conditions, negation and obligation strength; `detail` explains the
+candidate defect separately. The selected original sources support the obligation.
+Native code carries the statement unchanged through admission, comparison,
+correction, repair and persisted evidence; it cannot extract, infer or rewrite an
+obligation from diagnostic prose. Non-omission and principle findings forbid it.
+The comparison assignment binds the exact obligation together with the existing
+subject, detail, source selections, revision and canonical evidence. Changed
+obligation or evidence invalidates the old comparison. A selected source-omission
+detail correction returns both explanation and obligation, retaining the verdict
+and existing source/subject authorization. Correction precedes loss localization
+and revalidates the current binding; it does not reassess an admitted verdict or
+refresh a stale comparison through a semantic retry. A changed binding cannot
+retain valid comparison evidence.
+
+Native code binds complete evidence collections on the actual dataflow path to
+that subject. Original source support and the deficient
+subject are fixed premises; neither is reassessed. The loss packet's
+`fixed_finding.missing_obligation` is its single semantic comparison target.
+Diagnostic detail, final-field purpose and deficient-subject/producer outputs
+remain separately labelled supporting evidence. The loss reviewer judges whether
+each complete collection preserves the supplied obligation, allowing equivalent
+wording and support jointly expressed by its members. It must not require a
+standalone literal, final-field form or a description of the downstream defect.
+The model returns exactly one
+`preserved`, `lost` or `uncertain` assessment per assigned comparison ID, with
+original-source spans and an explanation of where the obligation survives or what
+is missing. The spans must collectively support the entire supplied source
+obligation, including conditions, negation and obligation strength; multiple spans
+may be necessary, while unrelated spans are omitted. The explanation assesses
+preservation in the assigned collection; the source spans establish the original
+obligation. `comparison_id` binds the whole native-assigned collection; the model
+does not select a member subset. Complete member identities, evidence, obligations
+and dependencies remain in the retained assignment. Shared identical views are
+assessed once. Other producer outputs are supporting context, not selectable
+culprits or permission to expand the finding.
+
+Native admission rejects missing, duplicate, foreign or stale comparisons and
+invalid source joins or native collection identities, including a changed obligation
+binding. The closed response rejects the superseded `members` field; no reader,
+correction or normalization fills member IDs into rejected responses. It derives
+attribution backwards through the bound path: preserved input and lost output
+establish the boundary's owner; lost input
+and lost output establish only inherited absence. Required uncertainty, composite
+ownership or unavailable facts leave attribution unresolved. Preserved original
+claims assigned to authoring cut off upstream blame; signal paraphrases are not
+substituted for those claims. Native checks do not prove the semantic labels or
+explanations, or prove that the model considered every assigned member. Explanation
+adequacy, citation completeness and relevance, and judgment correctness require
+separate semantic assessment. Native admission does not require every offered
+source to be cited or fill in missing citations: available source identity does
+not establish semantic support. A forced
+no-feature extraction owns its forced classifications;
+a separately classified claims collection does not identify a unique extraction
+or classification culprit merely because meaning is missing.
+
+Attribution is separate from atomic permission. Derived upstream locations supply
+the existing diagnostic claim sets and must pass the existing target, old-value,
+revision and dependency checks. Known authored-association or summary defects
+retain explicit unsupported-repair identities and cannot fall back to another
+producer or candidate.
+Unresolved attribution grants no upstream rebuilding; independently authorized
+candidate-local checks remain available. No new exact-reference, association-membership, summary,
+entity-decision, retry or verdict-reassessment permission is added.
+
+Collection, correction, authorization and readback use this one comparison
+contract. Canonical evidence retains native facts, bindings, the complete response
+and its comparison-call origin separately from the review-finding origin. Rebuild
+bindings from current canonical facts before deriving any retained attribution;
+request logs and stored digests are not authority. Changed producers or candidate
+facts retire dependent evidence through existing invalidation. The cached location
+must equal the rederived result. Native `invalid_loss` remains terminal; protocol
+correction fixes only its existing permitted protocol defects.
+
+Signal-content repair preserves the validated unique member set. That ordered set,
+within the existing source-state and producer scope, identifies its review retry
+across regenerated signal ordinals. Changed membership cannot resolve that defect
+or reset its allowance. Other regenerated subjects retain their existing policy.
 
 ### 22.2 Repair classification
 
@@ -202,20 +270,76 @@ The repair guidance contains:
 - the exact replacement schema;
 - the instruction that unrelated fields must not be returned or changed.
 
-**Focused-review repair (approved 26 September 2026).** A produced finding is
-validated before the next native subject is requested. A mechanically invalid
-finding may use the existing selected-value/field atomic repair while other
-subjects remain pending; pending subjects do not produce missing-finding defects.
+**Focused-review repair (approved 26 September 2026; task-authorized Phase 4
+transport/lifecycle amendment, 11 October 2026).** All produced findings are
+individually validated before the next native assignment is requested. The
+acceptance-criterion record assignment in §17 may produce its three existing
+Given/When/Then findings in one call. Exact complete native membership is checked
+before appending any member; partial, duplicate, foreign or misbound responses
+cannot contribute coverage. Native ledger order owns canonical ordering.
+A mechanically invalid finding may use the existing selected-value/field atomic
+repair while other subjects remain pending; valid produced siblings remain
+unchanged and future pending subjects do not produce missing-finding defects.
 Authorization binds the current diagnostic, typed subject, original value,
 revision and dependencies. An admitted negative or inconclusive finding remains
 review data; repair cannot change its verdict. Protocol correction stays on the
 same request assignment and selected schema. The collection's first admitted
 native-candidate origin stays fixed through later findings and repairs, while each
-finding retains its own origin. Complete membership, evidence and relationship
+finding retains its own origin. Batched siblings initially share their actual
+accepted review-call origin; a selected repair changes only its target's origin,
+never inventing a call for another field. A record protocol correction requests
+the same complete three-member assignment, while native detail/evidence repair
+remains scoped to the selected singleton finding and retains its verdict.
+Multiple candidate omissions are localized serially from the earliest canonical
+finding with no preservation evidence. Each keeps its own unchanged obligation,
+complete comparison assignment and comparison-call origin; completing one does
+not clear another. Selection derives from retained canonical findings, not a
+second obligation queue. Revalidate after every comparison or repair and do not
+request another review assignment while a current omission awaits localization.
+Complete membership, evidence and relationship
 validation run before reconciliation, publication or clarification. The existing
 runner owns request retirement, per-assignment and native-defect retry allowances,
 and global actual-token accounting; successful independent work does not reset an
 unresolved target or replenish the finite budget.
+
+**Within-execution review retention (task-authorized Phase 6 amendment,
+11 October 2026).** Candidate-local repairs still retire current support and
+authority projections. An execution-private receipt reservoir may preserve clean
+admitted `supported`/`not_applicable` source assignments as historical evidence.
+It cannot satisfy a gate. Reconstruct the complete current assignment through
+the existing packet owner and check the [§12.6 request witness](12-model-boundary.md#126-semantic-review),
+original sources, canonical source producer, native subjects/requiredness and
+applicability. Equal field bytes, aliases, ordinals or reference-state strings
+alone do not authorize reuse. Fresh native admission appends the entire assigned
+group in ordinary collector order, with its original finding values and actual
+origins, and builds current revision-bound authority. An empty restart prefix
+contains no finding and cannot complete a review.
+
+Original review scope and native occurrence identities survive candidate-local
+restarts; reassessing a changed subject cannot replenish its repair allowance.
+Update historical snapshots after every admitted new or retained assignment and
+loss-localization update or native finding repair. A changed value/origin retires its older receipt. Missing,
+foreign, stale or invalid receipts provide no coverage; changed assignments take
+the ordinary model path. Supported detail/evidence repairs and protocol-corrected
+assignments are conservatively reassessed unless their additional complete
+dependency witness is represented. Source omissions and their revision-bound
+preservation comparisons are not reused. Loss localization, verdict prohibition
+and repair attribution retain their existing contracts.
+
+Upstream source/reconciliation producer changes prevent receipt reuse even when
+an equal reference-state string survives. Full-candidate collection/entity context
+changes require reassessment; policy context remains broad and is reassessed.
+Receipts retain their immutable input/request/result owners until execution
+teardown. They are native bookkeeping, never serialized review authority,
+checkpoints or cross-run caches. Fresh invocations start with no receipts.
+Impacted semantic review and complete native coverage, authority, policy and
+publication validation still run. Mechanical reuse establishes unchanged
+dependencies and admission, not the truth of the original semantic judgment.
+The pure operation consumes only the finite unchanged collector prefix, rebuilding
+each assignment after its predecessor is admitted. Membership must strictly grow
+within the current native population. A miss returns to ordinary model preparation;
+only a complete accepted source collection with no pending localization takes the
+completion transition. No extra retry allowance or unguarded workflow loop applies.
 
 Source-ID selection repairs project the diagnostic's native eligibility rule
 through the shared [§12.2 schema restrictions](12-model-boundary.md#122-initial-guidance-packet).
@@ -229,11 +353,12 @@ including record insertion and coupled record repair. The engine reconstructs
 canonical `provenance.claim_ids` from the bound source group or selected
 diagnostic producer before old-value/revision and full-candidate checks.
 Source-ID or detail corrections remain in their existing selected repair
-families; detail repair cannot change the verdict. The original source-bound
-assignment, explicit `S`, effective evidence bound and siblings stay pinned by
-the existing atomic authorization. A value-only replacement cannot expand them;
-changing the source obligation requires upstream reconciliation and
-regeneration. Malformed or corrupt stored evidence is rejected before
+families; source-omission detail correction uses the coupled explanation and
+obligation shape in §22.1, and cannot change the verdict. The original source-group occurrence association, explicit `S`, effective evidence
+bound and siblings stay pinned by the existing atomic authorization. A value-only replacement cannot expand them;
+changing authored group membership requires separately authorized authored-unit
+rebuilding; none is added by this amendment. Genuine evidenced upstream loss
+retains its existing producer repair path. Malformed or corrupt stored evidence is rejected before
 model-response reconstruction. Unbound authority is an engine block, not a
 model repair or user clarification.
 

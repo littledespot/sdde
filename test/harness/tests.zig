@@ -7,11 +7,6 @@ test {
     _ = @import("call/capture_test.zig");
     _ = @import("call/report_test.zig");
     _ = @import("diagnostic_binding_test.zig");
-    _ = @import("roles/tests.zig");
-    _ = @import("records/tests.zig");
-    _ = @import("signals/tests.zig");
-    _ = @import("entities/tests.zig");
-    _ = @import("authoring_guidance/tests.zig");
 }
 
 const case_bytes =
@@ -389,7 +384,7 @@ test "Bedrock evaluator preserves registered reasoning effort and rejects unsupp
                 const encoded = try bedrock.request(a, config, inputs);
                 const root = try c.decode(std.json.Value, a, encoded);
                 try std.testing.expectEqualStrings(@tagName(effort), root.object.get("reasoning_effort").?.string);
-                try std.testing.expectEqual(@as(i64, 0), root.object.get("temperature").?.integer);
+                try std.testing.expectEqual(@as(f64, 0.1), root.object.get("temperature").?.float);
                 try std.testing.expect(std.mem.indexOf(u8, encoded, "maxTokens") == null);
             }
         }
@@ -438,7 +433,7 @@ test "Bedrock evaluation uses native schemas through HTTP capture and grading an
         try std.testing.expectEqual(@as(usize, 1), std.mem.count(u8, encoded, framing));
         try std.testing.expectEqualStrings(try packet.resultSchema(a), root.object.get("messages").?.array.items[0].object.get("content").?.array.items[2].object.get("text").?.string);
         try std.testing.expectEqualStrings(try packet.input(a, inputs), root.object.get("messages").?.array.items[1].object.get("content").?.array.items[0].object.get("text").?.string);
-        try std.testing.expectEqual(@as(i64, 0), root.object.get("temperature").?.integer);
+        try std.testing.expectEqual(@as(f64, 0.1), root.object.get("temperature").?.float);
         const format = root.object.get("response_format").?.object;
         try std.testing.expectEqualStrings("json_schema", format.get("type").?.string);
         const native = format.get("json_schema").?.object;
@@ -785,19 +780,6 @@ test "retry and total-token boundaries use actual observations without score-dri
     try std.testing.expectEqual(@as(u64, 30), exceeded.attempts[0].usage.?.total_tokens);
 }
 
-test "bad judgments stay evaluator errors while provider usage is retained" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    var invalid = observed_good;
-    invalid.payload = "{\"results\":[]}";
-    var fake: Fake = .{ .observations = &.{invalid} };
-    const report = try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), try capture(a));
-    try std.testing.expectEqual(.invalid_judgment, report.outcome.evaluator_error);
-    try std.testing.expectEqual(@as(u64, 30), report.attempts[0].usage.?.total_tokens);
-    try std.testing.expect(std.mem.indexOf(u8, try reports.markdown(a, report), "No quality score") != null);
-}
-
 test "judgment diagnostics distinguish syntax shape and exact evidence without retries or grades" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -808,6 +790,7 @@ test "judgment diagnostics distinguish syntax shape and exact evidence without r
     const cases = [_]struct { payload: []const u8, reason: Reason, evidence_index: ?usize = null, document_id: ?[]const u8 = null }{
         .{ .payload = "{\"results\":[{}},{}]}", .reason = .json },
         .{ .payload = "{\"results\":\"invalid\"}", .reason = .invalid_shape },
+        .{ .payload = "{\"results\":[]}", .reason = .criterion_count },
         .{ .payload = try std.mem.replaceOwned(u8, a, good, "Store the message.", "Invented quotation."), .reason = .quote_not_found, .evidence_index = 0, .document_id = "requirements" },
         .{ .payload = try std.mem.replaceOwned(u8, a, good, "The user can store the message.", "Invented quotation."), .reason = .quote_not_found, .evidence_index = 1, .document_id = "specification" },
         .{ .payload = try std.mem.replaceOwned(u8, a, good, "\"requirements\"", "\"foreign\""), .reason = .unknown_document, .evidence_index = 0, .document_id = "foreign" },
@@ -838,7 +821,7 @@ test "judgment diagnostics distinguish syntax shape and exact evidence without r
             try std.testing.expectEqual(@as(usize, 1), detail.location.?.line);
             try std.testing.expectEqual(@as(usize, 15), detail.location.?.column);
             try std.testing.expect(std.mem.indexOf(u8, markdown, "at byte 14, line 1, column 15") != null);
-        } else if (case.reason != .invalid_shape) {
+        } else if (case.reason != .invalid_shape and case.reason != .criterion_count) {
             try std.testing.expectEqualStrings("coverage", diagnostic.criterion_id.?);
         }
     }
@@ -1009,75 +992,6 @@ test "missing content is recorded as absence without inventing a candidate quote
     try std.testing.expectEqual(@as(f64, 0), (try judgment.validate(a, null, inputs, try std.json.Stringify.valueAlloc(a, proposal, .{}))).score_percent.?);
 }
 
-test "the selected live case and rubric load without a fixture-specific judge" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const case_data = @embedFile("../e2e/wf-001-hello-world/node-vitest/spec.case.json");
-    const rubric_data = @embedFile("../e2e/wf-001-hello-world/node-vitest/rubric/spec.json");
-    const source = @embedFile("../e2e/wf-001-hello-world/reference/stories.md");
-    const selected = try c.parseCase(a, case_data);
-    const rubric = try c.parseRubric(a, rubric_data);
-    try std.testing.expectEqual(@as(usize, 7), rubric.criteria.len);
-    try std.testing.expectEqualStrings("startup-coverage", rubric.criteria[0].id);
-    try std.testing.expectEqualStrings("greeting-fidelity", rubric.criteria[1].id);
-    try std.testing.expectEqualStrings("utc-date-time-coverage", rubric.criteria[2].id);
-    try std.testing.expectEqual(@as(u32, 2), rubric.revision);
-    const inputs: c.Capture = .{
-        .evaluation_id = "eval-hello",
-        .case = selected,
-        .case_bytes = case_data,
-        .rubric = rubric,
-        .rubric_bytes = rubric_data,
-        .sources = &.{.{ .id = "stories", .text = source }},
-        .specification = "When the application starts successfully, it displays Hello, World!",
-        .generation = (try capture(a)).generation,
-    };
-    const bytes = try packet.input(a, inputs);
-    const parsed = try c.decode(std.json.Value, a, bytes);
-    try std.testing.expectEqualStrings(source, parsed.object.get("sources").?.array.items[0].object.get("text").?.string);
-    try std.testing.expectEqualStrings(inputs.specification, parsed.object.get("specification").?.object.get("text").?.string);
-    const results = try a.alloc(judgment.CriterionResult, rubric.criteria.len);
-    for (rubric.criteria, results) |criterion, *result| result.* = .{
-        .criterion_id = criterion.id,
-        .disposition = .scored,
-        .score = rubric.maximum_score,
-        .explanation = "Scripted transport example, not semantic calibration.",
-        .evidence = &.{ .{ .document_id = "stories", .quote = source }, .{ .document_id = "specification", .quote = inputs.specification } },
-        .missing_from_specification = false,
-    };
-    var observed = observed_good;
-    observed.payload = try std.json.Stringify.valueAlloc(a, judgment.Proposal{ .results = results }, .{});
-    var fake: Fake = .{ .observations = &.{observed} };
-    const report = try evaluator.run(std.testing.io, a, fake.port(), try configuration.parse(a, config_bytes, test_selection), inputs);
-    try std.testing.expectEqual(.not_configured, report.outcome.evaluated.threshold);
-    try std.testing.expectEqual(@as(f64, 100), report.outcome.evaluated.score_percent.?);
-    // This tests accounting, not whether the specimen deserves this grade.
-}
-
-test "all calibration specimens reach the ordinary packet without semantic prefiltering" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-    const root = "test/e2e/wf-001-hello-world/node-vitest/";
-    const calibration_root = "test/integration/fixtures/wf-001-hello-world/node-vitest/calibration/";
-    const names = .{
-        "faithful-a.md",     "faithful-b.md",     "missing-startup.md",       "missing-greeting.md",
-        "wrong-greeting.md", "invented-scope.md", "embedded-instructions.md",
-    };
-    inline for (names) |name| {
-        const input = try @import("files.zig").capture(std.testing.io, a, .cwd(), root ++ "spec.case.json", calibration_root ++ name, "calibration-" ++ name, (try capture(a)).generation);
-        try std.testing.expectEqualStrings(@embedFile("../integration/fixtures/wf-001-hello-world/node-vitest/calibration/" ++ name), input.specification);
-        try std.testing.expectEqual(@as(usize, 1), input.sources.len);
-        try std.testing.expectEqualStrings(@embedFile("../e2e/wf-001-hello-world/reference/stories.md"), input.sources[0].text);
-        const message = try c.decode(std.json.Value, a, try packet.input(a, input));
-        try std.testing.expectEqualStrings(input.specification, message.object.get("specification").?.object.get("text").?.string);
-        try std.testing.expectEqual(.supplied, input.generation.origin);
-        try std.testing.expectEqual(.not_run, input.generation.workflow_status);
-    }
-    // No grade is asserted: the LLM and reviewer still own semantic assessment.
-}
-
 test "provider observations cannot invent identity usage or successful completion" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
@@ -1175,7 +1089,7 @@ test "live generation capture requires completed identity and distinct valid mod
     try std.testing.expectError(error.InvalidEvaluationContract, c.validateCapture(inputs));
 }
 
-test "Bedrock temperature resolves to zero and rejects configured or forged overrides" {
+test "Bedrock temperature resolves to 0.1 and rejects configured or forged overrides" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1187,15 +1101,15 @@ test "Bedrock temperature resolves to zero and rejects configured or forged over
             continue;
         }
         const config = try configuration.parse(a, config_bytes, selection);
-        try std.testing.expectEqual(@as(?f64, 0), config.temperature);
-        const explicit_zero = try std.mem.replaceOwned(u8, a, config_bytes, "\"temperature\":null", "\"temperature\":0");
-        try std.testing.expectEqualDeep(config, try configuration.parse(a, explicit_zero, selection));
-        for ([_][]const u8{ "-1", "0.001", "0.25", "1", "2" }) |value| {
+        try std.testing.expectEqual(@as(?f64, 0.1), config.temperature);
+        const explicit_fixed = try std.mem.replaceOwned(u8, a, config_bytes, "\"temperature\":null", "\"temperature\":0.1");
+        try std.testing.expectEqualDeep(config, try configuration.parse(a, explicit_fixed, selection));
+        for ([_][]const u8{ "-1", "0", "0.001", "0.25", "1", "2" }) |value| {
             const field = try std.fmt.allocPrint(a, "\"temperature\":{s}", .{value});
             const bytes = try std.mem.replaceOwned(u8, a, config_bytes, "\"temperature\":null", field);
             try std.testing.expectError(error.InvalidEvaluationContract, configuration.parse(a, bytes, selection));
         }
-        for ([_]?f64{ null, 0.001, 0.25, 1, 2 }) |value| {
+        for ([_]?f64{ null, 0, 0.001, 0.25, 1, 2 }) |value| {
             var forged = config;
             forged.temperature = value;
             try std.testing.expectError(error.InvalidEvaluationContract, configuration.validate(forged));

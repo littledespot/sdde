@@ -3,6 +3,7 @@ const a = @import("../domain/required_authority.zig");
 pub const Payload = union(enum) {
     inputs: a.Inputs,
     support_initial,
+    review_history: @import("../domain/specification_review_retention.zig").History,
     support: @import("../domain/specification_support.zig").Source.Collection,
     principle_pending: @import("../domain/specification_review.zig").Pending,
     principle_support: @import("../domain/specification_review.zig").PolicyResult,
@@ -22,6 +23,8 @@ pub const create = storage.create;
 pub const destroy = storage.destroy;
 pub const view = storage.view;
 pub const payload = storage.payload;
+pub const rejection = storage.rejection;
+pub const retainsCurrentInputs = storage.retainsCurrentInputs;
 pub const publish = storage.publish;
 pub fn read(inputs: *const @import("../domain/pipeline_data.zig").View, schema: @import("../domain/pipeline_data.zig").Schema, comptime tag: @import("std").meta.Tag(Payload)) !@FieldType(Payload, @tagName(tag)) {
     return storage.read(inputs, schema, tag) catch |err| switch (err) {

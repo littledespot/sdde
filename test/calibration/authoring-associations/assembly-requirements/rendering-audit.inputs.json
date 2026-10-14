@@ -1,0 +1,22 @@
+{
+  "frozen_plan": {
+    "path": "zig-out/assembly-requirements-comparison/freeze.json",
+    "sha256": "a116873a995e2080ca7d9a5aa6eb1148c2887f0d35c88db99946ab8dd36c3659",
+    "bytes": 90628
+  },
+  "admission": {
+    "path": "zig-out/assembly-requirements-comparison/native-admission.json",
+    "sha256": "b5bef4493a4d0686fa3b4a5cf984dffb401a09e97b91f62e71fbb755a0a55d94",
+    "bytes": 623632
+  },
+  "retained_cases": {
+    "path": "zig-out/assembly-requirements-comparison/workspace/test/calibration/authoring-associations/cases.json",
+    "sha256": "330c797715dea1387d49171808796ec8e6a34652503318c254f69e5181869911",
+    "bytes": 10478
+  },
+  "panel_cases": {
+    "path": "zig-out/assembly-requirements-comparison/workspace/test/calibration/authoring-associations/assembly-requirements/cases.json",
+    "sha256": "942f2a0cb08ed1ee6568594d2cc431626ba535bdf5da022d6a639bc0831288e4",
+    "bytes": 5955
+  }
+}

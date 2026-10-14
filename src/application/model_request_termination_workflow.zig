@@ -16,6 +16,7 @@ pub const Terminate = struct {
         .replaces = Action.contract.replaces,
         .outcomes = &selection.termination_outcomes,
         .side_effect = Action.contract.side_effect,
+        .outcome_association = .{ .request_closure = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_authorization_result } },
     };
     allocator: std.mem.Allocator,
     action: Action = .{},

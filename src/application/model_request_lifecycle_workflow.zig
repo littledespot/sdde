@@ -16,6 +16,7 @@ pub const Advance = struct {
         .outcomes = &.{ .ok, .failed },
         .side_effect = .none,
         .parameters = &.{selection.parameter},
+        .outcome_association = .{ .preserve = .{ .kind = .request, .subject = .prepared_model_request, .evidence = .provider_authorization_result } },
     };
     allocator: std.mem.Allocator,
     action: Action = .{},

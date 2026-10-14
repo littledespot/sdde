@@ -86,7 +86,7 @@ pub const Origins = struct {
     }
 };
 pub const GroupPolicy = union(enum) {
-    membership: struct { disposition: g.spec.Applicability, fixed_provenance: ?g.spec.Selection },
+    membership: struct { disposition: g.spec.Applicability, fixed_provenance: ?g.spec.Selection, fixed_source_group_ids: []const @import("reference_reconciliation.zig").SignalId },
 };
 pub const GroupRepair = struct { target: StableTarget, policy: GroupPolicy };
 pub const ValueEvidenceBound = struct {
@@ -234,7 +234,7 @@ pub fn attributedValue(comptime boundary: g.spec.Boundary, response: g.Responses
     }
     if (content != .records or subject.record >= content.records.len) return error.InvalidSpecificationRepair;
     var record = content.records[subject.record];
-    return .{ .value = try valueField(&record.content, field), .provenance = record.provenance };
+    return .{ .value = try valueField(&record.content, field), .source_group_ids = record.source_group_ids, .provenance = record.provenance };
 }
 pub fn replaceCanonicalValue(a: std.mem.Allocator, response: g.CanonicalResponse, subject: Subject, field: ValueField, value: g.spec.BusinessValue) Error!g.CanonicalResponse {
     _ = try attributedValue(.canonical, response, subject, field);

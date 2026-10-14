@@ -13,7 +13,7 @@ const description: debug.Description = .{
     .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
     .schema = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
     .response_mode = .prompt_only,
-    .controls = .{ .temperature = .zero },
+    .controls = .{ .temperature = .fixed },
     .reasoning_effort = "low",
     .operation_kind = .inference,
 };

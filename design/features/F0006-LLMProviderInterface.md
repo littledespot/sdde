@@ -488,10 +488,10 @@ outcome through runner-owned child bindings:
 Request-origin contracts declare one repository slot. Its catalogue model’s required
 `json` boolean selects native-schema output (`true`) or prompt-only guidance (`false`),
 as amended in ADR 0012 on 2026-09-21. Unsupported native selection rejects the complete
-catalogue; workflow `response-mode` overrides reject. Under the user-approved 2026-09-19 amendment
-to §12.5, temperature is engine-owned: binding selects `0` when the registered
+catalogue; workflow `response-mode` overrides reject. Under the user-approved 2026-10-11 amendment
+to §12.5, temperature is engine-owned: binding selects `0.1` when the registered
 model supports it, otherwise omission. Workflow `temperature` parameters reject,
-including zero; neither request consumers nor retries can override the binding.
+including `0.1`; neither request consumers nor retries can override the binding.
 Resources and outcomes remain in the existing concise workflow structure.
 
 - The originating step's typed slot requirements compile into the

@@ -976,9 +976,18 @@ test "production event projection uses closed facts and propagates every barrier
     const Spy = struct {
         count: usize = 0,
         blocked: bool = false,
+        expect_capture: bool = false,
         fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) log_stream.Outcome {
             const self: *@This() = @ptrCast(@alignCast(context));
             _ = log_event_registry.validateFact(fact.fact) catch return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+            if (self.expect_capture) {
+                const code = fact.fact.fields.diagnostic_code orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+                if (!std.mem.eql(u8, code.bytes, "MODEL_CAPTURE_LINEAGE_FAILURE_MISSING_SOURCE")) return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+                if (fact.fact.event_type == .run_blocked) {
+                    const correlation = fact.fact.correlation_id orelse return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+                    if (!std.mem.eql(u8, correlation.bytes, "request-7-inference-1") or fact.fact.attempt != 1) return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+                }
+            }
             self.count += 1;
             return if (self.blocked) .{ .blocked = .LOG_FLUSH_FAILURE } else .dropped;
         }
@@ -1005,6 +1014,11 @@ test "production event projection uses closed facts and propagates every barrier
         try std.testing.expectEqual(expected, events.retryAttempt(node, 2, false));
         try std.testing.expectEqual(expected, events.retryAttempt(node, 3, true));
         try std.testing.expectEqual(expected, events.emit(.{ .event_type = .publication_prepared, .fields = .{ .outcome = .needs_user } }));
+        spy.expect_capture = true;
+        const rejected: @import("domain/workflow_execution.zig").Rejection = .{ .model_capture = .{ .code = .LOG_SERIALIZATION_FAILURE, .stage = .lineage, .cause = .{ .lineage = .missing_source }, .origin = .{ .request = .{ .value = 7 }, .attempt = .{ .value = 1 } }, .direction = .request } };
+        try std.testing.expectEqual(expected, events.action(node, .{ .rejected = rejected }, null));
+        try std.testing.expectEqual(expected, events.terminal(.{ .execution_rejected = rejected }));
+        spy.expect_capture = false;
     }
     try std.testing.expect(spy.count > 0);
 }

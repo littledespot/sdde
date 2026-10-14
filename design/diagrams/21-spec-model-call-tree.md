@@ -34,10 +34,9 @@ flowchart LR
     RC --> SUMMARY_ROUTE["Check summary reuse<br/>Non-final partitions"]
     SUMMARY_ROUTE -. "Current single child;<br/>unchanged dependencies" .-> SUMMARY_REUSE["Native carry-forward<br/>Validate, identify and build summary"]
     SUMMARY_ROUTE -. "Semantic summarization required" .-> SUMMARY["summary<br/>reconciliation-prompt<br/>1 call per remaining summary partition"]
-    RC --> GLOBAL["Native global phase handoffs<br/>4 validated semantic assignments"]
+    RC --> GLOBAL["Native global phase handoffs<br/>3 validated semantic assignments"]
     GLOBAL --> DISPOSITIONS["dispositions<br/>dispositions-prompt"]
     GLOBAL --> SIGNALS["signals<br/>signals-prompt"]
-    GLOBAL --> ROLES["roles<br/>roles-prompt<br/>1 complete role-decision request"]
     GLOBAL --> CONFLICTS["conflicts<br/>conflicts-prompt"]
     RC -. "Invalid summary" .-> RC_REPAIR["repair-reconciliation-candidate<br/>repair-prompt<br/>Authorized reconciliation repair"]
 
@@ -45,29 +44,25 @@ flowchart LR
     VALIDATE_RC -. "Invalid global candidate" .-> RC_REPAIR
 
     ROOT -. "Source readiness requires review,<br/>or preservation check enabled" .-> SOURCE["review-source"]
-    SOURCE --> SUPPORT["review-support<br/>See generation and review tree"]
+    SOURCE --> SUPPORT["review-source-support<br/>See generation and review tree"]
     ROOT -. "Source-authority gate selects repair" .-> UPSTREAM["Source omission repair"]
     UPSTREAM --> SOURCE_EX["repair-source-extraction<br/>model-request-with-context<br/>repair-prompt"]
     UPSTREAM --> SOURCE_RC["repair-source-candidate<br/>repair-prompt<br/>Reconciliation schema"]
 
     classDef model fill:#dbeafe,stroke:#2563eb,color:#111827;
     classDef repair fill:#ffedd5,stroke:#ea580c,color:#111827;
-    class CONTENT,CLASSIFICATIONS,SUMMARY,DISPOSITIONS,SIGNALS,ROLES,CONFLICTS model;
+    class CONTENT,CLASSIFICATIONS,SUMMARY,DISPOSITIONS,SIGNALS,CONFLICTS model;
     class TEXT_REPAIR,EX_REPAIR,RC_REPAIR,SOURCE_EX,SOURCE_RC repair;
 ```
 
 Global calls execute in this order: **dispositions → validate → signals → validate
-→ roles → validate → conflicts → validate**. The next call receives native accepted
-facts, rather than unchecked response JSON. Repairs retire affected descendants
-and request pending assignments again. Roles return one complete required decision
-map: each registered role selects supporting stable signal occurrence handles or
-reports unsupported. Native admission rejects missing/duplicate decisions and
-duplicate/ineligible selections, then derives positive group-role assignments in
-offered-group and role order. Selected groups' complete claim selections must be
-retained; historical groups remain evidence without authoring roles. An empty
-eligible catalogue permits only unsupported decisions. Admission and readback use
-that same eligibility rule. Upstream changes retire the complete assessment,
-producer origin and derived assignments together; pending is not unsupported.
+→ conflicts → validate**. The next call receives native accepted facts rather than
+unchecked response JSON. Repairs retire affected descendants and request pending
+assignments again. Canonical accepted group occurrences feed authoring; there is
+no independent presentation-role request or positive-role conversion. Authored
+values select complete current groups while drafting, and native code admits the
+occurrences without judging semantic support. Changed upstream groups retire
+affected authored associations and dependent review/attribution evidence.
 Conflicts select accepted group handles. Native code constructs token
 projections and reciprocal relationships. Summary partitions finish before the
 global phase handoffs. The YAML sets
@@ -97,21 +92,15 @@ routes through source review and the authority gate.
 
 ## Specification generation and review
 
-Native generation initialization checks all authoring roles before the first
-authoring request. Incomplete coverage ends `blocked`, retaining the missing roles,
-reference state/revision, role-selection request origin and eligible groups in the
-shared candidate diagnostic. Explicit unsupported decisions supply no positive
-coverage and grant no clarification or entity `not_applicable` authority. Protocol
-correction retains the complete map and immutable packet under existing bounds;
-unsupported adds no semantic retry. The gate adds no model call, automatic role
-assignment or correction allowance. Source readiness remains a separate structural
-check. Complete decisions prove representation only; semantic improvement still
-requires baseline comparison and actual publication/rubric evidence.
-
-Generation runs **brief → primary user story → entities → record groups**.
-After assembly and deterministic coverage validation, source review runs before
-applicable principle review. Each review request assesses one native subject;
-it is not one request for the entire specification.
+Native generation initialization requires complete current references and a
+nonempty retained group catalogue. Initial brief, story and entity-basis values
+select nonempty unique canonical `signal_ids` alongside content; initial questions
+select their distinct question-eligible groups. Native admission derives required
+`source_group_ids`, complete claim unions and exact lineage. Records retain one
+native-bound group and return content only. No role-classifier call or mandatory
+role-prebinding gate remains. Invalid or stale native authority blocks without
+fabricating a user information gap; semantic support and authored meaning still
+require review and separate live qualification.
 
 ```mermaid
 flowchart LR
@@ -125,15 +114,18 @@ flowchart LR
 
     ROOT --> REVIEW["review-specification"]
     REVIEW --> CANDIDATE["review-candidate"]
-    CANDIDATE --> SOURCE["source: review-support<br/>support-prompt"]
-    CANDIDATE -. "Selected principle spans apply" .-> POLICY["policy: review-support<br/>principle-prompt"]
-    ROOT -. "Pre-generation source review" .-> PRE["review-source<br/>support-prompt"]
+    CANDIDATE --> SOURCE["source: review-source-support<br/>support-prompt"]
+    CANDIDATE -. "Selected principle spans apply" .-> POLICY["policy: assess-support<br/>principle-prompt"]
+    ROOT -. "Pre-generation source review" .-> PRE["assess-source: review-source-support<br/>support-prompt"]
 
-    SOURCE --> SUPPORT["review-support<br/>Repeat for each pending subject"]
-    POLICY --> SUPPORT
+    SOURCE --> SUPPORT["Source review loop<br/>Repeat for each pending native assignment"]
+    POLICY --> FINDING
     PRE --> SUPPORT
-    SUPPORT --> FINDING["model-request<br/>Assigned support or principle prompt<br/>1 call per subject"]
-    SUPPORT -. "Source finding needs omission localization" .-> LOSS["loss-model<br/>loss-prompt<br/>Additional localization call"]
+    SUPPORT --> REUSE["Source-only native reuse eligibility<br/>Complete current assignment + original accepted call"]
+    REUSE -- "Unchanged eligible source receipt" --> RETAIN["Native re-admission<br/>Original finding/origin; no model call"]
+    REUSE -- "Changed, excluded or policy assignment" --> FINDING["model-request<br/>Assigned support or principle prompt<br/>1 call per focused subject;<br/>1 source call for 3 AC-record field findings"]
+    RETAIN --> SUPPORT
+    SUPPORT -. "Source finding needs omission localization" .-> LOSS["loss-model<br/>loss-prompt<br/>1 complete comparison per omission;<br/>serial canonical order"]
     SUPPORT -. "Review validation authorizes repair" .-> SUPPORT_REPAIR["repair<br/>Assigned support or principle prompt<br/>Authorized finding repair"]
 
     REVIEW -. "Source-backed candidate omission" .-> OMISSION["repair-omission<br/>repair-prompt<br/>Generation schema; then reassemble and review"]
@@ -147,11 +139,38 @@ flowchart LR
     class UNIT_REPAIR,SUPPORT_REPAIR,OMISSION,EX,RC repair;
 ```
 
-Record-group assignments come from active reconciled signals with the `records`
-role; one group may produce several specification records. Review subjects come
+Record-group assignments enumerate complete active reconciled groups; one group
+may produce several specification records or none. Empty output advances the native
+cursor but cannot bypass aggregate coverage, required families or semantic review. Review subjects come
 from the shared required-authority ledger. Empty principle selection requires no
 principle model call. Repairs and upstream rebuilding can cause renewed review
 or reconciliation calls; they do not independently commit a unit.
+
+Phase 6 retains only clean admitted source assignments with unchanged complete
+packet, native requirements/applicability, sources, schema, guidance and model
+settings in the same execution. An AC receipt retains all three findings together.
+The pure reuse operation consumes a finite unchanged prefix, stopping at the first
+assignment that needs a model call. Source and policy loops share one assessment
+body; localization remains source-only, and policy has no reuse transition.
+Sibling or broad-context changes require new review. Policy review, omissions and
+corrected assignments are reassessed. Historical receipts never satisfy authority;
+the ordinary collector re-admits them against the current revision and full native
+validation still runs. Actual original origins and retry identities survive; no
+request, checkpoint or persisted cache is created. See
+[§22.4](../contracts/22-repair.md#224-repair-request-and-response).
+
+The AC record assignment starts at its native Given requirement and retains one
+finding for each of Given, When and Then. Exact complete membership is checked
+before append, wire order is normalized to native ledger order, and each field
+keeps its own purpose and evidence validation. A record pass cannot replace any
+field finding. The separate AC/scenario collection assessments and all existing
+source-preservation and principle duties remain unchanged. Record protocol
+correction retains the complete assignment; native finding repair still changes
+only its authorized selected field. Batched findings share the actual accepted
+call origin. Multiple omissions retain their own findings and comparison origins;
+each is localized through a complete assignment before the next canonical pending
+omission or review assignment proceeds. These request-count changes grant no new
+repair or clarification permission and do not establish semantic improvement.
 
 The `model-request-with-context` subgraph retains the workflow-selected context
 for extraction repairs and specification authoring. Generation, native unit repair

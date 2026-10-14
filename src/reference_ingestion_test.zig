@@ -98,29 +98,21 @@ test "reference inventory rejects Unicode case normalization physical aliases an
     try std.testing.expectError(error.InvalidReferenceInventory, validator.execute(arena.allocator(), .{ .directory = selected, .entries = &.{ file("a.md", 3, 0), file("b.md", 3, 0) } }));
 }
 
-test "Hello World reference preserves exact content and source locations" {
-    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
-    defer arena.deinit();
-    const bytes = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "test/e2e/wf-001-hello-world/reference/stories.md", arena.allocator(), .limited(reference.limits.source_file_bytes));
-    const inputs = try read(arena.allocator(), "stories.md", bytes);
-    try std.testing.expectEqual(@as(usize, 1), inputs.documents.len);
-    const document = inputs.documents[0];
-    try std.testing.expectEqualSlices(u8, bytes, document.bytes);
-    try std.testing.expectEqual(@as(usize, 0), document.blocks[0].span.start.byte);
-    try std.testing.expectEqual(bytes.len, document.blocks[document.blocks.len - 1].span.end.byte);
-    try std.testing.expectEqual(reference.ReaderId.markdown_source_v1, document.reader);
-    try std.testing.expectEqualStrings("stories.md", document.path.bytes);
-    try std.testing.expectEqual(bytes.len, inputs.source_bytes);
-    try std.testing.expectEqual(bytes.len, inputs.decoded_bytes);
-}
-
 test "Markdown reader retains BOM CRLF Unicode whitespace links and code without executing or rewriting" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const bytes = "\xef\xbb\xbf# Café\r\n\r\n[link](https://invalid.example)\r\n<script>ignored()</script>\r\n\t- `a/b.ts`\r";
     const result = try read(arena.allocator(), "notes.MD", bytes);
-    try std.testing.expectEqualSlices(u8, bytes, result.documents[0].bytes);
-    const end = result.documents[0].blocks[0].span.end;
+    try std.testing.expectEqual(@as(usize, 1), result.documents.len);
+    const document = result.documents[0];
+    try std.testing.expectEqualSlices(u8, bytes, document.bytes);
+    try std.testing.expectEqual(@as(usize, 0), document.blocks[0].span.start.byte);
+    try std.testing.expectEqual(bytes.len, document.blocks[document.blocks.len - 1].span.end.byte);
+    try std.testing.expectEqual(reference.ReaderId.markdown_source_v1, document.reader);
+    try std.testing.expectEqualStrings("notes.MD", document.path.bytes);
+    try std.testing.expectEqual(bytes.len, result.source_bytes);
+    try std.testing.expectEqual(bytes.len, result.decoded_bytes);
+    const end = document.blocks[0].span.end;
     try std.testing.expectEqual(@as(u32, 6), end.line);
     try std.testing.expectEqual(@as(u32, 1), end.column);
     const whitespace = try read(arena.allocator(), "blank.markdown", " \t\n");

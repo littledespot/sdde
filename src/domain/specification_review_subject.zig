@@ -155,7 +155,7 @@ pub fn projectLoss(a: std.mem.Allocator, inputs: authority.Inputs, context: prov
         if (try field(a, inputs, context, id)) |target| return .{ .brief_field = .{ .slot = id.slot, .text = target.text, .brief = resolved } };
         return .{ .pending_subject = .{ .slot = id.slot, .brief = resolved } };
     }
-    // A pre-authoring role review has no candidate to blame. Its current bound
+    // A not-yet-authored field has no candidate to blame. Its current bound
     // producers and the fixed finding remain in the surrounding loss packet.
     return .{ .pending_subject = .{ .slot = id.slot } };
 }

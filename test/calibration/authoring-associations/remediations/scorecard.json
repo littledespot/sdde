@@ -1,0 +1,3646 @@
+{
+  "status": "assessed_partial_budget_stopped",
+  "manual_review": "Implementation-agent assessments independently checked against original evidence, current native admission and canonical resolved records; not deterministic semantic proof.",
+  "freeze_sha256": "6bd09d06a79c537954022a3d83a9738dabad610d8d3a87468624b54d6dd79cb4",
+  "planned_physical_calls": 60,
+  "received": 46,
+  "not_sent": 14,
+  "actual_tokens": 202021,
+  "input_tokens": 94976,
+  "output_tokens": 107045,
+  "stop_reason": "ActualTokenStop",
+  "output_limit_calls": [
+    1,
+    4,
+    5,
+    37
+  ],
+  "native_admitted_total": 35,
+  "mechanical_assembly_counts": {
+    "not_reached": 9,
+    "passed": 26
+  },
+  "no_retries_repairs_judges_source_review_e2e": true,
+  "summary": [
+    {
+      "factor": "entity_purpose",
+      "candidate_gate": "not_passed",
+      "baseline": {
+        "planned": 6,
+        "sent": 6,
+        "not_sent": 0,
+        "completed_final": 4,
+        "native_admitted": 4,
+        "semantic_readability_adequate": 2,
+        "native_and_quality_adequate": 2,
+        "factor_adequate": 4,
+        "factor_uncertain_received": 0,
+        "input_tokens": 11490,
+        "output_tokens": 33376,
+        "known_total_tokens": 44866,
+        "replay_seconds": 84.862943583
+      },
+      "candidate": {
+        "planned": 6,
+        "sent": 6,
+        "not_sent": 0,
+        "completed_final": 5,
+        "native_admitted": 5,
+        "semantic_readability_adequate": 2,
+        "native_and_quality_adequate": 2,
+        "factor_adequate": 4,
+        "factor_uncertain_received": 1,
+        "input_tokens": 11682,
+        "output_tokens": 17384,
+        "known_total_tokens": 29066,
+        "replay_seconds": 58.671463793
+      }
+    },
+    {
+      "factor": "assembly_context",
+      "candidate_gate": "not_passed",
+      "baseline": {
+        "planned": 6,
+        "sent": 6,
+        "not_sent": 0,
+        "completed_final": 6,
+        "native_admitted": 5,
+        "semantic_readability_adequate": 1,
+        "native_and_quality_adequate": 1,
+        "factor_adequate": 1,
+        "factor_uncertain_received": 0,
+        "input_tokens": 12446,
+        "output_tokens": 9923,
+        "known_total_tokens": 22369,
+        "replay_seconds": 26.771302165
+      },
+      "candidate": {
+        "planned": 6,
+        "sent": 6,
+        "not_sent": 0,
+        "completed_final": 6,
+        "native_admitted": 1,
+        "semantic_readability_adequate": 0,
+        "native_and_quality_adequate": 0,
+        "factor_adequate": 0,
+        "factor_uncertain_received": 0,
+        "input_tokens": 13352,
+        "output_tokens": 12392,
+        "known_total_tokens": 25744,
+        "replay_seconds": 36.769762875
+      }
+    },
+    {
+      "factor": "composition_guidance",
+      "candidate_gate": "not_passed",
+      "baseline": {
+        "planned": 6,
+        "sent": 6,
+        "not_sent": 0,
+        "completed_final": 6,
+        "native_admitted": 5,
+        "semantic_readability_adequate": 1,
+        "native_and_quality_adequate": 1,
+        "factor_adequate": 1,
+        "factor_uncertain_received": 0,
+        "input_tokens": 12366,
+        "output_tokens": 9081,
+        "known_total_tokens": 21447,
+        "replay_seconds": 24.457085083
+      },
+      "candidate": {
+        "planned": 6,
+        "sent": 6,
+        "not_sent": 0,
+        "completed_final": 6,
+        "native_admitted": 6,
+        "semantic_readability_adequate": 1,
+        "native_and_quality_adequate": 1,
+        "factor_adequate": 1,
+        "factor_uncertain_received": 0,
+        "input_tokens": 12612,
+        "output_tokens": 981,
+        "known_total_tokens": 13593,
+        "replay_seconds": 6.620605
+      }
+    },
+    {
+      "factor": "evidence_ownership",
+      "candidate_gate": "not_passed",
+      "baseline": {
+        "planned": 6,
+        "sent": 6,
+        "not_sent": 0,
+        "completed_final": 5,
+        "native_admitted": 5,
+        "semantic_readability_adequate": 2,
+        "native_and_quality_adequate": 2,
+        "factor_adequate": 0,
+        "factor_uncertain_received": 2,
+        "input_tokens": 12446,
+        "output_tokens": 23258,
+        "known_total_tokens": 35704,
+        "replay_seconds": 62.746160458
+      },
+      "candidate": {
+        "planned": 6,
+        "sent": 4,
+        "not_sent": 2,
+        "completed_final": 4,
+        "native_admitted": 4,
+        "semantic_readability_adequate": 2,
+        "native_and_quality_adequate": 2,
+        "factor_adequate": 0,
+        "factor_uncertain_received": 2,
+        "input_tokens": 8582,
+        "output_tokens": 650,
+        "known_total_tokens": 9232,
+        "replay_seconds": 4.50654654
+      }
+    },
+    {
+      "factor": "source_uncertainty",
+      "candidate_gate": "not_tested",
+      "baseline": {
+        "planned": 6,
+        "sent": 0,
+        "not_sent": 6,
+        "completed_final": 0,
+        "native_admitted": 0,
+        "semantic_readability_adequate": 0,
+        "native_and_quality_adequate": 0,
+        "factor_adequate": 0,
+        "factor_uncertain_received": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "known_total_tokens": 0,
+        "replay_seconds": 0.0
+      },
+      "candidate": {
+        "planned": 6,
+        "sent": 0,
+        "not_sent": 6,
+        "completed_final": 0,
+        "native_admitted": 0,
+        "semantic_readability_adequate": 0,
+        "native_and_quality_adequate": 0,
+        "factor_adequate": 0,
+        "factor_uncertain_received": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "known_total_tokens": 0,
+        "replay_seconds": 0.0
+      }
+    }
+  ],
+  "trials": [
+    {
+      "ordinal": 1,
+      "trial_id": "entity_purpose-equipment-joint-support-baseline-1",
+      "factor": "entity_purpose",
+      "case_id": "equipment-joint-support",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": false,
+      "native_status": "rejected",
+      "native_issue": null,
+      "native_rejection": "ProviderNonCandidateResponse",
+      "assembly_outcome": "not_assessed",
+      "input_tokens": 2032,
+      "output_tokens": 16384,
+      "replay_elapsed_ns": 43408910125,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "d69a025261c03fd4a200dbb87531a2e7"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/01-entity_purpose-equipment-joint-support-baseline-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/01-entity_purpose-equipment-joint-support-baseline-1-records-1.response.json"
+      ],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "entity-assessment.json",
+        "trial_id": "entity_purpose-equipment-joint-support-baseline-1",
+        "semantic_adequacy": null,
+        "factor_adequacy": false,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": true,
+        "qualification": false,
+        "explanation": "Output-limit stop at 16,384 output tokens; no complete candidate was admitted. The visible partial answer expands from equipment/inspection concepts into unsupported timestamps, logs and recursively named history records, followed by placeholder records. This demonstrates the entity expansion defect, but the partial answer is not scored as complete semantic coverage or readable output.",
+        "defects": [
+          "output_limit",
+          "unsupported_entity_expansion",
+          "placeholder_expansion"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 2,
+      "trial_id": "entity_purpose-equipment-joint-support-baseline-2",
+      "factor": "entity_purpose",
+      "case_id": "equipment-joint-support",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_reached",
+      "input_tokens": 2032,
+      "output_tokens": 190,
+      "replay_elapsed_ns": 1337750166,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "fb9e3ca73edd85dcb632dd9f4a5650f5"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/02-entity_purpose-equipment-joint-support-baseline-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/02-entity_purpose-equipment-joint-support-baseline-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/entity_purpose-equipment-joint-support-baseline-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "entity-assessment.json",
+        "trial_id": "entity_purpose-equipment-joint-support-baseline-2",
+        "semantic_adequacy": false,
+        "factor_adequacy": true,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": null,
+        "unsupported_additions": false,
+        "qualification": false,
+        "explanation": "Native selected-unit admission passed; final assembly was not reached because this is group 1. The Equipment entity and inspection association are relevant and do not recursively expand. Canonical resolution produces Inspectionrecords inspection results for Equipment. Behavioral records emphasize group 2's availability rule; identifier retention appears in the given state rather than as an explicit required retention result, so complete assigned retention meaning is uncertain rather than claimed absent. E123 and PASS/FAIL are illustrative scenario values, not automatically unsupported requirements.",
+        "defects": [
+          "relationship_fragment_join",
+          "assigned_identifier_retention_weak",
+          "contextual_availability_ownership"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 3,
+      "trial_id": "entity_purpose-equipment-joint-support-candidate-1",
+      "factor": "entity_purpose",
+      "case_id": "equipment-joint-support",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_reached",
+      "input_tokens": 2080,
+      "output_tokens": 399,
+      "replay_elapsed_ns": 2135310125,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "c1438e330088f61ec5182ddafceb637f"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/03-entity_purpose-equipment-joint-support-candidate-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/03-entity_purpose-equipment-joint-support-candidate-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/entity_purpose-equipment-joint-support-candidate-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "entity-assessment.json",
+        "trial_id": "entity_purpose-equipment-joint-support-candidate-1",
+        "semantic_adequacy": false,
+        "factor_adequacy": null,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "qualification": false,
+        "explanation": "Native selected-unit admission passed; final assembly was not reached. The FR explicitly preserves storage of identifiers and inspection results. Five entities remain related to the original business context, but separate EquipmentAvailability and InspectionResultStatus concepts are not justified as necessary; this is an entity-necessity uncertainty, not a fixed count failure. Canonical relationship values include hasInspectionResultRepresents the association between equipment and its inspection results and belongsToEquipmentLinks the inspection result to the equipment it concerns. The AC emphasizes the other group's availability rule, so ownership and field purpose require separate attention despite preserved retention meaning.",
+        "defects": [
+          "relationship_fragment_join",
+          "entity_necessity_uncertain",
+          "contextual_availability_ownership"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 4,
+      "trial_id": "entity_purpose-equipment-joint-support-candidate-2",
+      "factor": "entity_purpose",
+      "case_id": "equipment-joint-support",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": false,
+      "native_status": "rejected",
+      "native_issue": null,
+      "native_rejection": "ProviderNonCandidateResponse",
+      "assembly_outcome": "not_assessed",
+      "input_tokens": 2080,
+      "output_tokens": 16384,
+      "replay_elapsed_ns": 52397326542,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "4af9408238461fe0b2dbeac6135b1769"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/04-entity_purpose-equipment-joint-support-candidate-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/04-entity_purpose-equipment-joint-support-candidate-2-records-1.response.json"
+      ],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "entity-assessment.json",
+        "trial_id": "entity_purpose-equipment-joint-support-candidate-2",
+        "semantic_adequacy": null,
+        "factor_adequacy": false,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": true,
+        "qualification": false,
+        "explanation": "Output-limit stop at 16,384 output tokens; no complete candidate was admitted. The partial answer contains 405 fully closed entity records and continues into unsupported inspection storage, event and notification service concepts. The clarified purpose did not prevent recursive expansion in this repetition. Complete semantic coverage and readability remain unassessed; partial content cannot qualify the candidate.",
+        "defects": [
+          "output_limit",
+          "unsupported_entity_expansion"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 5,
+      "trial_id": "entity_purpose-warehouse-location-baseline-1",
+      "factor": "entity_purpose",
+      "case_id": "warehouse-location",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": false,
+      "native_status": "rejected",
+      "native_issue": null,
+      "native_rejection": "ProviderNonCandidateResponse",
+      "assembly_outcome": "not_assessed",
+      "input_tokens": 1957,
+      "output_tokens": 16384,
+      "replay_elapsed_ns": 37218787000,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "66beed558ee8a9b45e88169db91203dc"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/05-entity_purpose-warehouse-location-baseline-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/05-entity_purpose-warehouse-location-baseline-1-records-1.response.json"
+      ],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "entity-assessment.json",
+        "trial_id": "entity_purpose-warehouse-location-baseline-1",
+        "semantic_adequacy": null,
+        "factor_adequacy": false,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": true,
+        "qualification": false,
+        "explanation": "Output-limit stop at 16,384 output tokens; no complete candidate was admitted. The partial answer expands into unsupported query logging, users, record actions and further entities and placeholders. Its AC requires recording a query action, which the original retention obligation and controlled locating goal do not establish. The partial answer is not scored as a completed collection.",
+        "defects": [
+          "output_limit",
+          "unsupported_query_logging",
+          "unsupported_entity_expansion",
+          "placeholder_expansion"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 6,
+      "trial_id": "entity_purpose-warehouse-location-baseline-2",
+      "factor": "entity_purpose",
+      "case_id": "warehouse-location",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 1957,
+      "output_tokens": 204,
+      "replay_elapsed_ns": 1191798458,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "2d4aec3a382b61e352097fff88950e3e"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/06-entity_purpose-warehouse-location-baseline-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/06-entity_purpose-warehouse-location-baseline-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/entity_purpose-warehouse-location-baseline-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "entity-assessment.json",
+        "trial_id": "entity_purpose-warehouse-location-baseline-2",
+        "semantic_adequacy": false,
+        "factor_adequacy": true,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "qualification": false,
+        "explanation": "Native selected-unit and final assembly admission passed. Parcel and StorageLocation are relevant source-supported business concepts; the AC and FR preserve storage of the identifier/location association. Canonical relationship values ParcelhasStorageLocation and StorageLocationcontainsParcel fail the declared resolved readability criterion. Entity scope is adequate despite this separate composition defect.",
+        "defects": [
+          "relationship_fragment_join"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 7,
+      "trial_id": "entity_purpose-warehouse-location-candidate-1",
+      "factor": "entity_purpose",
+      "case_id": "warehouse-location",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2005,
+      "output_tokens": 191,
+      "replay_elapsed_ns": 1176434292,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "15693ed7851e0f685f944750a301022b"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/07-entity_purpose-warehouse-location-candidate-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/07-entity_purpose-warehouse-location-candidate-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/entity_purpose-warehouse-location-candidate-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "entity-assessment.json",
+        "trial_id": "entity_purpose-warehouse-location-candidate-1",
+        "semantic_adequacy": false,
+        "factor_adequacy": true,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "qualification": false,
+        "explanation": "Native selected-unit and final assembly admission passed. Parcel and StorageLocation are relevant, the storage obligation survives in the FR, and an empty StorageLocation relationships collection remains valid. Retrieval in the AC observes the retained association and is supported by the supplied locating goal; it is not automatically a new interface requirement. Canonical resolution still produces ParcelhasStorageLocation, so resolved readability and the relationship field purpose do not qualify overall output.",
+        "defects": [
+          "relationship_fragment_join"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 8,
+      "trial_id": "entity_purpose-warehouse-location-candidate-2",
+      "factor": "entity_purpose",
+      "case_id": "warehouse-location",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2005,
+      "output_tokens": 195,
+      "replay_elapsed_ns": 1162354250,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "bf8411f2344cfbdf713fa7da1d0f6516"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/08-entity_purpose-warehouse-location-candidate-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/08-entity_purpose-warehouse-location-candidate-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/entity_purpose-warehouse-location-candidate-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "entity-assessment.json",
+        "trial_id": "entity_purpose-warehouse-location-candidate-2",
+        "semantic_adequacy": false,
+        "factor_adequacy": true,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "qualification": false,
+        "explanation": "Native selected-unit and final assembly admission passed. The candidate retains parcel identifiers and their stored locations, models two relevant business concepts and uses a valid empty relationship collection for StorageLocation. The locating AC is compatible with observing the retained association and the controlled goal. The canonically resolved ParcelhasStorageLocation value remains a readability/relationship-purpose defect despite adequate entity scope.",
+        "defects": [
+          "relationship_fragment_join"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 9,
+      "trial_id": "entity_purpose-completion-notification-baseline-1",
+      "factor": "entity_purpose",
+      "case_id": "completion-notification",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 1756,
+      "output_tokens": 108,
+      "replay_elapsed_ns": 888757834,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "f752f0e7d9ba20f13dc960c64606aec5"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/09-entity_purpose-completion-notification-baseline-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/09-entity_purpose-completion-notification-baseline-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/entity_purpose-completion-notification-baseline-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "entity-assessment.json",
+        "trial_id": "entity_purpose-completion-notification-baseline-1",
+        "semantic_adequacy": true,
+        "factor_adequacy": true,
+        "readability": true,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "qualification": true,
+        "explanation": "Native selected-unit and final assembly admission passed. The AC has a requested operation, successful completion trigger and visible notification; the FR preserves the complete source obligation. No entities are invented. This pair's request is byte-identical to the candidate control and cannot demonstrate an entity-purpose effect.",
+        "defects": []
+      },
+      "native_and_quality_adequate": true
+    },
+    {
+      "ordinal": 10,
+      "trial_id": "entity_purpose-completion-notification-baseline-2",
+      "factor": "entity_purpose",
+      "case_id": "completion-notification",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 1756,
+      "output_tokens": 106,
+      "replay_elapsed_ns": 816940000,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "4cb0b80b63e0f3215d84c5be5d5585ad"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/10-entity_purpose-completion-notification-baseline-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/10-entity_purpose-completion-notification-baseline-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/entity_purpose-completion-notification-baseline-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "entity-assessment.json",
+        "trial_id": "entity_purpose-completion-notification-baseline-2",
+        "semantic_adequacy": true,
+        "factor_adequacy": true,
+        "readability": true,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "qualification": true,
+        "explanation": "Native selected-unit and final assembly admission passed. Successful completion causes a visible notification and the FR preserves the general requirement. Expected success in this AC describes one scenario and does not limit the broader FR; it is not scored as an invented feature-wide prerequisite. No entities are produced. The byte-identical control cannot demonstrate a cause from changed entity wording.",
+        "defects": []
+      },
+      "native_and_quality_adequate": true
+    },
+    {
+      "ordinal": 11,
+      "trial_id": "entity_purpose-completion-notification-candidate-1",
+      "factor": "entity_purpose",
+      "case_id": "completion-notification",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 1756,
+      "output_tokens": 108,
+      "replay_elapsed_ns": 864372542,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "92e97c01844fdbf155562bea322b4540"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/11-entity_purpose-completion-notification-candidate-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/11-entity_purpose-completion-notification-candidate-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/entity_purpose-completion-notification-candidate-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "entity-assessment.json",
+        "trial_id": "entity_purpose-completion-notification-candidate-1",
+        "semantic_adequacy": true,
+        "factor_adequacy": true,
+        "readability": true,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "qualification": true,
+        "explanation": "Native selected-unit and final assembly admission passed. The collection faithfully expresses notification after a requested operation succeeds, with clear field values and no entities. Expected success in the AC does not restrict the general FR. This unchanged-input control cannot establish an entity-purpose improvement.",
+        "defects": []
+      },
+      "native_and_quality_adequate": true
+    },
+    {
+      "ordinal": 12,
+      "trial_id": "entity_purpose-completion-notification-candidate-2",
+      "factor": "entity_purpose",
+      "case_id": "completion-notification",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 1756,
+      "output_tokens": 107,
+      "replay_elapsed_ns": 935666042,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "2bfe99ee08f474f6686ad5971d186541"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/12-entity_purpose-completion-notification-candidate-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/12-entity_purpose-completion-notification-candidate-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/entity_purpose-completion-notification-candidate-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "entity-assessment.json",
+        "trial_id": "entity_purpose-completion-notification-candidate-2",
+        "semantic_adequacy": true,
+        "factor_adequacy": true,
+        "readability": true,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "qualification": true,
+        "explanation": "Native selected-unit and final assembly admission passed. The requested operation, successful completion trigger and displayed notification fulfil the AC and FR purposes. No unsupported entity or behavior is added. The request is byte-identical to the baseline control, so this is a passing control rather than evidence of a changed-purpose effect.",
+        "defects": []
+      },
+      "native_and_quality_adequate": true
+    },
+    {
+      "ordinal": 13,
+      "trial_id": "assembly_context-startup-display-baseline-1",
+      "factor": "assembly_context",
+      "case_id": "startup-display",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2234,
+      "output_tokens": 123,
+      "replay_elapsed_ns": 925802416,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "f4aae98c40341dc3c4cf3b34297ddb5e"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/13-assembly_context-startup-display-baseline-1-records-2.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/13-assembly_context-startup-display-baseline-1-records-2.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/assembly_context-startup-display-baseline-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 13,
+        "trial_id": "assembly_context-startup-display-baseline-1",
+        "factor": "assembly_context",
+        "arm": "baseline",
+        "case_id": "startup-display",
+        "native_status": "admitted_content",
+        "assembly_outcome": "passed",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/assembly_context-startup-display-baseline-1.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": true,
+        "factor_adequacy": true,
+        "readability": true,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": true,
+        "qualification": false,
+        "explanation": "The new criterion and requirement express startup/display/UTC and preserve the exact greeting bytes. The specific greeting adds information absent from the generic fixed prefix. Plain literal representation was admitted natively and is not labelled illicit. Ownership of additional contextual startup/UTC duties in the token-only group remains uncertain.",
+        "defects": [],
+        "input_tokens": 2234,
+        "output_tokens": 123
+      },
+      "native_and_quality_adequate": true
+    },
+    {
+      "ordinal": 14,
+      "trial_id": "assembly_context-startup-display-baseline-2",
+      "factor": "assembly_context",
+      "case_id": "startup-display",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2234,
+      "output_tokens": 124,
+      "replay_elapsed_ns": 920851458,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "24c2302b27554af7c8d1e31ab7eb02dd"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/14-assembly_context-startup-display-baseline-2-records-2.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/14-assembly_context-startup-display-baseline-2-records-2.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/assembly_context-startup-display-baseline-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 14,
+        "trial_id": "assembly_context-startup-display-baseline-2",
+        "factor": "assembly_context",
+        "arm": "baseline",
+        "case_id": "startup-display",
+        "native_status": "admitted_content",
+        "assembly_outcome": "passed",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/assembly_context-startup-display-baseline-2.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": false,
+        "unsupported_additions": false,
+        "ownership_uncertain": true,
+        "qualification": false,
+        "explanation": "The assigned exact greeting is absent. Adjacent then and requirement string fragments resolve to run-together sentences, although the general startup and UTC duties remain visible.",
+        "defects": [
+          "assigned_exact_literal_missing",
+          "adjacent_fragment_joins_unreadable"
+        ],
+        "input_tokens": 2234,
+        "output_tokens": 124
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 15,
+      "trial_id": "assembly_context-startup-display-candidate-1",
+      "factor": "assembly_context",
+      "case_id": "startup-display",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "rejected",
+      "native_issue": {
+        "detail": null,
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "target": {
+            "record": 0
+          }
+        },
+        "rule": "duplicate_record",
+        "observed": null,
+        "blocked": "competing_records",
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": null,
+        "native_error": null
+      },
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": 2408,
+      "output_tokens": 163,
+      "replay_elapsed_ns": 1220510750,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "54148116eabbc24f9788a52f68c69242"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/15-assembly_context-startup-display-candidate-1-records-2.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/15-assembly_context-startup-display-candidate-1-records-2.response.json"
+      ],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 15,
+        "trial_id": "assembly_context-startup-display-candidate-1",
+        "factor": "assembly_context",
+        "arm": "candidate",
+        "case_id": "startup-display",
+        "native_status": "rejected",
+        "assembly_outcome": null,
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": true,
+        "field_purpose": false,
+        "meaning_preserved": false,
+        "unsupported_additions": false,
+        "ownership_uncertain": true,
+        "qualification": false,
+        "explanation": "The response repeats the fixed prefix FR and AC byte-for-byte, without the assigned greeting literal. Native admission identifies competing records across different source-group associations.",
+        "defects": [
+          "copies_prior_candidate",
+          "cross_group_duplicate",
+          "assigned_exact_literal_missing"
+        ],
+        "input_tokens": 2408,
+        "output_tokens": 163
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 16,
+      "trial_id": "assembly_context-startup-display-candidate-2",
+      "factor": "assembly_context",
+      "case_id": "startup-display",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "rejected",
+      "native_issue": {
+        "detail": null,
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "target": {
+            "record": 0
+          }
+        },
+        "rule": "duplicate_record",
+        "observed": null,
+        "blocked": "competing_records",
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": null,
+        "native_error": null
+      },
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": 2408,
+      "output_tokens": 142,
+      "replay_elapsed_ns": 1062577459,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "21023d213a5614876b4ad58f5157d330"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/16-assembly_context-startup-display-candidate-2-records-2.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/16-assembly_context-startup-display-candidate-2-records-2.response.json"
+      ],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 16,
+        "trial_id": "assembly_context-startup-display-candidate-2",
+        "factor": "assembly_context",
+        "arm": "candidate",
+        "case_id": "startup-display",
+        "native_status": "rejected",
+        "assembly_outcome": null,
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": true,
+        "field_purpose": false,
+        "meaning_preserved": false,
+        "unsupported_additions": false,
+        "ownership_uncertain": true,
+        "qualification": false,
+        "explanation": "The response repeats the fixed prefix FR and AC byte-for-byte, without the assigned greeting literal. Native admission identifies competing records across different source-group associations.",
+        "defects": [
+          "copies_prior_candidate",
+          "cross_group_duplicate",
+          "assigned_exact_literal_missing"
+        ],
+        "input_tokens": 2408,
+        "output_tokens": 142
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 17,
+      "trial_id": "assembly_context-equipment-joint-support-baseline-1",
+      "factor": "assembly_context",
+      "case_id": "equipment-joint-support",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2032,
+      "output_tokens": 166,
+      "replay_elapsed_ns": 1046239958,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "5c26302c032db35a33b47fe9ba7b4cd3"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/17-assembly_context-equipment-joint-support-baseline-1-records-2.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/17-assembly_context-equipment-joint-support-baseline-1-records-2.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/assembly_context-equipment-joint-support-baseline-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 17,
+        "trial_id": "assembly_context-equipment-joint-support-baseline-1",
+        "factor": "assembly_context",
+        "arm": "baseline",
+        "case_id": "equipment-joint-support",
+        "native_status": "admitted_content",
+        "assembly_outcome": "passed",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/assembly_context-equipment-joint-support-baseline-1.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "The assigned failed-inspection/unavailable-until-later-successful-inspection behavior survives in FR and AC. Entity relationship fragment tuples resolve to strings such as Equipment RegistercontainsEquipment Identifiers.",
+        "defects": [
+          "relationship_fragment_joins_unreadable"
+        ],
+        "input_tokens": 2032,
+        "output_tokens": 166
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 18,
+      "trial_id": "assembly_context-equipment-joint-support-baseline-2",
+      "factor": "assembly_context",
+      "case_id": "equipment-joint-support",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "rejected",
+      "native_issue": {
+        "detail": null,
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "target": {
+            "record": 27
+          }
+        },
+        "rule": "duplicate_record",
+        "observed": {
+          "record": {
+            "content": {
+              "entity": {
+                "name": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "Equipment Availability Status Change History Record"
+                      }
+                    }
+                  ]
+                },
+                "business_meaning": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "Business data that records a historical change to the availability status of Equipment"
+                      }
+                    }
+                  ]
+                },
+                "relationships": [
+                  {
+                    "segments": [
+                      {
+                        "literal": {
+                          "value": "Equipment"
+                        }
+                      },
+                      {
+                        "literal": {
+                          "value": "has availability status change history record"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "source_group_ids": [
+              {
+                "ordinal": 2
+              }
+            ],
+            "provenance": {
+              "claim_ids": [
+                {
+                  "ordinal": 2
+                }
+              ],
+              "clarification_response_ids": []
+            }
+          }
+        },
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": null,
+        "native_error": null
+      },
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": 2032,
+      "output_tokens": 9075,
+      "replay_elapsed_ns": 20971858583,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "9d869a7b71f1c39833438f9d9cdfbe7d"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/18-assembly_context-equipment-joint-support-baseline-2-records-2.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/18-assembly_context-equipment-joint-support-baseline-2-records-2.response.json"
+      ],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 18,
+        "trial_id": "assembly_context-equipment-joint-support-baseline-2",
+        "factor": "assembly_context",
+        "arm": "baseline",
+        "case_id": "equipment-joint-support",
+        "native_status": "rejected",
+        "assembly_outcome": null,
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": true,
+        "unsupported_additions": true,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "The core assigned availability behavior survives, but the response expands into 215 entities, including unsupported schedules and history/status wrappers, repeated entries and ellipsis placeholders. Native admission rejects duplicate record 27.",
+        "defects": [
+          "unsupported_entity_expansion",
+          "duplicate_records",
+          "placeholders",
+          "relationship_fragment_joins_unreadable"
+        ],
+        "input_tokens": 2032,
+        "output_tokens": 9075
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 19,
+      "trial_id": "assembly_context-equipment-joint-support-candidate-1",
+      "factor": "assembly_context",
+      "case_id": "equipment-joint-support",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "rejected",
+      "native_issue": {
+        "detail": null,
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "target": {
+            "record": 0
+          }
+        },
+        "rule": "duplicate_record",
+        "observed": null,
+        "blocked": "competing_records",
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": null,
+        "native_error": null
+      },
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": 2237,
+      "output_tokens": 154,
+      "replay_elapsed_ns": 1080456125,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "0bfd9677c340baed856f9cb9c1f9d7a7"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/19-assembly_context-equipment-joint-support-candidate-1-records-2.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/19-assembly_context-equipment-joint-support-candidate-1-records-2.response.json"
+      ],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 19,
+        "trial_id": "assembly_context-equipment-joint-support-candidate-1",
+        "factor": "assembly_context",
+        "arm": "candidate",
+        "case_id": "equipment-joint-support",
+        "native_status": "rejected",
+        "assembly_outcome": null,
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": true,
+        "field_purpose": false,
+        "meaning_preserved": false,
+        "unsupported_additions": true,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "The actual returned FR copies the poisoned prefix monthly-maintenance obligation. All three records copy earlier candidate records and substitute retention for the assigned availability duty. The pre-existing prefix defect itself is not counted; copying it into this actual response is. Native admission rejects competing records.",
+        "defects": [
+          "copies_prior_candidate",
+          "copies_poisoned_maintenance_obligation",
+          "assigned_availability_omitted",
+          "wrong_group_substitution",
+          "cross_group_duplicate"
+        ],
+        "input_tokens": 2237,
+        "output_tokens": 154
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 20,
+      "trial_id": "assembly_context-equipment-joint-support-candidate-2",
+      "factor": "assembly_context",
+      "case_id": "equipment-joint-support",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "rejected",
+      "native_issue": {
+        "detail": null,
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "target": {
+            "record": 0
+          }
+        },
+        "rule": "duplicate_record",
+        "observed": null,
+        "blocked": "competing_records",
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": null,
+        "native_error": null
+      },
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": 2237,
+      "output_tokens": 154,
+      "replay_elapsed_ns": 741136834,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "090057c04d476a590ceeb1c980efe9b0"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/20-assembly_context-equipment-joint-support-candidate-2-records-2.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/20-assembly_context-equipment-joint-support-candidate-2-records-2.response.json"
+      ],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 20,
+        "trial_id": "assembly_context-equipment-joint-support-candidate-2",
+        "factor": "assembly_context",
+        "arm": "candidate",
+        "case_id": "equipment-joint-support",
+        "native_status": "rejected",
+        "assembly_outcome": null,
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": true,
+        "field_purpose": false,
+        "meaning_preserved": false,
+        "unsupported_additions": true,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "The actual returned FR copies the poisoned prefix monthly-maintenance obligation. All three records copy earlier candidate records and substitute retention for the assigned availability duty. The pre-existing prefix defect itself is not counted; copying it into this actual response is. Native admission rejects competing records.",
+        "defects": [
+          "copies_prior_candidate",
+          "copies_poisoned_maintenance_obligation",
+          "assigned_availability_omitted",
+          "wrong_group_substitution",
+          "cross_group_duplicate"
+        ],
+        "input_tokens": 2237,
+        "output_tokens": 154
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 21,
+      "trial_id": "assembly_context-warehouse-location-baseline-1",
+      "factor": "assembly_context",
+      "case_id": "warehouse-location",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 1957,
+      "output_tokens": 236,
+      "replay_elapsed_ns": 1709806583,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "28313a370ba843aeb417cc04a61a203b"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/21-assembly_context-warehouse-location-baseline-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/21-assembly_context-warehouse-location-baseline-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/assembly_context-warehouse-location-baseline-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 21,
+        "trial_id": "assembly_context-warehouse-location-baseline-1",
+        "factor": "assembly_context",
+        "arm": "baseline",
+        "case_id": "warehouse-location",
+        "native_status": "admitted_content",
+        "assembly_outcome": "passed",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/assembly_context-warehouse-location-baseline-1.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "Parcel identifier/location retention survives. Readback/query is an observable check compatible with the supplied locating goal; it is not automatically labelled an invented interface. The relationship resolves to ParcelhasStorageLocation. Persistent data store wording is questionable specificity but not needed to establish the readability failure.",
+        "defects": [
+          "relationship_fragment_joins_unreadable"
+        ],
+        "input_tokens": 1957,
+        "output_tokens": 236
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 22,
+      "trial_id": "assembly_context-warehouse-location-baseline-2",
+      "factor": "assembly_context",
+      "case_id": "warehouse-location",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 1957,
+      "output_tokens": 199,
+      "replay_elapsed_ns": 1196743167,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "0f3f8a87775d876bcf250ccac943e514"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/22-assembly_context-warehouse-location-baseline-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/22-assembly_context-warehouse-location-baseline-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/assembly_context-warehouse-location-baseline-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 22,
+        "trial_id": "assembly_context-warehouse-location-baseline-2",
+        "factor": "assembly_context",
+        "arm": "baseline",
+        "case_id": "warehouse-location",
+        "native_status": "admitted_content",
+        "assembly_outcome": "passed",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/assembly_context-warehouse-location-baseline-2.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "Identifier/location retention survives across FR and an observable readback criterion. Separate Parcel and StorageLocation relationship entries concatenate without separators.",
+        "defects": [
+          "relationship_fragment_joins_unreadable"
+        ],
+        "input_tokens": 1957,
+        "output_tokens": 199
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 23,
+      "trial_id": "assembly_context-warehouse-location-candidate-1",
+      "factor": "assembly_context",
+      "case_id": "warehouse-location",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "rejected",
+      "native_issue": {
+        "detail": null,
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "target": {
+            "record": 100
+          }
+        },
+        "rule": "duplicate_record",
+        "observed": {
+          "record": {
+            "content": {
+              "entity": {
+                "name": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "WarehouseRegisterRollbackLogEntryReportEntryReportEntryReportEntryReportEntryOutcome"
+                      }
+                    }
+                  ]
+                },
+                "business_meaning": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "Outcome of a rollback log report entry report entry report report entry report"
+                      }
+                    }
+                  ]
+                },
+                "relationships": [
+                  {
+                    "segments": [
+                      {
+                        "literal": {
+                          "value": "WarehouseRegisterRollbackLogEntryReportEntryReportEntryReportEntryReportEntryOutcome"
+                        }
+                      },
+                      {
+                        "literal": {
+                          "value": "reports"
+                        }
+                      },
+                      {
+                        "literal": {
+                          "value": "WarehouseRegisterRollbackLogEntryReportEntryReportEntryReportEntryResult"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "source_group_ids": [
+              {
+                "ordinal": 1
+              }
+            ],
+            "provenance": {
+              "claim_ids": [
+                {
+                  "ordinal": 1
+                }
+              ],
+              "clarification_response_ids": []
+            }
+          }
+        },
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": null,
+        "native_error": null
+      },
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": 2031,
+      "output_tokens": 11543,
+      "replay_elapsed_ns": 31233893791,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "a547aa216cc95b24ef8b48de7e4d534e"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/23-assembly_context-warehouse-location-candidate-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/23-assembly_context-warehouse-location-candidate-1-records-1.response.json"
+      ],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 23,
+        "trial_id": "assembly_context-warehouse-location-candidate-1",
+        "factor": "assembly_context",
+        "arm": "candidate",
+        "case_id": "warehouse-location",
+        "native_status": "rejected",
+        "assembly_outcome": null,
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": true,
+        "unsupported_additions": true,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "The empty-prefix control preserves core storage behavior but produces 212 entities, including unsupported API, cache, backup, security and rollback structures; repeated records and ellipsis placeholders follow. Native admission rejects duplicate record 100.",
+        "defects": [
+          "unsupported_entity_expansion",
+          "duplicate_records",
+          "placeholders",
+          "relationship_fragment_joins_unreadable"
+        ],
+        "input_tokens": 2031,
+        "output_tokens": 11543
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 24,
+      "trial_id": "assembly_context-warehouse-location-candidate-2",
+      "factor": "assembly_context",
+      "case_id": "warehouse-location",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2031,
+      "output_tokens": 236,
+      "replay_elapsed_ns": 1431187916,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "be559224dbaaa6033e40eb2f6daf61a7"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/24-assembly_context-warehouse-location-candidate-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/24-assembly_context-warehouse-location-candidate-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/assembly_context-warehouse-location-candidate-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 24,
+        "trial_id": "assembly_context-warehouse-location-candidate-2",
+        "factor": "assembly_context",
+        "arm": "candidate",
+        "case_id": "warehouse-location",
+        "native_status": "admitted_content",
+        "assembly_outcome": "passed",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/assembly_context-warehouse-location-candidate-2.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "Core identifier/location retention and observable readback survive. P12345 and Aisle 3, Shelf B are illustrative scenario data, not new global constraints. Relationship values resolve to ParcelhasStorageLocation and StorageLocationis assigned toParcel.",
+        "defects": [
+          "relationship_fragment_joins_unreadable"
+        ],
+        "input_tokens": 2031,
+        "output_tokens": 236
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 25,
+      "trial_id": "composition_guidance-renewal-information-gap-baseline-1",
+      "factor": "composition_guidance",
+      "case_id": "renewal-information-gap",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2016,
+      "output_tokens": 154,
+      "replay_elapsed_ns": 1071014666,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "4601d443b80fde4b4327cefe719ed26a"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/25-composition_guidance-renewal-information-gap-baseline-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/25-composition_guidance-renewal-information-gap-baseline-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-renewal-information-gap-baseline-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 25,
+        "trial_id": "composition_guidance-renewal-information-gap-baseline-1",
+        "case_id": "renewal-information-gap",
+        "status": "completed_received",
+        "provider_stop": "stop",
+        "native_admission": "admitted_content",
+        "usage": {
+          "completion_tokens": 154,
+          "prompt_tokens": 2016,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 1760
+          },
+          "total_tokens": 2170
+        },
+        "response": "zig-out/authoring-remediations-comparison/live-archives/25-composition_guidance-renewal-information-gap-baseline-1-records-1.response.json",
+        "canonical_resolved": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-renewal-information-gap-baseline-1.resolved-records.json",
+        "assembly_outcome": "passed",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": false,
+        "unsupported_additions": true,
+        "explanation": "Relationship resolves to LoanhasReturnDeadline. Eligibility becomes active/not-returned, and the assigned undecided duration disappears from these records. The entity and changed deadline support some loan/deadline tracking, but do not repair the eligibility or uncertainty defects.",
+        "defects": [
+          "run_together_relationship",
+          "eligibility_changed_to_active_not_returned",
+          "assigned_duration_uncertainty_omitted"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 26,
+      "trial_id": "composition_guidance-renewal-information-gap-baseline-2",
+      "factor": "composition_guidance",
+      "case_id": "renewal-information-gap",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2016,
+      "output_tokens": 155,
+      "replay_elapsed_ns": 1095443625,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "5eafdf316dc5c7480b85e4000a5ab809"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/26-composition_guidance-renewal-information-gap-baseline-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/26-composition_guidance-renewal-information-gap-baseline-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-renewal-information-gap-baseline-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 26,
+        "trial_id": "composition_guidance-renewal-information-gap-baseline-2",
+        "case_id": "renewal-information-gap",
+        "status": "completed_received",
+        "provider_stop": "stop",
+        "native_admission": "admitted_content",
+        "usage": {
+          "completion_tokens": 155,
+          "prompt_tokens": 2016,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 1760
+          },
+          "total_tokens": 2171
+        },
+        "response": "zig-out/authoring-remediations-comparison/live-archives/26-composition_guidance-renewal-information-gap-baseline-2-records-1.response.json",
+        "canonical_resolved": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-renewal-information-gap-baseline-2.resolved-records.json",
+        "assembly_outcome": "passed",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": false,
+        "unsupported_additions": true,
+        "explanation": "Same tuple-like Loan/has/ReturnDeadline composition as repetition 1; active/not-returned replaces eligibility. No record retains the supplied unresolved extension duration.",
+        "defects": [
+          "run_together_relationship",
+          "eligibility_changed_to_active_not_returned",
+          "assigned_duration_uncertainty_omitted"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 27,
+      "trial_id": "composition_guidance-renewal-information-gap-candidate-1",
+      "factor": "composition_guidance",
+      "case_id": "renewal-information-gap",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2057,
+      "output_tokens": 159,
+      "replay_elapsed_ns": 1343700208,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "1d732e5e3f5f52543be8b4ecb3876c3b"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/27-composition_guidance-renewal-information-gap-candidate-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/27-composition_guidance-renewal-information-gap-candidate-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-renewal-information-gap-candidate-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 27,
+        "trial_id": "composition_guidance-renewal-information-gap-candidate-1",
+        "case_id": "renewal-information-gap",
+        "status": "completed_received",
+        "provider_stop": "stop",
+        "native_admission": "admitted_content",
+        "usage": {
+          "completion_tokens": 159,
+          "prompt_tokens": 2057,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 64
+          },
+          "total_tokens": 2216
+        },
+        "response": "zig-out/authoring-remediations-comparison/live-archives/27-composition_guidance-renewal-information-gap-candidate-1-records-1.response.json",
+        "canonical_resolved": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-renewal-information-gap-candidate-1.resolved-records.json",
+        "assembly_outcome": "passed",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": false,
+        "unsupported_additions": true,
+        "explanation": "The candidate still resolves its relationship to LoanhasReturnDeadline. It changes eligible renewal into renewal of an active/not-returned loan and omits the known undecided duration from returned records.",
+        "defects": [
+          "run_together_relationship",
+          "eligibility_changed_to_active_not_returned",
+          "assigned_duration_uncertainty_omitted"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 28,
+      "trial_id": "composition_guidance-renewal-information-gap-candidate-2",
+      "factor": "composition_guidance",
+      "case_id": "renewal-information-gap",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2057,
+      "output_tokens": 169,
+      "replay_elapsed_ns": 965455417,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "68a54a76f30495565ec9fa51b4781378"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/28-composition_guidance-renewal-information-gap-candidate-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/28-composition_guidance-renewal-information-gap-candidate-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-renewal-information-gap-candidate-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 28,
+        "trial_id": "composition_guidance-renewal-information-gap-candidate-2",
+        "case_id": "renewal-information-gap",
+        "status": "completed_received",
+        "provider_stop": "stop",
+        "native_admission": "admitted_content",
+        "usage": {
+          "completion_tokens": 169,
+          "prompt_tokens": 2057,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 2032
+          },
+          "total_tokens": 2226
+        },
+        "response": "zig-out/authoring-remediations-comparison/live-archives/28-composition_guidance-renewal-information-gap-candidate-2-records-1.response.json",
+        "canonical_resolved": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-renewal-information-gap-candidate-2.resolved-records.json",
+        "assembly_outcome": "passed",
+        "semantic_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": false,
+        "unsupported_additions": false,
+        "explanation": "The acceptance consequence preserves eligibility by checking it before extending the deadline; active-loan request in FR does not by itself erase that joint guard. The relationship remains LoanhasReturnDeadline and no returned record preserves the undecided duration.",
+        "defects": [
+          "run_together_relationship",
+          "assigned_duration_uncertainty_omitted"
+        ],
+        "factor_adequacy": false
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 29,
+      "trial_id": "composition_guidance-warehouse-location-baseline-1",
+      "factor": "composition_guidance",
+      "case_id": "warehouse-location",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 1957,
+      "output_tokens": 160,
+      "replay_elapsed_ns": 1077203042,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "3395c378f35cf5b7c1a922f45a3bf88c"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/29-composition_guidance-warehouse-location-baseline-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/29-composition_guidance-warehouse-location-baseline-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-warehouse-location-baseline-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 29,
+        "trial_id": "composition_guidance-warehouse-location-baseline-1",
+        "case_id": "warehouse-location",
+        "status": "completed_received",
+        "provider_stop": "stop",
+        "native_admission": "admitted_content",
+        "usage": {
+          "completion_tokens": 160,
+          "prompt_tokens": 1957,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 1936
+          },
+          "total_tokens": 2117
+        },
+        "response": "zig-out/authoring-remediations-comparison/live-archives/29-composition_guidance-warehouse-location-baseline-1-records-1.response.json",
+        "canonical_resolved": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-warehouse-location-baseline-1.resolved-records.json",
+        "assembly_outcome": "passed",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "explanation": "Storage of parcel identifier/location is required explicitly. The readback acceptance flow demonstrates retained data and fits the supplied locating goal. The entity relationship resolves to ParcelhasStorageLocation, so the composition purpose is not fulfilled.",
+        "defects": [
+          "run_together_relationship"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 30,
+      "trial_id": "composition_guidance-warehouse-location-baseline-2",
+      "factor": "composition_guidance",
+      "case_id": "warehouse-location",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "rejected",
+      "native_issue": {
+        "detail": null,
+        "unit": {
+          "records": {}
+        },
+        "field": {
+          "target": {
+            "record": 37
+          }
+        },
+        "rule": "duplicate_record",
+        "observed": {
+          "record": {
+            "content": {
+              "entity": {
+                "name": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "WarehouseRegisterChangeHistoryEntryMetadataUserRolePermissionActionTypeReadAll"
+                      }
+                    }
+                  ]
+                },
+                "business_meaning": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "The action of reading all warehouse register entries"
+                      }
+                    }
+                  ]
+                },
+                "relationships": [
+                  {
+                    "segments": [
+                      {
+                        "literal": {
+                          "value": "WarehouseRegisterChangeHistoryEntryMetadataUserRolePermissionActionTypeReadAll"
+                        }
+                      },
+                      {
+                        "literal": {
+                          "value": "belongs_to"
+                        }
+                      },
+                      {
+                        "literal": {
+                          "value": "WarehouseRegisterChangeHistoryEntryMetadataUserRolePermissionAction"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            "source_group_ids": [
+              {
+                "ordinal": 1
+              }
+            ],
+            "provenance": {
+              "claim_ids": [
+                {
+                  "ordinal": 1
+                }
+              ],
+              "clarification_response_ids": []
+            }
+          }
+        },
+        "blocked": null,
+        "text_issue": null,
+        "value_choices": null,
+        "repair_target": null,
+        "membership": null,
+        "native_error": null
+      },
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": 1957,
+      "output_tokens": 8356,
+      "replay_elapsed_ns": 19514993291,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "77dda2319fa87014e23ef4e679e84a1c"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/30-composition_guidance-warehouse-location-baseline-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/30-composition_guidance-warehouse-location-baseline-2-records-1.response.json"
+      ],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 30,
+        "trial_id": "composition_guidance-warehouse-location-baseline-2",
+        "case_id": "warehouse-location",
+        "status": "completed_received",
+        "provider_stop": "stop",
+        "native_admission": "rejected",
+        "usage": {
+          "completion_tokens": 8356,
+          "prompt_tokens": 1957,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 1936
+          },
+          "total_tokens": 10313
+        },
+        "response": "zig-out/authoring-remediations-comparison/live-archives/30-composition_guidance-warehouse-location-baseline-2-records-1.response.json",
+        "canonical_resolved": null,
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": true,
+        "unsupported_additions": true,
+        "explanation": "The completed response retains the storage duty and readback flow, but expands into unsupported API, audit, permission, metadata and governance entities. Tuple-like relationships lack separators. Native admission rejects a repeated entity record, so no admitted resolved file is available.",
+        "defects": [
+          "unsupported_entity_expansion",
+          "duplicate_record_native_rejection",
+          "tuple_like_relationships_without_separators"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 31,
+      "trial_id": "composition_guidance-warehouse-location-candidate-1",
+      "factor": "composition_guidance",
+      "case_id": "warehouse-location",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 1998,
+      "output_tokens": 166,
+      "replay_elapsed_ns": 1059989417,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "d88f8b4d695b6a33e4fa59828aae6b37"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/31-composition_guidance-warehouse-location-candidate-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/31-composition_guidance-warehouse-location-candidate-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-warehouse-location-candidate-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 31,
+        "trial_id": "composition_guidance-warehouse-location-candidate-1",
+        "case_id": "warehouse-location",
+        "status": "completed_received",
+        "provider_stop": "stop",
+        "native_admission": "admitted_content",
+        "usage": {
+          "completion_tokens": 166,
+          "prompt_tokens": 1998,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 64
+          },
+          "total_tokens": 2164
+        },
+        "response": "zig-out/authoring-remediations-comparison/live-archives/31-composition_guidance-warehouse-location-candidate-1-records-1.response.json",
+        "canonical_resolved": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-warehouse-location-candidate-1.resolved-records.json",
+        "assembly_outcome": "passed",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": false,
+        "unsupported_additions": false,
+        "explanation": "The required storage/retention duty is only presupposed by the acceptance setup; FR requires querying an existing location instead. Readback itself is legitimate context, but does not establish the missing retention obligation. The relationship resolves to ParcelhasStorageLocation.",
+        "defects": [
+          "retention_only_presupposed_not_required",
+          "run_together_relationship"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 32,
+      "trial_id": "composition_guidance-warehouse-location-candidate-2",
+      "factor": "composition_guidance",
+      "case_id": "warehouse-location",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 1998,
+      "output_tokens": 240,
+      "replay_elapsed_ns": 1348380500,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "e4c8ae8e0be238afdfa85fc1e79a4c1e"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/32-composition_guidance-warehouse-location-candidate-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/32-composition_guidance-warehouse-location-candidate-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-warehouse-location-candidate-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 32,
+        "trial_id": "composition_guidance-warehouse-location-candidate-2",
+        "case_id": "warehouse-location",
+        "status": "completed_received",
+        "provider_stop": "stop",
+        "native_admission": "admitted_content",
+        "usage": {
+          "completion_tokens": 240,
+          "prompt_tokens": 1998,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 1968
+          },
+          "total_tokens": 2238
+        },
+        "response": "zig-out/authoring-remediations-comparison/live-archives/32-composition_guidance-warehouse-location-candidate-2-records-1.response.json",
+        "canonical_resolved": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-warehouse-location-candidate-2.resolved-records.json",
+        "assembly_outcome": "passed",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": true,
+        "unsupported_additions": true,
+        "explanation": "The storage duty survives explicitly, but the acceptance setup adds a requirement that no parcels have been added or removed since a last check. That unnecessary prerequisite narrows the test. The output also adds non-alteration duties beyond the supplied storage requirement. ParcelhasStorageLocation remains run together.",
+        "defects": [
+          "run_together_relationship",
+          "unsupported_no_changes_since_last_check_prerequisite",
+          "additional_non_alteration_constraints"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 33,
+      "trial_id": "composition_guidance-startup-display-baseline-1",
+      "factor": "composition_guidance",
+      "case_id": "startup-display",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_reached",
+      "input_tokens": 2210,
+      "output_tokens": 132,
+      "replay_elapsed_ns": 789198334,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "8afed062dd70d0ad187f186233aab793"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/33-composition_guidance-startup-display-baseline-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/33-composition_guidance-startup-display-baseline-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-startup-display-baseline-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 33,
+        "trial_id": "composition_guidance-startup-display-baseline-1",
+        "case_id": "startup-display",
+        "status": "completed_received",
+        "provider_stop": "stop",
+        "native_admission": "admitted_content",
+        "usage": {
+          "completion_tokens": 132,
+          "prompt_tokens": 2210,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 464
+          },
+          "total_tokens": 2342
+        },
+        "response": "zig-out/authoring-remediations-comparison/live-archives/33-composition_guidance-startup-display-baseline-1-records-1.response.json",
+        "canonical_resolved": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-startup-display-baseline-1.resolved-records.json",
+        "assembly_outcome": "not_reached",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "explanation": "The two acceptance consequence strings join without a separator. FR retains the correct greeting bytes and UTC output. Successful startup is implicit in reaching the stated output after starting; no arbitrary startup error/exit policy is prescribed by the source.",
+        "defects": [
+          "run_together_acceptance_consequences"
+        ],
+        "exact_literal_bytes_preserved": true,
+        "exact_copy_fragments_used": false,
+        "exact_occurrence_identity": "Correct visible bytes; typed exact-copy provenance is not asserted by these plain-string fields. Native admission is recorded separately."
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 34,
+      "trial_id": "composition_guidance-startup-display-baseline-2",
+      "factor": "composition_guidance",
+      "case_id": "startup-display",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_reached",
+      "input_tokens": 2210,
+      "output_tokens": 124,
+      "replay_elapsed_ns": 909232125,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "913ca9a3a19daebac6f0652071715ff1"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/34-composition_guidance-startup-display-baseline-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/34-composition_guidance-startup-display-baseline-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-startup-display-baseline-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 34,
+        "trial_id": "composition_guidance-startup-display-baseline-2",
+        "case_id": "startup-display",
+        "status": "completed_received",
+        "provider_stop": "stop",
+        "native_admission": "admitted_content",
+        "usage": {
+          "completion_tokens": 124,
+          "prompt_tokens": 2210,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 1504
+          },
+          "total_tokens": 2334
+        },
+        "response": "zig-out/authoring-remediations-comparison/live-archives/34-composition_guidance-startup-display-baseline-2-records-1.response.json",
+        "canonical_resolved": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-startup-display-baseline-2.resolved-records.json",
+        "assembly_outcome": "not_reached",
+        "semantic_adequacy": true,
+        "factor_adequacy": true,
+        "readability": true,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "explanation": "Complete prose fields retain greeting display and UTC output, with a starting situation, start trigger and observable consequences. Successful startup is implicit in the resulting behavior. Greeting bytes are correct, though the model wrote them in plain strings rather than using the supplied exact-copy atom.",
+        "defects": [],
+        "exact_literal_bytes_preserved": true,
+        "exact_copy_fragments_used": false,
+        "exact_occurrence_identity": "Correct visible bytes; typed exact-copy provenance is not asserted by these plain-string fields. Native admission is recorded separately."
+      },
+      "native_and_quality_adequate": true
+    },
+    {
+      "ordinal": 35,
+      "trial_id": "composition_guidance-startup-display-candidate-1",
+      "factor": "composition_guidance",
+      "case_id": "startup-display",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_reached",
+      "input_tokens": 2251,
+      "output_tokens": 123,
+      "replay_elapsed_ns": 961073958,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "47ab5b60502b8e4a2281d18d1ff0e5ca"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/35-composition_guidance-startup-display-candidate-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/35-composition_guidance-startup-display-candidate-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-startup-display-candidate-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 35,
+        "trial_id": "composition_guidance-startup-display-candidate-1",
+        "case_id": "startup-display",
+        "status": "completed_received",
+        "provider_stop": "stop",
+        "native_admission": "admitted_content",
+        "usage": {
+          "completion_tokens": 123,
+          "prompt_tokens": 2251,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 512
+          },
+          "total_tokens": 2374
+        },
+        "response": "zig-out/authoring-remediations-comparison/live-archives/35-composition_guidance-startup-display-candidate-1-records-1.response.json",
+        "canonical_resolved": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-startup-display-candidate-1.resolved-records.json",
+        "assembly_outcome": "not_reached",
+        "semantic_adequacy": true,
+        "factor_adequacy": true,
+        "readability": true,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "explanation": "The candidate uses complete prose fields and preserves the startup greeting/UTC behavior. It does not add a new prerequisite or unsupported outcome. Greeting bytes match the supplied literal but appear as plain strings; native admission accepts them.",
+        "defects": [],
+        "exact_literal_bytes_preserved": true,
+        "exact_copy_fragments_used": false,
+        "exact_occurrence_identity": "Correct visible bytes; typed exact-copy provenance is not asserted by these plain-string fields. Native admission is recorded separately."
+      },
+      "native_and_quality_adequate": true
+    },
+    {
+      "ordinal": 36,
+      "trial_id": "composition_guidance-startup-display-candidate-2",
+      "factor": "composition_guidance",
+      "case_id": "startup-display",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_reached",
+      "input_tokens": 2251,
+      "output_tokens": 124,
+      "replay_elapsed_ns": 942005500,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "8489b14b7dec5ba332061f1aecfed872"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/36-composition_guidance-startup-display-candidate-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/36-composition_guidance-startup-display-candidate-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-startup-display-candidate-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 36,
+        "trial_id": "composition_guidance-startup-display-candidate-2",
+        "case_id": "startup-display",
+        "status": "completed_received",
+        "provider_stop": "stop",
+        "native_admission": "admitted_content",
+        "usage": {
+          "completion_tokens": 124,
+          "prompt_tokens": 2251,
+          "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 64
+          },
+          "total_tokens": 2375
+        },
+        "response": "zig-out/authoring-remediations-comparison/live-archives/36-composition_guidance-startup-display-candidate-2-records-1.response.json",
+        "canonical_resolved": "zig-out/authoring-remediations-comparison/native-resolved/composition_guidance-startup-display-candidate-2.resolved-records.json",
+        "assembly_outcome": "not_reached",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "explanation": "The candidate repeats the two-string acceptance consequence pattern, resolving to greetingThe application outputs... without a separator. Its FR still retains greeting bytes and UTC output. This is a paired readability regression from baseline repetition 2.",
+        "defects": [
+          "run_together_acceptance_consequences"
+        ],
+        "exact_literal_bytes_preserved": true,
+        "exact_copy_fragments_used": false,
+        "exact_occurrence_identity": "Correct visible bytes; typed exact-copy provenance is not asserted by these plain-string fields. Native admission is recorded separately."
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 37,
+      "trial_id": "evidence_ownership-equipment-joint-support-baseline-1",
+      "factor": "evidence_ownership",
+      "case_id": "equipment-joint-support",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": false,
+      "native_status": "rejected",
+      "native_issue": null,
+      "native_rejection": "ProviderNonCandidateResponse",
+      "assembly_outcome": "not_assessed",
+      "input_tokens": 2032,
+      "output_tokens": 16384,
+      "replay_elapsed_ns": 46073269167,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "fcb729a62f9a7fe45395e36f0299b437"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/37-evidence_ownership-equipment-joint-support-baseline-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/37-evidence_ownership-equipment-joint-support-baseline-1-records-1.response.json"
+      ],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 37,
+        "trial_id": "evidence_ownership-equipment-joint-support-baseline-1",
+        "factor": "evidence_ownership",
+        "arm": "baseline",
+        "case_id": "equipment-joint-support",
+        "native_status": "rejected",
+        "assembly_outcome": null,
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": true,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "The visible partial FR states assigned retention, but the response never completes. It expands into unsupported inspection timestamp/history structures and repeated entities before the output-limit stop. No complete collection or canonical resolved output exists.",
+        "defects": [
+          "output_limit",
+          "unsupported_entity_expansion",
+          "repetition"
+        ],
+        "input_tokens": 2032,
+        "output_tokens": 16384
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 38,
+      "trial_id": "evidence_ownership-equipment-joint-support-baseline-2",
+      "factor": "evidence_ownership",
+      "case_id": "equipment-joint-support",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_reached",
+      "input_tokens": 2032,
+      "output_tokens": 243,
+      "replay_elapsed_ns": 1443199625,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "43a2f5ebe967bfcfdfccfc65807a068f"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/38-evidence_ownership-equipment-joint-support-baseline-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/38-evidence_ownership-equipment-joint-support-baseline-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/evidence_ownership-equipment-joint-support-baseline-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 38,
+        "trial_id": "evidence_ownership-equipment-joint-support-baseline-2",
+        "factor": "evidence_ownership",
+        "arm": "baseline",
+        "case_id": "equipment-joint-support",
+        "native_status": "admitted_content",
+        "assembly_outcome": "not_reached",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/evidence_ownership-equipment-joint-support-baseline-2.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "The FR retains identifiers and inspection results. The AC and added FR clause primarily express the independent supporting availability duty rather than keeping records within the assigned retention association. This is wrong-group content, not an invented source obligation or total omission of retention. The relationship resolves to Inspectionrecords the result of an inspection performed on the equipment.",
+        "defects": [
+          "other_group_obligation_in_assigned_record",
+          "relationship_fragment_joins_unreadable"
+        ],
+        "input_tokens": 2032,
+        "output_tokens": 243
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 39,
+      "trial_id": "evidence_ownership-equipment-joint-support-candidate-1",
+      "factor": "evidence_ownership",
+      "case_id": "equipment-joint-support",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_reached",
+      "input_tokens": 2045,
+      "output_tokens": 215,
+      "replay_elapsed_ns": 1393954416,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "1c48e3d6c48d7db49aaeaddad0d9c08d"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/39-evidence_ownership-equipment-joint-support-candidate-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/39-evidence_ownership-equipment-joint-support-candidate-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/evidence_ownership-equipment-joint-support-candidate-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 39,
+        "trial_id": "evidence_ownership-equipment-joint-support-candidate-1",
+        "factor": "evidence_ownership",
+        "arm": "candidate",
+        "case_id": "equipment-joint-support",
+        "native_status": "admitted_content",
+        "assembly_outcome": "not_reached",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/evidence_ownership-equipment-joint-support-candidate-1.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "The FR and result-update clause preserve retention, but the criterion and FR also express the other group availability obligation under the fixed retention association. E123/PASS/FAIL are illustrative scenario values. The relationship resolves to Inspectionrecords inspection outcomes for Equipment.",
+        "defects": [
+          "other_group_obligation_in_assigned_record",
+          "relationship_fragment_joins_unreadable"
+        ],
+        "input_tokens": 2045,
+        "output_tokens": 215
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 40,
+      "trial_id": "evidence_ownership-equipment-joint-support-candidate-2",
+      "factor": "evidence_ownership",
+      "case_id": "equipment-joint-support",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_reached",
+      "input_tokens": 2045,
+      "output_tokens": 189,
+      "replay_elapsed_ns": 1198750458,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "d270073f1374c04d3af94c93b607ab75"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/40-evidence_ownership-equipment-joint-support-candidate-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/40-evidence_ownership-equipment-joint-support-candidate-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/evidence_ownership-equipment-joint-support-candidate-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 40,
+        "trial_id": "evidence_ownership-equipment-joint-support-candidate-2",
+        "factor": "evidence_ownership",
+        "arm": "candidate",
+        "case_id": "equipment-joint-support",
+        "native_status": "admitted_content",
+        "assembly_outcome": "not_reached",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/evidence_ownership-equipment-joint-support-candidate-2.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "The FR faithfully records identifiers/results, while the sole AC tests the independent supporting availability duty instead of assigned retention. The relationship resolves to Inspectionrecords the inspection result for the equipment.",
+        "defects": [
+          "wrong_group_criterion",
+          "relationship_fragment_joins_unreadable"
+        ],
+        "input_tokens": 2045,
+        "output_tokens": 189
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 41,
+      "trial_id": "evidence_ownership-startup-display-baseline-1",
+      "factor": "evidence_ownership",
+      "case_id": "startup-display",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2234,
+      "output_tokens": 124,
+      "replay_elapsed_ns": 860988625,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "8a6e2182a41a4286dd7b8aecb02eb8b5"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/41-evidence_ownership-startup-display-baseline-1-records-2.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/41-evidence_ownership-startup-display-baseline-1-records-2.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/evidence_ownership-startup-display-baseline-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 41,
+        "trial_id": "evidence_ownership-startup-display-baseline-1",
+        "factor": "evidence_ownership",
+        "arm": "baseline",
+        "case_id": "startup-display",
+        "native_status": "admitted_content",
+        "assembly_outcome": "passed",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/evidence_ownership-startup-display-baseline-1.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": true,
+        "factor_adequacy": null,
+        "readability": true,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": true,
+        "qualification": false,
+        "explanation": "The output preserves the literal greeting and startup trigger in readable FR/AC. UTC is supported original context. Token-only group ownership of this additional behavior remains uncertain rather than a proven substitution. Plain literal output was admitted; no exact_copy handle is returned.",
+        "defects": [
+          "token_only_ownership_uncertain"
+        ],
+        "input_tokens": 2234,
+        "output_tokens": 124
+      },
+      "native_and_quality_adequate": true
+    },
+    {
+      "ordinal": 42,
+      "trial_id": "evidence_ownership-startup-display-baseline-2",
+      "factor": "evidence_ownership",
+      "case_id": "startup-display",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2234,
+      "output_tokens": 122,
+      "replay_elapsed_ns": 861167541,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "060b99a1827b6f816b508546282632db"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/42-evidence_ownership-startup-display-baseline-2-records-2.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/42-evidence_ownership-startup-display-baseline-2-records-2.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/evidence_ownership-startup-display-baseline-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 42,
+        "trial_id": "evidence_ownership-startup-display-baseline-2",
+        "factor": "evidence_ownership",
+        "arm": "baseline",
+        "case_id": "startup-display",
+        "native_status": "admitted_content",
+        "assembly_outcome": "passed",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/evidence_ownership-startup-display-baseline-2.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": true,
+        "factor_adequacy": null,
+        "readability": true,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": true,
+        "qualification": false,
+        "explanation": "The output preserves the literal greeting and startup trigger in readable FR/AC. UTC is supported original context. Token-only group ownership of this additional behavior remains uncertain rather than a proven substitution. Plain literal output was admitted; no exact_copy handle is returned.",
+        "defects": [
+          "token_only_ownership_uncertain"
+        ],
+        "input_tokens": 2234,
+        "output_tokens": 122
+      },
+      "native_and_quality_adequate": true
+    },
+    {
+      "ordinal": 43,
+      "trial_id": "evidence_ownership-startup-display-candidate-1",
+      "factor": "evidence_ownership",
+      "case_id": "startup-display",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2246,
+      "output_tokens": 124,
+      "replay_elapsed_ns": 961478583,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "4070aa24b963f4d274d04b70a7610eff"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/43-evidence_ownership-startup-display-candidate-1-records-2.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/43-evidence_ownership-startup-display-candidate-1-records-2.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/evidence_ownership-startup-display-candidate-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 43,
+        "trial_id": "evidence_ownership-startup-display-candidate-1",
+        "factor": "evidence_ownership",
+        "arm": "candidate",
+        "case_id": "startup-display",
+        "native_status": "admitted_content",
+        "assembly_outcome": "passed",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/evidence_ownership-startup-display-candidate-1.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": true,
+        "factor_adequacy": null,
+        "readability": true,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": true,
+        "qualification": false,
+        "explanation": "The output preserves the literal greeting and startup trigger in readable FR/AC, matching the baseline content. The source partition does not settle token-only ownership; no demonstrated ownership improvement is established. Plain literal output was admitted; no exact_copy handle is returned.",
+        "defects": [
+          "token_only_ownership_uncertain"
+        ],
+        "input_tokens": 2246,
+        "output_tokens": 124
+      },
+      "native_and_quality_adequate": true
+    },
+    {
+      "ordinal": 44,
+      "trial_id": "evidence_ownership-startup-display-candidate-2",
+      "factor": "evidence_ownership",
+      "case_id": "startup-display",
+      "arm": "candidate",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 2246,
+      "output_tokens": 122,
+      "replay_elapsed_ns": 952363083,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "7d2b7b7eadcdba7c63c76c0913fcadb4"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/44-evidence_ownership-startup-display-candidate-2-records-2.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/44-evidence_ownership-startup-display-candidate-2-records-2.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/evidence_ownership-startup-display-candidate-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 44,
+        "trial_id": "evidence_ownership-startup-display-candidate-2",
+        "factor": "evidence_ownership",
+        "arm": "candidate",
+        "case_id": "startup-display",
+        "native_status": "admitted_content",
+        "assembly_outcome": "passed",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/evidence_ownership-startup-display-candidate-2.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": true,
+        "factor_adequacy": null,
+        "readability": true,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": true,
+        "qualification": false,
+        "explanation": "The output preserves the literal greeting and startup trigger in readable FR/AC, matching the baseline content. The source partition does not settle token-only ownership; no demonstrated ownership improvement is established. Plain literal output was admitted; no exact_copy handle is returned.",
+        "defects": [
+          "token_only_ownership_uncertain"
+        ],
+        "input_tokens": 2246,
+        "output_tokens": 122
+      },
+      "native_and_quality_adequate": true
+    },
+    {
+      "ordinal": 45,
+      "trial_id": "evidence_ownership-warehouse-location-baseline-1",
+      "factor": "evidence_ownership",
+      "case_id": "warehouse-location",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 1957,
+      "output_tokens": 6225,
+      "replay_elapsed_ns": 12621003583,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "f0c5f53275410561af45773703498b4b"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/45-evidence_ownership-warehouse-location-baseline-1-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/45-evidence_ownership-warehouse-location-baseline-1-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/evidence_ownership-warehouse-location-baseline-1.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 45,
+        "trial_id": "evidence_ownership-warehouse-location-baseline-1",
+        "factor": "evidence_ownership",
+        "arm": "baseline",
+        "case_id": "warehouse-location",
+        "native_status": "admitted_content",
+        "assembly_outcome": "passed",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/evidence_ownership-warehouse-location-baseline-1.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": false,
+        "meaning_preserved": true,
+        "unsupported_additions": true,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "Core parcel storage survives in FR/AC, but 63 entity records expand into unsupported register query/result/status/wrapper structures and an extremely long corrupted final entity name. Relationships concatenate without separators. Native admission demonstrates shape consistency only.",
+        "defects": [
+          "unsupported_entity_expansion",
+          "corrupted_entity_name",
+          "relationship_fragment_joins_unreadable"
+        ],
+        "input_tokens": 1957,
+        "output_tokens": 6225
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 46,
+      "trial_id": "evidence_ownership-warehouse-location-baseline-2",
+      "factor": "evidence_ownership",
+      "case_id": "warehouse-location",
+      "arm": "baseline",
+      "sent": true,
+      "completed_final": true,
+      "native_status": "admitted_content",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "passed",
+      "input_tokens": 1957,
+      "output_tokens": 160,
+      "replay_elapsed_ns": 886531917,
+      "origin": [
+        {
+          "parent": {
+            "run": "RUN-5603b655c6e6a7498c6980fc0d447584",
+            "call": "request-1-inference-1"
+          },
+          "run": "debugger-e0a2f051fd45e171efe1b25f2617065e",
+          "id": "7bcd104243113a5e9209eb17e73e2e06"
+        }
+      ],
+      "actual_evidence": [
+        "zig-out/authoring-remediations-comparison/live-archives/46-evidence_ownership-warehouse-location-baseline-2-records-1.request.json",
+        "zig-out/authoring-remediations-comparison/live-archives/46-evidence_ownership-warehouse-location-baseline-2-records-1.response.json"
+      ],
+      "resolved_records": "zig-out/authoring-remediations-comparison/native-resolved/evidence_ownership-warehouse-location-baseline-2.resolved-records.json",
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 46,
+        "trial_id": "evidence_ownership-warehouse-location-baseline-2",
+        "factor": "evidence_ownership",
+        "arm": "baseline",
+        "case_id": "warehouse-location",
+        "native_status": "admitted_content",
+        "assembly_outcome": "passed",
+        "canonical_resolved_file": ".zig-cache/authoring-associations/remediations/evidence_ownership-warehouse-location-baseline-2.resolved-records.json",
+        "status": "received",
+        "semantic_adequacy": false,
+        "factor_adequacy": false,
+        "readability": false,
+        "field_purpose": true,
+        "meaning_preserved": true,
+        "unsupported_additions": false,
+        "ownership_uncertain": false,
+        "qualification": false,
+        "explanation": "Core identifier/location retention survives. Readback is an observable check compatible with the supplied locating goal. The relationship resolves to ParcelhasStorageLocation.",
+        "defects": [
+          "relationship_fragment_joins_unreadable"
+        ],
+        "input_tokens": 1957,
+        "output_tokens": 160
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 47,
+      "trial_id": "evidence_ownership-warehouse-location-candidate-1",
+      "factor": "evidence_ownership",
+      "case_id": "warehouse-location",
+      "arm": "candidate",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 47,
+        "trial_id": "evidence_ownership-warehouse-location-candidate-1",
+        "factor": "evidence_ownership",
+        "arm": "candidate",
+        "case_id": "warehouse-location",
+        "native_status": "incomplete",
+        "assembly_outcome": null,
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "ownership_uncertain": null,
+        "qualification": false,
+        "explanation": "Not sent because the approved experiment actual-token stop was reached after ordinal 46. No response, meaning judgment or token usage is fabricated.",
+        "defects": [
+          "not_sent_experiment_token_stop"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 48,
+      "trial_id": "evidence_ownership-warehouse-location-candidate-2",
+      "factor": "evidence_ownership",
+      "case_id": "warehouse-location",
+      "arm": "candidate",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "assembly-ownership-assessment.json",
+        "ordinal": 48,
+        "trial_id": "evidence_ownership-warehouse-location-candidate-2",
+        "factor": "evidence_ownership",
+        "arm": "candidate",
+        "case_id": "warehouse-location",
+        "native_status": "incomplete",
+        "assembly_outcome": null,
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "ownership_uncertain": null,
+        "qualification": false,
+        "explanation": "Not sent because the approved experiment actual-token stop was reached after ordinal 46. No response, meaning judgment or token usage is fabricated.",
+        "defects": [
+          "not_sent_experiment_token_stop"
+        ]
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 49,
+      "trial_id": "source_uncertainty-renewal-information-gap-baseline-1",
+      "factor": "source_uncertainty",
+      "case_id": "renewal-information-gap",
+      "arm": "baseline",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 49,
+        "trial_id": "source_uncertainty-renewal-information-gap-baseline-1",
+        "case_id": "renewal-information-gap",
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "explanation": "Not sent: the shared actual-token experiment stop occurred after ordinal 46. No semantic assessment is available.",
+        "defects": []
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 50,
+      "trial_id": "source_uncertainty-renewal-information-gap-baseline-2",
+      "factor": "source_uncertainty",
+      "case_id": "renewal-information-gap",
+      "arm": "baseline",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 50,
+        "trial_id": "source_uncertainty-renewal-information-gap-baseline-2",
+        "case_id": "renewal-information-gap",
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "explanation": "Not sent: the shared actual-token experiment stop occurred after ordinal 46. No semantic assessment is available.",
+        "defects": []
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 51,
+      "trial_id": "source_uncertainty-renewal-information-gap-candidate-1",
+      "factor": "source_uncertainty",
+      "case_id": "renewal-information-gap",
+      "arm": "candidate",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 51,
+        "trial_id": "source_uncertainty-renewal-information-gap-candidate-1",
+        "case_id": "renewal-information-gap",
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "explanation": "Not sent: the shared actual-token experiment stop occurred after ordinal 46. No semantic assessment is available.",
+        "defects": []
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 52,
+      "trial_id": "source_uncertainty-renewal-information-gap-candidate-2",
+      "factor": "source_uncertainty",
+      "case_id": "renewal-information-gap",
+      "arm": "candidate",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 52,
+        "trial_id": "source_uncertainty-renewal-information-gap-candidate-2",
+        "case_id": "renewal-information-gap",
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "explanation": "Not sent: the shared actual-token experiment stop occurred after ordinal 46. No semantic assessment is available.",
+        "defects": []
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 53,
+      "trial_id": "source_uncertainty-maintenance-interval-uncertainty-baseline-1",
+      "factor": "source_uncertainty",
+      "case_id": "maintenance-interval-uncertainty",
+      "arm": "baseline",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 53,
+        "trial_id": "source_uncertainty-maintenance-interval-uncertainty-baseline-1",
+        "case_id": "maintenance-interval-uncertainty",
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "explanation": "Not sent: the shared actual-token experiment stop occurred after ordinal 46. No semantic assessment is available.",
+        "defects": []
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 54,
+      "trial_id": "source_uncertainty-maintenance-interval-uncertainty-baseline-2",
+      "factor": "source_uncertainty",
+      "case_id": "maintenance-interval-uncertainty",
+      "arm": "baseline",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 54,
+        "trial_id": "source_uncertainty-maintenance-interval-uncertainty-baseline-2",
+        "case_id": "maintenance-interval-uncertainty",
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "explanation": "Not sent: the shared actual-token experiment stop occurred after ordinal 46. No semantic assessment is available.",
+        "defects": []
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 55,
+      "trial_id": "source_uncertainty-maintenance-interval-uncertainty-candidate-1",
+      "factor": "source_uncertainty",
+      "case_id": "maintenance-interval-uncertainty",
+      "arm": "candidate",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 55,
+        "trial_id": "source_uncertainty-maintenance-interval-uncertainty-candidate-1",
+        "case_id": "maintenance-interval-uncertainty",
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "explanation": "Not sent: the shared actual-token experiment stop occurred after ordinal 46. No semantic assessment is available.",
+        "defects": []
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 56,
+      "trial_id": "source_uncertainty-maintenance-interval-uncertainty-candidate-2",
+      "factor": "source_uncertainty",
+      "case_id": "maintenance-interval-uncertainty",
+      "arm": "candidate",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 56,
+        "trial_id": "source_uncertainty-maintenance-interval-uncertainty-candidate-2",
+        "case_id": "maintenance-interval-uncertainty",
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "explanation": "Not sent: the shared actual-token experiment stop occurred after ordinal 46. No semantic assessment is available.",
+        "defects": []
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 57,
+      "trial_id": "source_uncertainty-completion-notification-baseline-1",
+      "factor": "source_uncertainty",
+      "case_id": "completion-notification",
+      "arm": "baseline",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 57,
+        "trial_id": "source_uncertainty-completion-notification-baseline-1",
+        "case_id": "completion-notification",
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "explanation": "Not sent: the shared actual-token experiment stop occurred after ordinal 46. No semantic assessment is available.",
+        "defects": []
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 58,
+      "trial_id": "source_uncertainty-completion-notification-baseline-2",
+      "factor": "source_uncertainty",
+      "case_id": "completion-notification",
+      "arm": "baseline",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 58,
+        "trial_id": "source_uncertainty-completion-notification-baseline-2",
+        "case_id": "completion-notification",
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "explanation": "Not sent: the shared actual-token experiment stop occurred after ordinal 46. No semantic assessment is available.",
+        "defects": []
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 59,
+      "trial_id": "source_uncertainty-completion-notification-candidate-1",
+      "factor": "source_uncertainty",
+      "case_id": "completion-notification",
+      "arm": "candidate",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 59,
+        "trial_id": "source_uncertainty-completion-notification-candidate-1",
+        "case_id": "completion-notification",
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "explanation": "Not sent: the shared actual-token experiment stop occurred after ordinal 46. No semantic assessment is available.",
+        "defects": []
+      },
+      "native_and_quality_adequate": false
+    },
+    {
+      "ordinal": 60,
+      "trial_id": "source_uncertainty-completion-notification-candidate-2",
+      "factor": "source_uncertainty",
+      "case_id": "completion-notification",
+      "arm": "candidate",
+      "sent": false,
+      "completed_final": false,
+      "native_status": "incomplete",
+      "native_issue": null,
+      "native_rejection": null,
+      "assembly_outcome": "not_assessed",
+      "input_tokens": null,
+      "output_tokens": null,
+      "replay_elapsed_ns": null,
+      "origin": [],
+      "actual_evidence": [],
+      "resolved_records": null,
+      "manual_assessment": {
+        "artifact": "composition-assessment.json",
+        "ordinal": 60,
+        "trial_id": "source_uncertainty-completion-notification-candidate-2",
+        "case_id": "completion-notification",
+        "status": "not_sent",
+        "semantic_adequacy": null,
+        "factor_adequacy": null,
+        "readability": null,
+        "field_purpose": null,
+        "meaning_preserved": null,
+        "unsupported_additions": null,
+        "explanation": "Not sent: the shared actual-token experiment stop occurred after ordinal 46. No semantic assessment is available.",
+        "defects": []
+      },
+      "native_and_quality_adequate": false
+    }
+  ],
+  "limitations": [
+    "Only one named presentation factor changed in each pair; effects of combined production packet are unqualified.",
+    "Development cases, two repetitions and controlled MOCK prefix; no actual upstream handoff, publication or rubric evidence.",
+    "Unsent/partial responses remain unknown, not successful observations.",
+    "Byte-identical no-entity control is not evidence of a causal entity-purpose effect.",
+    "Token-only startup ownership remains uncertain; correct source meaning does not resolve assignment policy.",
+    "Renewal uncertainty survives in controlled preceding story; record omission does not prove whole-artifact loss."
+  ],
+  "candidate_disposition": "withdrawn_by_user_2026-10-14",
+  "continuation": "cancelled; original14unattemptedrequestsnotdispatched"
+}

@@ -1,12 +1,31 @@
 # FIX01 — Outstanding Spec workflow reliability work
 
-**Critical review:** 10 October 2026, Australia/Melbourne.
+**Critical review:** 11 October 2026, Australia/Melbourne.
 
 **Status:** sole active fix record. §9.20 recommendations 1 and 2 mechanics and R6's
 bounded attribution change are implemented. R6's approved live comparison failed
-its quality gate; semantic acceptance remains open. The proposed R6 recovery
-follow-up below is the next implementation priority; it is not implemented or
-an amendment to accepted repair authority.
+its quality gate; semantic acceptance remains open. The subsequent explicit
+source-obligation handoff is implemented and fully verified offline under the
+user's separate request. Its approved 48-call Phase 3 comparison completed but
+failed the semantic gate (baseline 18/24 correct, candidate 20/24 with
+captured-story regression). Semantic acceptance and Phase 4 remain pending.
+The separately approved 60-call isolation comparison also completed and failed
+the unchanged gates: correct labels improved to 24/24, but native rejection left
+correct admitted attribution at 22/24 in both arms. No production split was made.
+Other proposed R6 repair-permission extensions remain unimplemented and
+unapproved by this handoff change.
+The user-approved native-owned assessed-collection amendment is implemented:
+loss responses return judgments, source spans and explanations without a member
+selection. Complete native assignments remain retained under state v12. Its new
+controlled 72-call comparison completed on 11 October and passed the inherited
+diagnostic gates: native admission/correct attribution **22/24 → 24/24**, with
+correct preservation judgments **24/24 in both arms**. One candidate answer still
+omits a required source citation. This qualifies the contract on known isolated
+inputs. The subsequent **76-call** citation comparison passed, improving complete
+citations **36/38 → 38/38**. The **30-call** actual source-review panel then failed:
+only **15/26** faithful omission handoffs, **2/2** supported controls and **0/2**
+genuine-gap controls. Source-review fidelity is now a demonstrated blocker;
+production batching/isolation and E2E publication remain unqualified.
 [Z_FIX01](Z_FIX01.md) now holds completed implementation, executed experiments,
 their approvals and supporting historical reviews. Dated open/proposed statements
 there are historical; the outstanding scope and priorities below govern tracking.
@@ -174,10 +193,147 @@ that the originating defect or the complete recovery path improved.
 
 #### Proposed recovery follow-up and implementation order
 
-**Status: recommendations, not implemented.** This documentation update does not
-authorize code changes, new repair permissions, verdict reassessment or live calls.
+**Status:** item 1's implementation and lifecycle cutover are complete under
+[FIX01-01 Phase 2](FIX01-01.md#phase-2--complete-the-lifecycle-and-offline-verification):
+395/395 focused tests and 1,454/1,454 full offline tests pass. Semantic comparison
+and live recovery/publication remain Phases 3 and 4. The explicit-obligation
+follow-up below is subsequently implemented; the remaining repair-permission
+recommendations are not implemented. This status does not authorize
+new repair permissions, verdict reassessment or live calls.
 Reuse the current owners; do not introduce a second recovery framework or hardcode
 this source, model, call number or extraction-to-spec sequence in the generic engine.
+
+**Explicit-obligation follow-up — 10 October 2026:** after the context-removal
+pilot failed (baseline 1/6 correct, candidate 2/6 with captured-case regression),
+the user approved implementing a distinct `missing_obligation` handoff and the
+Phase 3 rerun. The existing source reviewer now states the omitted requirement
+separately from the diagnostic explanation. Schema admission, review evidence,
+loss projection, correction, revision binding, repair consumers and persisted
+v11 readback carry that statement unchanged. The loss call assesses complete
+collections against it, retaining surrounding evidence as context. No new verdict,
+repair permission, semantic retry or reviewer was added.
+See [FIX01-02's implementation record](FIX01-02.md#explicit-obligation-follow-up--10-october-2026)
+and the [new calibration package](../test/calibration/source-loss-attribution/bound-preservation/obligation/README.md).
+`zig build verify --summary all -j2` passed **1,461/1,461 tests and 142/142 steps**.
+All approved **48 loss calls** (12 cases × two arms × two repetitions) completed
+on 10 October, 09:59:39Z–10:01:15Z. The
+[results](../test/calibration/source-loss-attribution/bound-preservation/obligation/results.md)
+record baseline **18/24** versus candidate **20/24** correct attribution, native
+admission **24/24 versus 23/24**, and adequate evidence **17/24 versus 19/24**.
+Both arms score 14/16 on the original eight cases and 13/16 on evidence; the
+candidate misses the required improvement, retains two false upstream diagnoses
+and scores only 6/8 candidate-loss cases against the 7/8 minimum. The captured
+story regresses from 2/2 to 0/2, despite improvement from 2/6 to 6/6 on fresh cases.
+The declared semantic gate therefore **failed**. The captured description also
+remains incorrect in both arms and repetitions.
+
+Usage was **60,910 input + 12,670 output = 73,580 tokens**. The 48-call allowance
+is consumed, separately from the preceding 12-call pilot: 60 diagnostic calls in
+this rollout at that panel's close. No additional live calls or Phase 4 E2E had
+run at that point; its conditional gate remains unmet. The failed pilot is not promoted, and the explicit-obligation
+mechanism is not an accepted semantic fix. Production source-review obligation
+fidelity has only offline mechanical coverage; it needs separate live qualification.
+Fixed supplied obligations cannot establish the full handoff's semantic quality
+or E2E publication acceptance. Review the retained failure before selecting any
+further change; no automatic experiment allowance follows.
+
+**Isolation comparison execution — 10 October 2026:** the user subsequently
+approved **60 physical calls**, comprising 24 batched baseline and 36 isolated
+candidate calls, for the [prepared experiment](../test/calibration/source-loss-attribution/bound-preservation/isolation/README.md).
+It reuses all twelve now-known cases and scores 24 complete decisions per arm
+against the unchanged gates. The baseline is the current explicit-obligation
+packet; the candidate assigns one complete comparison per call with unchanged
+guidance, sources, supporting context and settings. All **60/60** calls completed;
+the [results](../test/calibration/source-loss-attribution/bound-preservation/isolation/results.md)
+and [scorecard](../test/calibration/source-loss-attribution/bound-preservation/isolation/scorecard.json)
+retain the failed gate. Correct preservation labels improved **22/24 → 24/24**,
+native admission fell **24/24 → 22/24**, correct admitted attribution stayed
+**22/24**, and adequate evidence improved **21/24 → 22/24**. False upstream
+attributions fell **2 → 0** and the captured story improved **0/2 → 2/2**;
+the captured description was correct in both repetitions of both arms.
+
+Candidate extraction repetition 1 and unresolved-producer repetition 2 had
+correct loss judgments and source citations but returned `members: []` for
+nonempty collections. Both reject with `InvalidPreservationComparison`.
+Original-subset admission and correct attribution fell **16/16 → 14/16**,
+failing the minimum admission, genuine extraction/unresolved and no-regression
+gates. The required two-result improvement is also impossible against that
+perfect subset baseline, but the native failures independently prevent passing.
+No threshold changed. The captured-story benefit does not prove batching is the
+sole cause: the already-single-comparison unresolved control had identical input
+but failed once. Candidate cost rose **37,239 → 55,463 tokens (+48.9%)** and
+24 → 36 calls; total usage was **92,702 tokens**.
+
+The 60-call allowance is consumed, bringing this rollout to 120 diagnostic calls.
+No production split or further live call followed that panel. The user subsequently
+approved removing the redundant model-returned member selection across the shared
+contract. The typed response, schema, admission, correction, persistence, fixtures
+and calibration now agree: comparison IDs bind complete native collections, and
+responses supply only judgments, original-source spans and explanations. State v12
+rejects earlier snapshots; old responses with `members` reject as unknown fields.
+No IDs are supplied to previously rejected answers. Collection freshness,
+comparison completeness, source joins and repair permission remain native checks.
+
+The [new native-scope comparison](../test/calibration/source-loss-attribution/bound-preservation/native-scope/README.md)
+held isolated inputs and model settings fixed in both arms for **72/72** completed
+physical calls. It used the actual frozen prior native owner for baseline admission
+and the current owner for candidate admission; neither reads the other's response
+contract. Retain historical failures unchanged. Measure judgment accuracy,
+explanation adequacy and native admission separately: assigned scope does not prove
+the model considered every member, and removing selected IDs removes one observable
+cross-check. Its new allowance is consumed. The
+[results](../test/calibration/source-loss-attribution/bound-preservation/native-scope/results.md)
+show both arms' judgments correct **24/24**, but baseline empty selections caused
+two rejections; candidate admission and correct attribution reached **24/24**.
+The inherited gates passed, including original-subset attribution **14/16 → 16/16**,
+captured-story **2/2** and the six known family regressions **6/6**. This is an
+admission improvement, not a gain in judgment accuracy. Candidate unresolved
+repetition 2 omits the alarm source citation: explanation/source adequacy fell
+**24/24 → 23/24** despite correct safe attribution. The historical no-case-regression
+gate measures attribution accuracy, separately from its evidence minimum; no
+threshold changed. Do not describe the result as zero semantic regressions.
+Production isolation remains conditional; live source-review fidelity, the actual
+review-to-loss handoff and Phase 4 publication/rubric acceptance remain unqualified.
+
+**Citation-completeness follow-up — 11 October 2026:** the user requested the
+shared evidence clarification and qualification recommendations. The existing
+loss prompt and §22 now distinguish citations establishing the entire original
+obligation from explanations assessing preservation in the assigned collection.
+The schema, native attribution and repair permissions are unchanged. The approved
+76-call comparison passed its frozen gates: complete/relevant citations improved
+**36/38 → 38/38**, with **38/38** correct verdicts and **26/26** correct admitted
+attributions in both arms. Both previously missing alarm citations were complete
+in the candidate. This demonstrates improvement on the supplied-obligation panel;
+the separately approved actual source-review panel then completed and failed its
+frozen gates. Only **15/26** actual omission handoffs were faithful: seven omissions
+were missed and four returned an inadequate or wrong target. Both genuine-gap
+controls invented source obligations; supported controls passed **2/2**. All thirty
+responses passed native mechanical admission, with unchanged actual obligations,
+source IDs and replay lineage. That verifies conversion, not semantics. No
+downstream loss call, repair or E2E ran. See the
+[implementation and qualification record](FIX01-02.md#citation-completeness-and-actual-handoff-follow-up--11-october-2026)
+for the offline mechanics, [citation results](../test/calibration/source-loss-attribution/bound-preservation/citation-completeness/results.md)
+and [actual source-review failures](../test/calibration/source-loss-attribution/bound-preservation/citation-completeness/handoff-results.md).
+The historical native-scope results and acceptance thresholds remain unchanged.
+
+**Next bounded work: review shared source-review direction and semantic coverage.**
+The unchanged reviewer sometimes checks only candidate clauses that match sources,
+missing assigned absent behavior, and sometimes promotes candidate additions into
+original-source requirements. Clarify original-source authority, candidate target
+and completeness for the assigned field purpose through the existing shared
+purpose/evidence owner. Current claim associations and `eligible_subset` permission
+must not silently define original-source coverage. Coverage ownership is plausibly
+under-specified, especially for inherited/source-only losses; model-internal cause
+is unproven. Startup-trigger loss and invented display/unlock duties are definite
+semantic defects independent of that ambiguity.
+
+Do not make every field cover every source, infer relevance in the generic engine,
+force modal words/source counts, fill oracle obligations or expand repair authority.
+Prepare a controlled actual-review comparison using these failures and unrelated
+controls, measuring missed defects, false omissions, conditions/strength and
+source-premise faithfulness. Further calls need separate bounded approval. Retain
+the qualified loss-citation guidance; its later-stage change was not used by the
+unchanged source reviewer and this panel cannot establish reviewer regression.
 
 1. **Replace broad culprit selection with bound preservation comparisons.** R6
    already supplies actual producer outputs. The proposed change is to the task and
@@ -194,6 +350,24 @@ this source, model, call number or extraction-to-spec sequence in the generic en
    inference. Reuse the existing loss call, not an additional judge or a call per
    producer. Associations and routing can be checked natively; preservation remains
    model-assisted and must be tested against the failed R6 baseline.
+   **10 October status:** the contract and recovery mechanics are implemented and
+   verified offline in [FIX01-01](FIX01-01.md). Its first 32-call comparison failed:
+   7/16 candidate responses passed native admission and 2/16 yielded correct
+   admitted attribution, with one false upstream attribution. The shared request
+   projection follow-up removes competing IDs, source coordinates and assessed-subject
+   ambiguity. Its [separately approved 32-call comparison](../test/calibration/source-loss-attribution/bound-preservation/projection/README.md#results--10-october-2026)
+   improved admission to 16/16 and correct attribution to 14/16 (baseline 8/16 and
+   6/16), but still failed two gates: it falsely diagnosed role loss when a business
+   claim expressed the literal without a separate preserved-token member. Separate
+   meaning preservation from canonical representation in the next candidate.
+   That shared presentation follow-up is now implemented: resolved claim meanings
+   omit extraction-category labels, and guidance distinguishes expressed behavior
+   from its representation. Its [32-call comparison](../test/calibration/source-loss-attribution/bound-preservation/meaning/README.md)
+   executed under fresh approval: both arms admitted 16/16 and correctly attributed
+   14/16, repeating the same two false role-loss judgments. Category removal and
+   clarified guidance did not improve outcomes. Semantic acceptance and conditional
+   production E2E remain open. All three diagnostic
+   allowances are consumed. Do not count measured improvement as completion.
 2. **Enable the smallest justified repair while retaining unaffected work.** If
    comparison establishes that the obligation survived upstream, use candidate-local
    repair. An established upstream loss uses its existing producer repair and

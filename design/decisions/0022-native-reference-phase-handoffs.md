@@ -4,6 +4,7 @@
 - **Date:** 2026-10-06
 - **Authority:** User approval of all changes in FIX_003.
 - **9 October 2026 amendment authority:** Explicit user instruction to implement complete role decisions under [Z_FIX01 §9.8](../../fixes/Z_FIX01.md#98-complete-role-decisions-critical-review--9-october-2026).
+- **11 October 2026 authoring-association amendment authority:** Explicit user instruction to implement [FIX03 Phase 5](../../fixes/FIX03.md#521-phase-5-replacement-contract--implemented-candidate-qualification-pending), removing the independent role phase and moving semantic source selection into authoring under ADR 0020.
 - **10 October 2026 amendment authority:** Explicit user instruction to implement
   summary union coverage and proven duplicate normalization, followed by validated
   single-child carry-forward, under
@@ -28,15 +29,13 @@ Signal selections reuse the existing execution-local repair occurrence IDs. They
 are distinct from final canonical signal IDs and stay with surviving groups after
 insertion or deletion. Each assignment binds reference state, partition, revision
 and the exact accepted phase facts through the existing dependency snapshot owner.
-Final canonical IDs still follow validated array order. One initial role request
-returns the complete required decision map defined by
-[ADR 0020](0020-derived-exact-reference-lineage.md#complete-role-decision-amendment-approved-9-october-2026).
-Native admission projects supported selections to group-role assignments in
-offered-group and registered-role order. Roles may be shared across groups; a group
-may have several roles or none. A changed upstream phase retires its complete role
-assessment, producer origin and derived assignments, and YAML requests them again
-before full validation. Pending assessments cannot default to unsupported. Engine
-staleness is never reported as a model's invalid role decision.
+Final canonical IDs follow validated array order. The three global semantic
+assignments are dispositions, signals and conflicts; no presentation-role request
+or pending role assessment remains. Authoring receives canonical accepted group
+occurrences and selects its support while drafting under
+[ADR 0020](0020-derived-exact-reference-lineage.md#authored-association-amendment-approved-11-october-2026).
+Changed upstream facts retire affected groups and their dependent authored
+associations; engine staleness is never attributed to a model's semantic decision.
 
 Summary statement membership covers the partition by union; each statement has a
 nonempty unique authorized selection. Combined, split and overlapping expressions
@@ -113,23 +112,16 @@ rejection as `failed_requirement`, distinct from the authorized replacement's
 constraints. Full coverage and within-selection uniqueness remain required;
 schema admission does not establish meaning preservation or model reliability.
 
-Authoring-role choices use the same positive-support eligibility as their Spec
-consumers: every claim in a selected group must be retained. The shared reference
-support owner supplies this rule to phase packets, role validation, generation,
-review, coverage and canonical readback. Historical duplicate/superseded signals
-remain valid evidence without authoring roles. Filtering role choices preserves
-their original occurrence IDs and complete claim evidence; it neither removes
-members from a mixed group nor assigns missing roles. An ineligible model
-selection rejects at its producing phase before dependent dispatch.
-When the eligible catalogue is empty, tagged-variant projection removes every
-supported branch before narrowing choices; the model may report only unsupported
-decisions. Native code does not fabricate these verdicts or emit an empty ID enum.
-Protocol corrections retain the complete map, selected schema and immutable phase
-packet; existing bounds apply without a semantic correction loop. Unsupported is
-a candidate support judgment, not a human gap or `not_applicable` authority. The
-existing mandatory-role coverage gate still blocks authoring without positive
-support. Canonical readback validates the derived positive assignments; captured
-responses retain explicit negatives without a second persisted authority.
+Initial authoring choices preserve complete current groups whose members are
+retained. The shared reference-support owner supplies eligibility to generation,
+admission, review, coverage and canonical readback. Historical duplicate/superseded
+groups remain evidence but cannot acquire positive authored associations. Filtering
+preserves occurrence IDs and all members; it never trims a mixed group or chooses
+semantic support. Positive values additionally retain the existing prohibition on
+mapping open questions; clarification question evidence has its own scope.
+An empty retained catalogue blocks native readiness before dispatch. Protocol
+correction retains the same catalogue, selected schema and existing allowance.
+No role list, unsupported-only schema or positive default is reconstructed.
 
 Conflict groups are semantic choices. Each supplied group declares all its pairs;
 native code constructs reciprocal relationships only within that group. Overlap is
@@ -145,6 +137,14 @@ model call. Native projections have no fabricated provider origin. An authorized
 outcome-changing repair retires forced classifications and returns through the
 classification gate; positive token-only extraction remains distinct from
 no-feature extraction.
+
+The user-authorized FIX01-01 Phase 2 cutover uses current accepted claims,
+dispositions, groups and admitted authored associations to bind preservation comparisons.
+Comparisons assess actual consumed collections; supporting signal prose does not
+replace original authoring claims. Upstream changes retire affected comparison
+evidence along with existing descendants. Native attribution is checked again
+against these facts before repair. This adds no semantic association/summary repair and preserves the existing
+full-candidate coverage and publication rules.
 
 Principle citation granularity is unchanged: selecting a narrower policy passage
 remains semantic. No precision-losing citation catalogue is introduced.

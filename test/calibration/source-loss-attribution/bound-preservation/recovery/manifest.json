@@ -1,0 +1,1105 @@
+{
+  "purpose": "FIX01-02 Phase 0 offline recovery counterfactual; no live comparison or promotion",
+  "hash_encoding": "File hashes are SHA-256 of exact bytes. Component hashes use sorted compact UTF-8 JSON. Present:false records absence, not a provider default.",
+  "historical_run": {
+    "report": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/report.json",
+      "sha256": "3d47ced1f2361e5a86b15673186fdef166f2729ed113c1a2255ac7c81ae2ea06",
+      "bytes": 122727
+    },
+    "build_inputs": {
+      "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/build-inputs.json",
+      "sha256": "0072174431a0b96a45ee4abc36bea4fe21823eea9b4d2536c37b813b1e0946c0",
+      "bytes": 11546599
+    },
+    "build": {
+      "inputs_file": "build-inputs.json",
+      "optimize": "Debug",
+      "reconstruction": "captured",
+      "source": {
+        "modified": true,
+        "revision": "79b4ddc2d0970ea6215b65a567c7067bfc6efd43",
+        "source_sha256": "f4f095b2d3d0d894179a23328e65fe7efcba9e91830068f67733c2582978ba42"
+      },
+      "target": "aarch64-macos-none",
+      "zig_version": "0.16.0"
+    },
+    "status": "workflow_invalid",
+    "total_tokens": 46460,
+    "total_token_budget": 100000
+  },
+  "calls": [
+    {
+      "call": 9,
+      "model": "openai.gpt-oss-20b-1:0",
+      "region": "ap-southeast-2",
+      "controls": {
+        "reasoning_effort": {
+          "present": true,
+          "value": "low"
+        },
+        "temperature": {
+          "present": true,
+          "value": 0
+        },
+        "top_p": {
+          "present": false
+        },
+        "seed": {
+          "present": false
+        },
+        "max_completion_tokens": {
+          "present": true,
+          "value": 16384
+        },
+        "max_tokens": {
+          "present": false
+        }
+      },
+      "schema_transport": "json_schema",
+      "request": {
+        "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000009/request.json",
+        "sha256": "e7fc7b4fda5223b2470663e33e3662e03116078cade90ce1bac628e23255db05",
+        "bytes": 5063
+      },
+      "context": {
+        "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000009/context.json",
+        "sha256": "9fb5ec256570695f061ab4694b983880ea532a8ed0e24f26030daecbf32f951f",
+        "bytes": 4217
+      },
+      "response": {
+        "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000009/response.json",
+        "sha256": "4246b8e3fb8d2bbf9ec5d4bda9623137ddf49d34b78e08ef11f4c37bb84df0c6",
+        "bytes": 988
+      },
+      "normalized_output": {
+        "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000009/model_output.txt",
+        "sha256": "aef597deaf0d83a5f52ed5ea650da8d2aef0ae76dddc35d798b5c8c895386be7",
+        "bytes": 208
+      },
+      "prompt_sha256": "c105c794ec19aeea0c8c4688925e362c5c1dae7aa3ca5bbbb04bf9c862bffaba",
+      "packet_sha256": "c23d566fb5fb2f0fc99cceae7c298ec7da0767fd29f0b190611df2c9d5dfddd3",
+      "transport_schema_sha256": "da87b03037944e7e98561188653c0a9cfd3ec9a93337ecd820c5b1022407edfe"
+    },
+    {
+      "call": 15,
+      "model": "openai.gpt-oss-20b-1:0",
+      "region": "ap-southeast-2",
+      "controls": {
+        "reasoning_effort": {
+          "present": true,
+          "value": "low"
+        },
+        "temperature": {
+          "present": true,
+          "value": 0
+        },
+        "top_p": {
+          "present": false
+        },
+        "seed": {
+          "present": false
+        },
+        "max_completion_tokens": {
+          "present": true,
+          "value": 16384
+        },
+        "max_tokens": {
+          "present": false
+        }
+      },
+      "schema_transport": "json_schema",
+      "request": {
+        "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000015/request.json",
+        "sha256": "a8c700dd0469ce114616d4c048dda2d77fce3293d62683bb5789d8d157280b83",
+        "bytes": 8609
+      },
+      "context": {
+        "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000015/context.json",
+        "sha256": "00e0c773fa8508d3805f8fb69a927dffcea5725fabd4841891e4fa15c9bcfc37",
+        "bytes": 7291
+      },
+      "response": {
+        "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000015/response.json",
+        "sha256": "701be6c0812e86d326384e490e9659bf98f1a1e8146dc200a1bec908e76e418c",
+        "bytes": 1355
+      },
+      "normalized_output": {
+        "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000015/model_output.txt",
+        "sha256": "5a9f31725deda080dfd0467684a629a429d8cc8a1078db8bc9cc20d0887f3550",
+        "bytes": 452
+      },
+      "prompt_sha256": "0f3b0ef1c82c852e1f186f78636c3fe686f9e0a455889dfe2c536f708e69438a",
+      "packet_sha256": "1d045ab0536edad25b89c48021c2e9a7accc8cbe6b91e29fa3e1b318b4f754fe",
+      "transport_schema_sha256": "4e6cdc5c6927528902ac92cd7fa3d6e527a7937470539e1dc5598aa02d9a993b"
+    },
+    {
+      "call": 16,
+      "model": "openai.gpt-oss-20b-1:0",
+      "region": "ap-southeast-2",
+      "controls": {
+        "reasoning_effort": {
+          "present": true,
+          "value": "low"
+        },
+        "temperature": {
+          "present": true,
+          "value": 0
+        },
+        "top_p": {
+          "present": false
+        },
+        "seed": {
+          "present": false
+        },
+        "max_completion_tokens": {
+          "present": true,
+          "value": 16384
+        },
+        "max_tokens": {
+          "present": false
+        }
+      },
+      "schema_transport": "json_schema",
+      "request": {
+        "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/request.json",
+        "sha256": "a34f5df19cad6b687c3210d2934b663900e2dde39845e9b3f1b5eaf389c60ddc",
+        "bytes": 10299
+      },
+      "context": {
+        "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/context.json",
+        "sha256": "38ace18123819b29821208654e4a0157659257caa908fdcc1c38bfb22e5319e7",
+        "bytes": 9570
+      },
+      "response": {
+        "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/response.json",
+        "sha256": "6a738b0a01c33357f6753db77893850ac82592dbc6a8ff2a2c3951595c44b00e",
+        "bytes": 1655
+      },
+      "normalized_output": {
+        "path": "zig-out/e2e-spec/2026-10-10T07-55-12Z-f3a1cca5cb586534ebedb3716242185e/evidence/generation/call-000016/model_output.txt",
+        "sha256": "b5e0b956eabb5c766fd0ff6f91ac8249c84fd61616f311bcd581a8e673393676",
+        "bytes": 860
+      },
+      "prompt_sha256": "a46c5da92e1fb912790177bd9e69e796bc69d01e0ae9a581b1e5fe002abce34d",
+      "packet_sha256": "b9905d8306ad0c558fbe59b0b253ccb9e755e52043716214014b4cec4280f837",
+      "transport_schema_sha256": "44589019ead922ba068adfe0b1e62acae6797a996fa85b9a4785b46a5d141591"
+    }
+  ],
+  "native_assignment": {
+    "path": "test/calibration/source-loss-attribution/bound-preservation/recovery/captured-assignment.json",
+    "sha256": "59f7bc44b0d0adc7d555ef8126072fb920d1f94b7aebd4ac3947081430671ac8",
+    "bytes": 25929
+  },
+  "historical_comparison_response": {
+    "assessments": [
+      {
+        "comparison_id": {
+          "ordinal": 1
+        },
+        "explanation": "The complete collection of members for comparison 1 includes the required meaning \"When started, the application must display `Hello, World!`\", which satisfies the missing display text requirement. The source lines 5–7 explicitly state this obligation, and the member list preserves it.",
+        "members": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          },
+          {
+            "ordinal": 4
+          }
+        ],
+        "result": "preserved",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": {
+                "ordinal": 5
+              },
+              "last": {
+                "ordinal": 7
+              }
+            }
+          }
+        ]
+      },
+      {
+        "comparison_id": {
+          "ordinal": 2
+        },
+        "explanation": "Comparison 2’s member list omits the required meaning \"When started, the application must display `Hello, World!`\". The source lines 5–7 contain this obligation, but it is not represented in the assigned collection, so the missing meaning is lost.",
+        "members": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "result": "lost",
+        "sources": [
+          {
+            "chunk_id": {
+              "bytes": "chunk-1"
+            },
+            "lines": {
+              "first": {
+                "ordinal": 5
+              },
+              "last": {
+                "ordinal": 7
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "prior_scorecards": [
+    {
+      "artifact": {
+        "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/scorecard.json",
+        "sha256": "8025e7da99a547ec03bd3e0a2256235422c5019fffcdd6b0cbf372119527428f",
+        "bytes": 79900
+      },
+      "status": "completed_gate_failed",
+      "summary": {
+        "baseline": {
+          "correct_attribution": 2,
+          "false_upstream": 11,
+          "false_candidate": 0,
+          "missed_genuine_loss": 6,
+          "unnecessary_uncertainty": 3,
+          "evidence_adequacy": 2,
+          "input_tokens": 26716,
+          "output_tokens": 2592,
+          "roundtrip_latency_ms": 16755,
+          "trials": 16,
+          "schema_valid": 16,
+          "native_admitted": null,
+          "invalid_source_spans": 8,
+          "invalid_members": 0,
+          "semantic_verdict_sets_correct": null,
+          "normalizations": {
+            "removed_leading_brace_quote": 14,
+            "none": 2
+          },
+          "cohorts": {
+            "development": {
+              "correct": 0,
+              "trials": 8
+            },
+            "unused": {
+              "correct": 2,
+              "trials": 8
+            }
+          }
+        },
+        "candidate": {
+          "correct_attribution": 2,
+          "false_upstream": 1,
+          "false_candidate": 0,
+          "missed_genuine_loss": 6,
+          "unnecessary_uncertainty": 4,
+          "evidence_adequacy": 2,
+          "input_tokens": 28720,
+          "output_tokens": 3645,
+          "roundtrip_latency_ms": 20840,
+          "trials": 16,
+          "schema_valid": 16,
+          "native_admitted": 7,
+          "invalid_source_spans": 7,
+          "invalid_members": 2,
+          "semantic_verdict_sets_correct": 10,
+          "normalizations": {
+            "removed_leading_brace_quote": 16
+          },
+          "cohorts": {
+            "development": {
+              "correct": 0,
+              "trials": 8
+            },
+            "unused": {
+              "correct": 2,
+              "trials": 8
+            }
+          }
+        }
+      },
+      "assessment": "Manual semantic review of frozen requirements and actual responses, assisted by the coding agent; non-blinded; not deterministic semantic proof. Mechanical reference checks supplement, never replace, production native admission. Baseline native admission is unassessed.",
+      "frozen_plan": {
+        "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/comparison/comparison.json",
+        "sha256": "6b1695b85f509438059b71f591a9dd8bfe799ec5ea7d4ce99e81e7659e61154d",
+        "bytes": 22301
+      },
+      "planned_settings": {
+        "provider": "aws-bedrock",
+        "model": "openai.gpt-oss-20b-1:0",
+        "region": "ap-southeast-2",
+        "reasoning_effort": "low",
+        "temperature": 0,
+        "max_output_tokens": 16384,
+        "response_mode": "native_schema"
+      },
+      "observed_control_groups": [
+        {
+          "controls": {
+            "max_completion_tokens": {
+              "present": true,
+              "value": 16384
+            },
+            "max_tokens": {
+              "present": false
+            },
+            "reasoning_effort": {
+              "present": true,
+              "value": "low"
+            },
+            "seed": {
+              "present": false
+            },
+            "temperature": {
+              "present": true,
+              "value": 0
+            },
+            "top_p": {
+              "present": false
+            }
+          },
+          "requests": 32
+        }
+      ],
+      "actual_requests": [
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/captured-description-baseline-1.request.json",
+          "sha256": "6623b459268ebcb8f438118a4d4ff3de585c9efaa52dc98e1f2dc31fdb6cb231",
+          "bytes": 13095
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/captured-description-baseline-2.request.json",
+          "sha256": "6623b459268ebcb8f438118a4d4ff3de585c9efaa52dc98e1f2dc31fdb6cb231",
+          "bytes": 13095
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/captured-description-candidate-1.request.json",
+          "sha256": "88125adb088ca7bc70b71806ebcab6246eb96d8ade026fe34f8deff0de33f5e1",
+          "bytes": 13792
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/captured-description-candidate-2.request.json",
+          "sha256": "88125adb088ca7bc70b71806ebcab6246eb96d8ade026fe34f8deff0de33f5e1",
+          "bytes": 13792
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/extraction-inherited-baseline-1.request.json",
+          "sha256": "c1a5a0fce263da3be4562fd680438ca68725f234e5239dcb88cb5308ccb42455",
+          "bytes": 8754
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/extraction-inherited-baseline-2.request.json",
+          "sha256": "c1a5a0fce263da3be4562fd680438ca68725f234e5239dcb88cb5308ccb42455",
+          "bytes": 8754
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/extraction-inherited-candidate-1.request.json",
+          "sha256": "54323b4142d2324835d6c847c7e3c36b6fb4f234e15dc7cd77f53213a184afeb",
+          "bytes": 8901
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/extraction-inherited-candidate-2.request.json",
+          "sha256": "54323b4142d2324835d6c847c7e3c36b6fb4f234e15dc7cd77f53213a184afeb",
+          "bytes": 8901
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/fan-direct-signal-baseline-1.request.json",
+          "sha256": "7689999b218ed94645a3777a3fa0be1993c899b6fa7a674fc4b16697b62cd4c5",
+          "bytes": 7458
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/fan-direct-signal-baseline-2.request.json",
+          "sha256": "7689999b218ed94645a3777a3fa0be1993c899b6fa7a674fc4b16697b62cd4c5",
+          "bytes": 7458
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/fan-direct-signal-candidate-1.request.json",
+          "sha256": "b76d34263783bc5bcd5300fde49cc275f378872163473901a3869ea1bd5ec09e",
+          "bytes": 7320
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/fan-direct-signal-candidate-2.request.json",
+          "sha256": "b76d34263783bc5bcd5300fde49cc275f378872163473901a3869ea1bd5ec09e",
+          "bytes": 7320
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/joint-two-sources-baseline-1.request.json",
+          "sha256": "cfbd938d33d69604e51b2496170a38f3488016c64fadcb2a0b4c0161f2342ee4",
+          "bytes": 9073
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/joint-two-sources-baseline-2.request.json",
+          "sha256": "cfbd938d33d69604e51b2496170a38f3488016c64fadcb2a0b4c0161f2342ee4",
+          "bytes": 9073
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/joint-two-sources-candidate-1.request.json",
+          "sha256": "0380d3cae7295796ad38cc03d6f8288c88b90308108612c7885160e180979cf0",
+          "bytes": 8956
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/joint-two-sources-candidate-2.request.json",
+          "sha256": "0380d3cae7295796ad38cc03d6f8288c88b90308108612c7885160e180979cf0",
+          "bytes": 8956
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/loan-candidate-baseline-1.request.json",
+          "sha256": "5ef83f38ddb433c2adec062961526d188689b499cd62c0b35a76765ed17c91d6",
+          "bytes": 7602
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/loan-candidate-baseline-2.request.json",
+          "sha256": "5ef83f38ddb433c2adec062961526d188689b499cd62c0b35a76765ed17c91d6",
+          "bytes": 7602
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/loan-candidate-candidate-1.request.json",
+          "sha256": "8ca0ff4bbc265cb713afc9d6e53024c47eb5c60ec4297f3247e92f3de6da94ef",
+          "bytes": 7473
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/loan-candidate-candidate-2.request.json",
+          "sha256": "8ca0ff4bbc265cb713afc9d6e53024c47eb5c60ec4297f3247e92f3de6da94ef",
+          "bytes": 7473
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/parking-candidate-baseline-1.request.json",
+          "sha256": "807cecadff39165ce1b10bc11d1e503038e72e268fe47541082ca46c9d9d550a",
+          "bytes": 7522
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/parking-candidate-baseline-2.request.json",
+          "sha256": "807cecadff39165ce1b10bc11d1e503038e72e268fe47541082ca46c9d9d550a",
+          "bytes": 7522
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/parking-candidate-candidate-1.request.json",
+          "sha256": "2fa29aa8eb3d36b4cb87f0a97a7ced65f32bb751ded632344452dbe4365b0b01",
+          "bytes": 7378
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/parking-candidate-candidate-2.request.json",
+          "sha256": "2fa29aa8eb3d36b4cb87f0a97a7ced65f32bb751ded632344452dbe4365b0b01",
+          "bytes": 7378
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/unresolved-multiple-producers-baseline-1.request.json",
+          "sha256": "c91efe4c7d766878a269035a6bcc826b419830cbcc241ac17f2fd104f8d913b0",
+          "bytes": 9051
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/unresolved-multiple-producers-baseline-2.request.json",
+          "sha256": "c91efe4c7d766878a269035a6bcc826b419830cbcc241ac17f2fd104f8d913b0",
+          "bytes": 9051
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/unresolved-multiple-producers-candidate-1.request.json",
+          "sha256": "68bb40c92487509fb482ce90c53bee78beea060b9220882ce4d8f2dca3f6d206",
+          "bytes": 8904
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/unresolved-multiple-producers-candidate-2.request.json",
+          "sha256": "68bb40c92487509fb482ce90c53bee78beea060b9220882ce4d8f2dca3f6d206",
+          "bytes": 8904
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/wrong-role-assignment-baseline-1.request.json",
+          "sha256": "067c963b5604f5a3bef6e41b3ade32b619747dc2fdecf98bd61b3ebe6d6654e3",
+          "bytes": 8861
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/wrong-role-assignment-baseline-2.request.json",
+          "sha256": "067c963b5604f5a3bef6e41b3ade32b619747dc2fdecf98bd61b3ebe6d6654e3",
+          "bytes": 8861
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/wrong-role-assignment-candidate-1.request.json",
+          "sha256": "f9f1675787595908253a02ce2d2151202aa6d2cd705dbd83cb69d05c47db594a",
+          "bytes": 9044
+        },
+        {
+          "path": "zig-out/source-loss-preservation-comparison/2026-10-10T07-12-43Z-r9gpx8hq/results/wrong-role-assignment-candidate-2.request.json",
+          "sha256": "f9f1675787595908253a02ce2d2151202aa6d2cd705dbd83cb69d05c47db594a",
+          "bytes": 9044
+        }
+      ]
+    },
+    {
+      "artifact": {
+        "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/scorecard.json",
+        "sha256": "bae6bdbfcb454272598936e49c5471d2a1593139411897527ac69391a08154ba",
+        "bytes": 93693
+      },
+      "status": "completed_gate_failed",
+      "summary": {
+        "baseline": {
+          "correct_attribution": 6,
+          "semantic_verdicts_correct": 11,
+          "false_upstream": 0,
+          "false_repairable_upstream": 0,
+          "false_candidate": 0,
+          "unnecessary_uncertainty": 2,
+          "evidence_adequacy": 6,
+          "input_tokens": 28720,
+          "output_tokens": 3651,
+          "round_trip_ms": 21104,
+          "trials": 16,
+          "native_admitted": 8,
+          "schema_valid": 16,
+          "normalizations": {
+            "removed_leading_brace_quote": 16
+          }
+        },
+        "candidate": {
+          "correct_attribution": 14,
+          "semantic_verdicts_correct": 14,
+          "false_upstream": 2,
+          "false_repairable_upstream": 0,
+          "false_candidate": 0,
+          "unnecessary_uncertainty": 0,
+          "evidence_adequacy": 14,
+          "input_tokens": 18230,
+          "output_tokens": 3877,
+          "round_trip_ms": 21887,
+          "trials": 16,
+          "native_admitted": 16,
+          "schema_valid": 16,
+          "normalizations": {
+            "removed_leading_brace_quote": 16
+          }
+        }
+      },
+      "assessment": "Non-blinded manual semantic review by the coding agent against unchanged case facts. Native reports come from production admission for both arms. Correct attribution requires both semantic verdicts and native ownership. Role attribution counts as upstream ownership even though no repair permission exists. Evidence adequacy includes the complete fixed finding and response; weaker local citation precision in the role case is disclosed. Not deterministic semantic proof.",
+      "frozen_plan": {
+        "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/comparison/projection/comparison.json",
+        "sha256": "52d31c01fa4dac9ed4fae688c740a8c159f9c0cd40964e8aac7626a406e668f9",
+        "bytes": 22029
+      },
+      "planned_settings": {
+        "provider": "aws-bedrock",
+        "model": "openai.gpt-oss-20b-1:0",
+        "region": "ap-southeast-2",
+        "reasoning_effort": "low",
+        "temperature": 0,
+        "max_output_tokens": 16384,
+        "response_mode": "native_schema"
+      },
+      "observed_control_groups": [
+        {
+          "controls": {
+            "max_completion_tokens": {
+              "present": true,
+              "value": 16384
+            },
+            "max_tokens": {
+              "present": false
+            },
+            "reasoning_effort": {
+              "present": true,
+              "value": "low"
+            },
+            "seed": {
+              "present": false
+            },
+            "temperature": {
+              "present": true,
+              "value": 0
+            },
+            "top_p": {
+              "present": false
+            }
+          },
+          "requests": 32
+        }
+      ],
+      "actual_requests": [
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/captured-description-baseline-1.request.json",
+          "sha256": "88125adb088ca7bc70b71806ebcab6246eb96d8ade026fe34f8deff0de33f5e1",
+          "bytes": 13792
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/captured-description-baseline-2.request.json",
+          "sha256": "88125adb088ca7bc70b71806ebcab6246eb96d8ade026fe34f8deff0de33f5e1",
+          "bytes": 13792
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/captured-description-candidate-1.request.json",
+          "sha256": "7fe45bd13f372887375980f50fb5785155f5f510e1a0bf8c0d062c974157774c",
+          "bytes": 8753
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/captured-description-candidate-2.request.json",
+          "sha256": "7fe45bd13f372887375980f50fb5785155f5f510e1a0bf8c0d062c974157774c",
+          "bytes": 8753
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/extraction-inherited-baseline-1.request.json",
+          "sha256": "54323b4142d2324835d6c847c7e3c36b6fb4f234e15dc7cd77f53213a184afeb",
+          "bytes": 8901
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/extraction-inherited-baseline-2.request.json",
+          "sha256": "54323b4142d2324835d6c847c7e3c36b6fb4f234e15dc7cd77f53213a184afeb",
+          "bytes": 8901
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/extraction-inherited-candidate-1.request.json",
+          "sha256": "9b6e712fb89889024bba29a4c38df10cf400f42f8a675a7e858b0a8b248f2573",
+          "bytes": 6449
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/extraction-inherited-candidate-2.request.json",
+          "sha256": "9b6e712fb89889024bba29a4c38df10cf400f42f8a675a7e858b0a8b248f2573",
+          "bytes": 6449
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/fan-direct-signal-baseline-1.request.json",
+          "sha256": "b76d34263783bc5bcd5300fde49cc275f378872163473901a3869ea1bd5ec09e",
+          "bytes": 7320
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/fan-direct-signal-baseline-2.request.json",
+          "sha256": "b76d34263783bc5bcd5300fde49cc275f378872163473901a3869ea1bd5ec09e",
+          "bytes": 7320
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/fan-direct-signal-candidate-1.request.json",
+          "sha256": "f5b9290a64f0491c995dab4fb52193e71b3bb401c0696c3b738b066fdfc40783",
+          "bytes": 5683
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/fan-direct-signal-candidate-2.request.json",
+          "sha256": "f5b9290a64f0491c995dab4fb52193e71b3bb401c0696c3b738b066fdfc40783",
+          "bytes": 5683
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/joint-two-sources-baseline-1.request.json",
+          "sha256": "0380d3cae7295796ad38cc03d6f8288c88b90308108612c7885160e180979cf0",
+          "bytes": 8956
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/joint-two-sources-baseline-2.request.json",
+          "sha256": "0380d3cae7295796ad38cc03d6f8288c88b90308108612c7885160e180979cf0",
+          "bytes": 8956
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/joint-two-sources-candidate-1.request.json",
+          "sha256": "616acba382dd8cd925fd93bbf4c42e7edada8b1605c9b3038d117af2ee4b55f3",
+          "bytes": 6440
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/joint-two-sources-candidate-2.request.json",
+          "sha256": "616acba382dd8cd925fd93bbf4c42e7edada8b1605c9b3038d117af2ee4b55f3",
+          "bytes": 6440
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/loan-candidate-baseline-1.request.json",
+          "sha256": "8ca0ff4bbc265cb713afc9d6e53024c47eb5c60ec4297f3247e92f3de6da94ef",
+          "bytes": 7473
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/loan-candidate-baseline-2.request.json",
+          "sha256": "8ca0ff4bbc265cb713afc9d6e53024c47eb5c60ec4297f3247e92f3de6da94ef",
+          "bytes": 7473
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/loan-candidate-candidate-1.request.json",
+          "sha256": "fb8ea82d1059eccba7a39b5eabeaef871bb83f07645f64644b87728275c54451",
+          "bytes": 5923
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/loan-candidate-candidate-2.request.json",
+          "sha256": "fb8ea82d1059eccba7a39b5eabeaef871bb83f07645f64644b87728275c54451",
+          "bytes": 5923
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/parking-candidate-baseline-1.request.json",
+          "sha256": "2fa29aa8eb3d36b4cb87f0a97a7ced65f32bb751ded632344452dbe4365b0b01",
+          "bytes": 7378
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/parking-candidate-baseline-2.request.json",
+          "sha256": "2fa29aa8eb3d36b4cb87f0a97a7ced65f32bb751ded632344452dbe4365b0b01",
+          "bytes": 7378
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/parking-candidate-candidate-1.request.json",
+          "sha256": "6899980e4d3d578c752be17ba14e9c843b2587abaea7d6cb2025d40570587694",
+          "bytes": 5873
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/parking-candidate-candidate-2.request.json",
+          "sha256": "6899980e4d3d578c752be17ba14e9c843b2587abaea7d6cb2025d40570587694",
+          "bytes": 5873
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/unresolved-multiple-producers-baseline-1.request.json",
+          "sha256": "68bb40c92487509fb482ce90c53bee78beea060b9220882ce4d8f2dca3f6d206",
+          "bytes": 8904
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/unresolved-multiple-producers-baseline-2.request.json",
+          "sha256": "68bb40c92487509fb482ce90c53bee78beea060b9220882ce4d8f2dca3f6d206",
+          "bytes": 8904
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/unresolved-multiple-producers-candidate-1.request.json",
+          "sha256": "3a95ac24161ac698b8d950fa9611aaf22d32a999a79c4ed64216ef0b2ec073e5",
+          "bytes": 6468
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/unresolved-multiple-producers-candidate-2.request.json",
+          "sha256": "3a95ac24161ac698b8d950fa9611aaf22d32a999a79c4ed64216ef0b2ec073e5",
+          "bytes": 6468
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/wrong-role-assignment-baseline-1.request.json",
+          "sha256": "f9f1675787595908253a02ce2d2151202aa6d2cd705dbd83cb69d05c47db594a",
+          "bytes": 9044
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/wrong-role-assignment-baseline-2.request.json",
+          "sha256": "f9f1675787595908253a02ce2d2151202aa6d2cd705dbd83cb69d05c47db594a",
+          "bytes": 9044
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/wrong-role-assignment-candidate-1.request.json",
+          "sha256": "25a9b3c986c2bc9174d1aafe70748b3e85254dd8e84315f03959fe7a174ae3de",
+          "bytes": 6511
+        },
+        {
+          "path": "zig-out/source-loss-projection-comparison/2026-10-10T07-32-15Z-v2azhjiy/results/wrong-role-assignment-candidate-2.request.json",
+          "sha256": "25a9b3c986c2bc9174d1aafe70748b3e85254dd8e84315f03959fe7a174ae3de",
+          "bytes": 6511
+        }
+      ]
+    },
+    {
+      "artifact": {
+        "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/scorecard.json",
+        "sha256": "3c06fd80ce16957323d930e342c420d53d0b65df288ad055523c7a517fd837f1",
+        "bytes": 95640
+      },
+      "status": "completed_gate_failed",
+      "summary": {
+        "baseline": {
+          "correct_attribution": 14,
+          "semantic_verdicts_correct": 14,
+          "false_upstream": 2,
+          "false_repairable_upstream": 0,
+          "false_candidate": 0,
+          "unnecessary_uncertainty": 0,
+          "evidence_adequacy": 14,
+          "input_tokens": 18230,
+          "output_tokens": 3880,
+          "round_trip_ms": 20339,
+          "trials": 16,
+          "native_admitted": 16,
+          "schema_valid": 16,
+          "normalizations": {
+            "removed_leading_brace_quote": 16
+          },
+          "provider_stops": {
+            "stop": 16
+          }
+        },
+        "candidate": {
+          "correct_attribution": 14,
+          "semantic_verdicts_correct": 14,
+          "false_upstream": 2,
+          "false_repairable_upstream": 0,
+          "false_candidate": 0,
+          "unnecessary_uncertainty": 0,
+          "evidence_adequacy": 14,
+          "input_tokens": 18302,
+          "output_tokens": 3738,
+          "round_trip_ms": 20831,
+          "trials": 16,
+          "native_admitted": 16,
+          "schema_valid": 16,
+          "normalizations": {
+            "removed_leading_brace_quote": 16
+          },
+          "provider_stops": {
+            "stop": 16
+          }
+        }
+      },
+      "assessment": "Manual non-blinded review retained in manual-assessment.json; not deterministic semantic proof. Every response was independently admitted by production code. Correct attribution requires native ownership, correct comparison verdicts and adequate explanation. Unsupported role ownership still counts as false upstream ownership.",
+      "frozen_plan": {
+        "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/comparison/meaning/comparison.json",
+        "sha256": "0de7023075693ace4669061060f96770637753252c47b204340d63add7be4d89",
+        "bytes": 23260
+      },
+      "planned_settings": {
+        "provider": "aws-bedrock",
+        "model": "openai.gpt-oss-20b-1:0",
+        "region": "ap-southeast-2",
+        "reasoning_effort": "low",
+        "temperature": 0,
+        "max_output_tokens": 16384,
+        "response_mode": "native_schema"
+      },
+      "observed_control_groups": [
+        {
+          "controls": {
+            "max_completion_tokens": {
+              "present": true,
+              "value": 16384
+            },
+            "max_tokens": {
+              "present": false
+            },
+            "reasoning_effort": {
+              "present": true,
+              "value": "low"
+            },
+            "seed": {
+              "present": false
+            },
+            "temperature": {
+              "present": true,
+              "value": 0
+            },
+            "top_p": {
+              "present": false
+            }
+          },
+          "requests": 32
+        }
+      ],
+      "actual_requests": [
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/captured-description-baseline-1.request.json",
+          "sha256": "7fe45bd13f372887375980f50fb5785155f5f510e1a0bf8c0d062c974157774c",
+          "bytes": 8753
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/captured-description-baseline-2.request.json",
+          "sha256": "7fe45bd13f372887375980f50fb5785155f5f510e1a0bf8c0d062c974157774c",
+          "bytes": 8753
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/captured-description-candidate-1.request.json",
+          "sha256": "5307124bc62ac421f22e048c9061d60e8da9953b3c74d3c821adbdeefad5f0ec",
+          "bytes": 8495
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/captured-description-candidate-2.request.json",
+          "sha256": "5307124bc62ac421f22e048c9061d60e8da9953b3c74d3c821adbdeefad5f0ec",
+          "bytes": 8495
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/extraction-inherited-baseline-1.request.json",
+          "sha256": "9b6e712fb89889024bba29a4c38df10cf400f42f8a675a7e858b0a8b248f2573",
+          "bytes": 6449
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/extraction-inherited-baseline-2.request.json",
+          "sha256": "9b6e712fb89889024bba29a4c38df10cf400f42f8a675a7e858b0a8b248f2573",
+          "bytes": 6449
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/extraction-inherited-candidate-1.request.json",
+          "sha256": "95c29efb2fd371dbc00115408a11008b34a540931a34180491a3182a08741bff",
+          "bytes": 6439
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/extraction-inherited-candidate-2.request.json",
+          "sha256": "95c29efb2fd371dbc00115408a11008b34a540931a34180491a3182a08741bff",
+          "bytes": 6439
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/fan-direct-signal-baseline-1.request.json",
+          "sha256": "f5b9290a64f0491c995dab4fb52193e71b3bb401c0696c3b738b066fdfc40783",
+          "bytes": 5683
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/fan-direct-signal-baseline-2.request.json",
+          "sha256": "f5b9290a64f0491c995dab4fb52193e71b3bb401c0696c3b738b066fdfc40783",
+          "bytes": 5683
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/fan-direct-signal-candidate-1.request.json",
+          "sha256": "3a47b9619380e0d119714687363f82813ca42a3e4a9cc3c3271ffce9d43039aa",
+          "bytes": 5783
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/fan-direct-signal-candidate-2.request.json",
+          "sha256": "3a47b9619380e0d119714687363f82813ca42a3e4a9cc3c3271ffce9d43039aa",
+          "bytes": 5783
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/joint-two-sources-baseline-1.request.json",
+          "sha256": "616acba382dd8cd925fd93bbf4c42e7edada8b1605c9b3038d117af2ee4b55f3",
+          "bytes": 6440
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/joint-two-sources-baseline-2.request.json",
+          "sha256": "616acba382dd8cd925fd93bbf4c42e7edada8b1605c9b3038d117af2ee4b55f3",
+          "bytes": 6440
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/joint-two-sources-candidate-1.request.json",
+          "sha256": "55a1af9cf284067189deb8c84dbe0eb9722860ad707c4ed19030fb4ae3081bb5",
+          "bytes": 6452
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/joint-two-sources-candidate-2.request.json",
+          "sha256": "55a1af9cf284067189deb8c84dbe0eb9722860ad707c4ed19030fb4ae3081bb5",
+          "bytes": 6452
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/loan-candidate-baseline-1.request.json",
+          "sha256": "fb8ea82d1059eccba7a39b5eabeaef871bb83f07645f64644b87728275c54451",
+          "bytes": 5923
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/loan-candidate-baseline-2.request.json",
+          "sha256": "fb8ea82d1059eccba7a39b5eabeaef871bb83f07645f64644b87728275c54451",
+          "bytes": 5923
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/loan-candidate-candidate-1.request.json",
+          "sha256": "9f740983d56f473a34047c4c2903a750109288a77c013f729f3b1f19789d9589",
+          "bytes": 6023
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/loan-candidate-candidate-2.request.json",
+          "sha256": "9f740983d56f473a34047c4c2903a750109288a77c013f729f3b1f19789d9589",
+          "bytes": 6023
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/parking-candidate-baseline-1.request.json",
+          "sha256": "6899980e4d3d578c752be17ba14e9c843b2587abaea7d6cb2025d40570587694",
+          "bytes": 5873
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/parking-candidate-baseline-2.request.json",
+          "sha256": "6899980e4d3d578c752be17ba14e9c843b2587abaea7d6cb2025d40570587694",
+          "bytes": 5873
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/parking-candidate-candidate-1.request.json",
+          "sha256": "c028a7f1a8a92a42e7fc45217081e3ff6a7f004728bc48a0f6b40f9fb3dc8e87",
+          "bytes": 5973
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/parking-candidate-candidate-2.request.json",
+          "sha256": "c028a7f1a8a92a42e7fc45217081e3ff6a7f004728bc48a0f6b40f9fb3dc8e87",
+          "bytes": 5973
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/unresolved-multiple-producers-baseline-1.request.json",
+          "sha256": "3a95ac24161ac698b8d950fa9611aaf22d32a999a79c4ed64216ef0b2ec073e5",
+          "bytes": 6468
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/unresolved-multiple-producers-baseline-2.request.json",
+          "sha256": "3a95ac24161ac698b8d950fa9611aaf22d32a999a79c4ed64216ef0b2ec073e5",
+          "bytes": 6468
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/unresolved-multiple-producers-candidate-1.request.json",
+          "sha256": "4a4991ba58ea3475c930d11583d2c4864c7b806e3daaf773c7489529f119161b",
+          "bytes": 6480
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/unresolved-multiple-producers-candidate-2.request.json",
+          "sha256": "4a4991ba58ea3475c930d11583d2c4864c7b806e3daaf773c7489529f119161b",
+          "bytes": 6480
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/wrong-role-assignment-baseline-1.request.json",
+          "sha256": "25a9b3c986c2bc9174d1aafe70748b3e85254dd8e84315f03959fe7a174ae3de",
+          "bytes": 6511
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/wrong-role-assignment-baseline-2.request.json",
+          "sha256": "25a9b3c986c2bc9174d1aafe70748b3e85254dd8e84315f03959fe7a174ae3de",
+          "bytes": 6511
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/wrong-role-assignment-candidate-1.request.json",
+          "sha256": "57e41390fb1cd94f1afcf09e8d56cd9b60046f3638774c703d47f4ba12747bc6",
+          "bytes": 6501
+        },
+        {
+          "path": "zig-out/source-loss-meaning-comparison/2026-10-10T07-49-32Z-iup3mpv6/results/wrong-role-assignment-candidate-2.request.json",
+          "sha256": "57e41390fb1cd94f1afcf09e8d56cd9b60046f3638774c703d47f4ba12747bc6",
+          "bytes": 6501
+        }
+      ]
+    }
+  ],
+  "current_production_owners": [
+    {
+      "path": "src/domain/source_preservation.zig",
+      "sha256": "b4f0d467f2be3a540e0819c52b12dd0673a0361550ceef389b3594af42dbc718",
+      "bytes": 1965
+    },
+    {
+      "path": "src/domain/source_omission_binding.zig",
+      "sha256": "ebdd6afd0895dfbbe44dc1778e3021b01d5c2811b1527a463968d61bac8b080f",
+      "bytes": 9828
+    },
+    {
+      "path": "src/domain/specification_support.zig",
+      "sha256": "7d3c4bcf49341ad1c27020ceee132ef7e40048f6c7b5bd78173c39c2290dddeb",
+      "bytes": 37622
+    },
+    {
+      "path": "src/domain/specification_coverage_repair.zig",
+      "sha256": "41f21eecb03830367133973f417ff57c11e264ae92cce24a54e7da585b2c766d",
+      "bytes": 29944
+    },
+    {
+      "path": "src/domain/specification_provenance.zig",
+      "sha256": "fd2a911dcc6d0798020e9e58bbc63ba8f211e92525ed02a703bbd90fc974b148",
+      "bytes": 19237
+    },
+    {
+      "path": "src/domain/specification_state.zig",
+      "sha256": "2036a0015eb227c5a31d17579765e823a8f2553faca05dc89c4895412f506984",
+      "bytes": 10617
+    },
+    {
+      "path": "src/actions/specification/merge_specification_omission_repair.zig",
+      "sha256": "04fc8b0ab9a81c30c440c5685403c267d0cec7edc5f8e349968dc5b90032d07f",
+      "bytes": 1753
+    },
+    {
+      "path": "design/workflows/spec/support-loss.prompt.md",
+      "sha256": "ead02788de3c01572c2b1d85c4f74e6332f657cb6f73ac0e87b0cf7490cac9b9",
+      "bytes": 1350
+    },
+    {
+      "path": "design/workflows/spec/support.schema.json",
+      "sha256": "f8285e781065ec47defd8175245613ad7ca489b119cb6543195744502d59bec3",
+      "bytes": 10384
+    },
+    {
+      "path": "design/workflows/spec.workflow.yaml",
+      "sha256": "aad19be28056e7a4a4bef6f2d4eb7b48125af15713232a3a9e708c3c1764f71f",
+      "bytes": 46164
+    }
+  ]
+}

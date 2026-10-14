@@ -10,6 +10,17 @@ const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
 pub const schema = values.schema(.specification_support_repair, owned.Value, 1, null).captured();
 pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{schema};
+
+pub fn authorizationBlocked(view: *const @import("../domain/pipeline_data.zig").View) values.Error!bool {
+    const value = try values.read(view, schema, owned.Value);
+    if (!owned.retainsCurrentInputs(value, view)) return error.InvalidCandidatePayload;
+    return switch (owned.payload(value).*) {
+        .support_repair, .principle_support_repair => false,
+        .rejected => (try authorizationRejectionOutcome(owned.rejection(value) orelse return error.InvalidCandidatePayload)) == .blocked,
+        else => error.InvalidCandidatePayload,
+    };
+}
+
 fn read(comptime selected: Purpose, view: *const @import("../domain/pipeline_data.zig").View) operations.Error!repair.Contract(selected).State {
     return owned.read(view, schema, if (selected == .source) .support_repair else .principle_support_repair) catch |operation_error| operation_error;
 }
@@ -17,6 +28,7 @@ fn retain(comptime selected: Purpose, owner: *owned.Owner, state: repair.Contrac
     owner.payload = if (selected == .source) .{ .support_repair = state } else .{ .principle_support_repair = state };
 }
 pub const Authorize = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_authorize = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_review, .result = .specification_support_repair } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .authorize;
     pub const Action = @import("../actions/specification/authorize_specification_support_repair.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .blocked, .failed };
@@ -33,9 +45,9 @@ pub const Authorize = struct {
             const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
             errdefer owned.destroy(owner);
             const authorization = self.action.execute(selected, owner.arena.allocator(), source, context_value, current.rejected) catch |err| {
-                if (err == error.OutOfMemory) return error.OutOfMemory;
+                const outcome = try authorizationRejectionOutcome(err);
                 owner.rejection = err;
-                return owned.publish(self.allocator, schema, owner, .blocked) catch |operation_error| operation_error;
+                return owned.publish(self.allocator, schema, owner, outcome) catch |operation_error| operation_error;
             };
             const permit = authorization.retry orelse return error.OperationExecutionFailed;
             retain(selected, owner, .{ .authorization = authorization });
@@ -46,6 +58,11 @@ pub const Authorize = struct {
         unreachable;
     }
 };
+
+fn authorizationRejectionOutcome(err: execution.OperationError) error{OutOfMemory}!@import("../domain/workflow.zig").OutcomeTag {
+    if (err == error.OutOfMemory) return error.OutOfMemory;
+    return .blocked;
+}
 pub const BuildInput = struct {
     pub const Action = @import("../actions/specification/build_specification_support_repair_input.zig").Action;
     allocator: std.mem.Allocator,
@@ -64,6 +81,7 @@ pub const BuildInput = struct {
     }
 };
 pub const Parse = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .preserve = .{ .kind = .candidate, .subject = .specification_support_repair, .evidence = .specification_support_repair, .result = .specification_support_repair } };
     pub const Action = @import("../actions/specification/parse_specification_support_repair.zig").Action;
     allocator: std.mem.Allocator,
     action: Action = .{},
@@ -85,6 +103,7 @@ pub const Parse = struct {
     }
 };
 pub const Merge = struct {
+    pub const outcome_association: @import("../domain/workflow_outcome_association.zig").Descriptor = .{ .repair_validate = .{ .kind = .candidate, .subject = .specification_support_review, .evidence = .specification_support_repair, .result = .specification_support_review } };
     pub const repair_role: @import("../domain/workflow_retry.zig").Role = .merge_validate;
     pub const Action = @import("../actions/specification/merge_specification_support_repair.zig").Action;
     pub const outcomes = [_]@import("../domain/workflow.zig").OutcomeTag{ .ok, .more, .invalid, .failed };
@@ -102,12 +121,17 @@ pub const Merge = struct {
             const state = try read(selected, &input.step.data);
             const context_value = try spec.readContext(&input.step.data);
             const permit = state.authorization.retry orelse return error.OperationExecutionFailed;
+            const history = try owned.read(&input.step.data, support.history_schema, .review_history);
+            const ledger = try values.read(&input.step.data, @import("model_request_workflow.zig").ledger_schema, @import("../domain/model_request_identity.zig").ModelRequestIdentityLedger);
             const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
-            const result = self.action.execute(selected, owner.arena.allocator(), source, context_value, current.rejected.candidate.?, state) catch |native_failure| {
+            const merged = self.action.execute(selected, owner.arena.allocator(), source, context_value, current.rejected.candidate.?, state, history, ledger) catch |native_failure| {
                 owned.destroy(owner);
                 return native_failure;
             };
+            const result = merged.collection;
             var candidate = try support.publish(selected, self.allocator, owner, progress, result);
+            errdefer for (candidate.delta.data_replacements) |value| if (value) |allocation| values.destroy(allocation);
+            try support.attachHistory(self.allocator, input.step.data, &candidate, merged.history);
             candidate.delta.repair_transition = .{ .merged_validated = .{ .permit = permit, .revision_after = switch (result) {
                 .accepted => |value| value.candidate.revision,
                 .pending => |value| value.revision,

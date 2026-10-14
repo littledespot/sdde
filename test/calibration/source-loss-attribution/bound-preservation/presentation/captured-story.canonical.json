@@ -1,0 +1,347 @@
+{
+  "brief": {
+    "description": {
+      "provenance": {
+        "citation_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "claim_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "When started, the application displays \"Hello, World!\" and outputs the current date and time in UTC."
+            }
+          }
+        ]
+      }
+    },
+    "primary_goal": {
+      "provenance": {
+        "citation_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "claim_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "Provides a quick greeting and the current UTC time to inform the user of successful startup."
+            }
+          }
+        ]
+      }
+    },
+    "title": {
+      "provenance": {
+        "citation_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "claim_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "Hello World Application"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "candidate": {
+    "display_name": {
+      "provenance": {
+        "citation_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "claim_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "literal": {
+              "value": "Hello World Application"
+            }
+          }
+        ]
+      }
+    },
+    "entities": {
+      "basis": {
+        "provenance": {
+          "citation_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "claim_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "clarification_response_ids": []
+        },
+        "value": {
+          "segments": [
+            {
+              "literal": {
+                "value": "All listed requirements are business-level behaviors that do not necessitate the creation or management of persistent data entities or relationships. The application must start, display a greeting, and output the current UTC date/time, which are transient actions. No requirement specifies storing, retrieving, or relating data, so entity records are unnecessary."
+              }
+            }
+          ]
+        }
+      },
+      "disposition": "not_applicable"
+    },
+    "primary_user_story": {
+      "provenance": {
+        "citation_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          },
+          {
+            "ordinal": 4
+          }
+        ],
+        "claim_ids": [
+          {
+            "ordinal": 1
+          },
+          {
+            "ordinal": 2
+          },
+          {
+            "ordinal": 3
+          }
+        ],
+        "clarification_response_ids": []
+      },
+      "value": {
+        "segments": [
+          {
+            "exact_copy": {
+              "claim_id": {
+                "ordinal": 4
+              }
+            }
+          },
+          {
+            "literal": {
+              "value": "As a user, when I launch the application, it should start successfully and display kindexact_copy and the current UTC date and time."
+            }
+          }
+        ]
+      }
+    },
+    "records": [
+      {
+        "id": {
+          "kind": "acceptance_criterion",
+          "ordinal": 1
+        },
+        "proposal": {
+          "content": {
+            "acceptance_criterion": {
+              "given": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "The application is not running"
+                    }
+                  }
+                ]
+              },
+              "then": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "The application starts successfullyThe console displays the text \"Hello, World!\"The console displays the current date and time in UTC"
+                    }
+                  }
+                ]
+              },
+              "when": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "The user launches the application"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "provenance": {
+            "citation_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 2
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "claim_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 2
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "clarification_response_ids": []
+          }
+        }
+      },
+      {
+        "id": {
+          "kind": "functional_requirement",
+          "ordinal": 1
+        },
+        "proposal": {
+          "content": {
+            "functional_requirement": {
+              "text": {
+                "segments": [
+                  {
+                    "literal": {
+                      "value": "When the application starts, it must display the greeting \"Hello, World!\" and output the current date and time in UTC"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "provenance": {
+            "citation_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 2
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "claim_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 2
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "clarification_response_ids": []
+          }
+        }
+      }
+    ]
+  }
+}

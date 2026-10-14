@@ -238,7 +238,7 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 
 - one reference chunk, artifact section, requirement cluster, task cluster, or file operation per call;
 - strict JSON schema with enums and `additionalProperties: false`;
-- temperature `0` whenever the selected registered model supports temperature; omit
+- temperature `0.1` whenever the selected registered model supports temperature; omit
   the control only when unsupported, without relying on it for correctness;
 - stable IDs for sources, requirements, tokens, projects, files, tasks, commands, and diagnostics;
 - complete response-shape guidance from the bound compiled schema, including
@@ -251,9 +251,10 @@ If the current unit cannot be completed with supplied facts, a workflow model op
 - one complete schema-valid result and explicit operation-local retry limits;
 - an optional YAML-declared fallback operation only after deterministic retry exhaustion, never as hidden behavior.
 
-The user-approved 2026-09-19 temperature policy applies to every engine model
-request and Bedrock rubric evaluation. Provider binding derives the control from
-registered capabilities; workflow definitions cannot select or override it.
+The user-approved 2026-10-11 amendment replaces the 2026-09-19 fixed temperature
+`0` with `0.1` for every engine model request and Bedrock rubric evaluation.
+Provider binding derives the control from registered capabilities; workflow
+definitions cannot select or override it.
 Prepared requests, retries and provider authorization retain and validate that
 control. OpenAI rubric evaluation remains outside this amendment.
 
@@ -265,6 +266,21 @@ control. OpenAI rubric evaluation remains outside this amendment.
   unit and declares its semantic-review resources and transitions in YAML.
 - Its findings are labeled `model_assisted`, retain source citations, and never masquerade as
   deterministic evidence.
+
+**Task-authorized Phase 6 amendment (11 October 2026):** an explicit pure native
+transition may re-admit an execution-local source-review assignment when its
+complete assessment dependencies are unchanged. The original terminal accepted
+request, epoch and actual inference origin remain the witness; reuse creates no
+request, attempt, provider receipt or token charge. Compare the native unit and
+purpose, full packet and restrictions, selected schema, compiled guidance/context
+and provider/model/slot/settings. The pure admission step may have a different
+workflow-step ID; workflow identity/version and the original producing request
+association remain fixed. No other binding difference is equivalent by implication.
+Current native subject, requiredness, applicability and evidence admission still
+apply. Eligibility and conservative exclusions are defined once in
+[§22.4](22-repair.md#224-repair-request-and-response); resource-only requests and
+JSON-composition parts have no review-retention contract. This is assessment
+reuse, not provider caching or deterministic semantic proof.
 
 ### 12.7 Workflow-defined model operations
 
@@ -819,25 +835,30 @@ claim or source-only evidence. A `candidate` attribution means the fixed omissio
 belongs to the generated subject while its meaning survived upstream; it requires
 a current candidate and nonempty subject-bound claim evidence. `unlocalized`
 means no reliable attribution was established. Both retain ordinary eligibility.
-Native source-review evidence retains `loss` and its source-line/producer-loss
-comparison, so readback repeats the same source and producer joins. A localized
-answer without comparison evidence rejects; `candidate`, `unlocalized` and non-omission
-findings carry no comparison. Principle evidence has neither. `specification-state/v9` rejects earlier
-snapshot contracts rather than silently supplying a missing binding. ADR 0020
-governs the derived exact-reference lineage.
+Native source-review evidence retains the bound preservation assignment and complete
+assessment response under [§22.1](22-repair.md). The derived location must agree
+with re-admission against current canonical facts. Non-omission and principle
+findings carry no comparison. The response supplies judgments, original-source
+spans and explanations; its comparison ID binds the entire native collection.
+The current `specification-state/v13` contract in [§24.1](24-workflow-state.md#241-workflow-state)
+retains these native collections and authored associations, rejecting earlier
+snapshot contracts without supplying missing bindings. ADR 0020 governs exact lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
 
 **Source-review response contract (28 September 2026):** the model chooses a
-semantic finding, detail, and any genuinely selectable source. When the finding
-is candidate omission, a separate call attributes it to the candidate, an upstream
-producer, or leaves it unlocalized. Its dedicated input contains the fixed finding,
-resolved candidate business values, numbered source lines and producers
-paired with their actual outputs. Only eligible producers carry selectable locations;
-other outputs remain supporting evidence; support-assessment instructions are absent.
-An upstream selection supplies the required source-line/producer comparison;
+semantic finding, detail, and any genuinely selectable source. The approved
+10 October explicit-obligation amendment in [§22.1](22-repair.md) also requires
+`missing_obligation` for a source candidate omission, distinct from its diagnostic
+detail and bound to its selected sources. No other finding or principle review
+may supply it. The separate loss call assesses native-bound preservation
+views against that unchanged obligation without revising the finding or inferring
+its requirement from diagnostic prose. It returns complete evidenced comparisons,
+not a location; the same schema and immutable assignment govern protocol correction.
+Resolved business values, numbered sources and producer context support those
+comparisons. Native code derives attribution under §22.1;
 every selected generation, source-review and repair schema rejects `provenance`.
 The engine constructs the canonical claim selection from the current bound
-source group, candidate evidence or selected diagnostic producer. A selected
+source group, candidate evidence or natively derived diagnostic producer. A selected
 extraction or token loss has an empty diagnostic claim set; signal or conflict
 loss uses the named producer's exact set. Source-only negative findings may
 carry empty canonical support where the rule permits it. An eligible catalogue,

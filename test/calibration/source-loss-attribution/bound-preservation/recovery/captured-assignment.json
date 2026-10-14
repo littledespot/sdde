@@ -1,0 +1,1070 @@
+{
+  "boundaries": [
+    {
+      "input": {
+        "source_premise": {}
+      },
+      "output": {
+        "comparison": {
+          "ordinal": 1
+        }
+      },
+      "owner": null
+    },
+    {
+      "input": {
+        "comparison": {
+          "ordinal": 1
+        }
+      },
+      "output": {
+        "comparison": {
+          "ordinal": 2
+        }
+      },
+      "owner": {
+        "role_assignment": "primary_user_story"
+      }
+    },
+    {
+      "input": {
+        "comparison": {
+          "ordinal": 2
+        }
+      },
+      "output": {
+        "deficient_subject": {}
+      },
+      "owner": {
+        "existing": {
+          "candidate": {}
+        }
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "id": {
+        "ordinal": 1
+      },
+      "members": [
+        {
+          "claim_id": {
+            "ordinal": 1
+          },
+          "id": {
+            "ordinal": 1
+          }
+        },
+        {
+          "claim_id": {
+            "ordinal": 2
+          },
+          "id": {
+            "ordinal": 2
+          }
+        },
+        {
+          "claim_id": {
+            "ordinal": 3
+          },
+          "id": {
+            "ordinal": 3
+          }
+        },
+        {
+          "claim_id": {
+            "ordinal": 4
+          },
+          "id": {
+            "ordinal": 4
+          }
+        }
+      ],
+      "purpose": "One narrative describing the actor or system identified by the source, its action and intended result. Preserve conditions and obligations; do not invent a persona or benefit or require a prewritten story."
+    },
+    {
+      "id": {
+        "ordinal": 2
+      },
+      "members": [
+        {
+          "claim_id": {
+            "ordinal": 1
+          },
+          "id": {
+            "ordinal": 1
+          }
+        },
+        {
+          "claim_id": {
+            "ordinal": 2
+          },
+          "id": {
+            "ordinal": 2
+          }
+        },
+        {
+          "claim_id": {
+            "ordinal": 3
+          },
+          "id": {
+            "ordinal": 3
+          }
+        }
+      ],
+      "purpose": "One narrative describing the actor or system identified by the source, its action and intended result. Preserve conditions and obligations; do not invent a persona or benefit or require a prewritten story."
+    }
+  ],
+  "facts": {
+    "brief": {
+      "description": {
+        "provenance": {
+          "citation_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "claim_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "clarification_response_ids": []
+        },
+        "value": {
+          "segments": [
+            {
+              "literal": {
+                "value": "When started, the application displays \"Hello, World!\" and outputs the current date and time in UTC."
+              }
+            }
+          ]
+        }
+      },
+      "primary_goal": {
+        "provenance": {
+          "citation_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "claim_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "clarification_response_ids": []
+        },
+        "value": {
+          "segments": [
+            {
+              "literal": {
+                "value": "Provides a quick greeting and the current UTC time to inform the user of successful startup."
+              }
+            }
+          ]
+        }
+      },
+      "title": {
+        "provenance": {
+          "citation_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "claim_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "clarification_response_ids": []
+        },
+        "value": {
+          "segments": [
+            {
+              "literal": {
+                "value": "Hello World Application"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "candidate": {
+      "display_name": {
+        "provenance": {
+          "citation_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "claim_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "clarification_response_ids": []
+        },
+        "value": {
+          "segments": [
+            {
+              "literal": {
+                "value": "Hello World Application"
+              }
+            }
+          ]
+        }
+      },
+      "entities": {
+        "basis": {
+          "provenance": {
+            "citation_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 2
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "claim_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 2
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "clarification_response_ids": []
+          },
+          "value": {
+            "segments": [
+              {
+                "literal": {
+                  "value": "All listed requirements are business-level behaviors that do not necessitate the creation or management of persistent data entities or relationships. The application must start, display a greeting, and output the current UTC date/time, which are transient actions. No requirement specifies storing, retrieving, or relating data, so entity records are unnecessary."
+                }
+              }
+            ]
+          }
+        },
+        "disposition": "not_applicable"
+      },
+      "primary_user_story": {
+        "provenance": {
+          "citation_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            },
+            {
+              "ordinal": 4
+            }
+          ],
+          "claim_ids": [
+            {
+              "ordinal": 1
+            },
+            {
+              "ordinal": 2
+            },
+            {
+              "ordinal": 3
+            }
+          ],
+          "clarification_response_ids": []
+        },
+        "value": {
+          "segments": [
+            {
+              "exact_copy": {
+                "claim_id": {
+                  "ordinal": 4
+                }
+              }
+            },
+            {
+              "literal": {
+                "value": "As a user, when I launch the application, it should start successfully and display kindexact_copy and the current UTC date and time."
+              }
+            }
+          ]
+        }
+      },
+      "records": [
+        {
+          "id": {
+            "kind": "acceptance_criterion",
+            "ordinal": 1
+          },
+          "proposal": {
+            "content": {
+              "acceptance_criterion": {
+                "given": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "The application is not running"
+                      }
+                    }
+                  ]
+                },
+                "then": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "The application starts successfullyThe console displays the text \"Hello, World!\"The console displays the current date and time in UTC"
+                      }
+                    }
+                  ]
+                },
+                "when": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "The user launches the application"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "provenance": {
+              "citation_ids": [
+                {
+                  "ordinal": 1
+                },
+                {
+                  "ordinal": 2
+                },
+                {
+                  "ordinal": 3
+                }
+              ],
+              "claim_ids": [
+                {
+                  "ordinal": 1
+                },
+                {
+                  "ordinal": 2
+                },
+                {
+                  "ordinal": 3
+                }
+              ],
+              "clarification_response_ids": []
+            }
+          }
+        },
+        {
+          "id": {
+            "kind": "functional_requirement",
+            "ordinal": 1
+          },
+          "proposal": {
+            "content": {
+              "functional_requirement": {
+                "text": {
+                  "segments": [
+                    {
+                      "literal": {
+                        "value": "When the application starts, it must display the greeting \"Hello, World!\" and output the current date and time in UTC"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "provenance": {
+              "citation_ids": [
+                {
+                  "ordinal": 1
+                },
+                {
+                  "ordinal": 2
+                },
+                {
+                  "ordinal": 3
+                }
+              ],
+              "claim_ids": [
+                {
+                  "ordinal": 1
+                },
+                {
+                  "ordinal": 2
+                },
+                {
+                  "ordinal": 3
+                }
+              ],
+              "clarification_response_ids": []
+            }
+          }
+        }
+      ]
+    },
+    "feature": {
+      "bytes": "hello-world"
+    },
+    "records": {
+      "conflicts": [],
+      "dispositions": [
+        {
+          "claim_id": {
+            "ordinal": 1
+          },
+          "disposition": "retained",
+          "related_claim_ids": []
+        },
+        {
+          "claim_id": {
+            "ordinal": 2
+          },
+          "disposition": "retained",
+          "related_claim_ids": []
+        },
+        {
+          "claim_id": {
+            "ordinal": 3
+          },
+          "disposition": "retained",
+          "related_claim_ids": []
+        },
+        {
+          "claim_id": {
+            "ordinal": 4
+          },
+          "disposition": "retained",
+          "related_claim_ids": []
+        }
+      ],
+      "items": {
+        "entries": [
+          {
+            "block_id": {
+              "ordinal": 1
+            },
+            "citations": [
+              {
+                "id": {
+                  "ordinal": 1
+                },
+                "value": {
+                  "block_id": {
+                    "ordinal": 1
+                  },
+                  "location": {
+                    "end": {
+                      "byte": 87,
+                      "column": 1,
+                      "line": 6
+                    },
+                    "start": {
+                      "byte": 44,
+                      "column": 1,
+                      "line": 5
+                    }
+                  },
+                  "source_id": {
+                    "ordinal": 1
+                  },
+                  "verbatim": "- The application must start successfully.\n"
+                }
+              }
+            ],
+            "claim": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "citation_ids": [
+                {
+                  "ordinal": 1
+                }
+              ],
+              "content": {
+                "model": {
+                  "business": {
+                    "value": {
+                      "segments": [
+                        {
+                          "literal": {
+                            "value": "The application must start successfully."
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "id": {
+                "ordinal": 1
+              }
+            },
+            "source_id": {
+              "ordinal": 1
+            }
+          },
+          {
+            "block_id": {
+              "ordinal": 1
+            },
+            "citations": [
+              {
+                "id": {
+                  "ordinal": 2
+                },
+                "value": {
+                  "block_id": {
+                    "ordinal": 1
+                  },
+                  "location": {
+                    "end": {
+                      "byte": 149,
+                      "column": 1,
+                      "line": 7
+                    },
+                    "start": {
+                      "byte": 87,
+                      "column": 1,
+                      "line": 6
+                    }
+                  },
+                  "source_id": {
+                    "ordinal": 1
+                  },
+                  "verbatim": "- When started, the application must display `Hello, World!`.\n"
+                }
+              }
+            ],
+            "claim": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "citation_ids": [
+                {
+                  "ordinal": 2
+                }
+              ],
+              "content": {
+                "model": {
+                  "business": {
+                    "value": {
+                      "segments": [
+                        {
+                          "literal": {
+                            "value": "When started, the application must display `Hello, World!`."
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "id": {
+                "ordinal": 2
+              }
+            },
+            "source_id": {
+              "ordinal": 1
+            }
+          },
+          {
+            "block_id": {
+              "ordinal": 1
+            },
+            "citations": [
+              {
+                "id": {
+                  "ordinal": 3
+                },
+                "value": {
+                  "block_id": {
+                    "ordinal": 1
+                  },
+                  "location": {
+                    "end": {
+                      "byte": 189,
+                      "column": 1,
+                      "line": 8
+                    },
+                    "start": {
+                      "byte": 149,
+                      "column": 1,
+                      "line": 7
+                    }
+                  },
+                  "source_id": {
+                    "ordinal": 1
+                  },
+                  "verbatim": "- Must also output date and time in UTC\n"
+                }
+              }
+            ],
+            "claim": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "citation_ids": [
+                {
+                  "ordinal": 3
+                }
+              ],
+              "content": {
+                "model": {
+                  "business": {
+                    "value": {
+                      "segments": [
+                        {
+                          "literal": {
+                            "value": "The application must also output the date and time in UTC."
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              },
+              "id": {
+                "ordinal": 3
+              }
+            },
+            "source_id": {
+              "ordinal": 1
+            }
+          },
+          {
+            "block_id": {
+              "ordinal": 1
+            },
+            "citations": [
+              {
+                "id": {
+                  "ordinal": 4
+                },
+                "value": {
+                  "block_id": {
+                    "ordinal": 1
+                  },
+                  "location": {
+                    "end": {
+                      "byte": 146,
+                      "column": 60,
+                      "line": 6
+                    },
+                    "start": {
+                      "byte": 133,
+                      "column": 47,
+                      "line": 6
+                    }
+                  },
+                  "source_id": {
+                    "ordinal": 1
+                  },
+                  "verbatim": "Hello, World!"
+                }
+              }
+            ],
+            "claim": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "citation_ids": [
+                {
+                  "ordinal": 4
+                }
+              ],
+              "content": {
+                "preserved_token": {
+                  "citation_id": {
+                    "ordinal": 4
+                  },
+                  "value": {
+                    "candidate_id": {
+                      "extractor_id": "markdown_inline_code_v1",
+                      "ordinal": 1,
+                      "source_id": {
+                        "ordinal": 1
+                      }
+                    },
+                    "downstream_obligation_id": {
+                      "token_id": {
+                        "ordinal": 1
+                      }
+                    },
+                    "id": {
+                      "ordinal": 1
+                    },
+                    "kind": "business_exact_string",
+                    "raw_value": {
+                      "bytes": "Hello, World!"
+                    }
+                  }
+                }
+              },
+              "id": {
+                "ordinal": 4
+              }
+            },
+            "source_id": {
+              "ordinal": 1
+            }
+          }
+        ],
+        "extraction": [
+          {
+            "outcome": {
+              "claims": [
+                {
+                  "ordinal": 1
+                },
+                {
+                  "ordinal": 2
+                },
+                {
+                  "ordinal": 3
+                },
+                {
+                  "ordinal": 4
+                }
+              ]
+            },
+            "scope": {
+              "chunk_id": {
+                "bytes": "chunk-1"
+              },
+              "state_id": {
+                "bytes": "reference-0e1dcd43cc05abd8ee1fca944d95249a"
+              }
+            },
+            "token_classifications": [
+              {
+                "preserve": {
+                  "kind": "business_exact_string",
+                  "token_candidate_id": {
+                    "extractor_id": "markdown_inline_code_v1",
+                    "ordinal": 1,
+                    "source_id": {
+                      "ordinal": 1
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "state_id": {
+          "bytes": "reference-0e1dcd43cc05abd8ee1fca944d95249a"
+        }
+      },
+      "signals": [
+        {
+          "id": {
+            "ordinal": 1
+          },
+          "value": {
+            "citation_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 2
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "claim_ids": [
+              {
+                "ordinal": 1
+              },
+              {
+                "ordinal": 2
+              },
+              {
+                "ordinal": 3
+              }
+            ],
+            "content": {
+              "model": {
+                "business": {
+                  "value": {
+                    "segments": [
+                      {
+                        "literal": {
+                          "value": "The application must start successfully.When started, the application must display `Hello, World!`.The application must also output the date and time in UTC."
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "generation_roles": [
+              "title",
+              "description",
+              "primary_goal",
+              "primary_user_story",
+              "entity_basis",
+              "records"
+            ]
+          }
+        },
+        {
+          "id": {
+            "ordinal": 2
+          },
+          "value": {
+            "citation_ids": [
+              {
+                "ordinal": 4
+              }
+            ],
+            "claim_ids": [
+              {
+                "ordinal": 4
+              }
+            ],
+            "content": {
+              "preserved_token": {
+                "token_id": {
+                  "ordinal": 1
+                }
+              }
+            },
+            "generation_roles": []
+          }
+        }
+      ]
+    },
+    "revision": 5,
+    "sources": {
+      "chunks": {
+        "entries": [
+          {
+            "block_id": {
+              "ordinal": 1
+            },
+            "id": {
+              "bytes": "chunk-1"
+            },
+            "ordinal": 1,
+            "source_id": {
+              "ordinal": 1
+            },
+            "span": {
+              "end": {
+                "byte": 189,
+                "column": 1,
+                "line": 8
+              },
+              "start": {
+                "byte": 0,
+                "column": 1,
+                "line": 1
+              }
+            }
+          }
+        ],
+        "partition": "source_blocks_v1",
+        "state_id": {
+          "bytes": "reference-0e1dcd43cc05abd8ee1fca944d95249a"
+        }
+      },
+      "corpus": {
+        "block_mappings": [
+          {
+            "canonical": {
+              "ordinal": 1
+            },
+            "provisional": {
+              "ordinal": 1,
+              "source": {
+                "ordinal": 1
+              }
+            }
+          }
+        ],
+        "feature_id": {
+          "bytes": "hello-world"
+        },
+        "source_mappings": [
+          {
+            "canonical": {
+              "ordinal": 1
+            },
+            "provisional": {
+              "ordinal": 1
+            }
+          }
+        ],
+        "sources": [
+          {
+            "blocks": [
+              {
+                "id": {
+                  "ordinal": 1
+                },
+                "ordinal": 1,
+                "span": {
+                  "end": {
+                    "byte": 189,
+                    "column": 1,
+                    "line": 8
+                  },
+                  "start": {
+                    "byte": 0,
+                    "column": 1,
+                    "line": 1
+                  }
+                }
+              }
+            ],
+            "bytes": "# Hello World Application\n\n## Requirements\n\n- The application must start successfully.\n- When started, the application must display `Hello, World!`.\n- Must also output date and time in UTC\n",
+            "id": {
+              "ordinal": 1
+            },
+            "path": {
+              "bytes": "stories.md"
+            },
+            "reader": "markdown_source_v1"
+          }
+        ],
+        "state_id": {
+          "bytes": "reference-0e1dcd43cc05abd8ee1fca944d95249a"
+        }
+      }
+    }
+  },
+  "finding": {
+    "detail": "The supplied subject omits the requirement that the application display the string \"Hello, World!\" as specified in the source. The source explicitly states that upon startup the application must display \"Hello, World!\" and output the current UTC date and time. The subject instead references an undefined token \"kindexact_copy\", thereby leaving the intended display text unrepresented.",
+    "ordinal": 4,
+    "revision": 4,
+    "source_ids": [
+      {
+        "ordinal": 1
+      }
+    ],
+    "subject": {
+      "contract_version": 1,
+      "kind": "feature_intent",
+      "member": 0,
+      "slot": "primary_user_story",
+      "unit": {
+        "feature": "singleton"
+      }
+    }
+  },
+  "sources": [
+    {
+      "chunk_id": {
+        "bytes": "chunk-1"
+      },
+      "lines": [
+        {
+          "id": {
+            "ordinal": 1
+          },
+          "text": "# Hello World Application\n"
+        },
+        {
+          "id": {
+            "ordinal": 2
+          },
+          "text": "\n"
+        },
+        {
+          "id": {
+            "ordinal": 3
+          },
+          "text": "## Requirements\n"
+        },
+        {
+          "id": {
+            "ordinal": 4
+          },
+          "text": "\n"
+        },
+        {
+          "id": {
+            "ordinal": 5
+          },
+          "text": "- The application must start successfully.\n"
+        },
+        {
+          "id": {
+            "ordinal": 6
+          },
+          "text": "- When started, the application must display `Hello, World!`.\n"
+        },
+        {
+          "id": {
+            "ordinal": 7
+          },
+          "text": "- Must also output date and time in UTC\n"
+        }
+      ],
+      "source_id": {
+        "ordinal": 1
+      }
+    }
+  ]
+}

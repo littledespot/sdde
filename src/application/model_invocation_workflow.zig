@@ -30,6 +30,7 @@ fn Call(comptime kind: provider.ProviderOperationKind) type {
             .produces = if (kind == .inference) &selection.produces else &selection.count_produces,
             .outcomes = &.{ .ok, .failed, .cancelled },
             .side_effect = Action.contract.side_effect,
+            .outcome_association = .{ .observe = .{ .kind = .request, .subject = .prepared_model_request, .evidence = output_schema.key } },
         };
         allocator: std.mem.Allocator,
         // A missing adapter fails closed; production never substitutes a fake.

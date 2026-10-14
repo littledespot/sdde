@@ -88,8 +88,8 @@ const Fixture = struct {
         errdefer self.arena.deinit();
         const entry = @import("composition/native_workflow_operations.zig").entry;
         const entries = core.entries ++ [_]operations.Entry{
-            entry(native.Build, &self.build),                                                                                                                                                                                        entry(native.Parse, &self.parse),                                                                                                                                                                                                                                                        entry(native.Reconcile, &self.reconcile),                                                                                                                                                                                      entry(native.Validate, &self.validate),
-            .{ .contract = .{ .id = "test.authority-inputs", .kind = .step, .produces = &.{.required_authority_inputs}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.inputs) }, .{ .contract = .{ .id = "test.authority-observation", .kind = .step, .requires = &.{.required_authority_inputs}, .produces = &.{.raw_required_authority_observations}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.observation) }, .{ .contract = .{ .id = "test.authority-protected", .kind = .step, .gates = &.{native.gate_contract.id.bytes}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.protected) },
+            entry(native.Build, &self.build),                                                                                                                                                                                        entry(native.Parse, &self.parse),                                                                                                                                                                                                                                                                                                                                                                                                                                                        entry(native.Reconcile, &self.reconcile),                                                                                                                                                                                      entry(native.Validate, &self.validate),
+            .{ .contract = .{ .id = "test.authority-inputs", .kind = .step, .produces = &.{.required_authority_inputs}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.inputs) }, .{ .contract = .{ .id = "test.authority-observation", .kind = .step, .requires = &.{.required_authority_inputs}, .produces = &.{.raw_required_authority_observations}, .outcomes = &.{.ok}, .side_effect = .none, .outcome_association = .{ .preserve = .{ .kind = .authority, .subject = .required_authority_inputs, .evidence = .required_authority_inputs, .result = .raw_required_authority_observations } } }, .binding = binding.bind(Script, &self.script, Script.observation) }, .{ .contract = .{ .id = "test.authority-protected", .kind = .step, .gates = &.{native.gate_contract.id.bytes}, .outcomes = &.{.ok}, .side_effect = .none }, .binding = binding.bind(Script, &self.script, Script.protected) },
         };
         self.registry = .{ .operations = try self.arena.allocator().dupe(operations.Entry, &entries), .data_schemas = &native.schemas, .gates = &.{native.gate_contract}, .policies = &core.profiles };
         try std.testing.expect(self.registry.validate());
@@ -157,6 +157,63 @@ test "unrelated compiled YAML workflows use native authority operations and pres
         try std.testing.expectEqual(expected, harness.run());
         try std.testing.expectEqual(@as(usize, if (fault == .none) 1 else 0), fixture.script.calls);
     };
+}
+
+test "native reconciliation observes changed disposition before validated authority classification" {
+    const association = @import("domain/workflow_outcome_association.zig");
+    for ([_]a.Kind{ .feature_intent, .design_decision, .executable_decomposition }) |kind| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator, kind, .conflict);
+        defer fixture.arena.deinit();
+        const graph = try fixture.compile(yaml);
+        var runner = fixture.runner(graph);
+        defer runner.deinit();
+        var harness: Harness = .{ .runner = &runner, .graph = graph };
+        try std.testing.expectEqual(.needs_user, harness.run());
+        const view: @import("domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+        const result = try owned.read(&view, native.result_schema, .result);
+        const decision = try values.read(&view, native.gate_schema, @import("domain/workflow_gate.zig").Decision);
+        try std.testing.expectEqual(.needs_user, result.continuation);
+        try std.testing.expectEqual(.rejected, decision.*);
+        const inputs_origin = runner.envelope.origins[@intFromEnum(native.inputs_schema.key)].?;
+        const ledger_origin = runner.envelope.origins[@intFromEnum(native.ledger_schema.key)].?;
+        const inputs: association.Subject = .{ .native = .{ .kind = .authority, .key = native.inputs_schema.key, .generation = inputs_origin.generation, .occurrence = inputs_origin.occurrence } };
+        const ledger: association.Subject = .{ .native = .{ .kind = .authority, .key = native.ledger_schema.key, .generation = ledger_origin.generation, .occurrence = ledger_origin.occurrence } };
+        for ([_]workflow.OutcomeTag{ .blocked, .invalid, .failed, .cancelled }) |prior| {
+            var state = association.State.init(std.testing.allocator);
+            defer state.deinit();
+            var first = try state.prepare(.{ .observe = native.Build.outcome_association.binding().? }, prior, &.{.{ .observe = .{ .subject = inputs, .outcome = prior } }});
+            defer first.deinit();
+            try state.commit(&first);
+            var carrier = try state.prepare(native.Build.outcome_association, .ok, &.{.{ .associate = .{ .source = inputs, .target = ledger } }});
+            defer carrier.deinit();
+            try state.commit(&carrier);
+            const change = [_]association.Change{.{ .observe = .{ .subject = ledger, .outcome = .needs_user } }};
+            const revision = state.revision;
+            try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .preserve = native.Reconcile.outcome_association.binding().? }, .needs_user, &change));
+            try std.testing.expectEqual(revision, state.revision);
+            var observed = try state.prepare(native.Reconcile.outcome_association, .needs_user, &change);
+            defer observed.deinit();
+            try state.commit(&observed);
+            // Observation retains the first failure until the native gate owns
+            // the disposition. It cannot make either pending finding disappear.
+            try std.testing.expectEqual(prior, state.firstUnresolved().?.outcome);
+            try std.testing.expectEqual(@as(usize, 2), state.entries.items.len);
+            const classification = [_]association.Change{.{ .reclassify = .{ .authority_result = .{ .subject = inputs, .result = &result } } }};
+            if (prior == .failed or prior == .cancelled) {
+                try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(native.Validate.outcome_association, .needs_user, &classification));
+                try std.testing.expectEqual(prior, state.firstUnresolved().?.outcome);
+            } else {
+                var validated = try state.prepare(native.Validate.outcome_association, .needs_user, &classification);
+                defer validated.deinit();
+                try state.commit(&validated);
+                try std.testing.expectEqual(.needs_user, state.firstUnresolved().?.outcome);
+                try std.testing.expectEqual(@as(usize, 2), state.entries.items.len);
+                try std.testing.expect(state.compatible(.needs_user));
+            }
+            try std.testing.expect(!state.compatible(.ok));
+        }
+    }
 }
 
 test "YAML cannot skip validation or route a rejected authority gate into protected work" {

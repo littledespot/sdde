@@ -64,17 +64,53 @@ This summarizes the existing contracts in
 - Authoring dependencies use resolved brief text and entity applicability/basis;
   canonical provenance and fragment bookkeeping stay native. Record purposes and
   selected schema alternatives derive from the same native eligibility decision.
-- Loss localization keeps its omission verdict fixed. The dedicated packet pairs
-  each producer with its actual output, alongside resolved candidate
-  business values and numbered source lines. Only eligible producers carry selectable
-  locations; other outputs remain supporting evidence. It omits support-assessment guidance.
-  `candidate` means the defect is downstream and meaning survived upstream;
-  `unlocalized` means ownership remains uncertain. Neither carries a comparison.
-  `localized` requires an eligible upstream `location` and source/producer `comparison`.
-  Shared admission checks current evidence association; it does not prove semantic
-  loss. Schema choices follow the same eligibility in initial and correction calls.
-  Candidate and unlocalized answers retain the existing safe candidate-local repair
-  or failure route; they grant no upstream target or broader repair authority.
+- Source `candidate_omission` separates a required `missing_obligation` from its
+  diagnostic `detail`. The existing reviewer states the omitted source requirement
+  directly, retaining conditions, negation and obligation strength and selecting
+  its source evidence. Other findings and principle reviews forbid the field.
+  Native code validates and carries it without synthesizing meaning. Initial
+  review, insertion and protocol correction use that same closed shape; selected
+  omission-detail correction returns both obligation and explanation under the
+  existing bound verdict and source evidence.
+- Loss comparison keeps that explicit obligation fixed and assesses native-bound evidence
+  collections. `preserved`, `lost` and `uncertain` describe each assigned view;
+  no model-selected culprit or repair operation is accepted. Native attribution,
+  currentness and permission follow [§22.1](../contracts/22-repair.md).
+  Omission admission requires its supporting sources even when claim evidence is
+  fixed by the subject; this provides the comparison's original-source premise.
+  Original claims selected for authoring remain its meaning input; signal prose is
+  supporting evidence. Complete comparison responses retain original-source spans,
+  judgments, explanations and their own call origin. The retained native assignment
+  owns complete collection membership; responses do not select a member subset.
+  Stored evidence is rederived without request logs.
+  The request exposes one comparison-local member ID, resolved claim meaning and
+  source identity. Canonical claim/citation IDs and half-open coordinates stay in
+  native evidence; source selections use only the inclusive line catalogue.
+  `fixed_finding.missing_obligation` is the single comparison target. The diagnostic
+  explanation and target purpose are supporting evidence alongside the already
+  deficient subject and resolved producer outputs. They cannot supply a different
+  obligation or require upstream collections to resemble the final artifact or
+  describe its defect. Equivalent wording and meaning expressed jointly by members
+  count as preservation.
+  Original-source spans establish the supplied obligation; the explanation
+  assesses preservation in the assigned collection. [§22](../contracts/22-repair.md)
+  owns collective citation support, including completeness and relevance. These
+  are separate semantic quality measures, not source-count admission rules.
+  Claim meanings omit extraction-category labels: preservation depends on what the
+  collection expresses, not whether a value has a separate member. A bare value
+  alone does not establish behavior. Canonical categories, occurrence identities
+  and actual classification decisions remain intact; native code does not infer
+  semantic equivalence or change authored association membership.
+- `Source.comparisonAssignment` constructs the shared native binding;
+  `packetForLoss` resolves its model-facing values. Initial requests and protocol
+  corrections use `preservation_comparisons`. Collection, diagnostic admission and
+  repair authorization use the same native derivation. Native `invalid_loss` is
+  terminal; this change adds no semantic retry or expanded repair permission.
+  The retained assignment binds the exact obligation, original explanation,
+  selected sources, subject, review revision and current canonical evidence.
+  Readback or repair with a changed binding rejects. Source-obligation fidelity
+  and loss-attribution quality require live measurement of both existing calls;
+  hand-written obligations alone cannot establish the complete handoff's quality.
 
 Native operation causes and expected domain rejections survive into CLI, telemetry
 and harness evidence through the closed operation contract. The harness records
@@ -83,6 +119,14 @@ event order does not prove the initiating semantic cause. Provider-content rejec
 survives transport retirement independently of protocol rejection. See the
 [retained evidence contract](../harness/e2e.md#retained-results). These observations
 grant no retry, repair, continuation or publication authority.
+
+Omission authorization retains each considered target's actual rejection reason,
+validated loss location and available target, finding and comparison origins.
+Unchecked targets stay explicit when stale or invalid evidence stops admission.
+These separate observations do not replace assembled-candidate attribution with
+a single culprit call. Target origins follow accepted replacements; absent origins
+remain absent. Reporting consumes the authorization trace without repeating its
+eligibility checks.
 
 ## Guidance by call type
 
@@ -160,7 +204,9 @@ only that payload schema. Native decoding restores the retained kind; the model 
 not repeat it. Target/revision ownership, sibling preservation and full validation
 remain with the existing repair owners.
 
-**Support review** returns one `decision` with evidence and brief detail. Native
+**Support review** retains one closed finding per native requirement, with evidence
+and brief detail. A singleton source assignment returns its existing source value;
+principle review retains its separate `decision` contract. Native
 policy supplies fixed applicability; `not_applicable` is a separate permitted
 decision only when applicability still needs review. Initial and missing-finding
 requests select the same closed shapes. Detail/evidence repairs preserve decisions;
@@ -179,8 +225,40 @@ Completed entity-applicability review receives the disposition, resolved basis a
 business context through the same projection as policy review. Partial source
 review and producer localization retain their existing subjects and evidence.
 
-**Entity applicability** uses the shared requirement description for role
-selection, generation, source/policy review and authorized basis repair. It defines
+The task-authorized Phase 4 source transport/lifecycle amendment batches the
+existing Given, When and Then findings of one acceptance-criterion record. The
+production builder selects a record assignment only at its first Given requirement
+with all three current native IDs. The response contains `findings`, each with
+`requirement_ordinal` and the existing closed source `value`. The native owner
+requires exact complete membership before append, normalizes wire order to ledger
+order and validates each field under its own purpose and evidence rule. A broad
+pass cannot fill several findings. Original sources and the same current record
+sibling context are shared; every finding remains independently attributable.
+
+Record protocol correction retains the complete assignment and schema. A native
+detail/evidence repair still receives only its selected singleton finding and
+cannot alter valid siblings or the verdict. One real accepted review call may
+appear in all three per-finding origin slots; only an actual selected replacement
+changes that field's origin. Multiple omissions are localized one at a time from
+the earliest canonical finding without preservation evidence. Each receives a
+complete bound comparison with its unchanged obligation and distinct comparison
+origin before review advances. No repair permission, required finding, collection
+coverage or principle duty is removed. Offline mechanical readiness does not
+establish lower actual cost, semantic equivalence or Phase 11 promotion.
+
+The shared requirement-description owner supplies source-only `assessment_scope`
+alongside the existing business purpose. It distinguishes authoritative original
+sources from derived claims and candidate assertions. Independent fields assess
+represented meaning and its conditions; record siblings may jointly express a
+flow. Collections assess complete assigned coverage, including original duties
+absent from current associations. Initial requests, protocol correction and
+authorized finding/detail/evidence repair use the same packet owner. Policy and
+authoring retain their existing business purposes; loss attribution retains the
+reviewer's unchanged obligation. No finding tag, persistence shape or repair
+permission changes with this scope presentation.
+
+**Entity applicability** uses the shared requirement description for generation,
+source/policy review and authorized basis repair. It defines
 both the entity-only disposition and the explanation connecting that decision to
 the requirements. A negative entity decision retains the other behavioral
 obligations. Review assesses the decision and its basis together; an irrelevant
@@ -205,7 +283,9 @@ Generation receives eligible family meanings and their fields through its source
 assignment; focused source and policy reviews receive the selected family/field
 purpose. Records authoring also receives `record_requirements`, projecting the
 canonical mandatory families with `assembled_specification` scope. Requiredness
-applies across bound source-group batches; optional families need no filler.
+includes the conditional entity family when native membership policy requires
+entities. It applies across bound source-group batches; no individual batch must
+emit every family, and optional families need no filler.
 The authoring prompt asks the collection to preserve all assigned obligations.
 The shared acceptance-criterion field descriptions distinguish the situation
 before the trigger, the trigger itself and its observable consequences. They
@@ -215,9 +295,16 @@ target. Specification content repair presents its authorized `task` once; active
 assignments retain their claim/signal selections and omit authoring purposes.
 Native value and membership repairs describe only the selected field or permitted
 families. Completed-unit omission repair retains `source_assignment: null` without
-recreating a consumed authoring assignment. Authoring resolves requirement meaning
-beside the bound purpose; remaining eligible requirements are context, not another
-assignment. These are projections of existing claims, not a new evidence ledger.
+recreating a consumed authoring assignment. Initial attributed authoring resolves offered whole-group requirement meaning
+beside each field purpose and selects supporting occurrences while drafting.
+Records retain one fixed native group. Shared source guidance identifies
+`source_assignment.requirements` as the batch's duties and `context_requirements`
+and prior drafts as interpretation context, not substitutes for another group's
+independent duty or permission to widen repair evidence. The cited original source
+still establishes qualifying conditions and the use of exact values. Token-only
+membership does not require empty output or establish that unrelated source duties
+belong to that batch; semantic support remains reviewed. These are projections of
+existing claims, not a new evidence ledger.
 Original source bytes remain available. Citation coordinates and extractor/token
 bookkeeping stay native; exact choices expose only the eligible occurrence, value
 and source. Initial requests use their authoring prompt; native replacements use
@@ -247,31 +334,34 @@ immutable native choice facts; protocol correction keeps that schema. Canonical
 segments and persisted lineage retain the occurrence ID. Matching literal text
 never reconstructs source identity, and this rule adds no semantic support.
 
-**Authoring-role assessment** remains one initial model call. Its `role_decisions`
-map requires one decision for every registered role: `supported` with nonempty
-unique eligible signal IDs, or `unsupported` without IDs. Role names and purposes
-come from the shared catalogue, not another prompt registry. Native admission
-rejects missing/duplicate roles and duplicate/ineligible selections, then derives
-positive group-role bindings in native offered-group and role order through the
-existing validator. No eligible groups yields an unsupported-only selected schema;
-pending decisions are not default negatives. Upstream repairs retire the complete
-assessment and derived bindings together. Protocol correction retains the same
-immutable packet and complete contract, with the existing allowance. An admitted
-unsupported judgment does not trigger semantic reconsideration, establish a user
-gap or grant entity `not_applicable` authority. See
-[ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#complete-role-decision-amendment-approved-9-october-2026).
+**Authored source associations** replace the independent role classifier and
+role-coverage prebinding gate under
+[ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#authored-association-amendment-approved-11-october-2026).
+Current complete references and a nonempty retained whole-group catalogue admit
+generation. Initial brief/story/entity values return `signal_ids` alongside their
+business value. Several complete groups may jointly support one field, and groups
+may be shared across fields. Native occurrence admission rejects duplicate,
+foreign, inactive or stale selections, constructs required canonical
+`source_group_ids`, derives complete-member `S` in catalogue order and reuses exact
+lineage/citation validation. A displayed group is available evidence, not proof
+of support. Positive associations cannot map open questions; clarification
+questions use their distinct native selection scope and existing reasons. Missing
+native authority does not become a missing user decision.
 
-**Authoring-role handoff** uses the shared
-[source-binding coverage check](../../src/domain/specification_source_binding.zig)
-before generation. Complete eligible coverage starts authoring. An incomplete
-assignment returns `blocked` with every missing role, the current reference state,
-partition and revision, role-selection request origin, and eligible signal/claim
-IDs. The existing candidate diagnostic carries this evidence into CLI and harness
-reports. Source readiness still establishes structural accounting, not role
-completeness. Unsupported decisions contribute no canonical positive roles;
-the actual captured response retains the verdict. This result authorizes neither
-default assignments, a user clarification nor an automatic correction call.
-Canonical readback requires complete coverage through the same check.
+A record task still binds one accepted group and returns content-only records;
+every record inherits exactly that group's complete selection. An empty array is
+allowed per group, advances the existing cursor and supplies no positive coverage.
+Aggregate mandatory families, entity membership, business mapping, exact coverage,
+full source/policy review and publication remain required. Initial protocol
+correction keeps its catalogue and schema. Fixed value/record repairs cannot
+select or change group IDs, widen `S` or their effective evidence bounds. An
+unresolved association defect blocks without producer-blame fallback. Record
+insertion requires a bound accepted occurrence; equal member lists cannot select
+an occurrence. Upstream change retires the catalogue and dependent authored/review
+evidence. Readback uses the same resolver and rejects inconsistent projections.
+Native admission does not prove field meaning or support quality; actual authored
+omissions, invention, wrong support, faithful clarifications and publication quality
+need separate live qualification.
 
 **After every response**, the engine independently requires one complete JSON object.
 The approved [§22.6 prefix normalization](../contracts/22-repair.md#226-unparseable-output)
@@ -383,19 +473,22 @@ and [schema-constrained InvokeModel output](https://docs.aws.amazon.com/bedrock/
 or prove improvement for the configured provider/model/schema combination. A
 comparison must record the actual mode and full engine-validation results.
 
-For authoring-role semantics, the development-only
-[calibration command and cohort](../../test/calibration/authoring-roles/README.md)
-reuse production role packets/schema restrictions, native role admission and the
-existing single-request replay adapter. Labels stay outside model content. The
-candidate guidance is an experiment. Baseline and intervention comparisons bind
+Historical authoring-role diagnostics used the shared then-current role
+packets/schema, admission and existing replay adapter. Phase 5 removes that
+production classifier and development launch entry point. The pending
+[representation diagnostic](../../test/calibration/authoring-roles/representation-control/README.md)
+retains an isolated pinned old native executable and copied assets; it has no
+production fallback. Current authoring-association qualification reuses the
+existing replay path and current admission rather than another role classifier.
+Labels stay outside model content. Historical guidance comparisons are experiments. Baseline and intervention comparisons bind
 each request schema to its matching diagnostic decoder; historical captures are
-immutable and any packet reprojection is explicit. Production has no sparse-wire
+immutable and any packet reprojection is explicit. Production has no historical-role or sparse-wire
 compatibility reader. Reports separate structural missing decisions, false
 unsupported verdicts and wrong supported selections from semantic omissions;
 complete representation is not a quality score. The completed
 [focused pilot](../../fixes/Z_FIX01.md#r7--high-focused-role-calibration-complete-broader-calibration-remains-open)
 found fewer unsupported assignments but unchanged total omissions and a regression
-on the captured production input; it retains production guidance. Neither that
+on the captured production input; it did not establish a successful production fix. Neither that
 small comparison nor offline tests establish whole-workflow reliability.
 
 The [R7 routing follow-up](../../fixes/Z_FIX01.md#97-r7-routing-calibration-follow-up--9-october-2026)
@@ -407,9 +500,11 @@ assignments but increased omissions overall and on captured production inputs;
 production semantic guidance is retained. Those results used the prior sparse
 response contract and do not establish the effect of complete role decisions.
 No genuine post-repair role capture is available, and diagnostic results establish
-no completed-spec quality improvement. The complete-decision intervention still
-requires comparison of omissions and wrong selections before promotion, followed
-by actual live publication, rubric grading and an unchanged repeat under §28.
+no completed-spec quality improvement. These historical role experiments do not
+qualify the current authored-association replacement. Its
+[current-authoring panel](../../test/calibration/authoring-associations/README.md)
+must assess selected support and actual meaning separately, followed by live
+publication, rubric grading and an unchanged repeat under §28.
 
 The [latest captured native-mode run](../../fixes/archive/FIX_001.md#latest-native-json-run--malformed-output-despite-native-schema)
 returned malformed JSON on all three attempts despite the native schema and explicit
@@ -429,3 +524,4 @@ availability nor one successful probe establishes reliable model conformance.
 | Protocol retry | [model_protocol_retry.zig](../../src/domain/model_protocol_retry.zig) |
 | Strict decoding | [model_envelope.zig](../../src/domain/model_envelope.zig) |
 | Schema validation | [model_payload_schema.zig](../../src/domain/model_payload_schema.zig) |
+| Execution-local source-review receipt admission | [specification_review_retention.zig](../../src/domain/specification_review_retention.zig), governed by [§22.4](../contracts/22-repair.md#224-repair-request-and-response) |

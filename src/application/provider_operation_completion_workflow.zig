@@ -21,6 +21,7 @@ fn Completion(comptime kind: @import("../domain/llm_provider_operation.zig").Pro
             .outcomes = &.{ .ok, .failed, .cancelled },
             .side_effect = Action.contract.side_effect,
             .runner_accounting = Action.contract.runner_accounting,
+            .outcome_association = .{ .preserve = .{ .kind = .request, .subject = .prepared_model_request, .evidence = if (kind == .inference) .provider_invocation_validation_result else .provider_token_count_validation_result, .result = .terminal_provider_operation } },
         };
         action: Action = .{},
 

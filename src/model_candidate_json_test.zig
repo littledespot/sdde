@@ -23,15 +23,6 @@ test "reconciliation rejects the observed native union response and accepts the 
     try candidateCase("reconciliation", "summary", "{\"statements\":[{\"local_key\":1,\"claim_ids\":[1],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"Display the greeting.\"]}}}]}", .unknown_property, "/statements/0/local_key");
 }
 
-test "reconciliation roles require a complete closed decision table" {
-    const good =
-        \\{"role_decisions":{"title":{"kind":"supported","signal_ids":[1]},"description":{"kind":"unsupported"},"primary_goal":{"kind":"unsupported"},"primary_user_story":{"kind":"unsupported"},"entity_basis":{"kind":"unsupported"},"records":{"kind":"supported","signal_ids":[1]}}}
-    ;
-    try checkCandidate("reconciliation", "roles_assignment", good);
-    try candidateCase("reconciliation", "roles_assignment", "{\"role_assignments\":[]}", .unknown_property, "/role_assignments");
-    try candidateCase("reconciliation", "roles_assignment", "{\"role_decisions\":{}}", .missing_required_property, "/role_decisions/title");
-}
-
 test "compact model JSON keeps sibling objects intact and round trips native unions" {
     try roundTrip(std.testing.allocator);
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
@@ -83,7 +74,7 @@ const response_wire = struct {
     const nodes = "[\"Source meaning\",{\"kind\":\"passive\",\"passive_literal_id\":" ++ id ++ "},{\"kind\":\"source\",\"source_id\":" ++ id ++ "}]";
     const normalized = segments;
     const exact = "[{\"kind\":\"exact_copy\",\"claim_id\":" ++ id ++ "}]";
-    const attributed = "{\"value\":" ++ normalized ++ "}";
+    const attributed = "{\"signal_ids\":[" ++ id ++ "],\"value\":" ++ normalized ++ "}";
     const selection = "{\"first\":7,\"last\":9}";
     const classifications = "[{\"kind\":\"preserve\",\"preserve\":{\"token_candidate_id\":{\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":7},\"kind\":\"business_exact_string\"}},{\"kind\":\"irrelevant\",\"source_id\":" ++ id ++ ",\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}]";
     const clarification = "{\"kind\":\"clarification\",\"reason\":\"ambiguous\",\"question\":" ++ attributed ++ "}";
@@ -116,7 +107,7 @@ test "independent wire cases cover every selected specification result and neste
     // Structural conformance is not a claim that these independently shaped
     // records satisfy the graph, source-join or semantic validators.
     try checkCandidate("generation", "brief", "{\"kind\":\"brief\",\"title\":" ++ response_wire.attributed ++ ",\"description\":" ++ response_wire.attributed ++ ",\"primary_goal\":" ++ response_wire.attributed ++ "}");
-    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.exact ++ "}");
+    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[" ++ response_wire.id ++ "],\"value\":" ++ response_wire.exact ++ "}");
     try checkCandidate("generation", "entities", "{\"kind\":\"entities\",\"disposition\":\"not_applicable\",\"basis\":" ++ response_wire.attributed ++ "}");
     inline for (.{ "brief", "primary_user_story", "entities" }) |selection| try checkCandidate("generation", selection, response_wire.clarification);
     // Assignment-specific rules require the unit context: schema checks here,
@@ -135,7 +126,7 @@ test "independent wire cases cover every selected specification result and neste
     try checkCandidate("support", "detail", "{\"detail\":\"Which deadline applies?\"}");
     try candidateCase("support", "detail", "{\"detail\":\"Which deadline applies?\",\"finding\":\"supported\"}", .unknown_property, "/finding");
     try checkCandidate("support", "selection", "{\"source_ids\":[]}");
-    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"Preserve the required confirmation.\"}");
+    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"Preserve the required confirmation.\",\"missing_obligation\":\"MOCK After renewal display confirmation.\"}");
     try checkCandidate("support", null, "{\"kind\":\"supported\",\"source_ids\":[],\"detail\":\"\"}");
 }
 
@@ -197,7 +188,7 @@ test "D1 source variants require questions only for gaps in focused findings" {
     };
     for (std.meta.tags(review.Decision)) |tag| {
         const gap = @import("domain/specification_support_evidence.zig").questionRequired(tag.finding());
-        const value: review.Value = .{ .kind = tag, .provenance = .{ .claim_ids = if (tag == .supported or tag == .not_applicable) &.{.{ .ordinal = 1 }} else &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{.{ .ordinal = 1 }}, .detail = "The request identifies the action but leaves its duration undecided.", .question = if (gap) "Which duration applies? Supply the duration and starting event." else null };
+        const value: review.Value = .{ .kind = tag, .missing_obligation = if (tag == .candidate_omission) "MOCK Complete the requested action." else null, .provenance = .{ .claim_ids = if (tag == .supported or tag == .not_applicable) &.{.{ .ordinal = 1 }} else &.{}, .clarification_response_ids = &.{} }, .source_ids = &.{.{ .ordinal = 1 }}, .detail = "The request identifies the action but leaves its duration undecided.", .question = if (gap) "Which duration applies? Supply the duration and starting event." else null };
         const canonical = try json.encode(review.Value, a, value);
         try std.testing.expectEqualDeep(value, try json.decode(review.Value, a, canonical));
         const valid = try model.encode(a, value, required);
@@ -271,7 +262,7 @@ test "required text and citation presence follows native rules in initial and se
     try checkCandidate("generation", "value", "{\"value\":" ++ response_wire.exact ++ "}");
     try candidateSchemaCase("generation", "value", "{\"value\":[]}", .array_length, "/value");
     try candidateSchemaCase("generation", "value", "{\"value\":[\"\"]}", .string_length, "/value/0");
-    try candidateSchemaCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":[]}", .array_length, "/value");
+    try candidateSchemaCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":[]}", .array_length, "/value");
 
     const review_prefix = "{\"kind\":\"";
     const review_tail = "\",\"source_ids\":[],\"detail\":\"\"}";
@@ -279,7 +270,8 @@ test "required text and citation presence follows native rules in initial and se
     try checkCandidate("support", "applicability_finding", review_prefix ++ "not_applicable" ++ review_tail);
     inline for (.{ "ambiguous", "conflicting", "unsupported", "candidate_omission", "inconclusive" }) |kind| {
         const question = if (comptime std.mem.eql(u8, kind, "ambiguous") or std.mem.eql(u8, kind, "conflicting") or std.mem.eql(u8, kind, "unsupported")) ",\"question\":\"Which rule applies?\"" else "";
-        const body = review_prefix ++ kind ++ "\",\"source_ids\":[],\"detail\":\"\"" ++ question ++ "}";
+        const obligation = if (comptime std.mem.eql(u8, kind, "candidate_omission")) ",\"missing_obligation\":\"MOCK Notify the patient.\"" else "";
+        const body = review_prefix ++ kind ++ "\",\"source_ids\":[1],\"detail\":\"\"" ++ question ++ obligation ++ "}";
         try candidateSchemaCase("support", "finding", body, .string_length, "/detail");
     }
     try candidateSchemaCase("support", "gap_detail", "{\"detail\":\"\",\"question\":\"Which rule applies?\"}", .string_length, "/detail");
@@ -312,7 +304,9 @@ test "provider schema projections retain expressible collection minima" {
 test "business values use one segment shape for prose and exact references" {
     const value = "[\"Display \",{\"kind\":\"exact_copy\",\"claim_id\":7},\" with UTC date/time.\"]";
     try checkCandidate("generation", "value", "{\"value\":" ++ value ++ "}");
-    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ value ++ "}");
+    try checkCandidate("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":" ++ value ++ "}");
+    try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ value ++ "}", .missing_required_property, "/signal_ids");
+    try candidateCase("generation", "value", "{\"signal_ids\":[7],\"value\":" ++ value ++ "}", .unknown_property, "/signal_ids");
     try candidateCase("generation", "value", "{\"value\":{\"kind\":\"exact_copy\",\"claim_id\":7}}", .type_mismatch, "/value");
     try candidateCase("generation", "value", "{\"value\":[{\"kind\":\"exact_copy\",\"token_id\":7,\"citation_id\":9}]}", .unknown_property, "/value/0/token_id");
 }
@@ -333,7 +327,7 @@ test "focused review evidence shapes follow native minima without excluding sour
         .supported_provenance = null,
         .candidate_bound = false,
     };
-    const source_only = "{\"kind\":\"candidate_omission\",\"source_ids\":[7],\"detail\":\"The generated content omitted the source rule.\"}";
+    const source_only = "{\"kind\":\"candidate_omission\",\"source_ids\":[7],\"detail\":\"The generated content omitted the source rule.\",\"missing_obligation\":\"MOCK After cancellation notify the patient.\"}";
     try candidateSchemaCase("support", "finding", source_only, null, null);
     try std.testing.expectEqual(@as(usize, 0), (try model.decode(a, source_only, bound)).provenance.claim_ids.len);
     try std.testing.expectError(error.InvalidJsonDocument, model.decode(a, "{\"kind\":\"supported\",\"source_ids\":[7],\"detail\":\"\"}", bound));
@@ -347,30 +341,14 @@ test "focused review evidence shapes follow native minima without excluding sour
     }
 }
 
-test "loss attribution wire variants stay closed across initial review insertion and replacement" {
-    const locations = .{
-        "{\"kind\":\"unlocalized\"}",
-        "{\"kind\":\"candidate\"}",
-        "{\"kind\":\"extraction_claim\",\"bytes\":\"chunk-7\"}",
-        "{\"kind\":\"token_classification\",\"source_id\":7,\"extractor_id\":\"markdown_inline_code_v1\",\"ordinal\":9}",
-        "{\"kind\":\"reconciliation_signal\",\"ordinal\":7}",
-        "{\"kind\":\"reconciliation_disposition\",\"ordinal\":9}",
-        "{\"kind\":\"reconciliation_conflict\",\"ordinal\":9}",
-    };
-    try std.testing.expectEqual(@typeInfo(@import("domain/source_omission.zig").Location).@"union".fields.len, locations.len);
-    inline for (locations) |location| {
-        const comparison = "{\"kind\":\"source_producer_comparison\",\"source\":{\"chunk_id\":{\"bytes\":\"chunk-7\"},\"lines\":{\"first\":1,\"last\":1}},\"producer_loss\":\"MOCK The producer omitted this source obligation.\"}";
-        const wire = if (comptime std.mem.eql(u8, location, "{\"kind\":\"unlocalized\"}") or std.mem.eql(u8, location, "{\"kind\":\"candidate\"}")) location else "{\"kind\":\"localized\",\"location\":" ++ location ++ ",\"comparison\":" ++ comparison ++ "}";
-        try checkCandidate("support", "loss", wire);
-        const value = "{\"kind\":\"candidate_omission\",\"loss\":" ++ location ++ ",\"source_ids\":[" ++ response_wire.id ++ "],\"detail\":\"Preserve the deadline.\"}";
-        inline for (.{ "finding", "applicability_finding" }) |selection| try candidateCase("support", selection, value, .unknown_property, "/loss");
-    }
-    try candidateCase("support", "loss", "{\"kind\":\"unlocalized\",\"comparison\":null}", .unknown_property, "/comparison");
-    try candidateCase("support", "loss", "{\"kind\":\"candidate\",\"comparison\":null}", .unknown_property, "/comparison");
-    try candidateCase("support", "loss", "{\"kind\":\"candidate\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"MOCK-chunk\"}}", .unknown_property, "/location");
-    try candidateCase("support", "loss", "{\"location\":{\"kind\":\"unlocalized\"},\"comparison\":null}", .missing_required_property, "/kind");
-    try candidateCase("support", "loss", "{\"kind\":\"localized\",\"location\":{\"kind\":\"extraction_claim\",\"bytes\":\"chunk-7\"}}", .missing_required_property, "/comparison");
-    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[],\"detail\":\"Preserve the deadline.\"}");
+test "preservation wire is closed and rejects old attribution choices" {
+    try checkCandidate("support", "preservation_comparisons", "{\"assessments\":[]}");
+    try checkCandidate("support", "preservation_comparisons", "{\"assessments\":[{\"comparison_id\":1,\"result\":\"lost\",\"sources\":[{\"chunk_id\":{\"bytes\":\"MOCK source\"},\"lines\":{\"first\":1,\"last\":1}}],\"explanation\":\"MOCK The supplied collection lacks shutdown behavior.\"}]}");
+    try candidateCase("support", "preservation_comparisons", "{\"assessments\":[{\"comparison_id\":1,\"result\":\"lost\",\"sources\":[{\"chunk_id\":{\"bytes\":\"MOCK source\"},\"lines\":{\"first\":1,\"last\":1}}],\"members\":[],\"explanation\":\"MOCK The supplied collection lacks shutdown behavior.\"}]}", .unknown_property, "/assessments/0/members");
+    try candidateCase("support", "preservation_comparisons", "{\"assessments\":[],\"kind\":\"candidate\"}", .unknown_property, "/kind");
+    try candidateCase("support", "preservation_comparisons", "{\"assessments\":[],\"location\":{}}", .unknown_property, "/location");
+    try candidateCase("support", "preservation_comparisons", "{}", .missing_required_property, "/assessments");
+    try checkCandidate("support", "finding", "{\"kind\":\"candidate_omission\",\"source_ids\":[1],\"detail\":\"MOCK Preserve the deadline.\",\"missing_obligation\":\"MOCK After renewal display the new deadline.\"}");
 }
 
 fn checkCandidate(comptime name: []const u8, comptime selection: ?[]const u8, bytes: []const u8) !void {
@@ -426,7 +404,7 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
     } else if (comptime std.mem.eql(u8, name, "reconciliation")) {
         const definition = selection.?;
         if (comptime std.mem.eql(u8, definition, "summary")) return nativeWire(@import("domain/reference_reconciliation_projection.zig").SemanticSummary, a, bytes);
-        inline for (.{ "dispositions", "signals", "roles", "conflicts" }) |phase| {
+        inline for (.{ "dispositions", "signals", "conflicts" }) |phase| {
             if (comptime std.mem.eql(u8, definition, phase ++ "_assignment")) return selectedWire(@import("domain/reference_reconciliation_stage.zig").Response, a, @field(@import("domain/reference_reconciliation_stage.zig").Stage, phase), bytes);
         }
         if (comptime std.mem.eql(u8, definition, "business_text")) return nativeWire(r.text.BusinessText, a, bytes);
@@ -443,7 +421,7 @@ fn decodeCandidate(comptime name: []const u8, comptime selection: ?[]const u8, a
         return nativeWire(@import("domain/specification_generation.zig").ModelResponse, a, bytes);
     } else if (comptime selection != null) {
         const selected = selection.?;
-        if (comptime std.mem.eql(u8, selected, "loss")) return nativeWire(@import("domain/source_omission.zig").Assessment, a, bytes);
+        if (comptime std.mem.eql(u8, selected, "preservation_comparisons")) return nativeWire(@import("domain/source_omission.zig").comparisons.Response, a, bytes);
         const model = @import("domain/specification_support_model.zig");
         if (comptime std.mem.eql(u8, selected, "finding") or std.mem.eql(u8, selected, "applicability_finding")) return nativeWire(model.Value, a, bytes);
         if (comptime std.mem.eql(u8, selected, "selection")) return nativeWire(model.Selection, a, bytes);
@@ -457,7 +435,7 @@ test "final proposal schemas and native readers reject deterministic echoes and 
     inline for (.{ "member_claim_ids", "member_summary_ids" }) |field| {
         try candidateCase("reconciliation", "summary", "{\"statements\":[],\"" ++ field ++ "\":[]}", .unknown_property, "/" ++ field);
     }
-    try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"value\":" ++ response_wire.normalized ++ ",\"provenance\":" ++ echoed ++ "}", .unknown_property, "/provenance");
+    try candidateCase("generation", "primary_user_story", "{\"kind\":\"primary_user_story\",\"signal_ids\":[7],\"value\":" ++ response_wire.normalized ++ ",\"provenance\":" ++ echoed ++ "}", .unknown_property, "/provenance");
     try candidateCase("support", null, "{\"kind\":\"supported\",\"provenance\":" ++ echoed ++ ",\"source_ids\":[],\"detail\":\"\"}", .unknown_property, "/provenance");
     try candidateCase("reconciliation", "signals_assignment", "{\"signals\":[{\"claim_ids\":[7],\"citation_ids\":[],\"content\":{\"kind\":\"model\",\"model\":{\"kind\":\"business\",\"segments\":[\"An observable result.\"]}}}]}", .unknown_property, "/signals/0/citation_ids");
     try candidateCase("reconciliation", "conflicts_assignment", "{\"conflicts\":[{\"group_id\":7,\"citation_ids\":[],\"kind\":\"value_mismatch\",\"summary\":{\"nodes\":" ++ response_wire.nodes ++ "}}]}", .unknown_property, "/conflicts/0/citation_ids");
