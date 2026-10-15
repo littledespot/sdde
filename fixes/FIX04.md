@@ -2,20 +2,63 @@
 
 **Reviewed:** 15 October 2026, Australia/Melbourne.
 
+**Current test selection — 16 October 2026:** The user switched back to
+**Bedrock GPT-OSS-20B**: `aws-bedrock / openai.gpt-oss-20b-1:0 /
+ap-southeast-2`, Converse, native JSON Schema, explicit low reasoning,
+engine-fixed temperature `0.1` and 16,384 requested output tokens. This
+supersedes the review's Luna-only selection and omitted-control instructions.
+The prospective protocol and live fixtures use this binding; the retained
+15 October Phase 0/1 reports and snapshots keep their historical Luna context.
+Their results do not qualify the newly selected binding. The configuration switch
+itself authorized no live run; a later separately authorized exchange passed the
+bounded compatibility gate as recorded below.
+
+**Current response-decoding correction — 16 October 2026:** the
+[07:29 Melbourne attempt](../zig-out/provider-compatibility/2026-10-15T20-29-20Z-a99ee228b9e19af49dd6e2784a35b700/report.json)
+received HTTP 200 with 2,254 reported tokens. The shared decoder rejected
+`usage.serverToolUsage: {}` before accounting or candidate inspection. The
+[provider contract](../design/features/F0007-AWSBedrockProvider.md#response-failure-and-accounting)
+now explicitly supports this closed empty metadata object and retains precise
+rejection diagnostics for unsupported shapes. The existing approved `{"{` prefix
+normalizer is unchanged. Captured-response offline regression is mechanical
+evidence; no new live call or semantic-quality qualification follows from this fix.
+
+**Current live evidence — 16 October 2026:** the separately authorized
+[07:46 Melbourne probe](../zig-out/provider-compatibility/2026-10-15T20-46-55Z-cb4fdfbfe3b6aff88bc99e68fa980506/report.json)
+was compatible for its first production request: HTTP 200, accepted JSON/schema,
+2,254 accounted tokens and the existing prefix normalization. The one-send stop
+intentionally cancelled the workflow; it published no specification and ran no
+rubric evaluation. The subsequently authorized
+[07:54 full loan-renewal baseline](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/report.json)
+blocked on competing duplicate records at `UnsafeSpecificationRepair`, before
+source review, after 13 calls and 25,508 tokens. Native reference review subjects
+are now aligned with omission localization under existing authority; this does
+not change per-group record authoring or authorize competing-record repair.
+The [08:09 post-fix full run](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/report.json)
+subsequently failed with `WorkflowTokenBudgetExceeded`: 37 calls and 101,002
+tokens against a 100,000-token workflow budget. It stopped during entity source
+review, before the corrected native reference reviews, with no candidate repair,
+specification publication or rubric evaluation. Live validation of that correction
+and full-workflow acceptance remain open. Offline verification passed all
+149 build steps and 1,555 tests, including native packaging smoke; exact check
+commands are recorded in [FIX01](FIX01.md#2-implementation-history).
+
 **Repository revision:** `5816d9bed631acabcb256025e911bb565b8f9771`.
 
 **Status:** **Phase 0 complete (offline), 15 October 2026**; its
 concrete protocol and evidence are linked in §5.6. The user-directed Converse
-cutover and small-model test cost policy are included. Phase 1 still requires an
-authentic separately authorized current-model exchange; semantic benefit and
-reduced brittleness remain unmeasured.
+cutover and small-model test cost policy are included. **Phase 1's offline
+implementation is complete and mechanically verified**: a fresh production-request
+compatibility harness has a one-send boundary. Its authentic separately authorized
+current-model exchange passed the bounded compatibility gate on 16 October.
+Semantic benefit and reduced brittleness remain unmeasured.
 
 This review evaluates the supplied recommendations: retain single responsibility
 for software, make model assignments semantically simpler, keep related meaning
-together, and leave bookkeeping and authority with deterministic code. The latest
-test constraint is **current-generation Luna only on Bedrock**, with **Sonnet,
+together, and leave bookkeeping and authority with deterministic code. At review
+time the test constraint was **current-generation Luna only on Bedrock**, with **Sonnet,
 Sol and Haiku excluded**. This supersedes the earlier mid-tier/Haiku test
-baseline; Phase 0 freezes `global.openai.gpt-6-luna` only. Historical repository
+baseline; the retained Phase 0 evidence froze `global.openai.gpt-6-luna`. Historical repository
 results supply regression-case context only; they do not establish the target's
 capability or support architecture selection. Generation quality remains the
 primary outcome; an improved reviewer alone does not satisfy it.
@@ -25,7 +68,9 @@ supporting research. Section 5 therefore describes the complete change surface;
 size alone is not a reason to stop or request the same authorization again. The
 current implementation delivers the offline evaluation foundation and the
 separately requested Bedrock Converse transport, including typed reasoning
-retention, registration and live-test cost enforcement. Generation prompts,
+retention, registration and live-test cost enforcement. The subsequent Phase 1
+implementation prepares a fresh production request and retains bounded provider
+compatibility evidence without publication authority. Generation prompts,
 assignment topology and semantic admission rules are unchanged. The explicit
 transport amendment does not accept the overall **Proposed design**.
 [FIX01](FIX01.md) remains the active implementation
@@ -374,11 +419,11 @@ Registration and offline fixtures do not prove live compatibility. Phase 1
 requires a fresh authentic exchange, separate from changing semantic assignments.
 
 Qualification should pin the exact intended generation slot, provider/model,
-reasoning, schema mode and provider output allowance. Keep current engine temperature
-policy: Luna's verified registration omits temperature and explicit reasoning
-controls because inspected primary sources do not establish their Converse
-mapping. Record the documented default medium effort without projecting an
-unverified field; prior models' settings cannot be copied into this binding.
+reasoning, schema mode and provider output allowance. The review's Luna binding
+omitted temperature and explicit reasoning controls because inspected primary
+sources did not establish their Converse mapping. Its documented default medium
+effort did not authorize an unverified field. The 16 October GPT-OSS selection
+instead uses the already registered low-reasoning and fixed-temperature controls.
 Historical temperature-zero reviewer panels are not this baseline.
 [Current operating rules](../design/contracts/12-model-boundary.md#125-low-capability-model-operating-rules).
 
@@ -398,8 +443,8 @@ size from the archived model runs.
 
 ### F8 — High: current-generation capability evidence is still insufficient
 
-Only current-generation Bedrock Luna is selected for the implemented test
-protocol. Sonnet, Sol, Haiku and direct OpenAI API models may not be used in live
+At the 15 October review, current-generation Bedrock Luna was selected for the
+implemented test protocol. The 16 October selection above now governs live
 tests. The older-model decomposition and verifier
 studies considered in the initial review are excluded from that evidence base.
 A recent publication date or fresh benchmark rerun does not make an older tested
@@ -644,7 +689,7 @@ Before live execution, specify:
    applicable schema restrictions, production text construction and canonical
    rendering. Keep the current brief/entity seeds and source evidence identical
    across paired arms. Preserve historical freezes.
-3. **Controls and counts:** exact current-generation small model, provider,
+3. **Controls and counts:** exact selected small model, provider,
    region, reasoning, response mode and output allowance; current temperature
    policy; logical trials, repetitions and physical sends. Record the evaluation
    date and whether the provider exposes an immutable version or moving alias.
@@ -710,12 +755,13 @@ need for this decomposition.
 
 ### 5.1 Planning assumptions and recommended starting point
 
-Use **current-generation small models** for tests under the latest user cost
-constraint. The user selects **Luna only on Bedrock** because it supports native
-JSON Schema. The exact binding is **`global.openai.gpt-6-luna` from Sydney**; no
-Sonnet, Sol, Haiku, direct OpenAI API or alternative Luna profile is a live test
-selection. This is an explicit model choice, not evidence that it wins on SDDE
-quality. Do not substitute historical small-model results or mix model cohorts.
+The latest user selection is **GPT-OSS-20B only on Bedrock**. The exact binding is
+**`openai.gpt-oss-20b-1:0` from Sydney**, Converse, native JSON Schema, low reasoning
+and engine-fixed temperature `0.1`; no Luna, Sonnet, Sol, Haiku, direct OpenAI API
+or alternative model ID/alias is a live test selection. The earlier
+current-generation-only cohort restriction is superseded by this explicit switch.
+This is a model choice, not evidence that it wins on SDDE quality. Do not
+substitute historical small-model results or mix model cohorts.
 Freeze exact model IDs, evaluation date and settings before dispatch.
 
 The observable objective is source-faithful complete specification generation,
@@ -1001,10 +1047,12 @@ record 72 variants, 225 source-backed duty labels, all 144 planned synthetic
 workloads, six required scoring specimens, zero actual sends/tokens and no
 workflow authority. All required offline checks passed.
 
-The freeze uses **global GPT-6 Luna / Converse / Sydney / provider-default
-reasoning (documented medium) / native JSON Schema with strict output /
-temperature omitted / 16,384 requested output tokens**. Explicit reasoning effort
-is omitted until its Converse mapping is verified; unsupported controls reject.
+The prospective freeze now uses **GPT-OSS-20B / Converse / Sydney / low reasoning /
+native JSON Schema / engine-fixed temperature 0.1 / 16,384 requested output
+tokens**. Its closed schema rejects the superseded Luna default-reasoning and
+strict-output fields. The retained snapshot above describes the earlier Luna
+freeze; the canonical offline integration producer regenerates the new model
+and protocol identity under `.zig-cache/semantic-simplicity/phase0/`.
 Eight development and sixteen reserved qualification features each have three variants;
 three repetitions of A/C give **144 development feature workloads**. The labels
 received a separate model-assisted source review, not human approval. The dry run
@@ -1023,7 +1071,7 @@ contract; inadequate precision or demand above 16 is inconclusive/infeasible,
 never permission to shrink the panel after seeing results. Prospective experiment
 limits are 1,000 sends and 2,000,000 actual tokens; `live_authorized` remains false.
 These are proposed experimental gates, not production size limits or dispatch
-approval. Only the selected Bedrock Luna tuple is permitted for live tests.
+approval. Only the selected Bedrock GPT-OSS-20B tuple is permitted for live tests.
 
 **Deliverable:** a frozen comparison protocol, case inventory and scorecard using
 existing calibration/harness owners. Include exact current model identity/settings,
@@ -1051,6 +1099,80 @@ generation. This phase makes progress measurable; it establishes no model benefi
 
 #### Phase 1 — Establish compatible current-model execution
 
+**Offline implementation complete; mechanical checks passed, 15 October 2026.**
+Final verification passed **155/155 build steps and 1,786/1,786 tests**; the
+[retained evidence record](../test/calibration/semantic-simplicity/phase1-offline-results.md)
+records exact commands and scope. The later authentic exchange result is recorded
+below and qualifies only the observed request/settings.
+
+The user-authorized development command
+prepares a fresh case through the existing production configuration, compiled
+workflow, model-request preparation, authorization, Converse transport and capture
+owners. The first model assignment remains unchanged; it depends on the selected
+workflow and normally concerns reference extraction in the supplied Spec case.
+This is not a historical debugger replay or a generation-quality comparison.
+
+After separate explicit approval for the live probe, use:
+
+```sh
+zig build provider-compatibility -- \
+  --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json --live
+```
+
+The equivalent launcher is `./scripts/provider-compatibility.sh` with those same
+arguments. There is no default case. `--live` opts into dispatch but cannot supply
+the user approval required by the model-conformance contract. The exact permitted
+binding is **Bedrock `openai.gpt-oss-20b-1:0` / Sydney / Converse / native JSON
+Schema / low reasoning / temperature 0.1**. The GPT-OSS profile supplies its
+registered reasoning control and omits Luna's strict-output field. The request inherits the case's configured
+output allowance and must match Phase 0's frozen 16,384 tokens, as the supplied
+Spec slot does. This is an experiment setting, not an engine size ceiling.
+Configuration preflight checks all slots against the cost policy and requires
+complete trace/debug capture before reading credentials. Production catalogue and
+request authority are validated before transport. No model/mode/settings
+substitution or fallback is admitted.
+
+The transport allows at most **one physical inference send**, charged before the
+attempt; transport failure cannot authorize a replacement. The runner stops
+through a typed cancellation after the exchange while preserving original
+rejections, and rejects any further dispatch. Supplied actual usage is retained
+before the stop, including rejected/stopped candidates.
+There are no retry, repair, judge or workflow-publication calls and no successful
+workflow-completion authority. Provider compatibility and production workflow
+outcome are separate results.
+Typed invocation/step outputs, replacements and side-effect policy reject any
+publication-capable child before execution through `publication_prohibited`,
+including before the first model exchange.
+
+Each run retains `report.json` and `report.md` beneath
+`zig-out/provider-compatibility/<UTC-date-time>-<unique-id>/`, linking available
+immutable request/response captures. The report identifies the revision, exact
+binding/settings, request/response bytes and association, closed schema inspection,
+provider stop, physical sends, actual usage and separately captured provider
+reasoning. Missing, malformed or uncertain evidence cannot close compatibility.
+Unknown actual consumption is `total_actual_tokens: null` with
+`usage_complete: false`; `total_accounted_tokens` explicitly retains native
+accounting. HTTP rejection alone is inconclusive, rather than proof of codec or
+model incompatibility.
+Read-only inspection reconstructs the exact canonical request and joins native
+identities/request-response bytes with the closed trace transport outcome and
+production accounting metadata. HTTP status/request ID come from the transport
+record. Request/response SHA-256 identities retained at the trusted transport
+observation bind external readback to the observed bytes and reject substitutions;
+they are diagnostic byte identities, not engine state or predecessor authority.
+Bodies from interrupted/uncertain delivery remain retained and
+inconclusive without candidate validation or invented usage.
+Reasoning remains diagnostic data, never semantic evidence or publication authority.
+See the [operating contract](../design/harness/e2e.md#test-one-fresh-provider-exchange).
+
+**Authentic exchange: bounded compatibility gate passed, 16 October 2026.**
+The first HTTP-200 exchange exposed the response-decoding defect recorded above.
+After that correction, the separately authorized 07:46 exchange passed candidate,
+schema, usage and request-association checks. It qualifies only the observed
+production request/settings, not every workflow request shape or semantic quality.
+The [Phase 1 offline evidence record](../test/calibration/semantic-simplicity/phase1-offline-results.md)
+records the mechanical checks separately from this live evidence.
+
 **Deliverable:** the current target's trusted registration and any required codec/
 adapter support behind existing ports, with the generation assignment unchanged.
 Verify official request, response, region, schema, reasoning, temperature, output
@@ -1059,7 +1181,16 @@ A current small-model cohort requires its own verified binding.
 
 **Test:** positive and negative provider/control cases, malformed and missing usage,
 noncandidate stops, unknown model/region, cancellation, exact request association,
-accounting and replay serialization. Run the provider suites in §5.7 and full
+accounting and replay serialization. The bounded scenario additionally covers
+first-send charging, second-send rejection, publication rejection before a child,
+cancellation before/after dispatch, partial responses, transport failure and
+capture/report failure without invented usage or success. Guard/preflight/argument,
+classification and report-finalization tests belong to
+`zig build test-provider-compatibility`. Fresh production runtime scenarios with
+fake first exchanges belong to `zig build test-integration`; these exercise
+configuration, request preparation, authorization, response identity and actual
+accounting in unrelated domains. Neither suite supplies authentic provider evidence.
+Run both, the provider suites in §5.7 and full
 verification when the coordinated adapter change is complete. After separate
 bounded live approval, capture an authentic exchange from the selected current
 model using the production path; do not retarget a historical browser replay.
@@ -1177,7 +1308,7 @@ External release/publication remains a separately authorized action.
 For each expansion, change one declared dimension—such as a larger feature range,
 another domain or a current-generation small model—and repeat the applicable
 baseline and complete qualification gates. Each current small-model result stands
-alone; another model's gain cannot qualify it. The Luna-only live-test constraint
+alone; another model's gain cannot qualify it. The GPT-OSS-20B-only live-test constraint
 remains in force; another model needs explicit changed scope. Recheck model
 generations at execution time.
 
@@ -1205,10 +1336,12 @@ Use the repository's registered build steps. This table maps future phase checks
 | Phase/boundary | Existing verification entries |
 | --- | --- |
 | Offline evaluation protocol and labelled accounting | `zig build test-rubric-evaluator`, `zig build test-integration` |
+| Fresh one-send compatibility scenario, offline | `zig build test-provider-compatibility` (guards/CLI/report), `zig build test-integration` (fresh production runtime/fake exchange), `zig build test-provider-compatibility-launcher`, `zig build smoke-provider-compatibility` |
 | Provider and request compatibility | `zig build test-provider-conformance`, `zig build test-provider-invocation-validation`, `zig build test-model-request-preparation`, `zig build test-model-request-workflow` |
 | Source packets, generation and response contracts | `zig build test-reference-model-input`, `zig build test-specification-generation`, `zig build test-specification-contract` |
 | Repair, runner, identity and lifecycle | `zig build test-workflow-repair-retry`, `zig build test-workflow-graph`, `zig build test-pipeline-envelope`, `zig build test-atomic-execution`, `zig build test-architecture` |
 | Completed coordinated implementation | `zig build verify`, including offline integration and clean-directory native packaging checks |
+| Separately approved authentic Phase 1 exchange | `zig build provider-compatibility -- --case <explicit-approved-case-path> --live`; at most one physical inference send, no judge or publication authority |
 | Approved full-workflow qualification | `zig build e2e-spec -- --case <explicit-approved-case-path>` with the required configuration and per-run approval; never an automatic verification dependency |
 
 See [build registration](../build.zig#L669), the
@@ -1229,13 +1362,31 @@ calls or higher schema admission alone cannot close the semantic rollout.
 The delivery now includes Phase 0's closed evaluation contracts, fixed offline
 integration scenario and retained fixture/result evidence. The separately
 requested production change replaces provider-specific Bedrock chat serialization with
-shared Converse invocation/count/replay/harness codecs, adds the current Luna
+shared Converse invocation/count/replay/harness codecs, adds the registered Luna
 binding and retains optional provider reasoning in typed debugger diagnostics.
-The development live-test policy permits only the selected Bedrock Luna tuple
+The current development live-test policy permits only the selected Bedrock GPT-OSS-20B tuple
 before credentials/network. Canonical live fixtures and the explicit judge
 selection use that same model; judging remains a separately labelled role with
 its own settings/accounting, not independent model evidence. No production
 dependency was added.
+
+The user subsequently requested Phase 1's bounded fresh-request scenario. It
+reuses production owners, limits transport to one physical inference send and
+retains provider compatibility separately from the interrupted workflow outcome.
+The command and launcher require an explicit case and live opt-in; their offline
+tests exercise rejection and failure evidence without connecting to Bedrock.
+The later authentic compatible exchange closed the bounded Phase 1 exchange gate.
+Its operating contract and command are recorded in §5.6; its
+[offline evidence record](../test/calibration/semantic-simplicity/phase1-offline-results.md)
+is separate from the authentic compatibility qualification. Implementation progress remains
+in FIX01.
+Phase 1's offline implementation and mechanical checks are complete: final full
+verification passed **155/155 build steps and 1,786/1,786 tests**, including
+provider/request checks, offline production integration, architecture and native
+clean-directory packaging. The retained evidence record supplies the exact
+registered command. Those offline checks performed no authentic model exchange;
+the later 16 October attempts, decoder correction and compatible exchange are
+recorded above. Full workflow publication and rubric acceptance remain open.
 
 The analysis inspected current assignment, evidence, review, generation and provider
 owners; relevant accepted amendments; historical report/fixture provenance; and
@@ -1252,7 +1403,7 @@ Targeted checks cover closed fixtures, complete workload denominators, initial
 versus corrected labels, persistent harm, uncertainty/stops, provider controls,
 usage, exact replay, reasoning ownership/display and cost rejection. Required full
 verification includes architecture, offline integration and native clean-directory
-packaging. Final verification passed **145/145 build steps and 1,671/1,671 tests**:
+packaging. Phase 0 verification passed **145/145 build steps and 1,671/1,671 tests**:
 `ZIG_GLOBAL_CACHE_DIR=/private/tmp/sdde-zig-global-cache zig build --global-cache-dir
 /private/tmp/sdde-zig-global-cache test-rubric-evaluator verify -j2 --summary all`.
 The rerun used approved sandbox escalation for the nested compiler checks and
@@ -1265,8 +1416,9 @@ workflow `invoke-model` action names and immutable historical evidence retain
 their separate meanings.
 
 No model/provider calls, live debugger replay or E2E execution were performed.
-Phase 1 compatibility and Phases 2–6 semantic qualification remain open. Source
-labels and review are model-assisted, not human-approved or deterministic proof;
+Phase 1's authentic compatibility gate and Phases 2–6 semantic qualification
+remain open. Source labels and review are model-assisted, not human-approved or
+deterministic proof;
 no semantic benefit, reduced brittleness or useful publication is claimed.
 Historical results remain immutable and the existing staged FIX04 version is
 preserved; current changes are in the working copy.

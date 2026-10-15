@@ -82,7 +82,7 @@ pub fn response(a: std.mem.Allocator, received: transport.Response) std.mem.Allo
     } };
     var parsed = strict.parse(a, received.received.body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else .{ .failure = .invalid_response };
     defer parsed.deinit();
-    var decoded = decoding.decodeConverse(a, parsed.value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else .{ .failure = .invalid_response };
+    var decoded = decoding.decodeConverse(a, parsed.value, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else .{ .failure = .invalid_response };
     defer decoded.deinit(a);
     return switch (decoded.output) {
         .invalid => .{ .usage = decoded.usage, .failure = .invalid_response },

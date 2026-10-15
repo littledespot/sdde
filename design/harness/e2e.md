@@ -6,12 +6,11 @@ The checked-in [greeting](../../test/e2e/wf-001-hello-world/node-vitest/workflow
 and [loan-renewal](../../test/e2e/wf-002-loan-renewal/workflow.case.json) cases have
 separate sources and rubrics and reference the same workflow/model configuration.
 
-1. Review the case's explicit Bedrock `global.openai.gpt-6-luna` generation
-   selection from `ap-southeast-2`, then configure the same Luna judge under
+1. Review the case's explicit Bedrock `openai.gpt-oss-20b-1:0` generation
+   selection from `ap-southeast-2`, then configure the same GPT-OSS-20B judge under
    [Environment setup](#environment-setup). Both cases share the native JSON
-   catalogue; all six generation slots omit explicit reasoning overrides and
-   temperature. AWS documents default medium reasoning. Global routing may leave
-   Australia; Sydney is the source region, not a residency guarantee.
+   catalogue; Spec generation, repair and grading select low reasoning. The
+   registered profile uses temperature `0.1`.
 2. Obtain explicit user approval for this E2E run under
    [AGENTS.md](../../AGENTS.md#testing-expectations).
 3. Run the launcher with an explicitly selected live case:
@@ -36,10 +35,10 @@ separate sources and rubrics and reference the same workflow/model configuration
 - Case paths are repository-relative and must be supplied with `--case <path>`.
   The script has no default case.
 - The shared [live-test cost policy](../../test/harness/model_cost_policy.zig)
-  permits only `aws-bedrock` / `global.openai.gpt-6-luna`. E2E preflight checks
+  permits only `aws-bedrock` / `openai.gpt-oss-20b-1:0`. E2E preflight checks
   every configured generation slot and the judge selection before reading
-  credentials or starting the workflow. Sonnet, Sol, Haiku, direct OpenAI,
-  historical models and other aliases reject; no target is substituted.
+  credentials or starting the workflow. Sonnet, Sol, Haiku, Luna, direct OpenAI
+  and other aliases reject; no target is substituted.
 - Automated tests cannot open native model connections, including with credentials
   present. Smoke subprocesses use the same application entry points with model
   connections compiled out. Test/verification build steps reject transitive dependencies on live
@@ -65,8 +64,8 @@ After obtaining explicit approval for the selected live diagnostic and repeat co
   --run 'zig-out/e2e-spec/<UTC-date-time>-<unique-id>' \
   --workflow spec-generation \
   --call 1 \
-  --model global.openai.gpt-6-luna \
-  --reasoning-effort none \
+  --model openai.gpt-oss-20b-1:0 \
+  --reasoning-effort low \
   --repeats 3
 ```
 
@@ -92,7 +91,7 @@ uses the caller's environment:
 zig build e2e-call -- \
   --run 'zig-out/e2e-spec/<UTC-date-time>-<unique-id>' \
   --workflow spec-generation --call 1 \
-  --model global.openai.gpt-6-luna --reasoning-effort none
+  --model openai.gpt-oss-20b-1:0 --reasoning-effort low
 ```
 
 The selected model must resolve through the selected run's retained provider
@@ -103,9 +102,9 @@ catalogue. Captured response mode and other inference controls, including an
 optional output allowance, are preserved. Unsupported combinations reject before
 dispatch; no model, response mode or control silently falls back. The effective
 binding must also pass the live cost policy before the credential is read.
-A current Luna capture with omitted temperature/reasoning controls is eligible.
-Retained catalogues must already authorize the requested Luna tuple. Historical
-captures with incompatible response modes or temperature controls reject; the
+A current GPT-OSS-20B capture with compatible temperature/reasoning controls is
+eligible. Retained catalogues must already authorize the requested GPT-OSS-20B
+tuple. Historical captures with incompatible response modes or temperature controls reject; the
 command does not rewrite those controls or add catalogue entries. The capture
 and its configuration remain unchanged. Browser exact and modified replay retain
 their existing model/settings restrictions.
@@ -113,11 +112,11 @@ their existing model/settings restrictions.
 The launcher reuses the canonical Bedrock Converse encoder and decoder. The
 registered `BedrockRequestProfile` selects provider-specific fields through
 `additionalModelRequestFields`, while supported common controls use
-`inferenceConfig`. Luna's native JSON mode additionally requires
-`text.format.strict: true`. The registered subset omits temperature and explicit
-reasoning; `--reasoning-effort none` requests omission, not disabled model
-reasoning. The documented provider default is medium. Complete engine validation
-still applies. No model-name prefix selects a serializer or grants a capability.
+`inferenceConfig`. GPT-OSS-20B uses its registered reasoning-effort field and
+temperature `0.1`. The separate registered Luna profile retains its required
+`text.format.strict: true` field and omits temperature and explicit reasoning.
+Complete engine validation still applies. No model-name prefix selects a
+serializer or grants a capability.
 
 Each dispatched repeat makes exactly one provider request. There are no automatic
 retries, repairs, upstream nodes, workflow continuation, publication or evaluator
@@ -141,6 +140,93 @@ launcher probes. Approval to implement or test this command offline does not
 authorize paid calls; each live diagnostic needs explicit bounded approval under
 the [model-conformance contract](../contracts/28-testing.md#288-model-conformance-comparisons).
 
+## Test one fresh provider exchange
+
+`provider-compatibility` prepares the first model request of an explicitly
+selected case through the production configuration, workflow compilation, request
+preparation, authorization, provider and capture owners. It does not require a
+prior E2E run or debugger capture. The first request depends on the selected
+workflow; the supplied Spec case normally starts with reference extraction.
+The command measures the provider boundary, not record-generation quality.
+
+After separate explicit approval for this one-send live diagnostic, use:
+
+```sh
+zig build provider-compatibility -- \
+  --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json --live
+```
+
+The development launcher accepts the same selectors:
+
+```sh
+./scripts/provider-compatibility.sh \
+  --case test/e2e/wf-001-hello-world/node-vitest/workflow.case.json --live
+```
+
+`--case` is mandatory and repository-relative; there is no default or latest-run
+selection. `--live` is an explicit dispatch opt-in, not a substitute for the
+required user approval. Building the executable and offline verification make
+no provider calls. The launcher uses the checkout's optional `.env.e2e` with the
+same override rules as the other live harness launchers; help does not load it.
+The direct executable uses the caller's environment. Only
+`TEST_AWS_BEARER_TOKEN_BEDROCK` is needed for the selected model; no judge credential
+or evaluation request is used.
+
+Configuration preflight requires complete `trace` or `debug` capture and checks
+every configured slot against the shared GPT-OSS-20B-only cost policy before
+credential access. Production preparation validates the catalogue and selected request;
+the send boundary independently checks the frozen binding/settings before
+transport. The allowed binding is
+`aws-bedrock / openai.gpt-oss-20b-1:0 / ap-southeast-2`, with native JSON Schema,
+low reasoning and registered temperature `0.1`. The request inherits its configured
+provider-requested output allowance and must match Phase 0's frozen 16,384 tokens,
+as the supplied Spec slot does. This is an experiment setting, not an engine size
+ceiling. Any supplied reasoning remains separately captured diagnostic data.
+No historical request is retargeted and no alternative model or response mode
+is substituted.
+
+The transport permits **at most one physical inference send**. The attempt is
+charged at the send boundary, so a transport failure does not permit a replacement
+request. After that exchange the runner stops through a typed cancellation,
+preserving any original rejection; another dispatch is rejected before transport.
+Supplied usage from the observed exchange is retained before the stop.
+Cancellation, missing usage, malformed output and
+provider failures remain explicit outcomes. There are no retries, repairs,
+rubric calls, workflow artifact publication or completion authority. Production
+workflow outcome and provider-compatibility status are reported separately.
+Before any invocation/step executes, typed compiled output/replacement keys and
+side-effect policy are checked for publication capability. A publication-capable
+child stops at `publication_prohibited`, even before the first exchange.
+
+Each invocation retains `report.json` (`provider-compatibility-report/v1`) and
+`report.md` beneath `zig-out/provider-compatibility/<UTC-date-time>-<unique-id>/`.
+The report links available immutable request/response captures and records the
+revision, exact model/settings, request/response identity and bytes, protocol and
+schema checks, stop reason, actual usage, physical sends and any provider-supplied
+reasoning. Unknown actual consumption is `total_actual_tokens: null` with
+`usage_complete: false`; `total_accounted_tokens` separately preserves native
+accounting. HTTP rejection alone is inconclusive because credentials or service
+availability may be responsible. The report distinguishes `compatible`,
+`incompatible`, `inconclusive`,
+`input_invalid` and `harness_error`; missing evidence cannot produce a compatibility
+pass. Read-only inspection reconstructs the canonical request and joins exact
+request/response bytes and native identities with the trace's closed transport
+outcome and production accounting metadata. The transport outcome owns HTTP
+status/request ID when the native prompt archive has no HTTP status. Request and
+response SHA-256 values retained from the trusted transport observation bind
+external readback to the observed bytes and reject substitutions. These are
+diagnostic byte identities, not engine state or predecessor authority. Bodies
+retained from interrupted or uncertain delivery remain inconclusive without
+candidate validation or invented usage. Reasoning signatures/redacted blocks
+remain opaque and never become source or workflow authority. Semantic quality
+and useful publication are not assessed.
+A compatible first exchange qualifies only that observed request/settings; it
+does not qualify every workflow request shape or establish complete E2E acceptance.
+
+The [FIX04 Phase 1 gate](../../fixes/FIX04.md#phase-1--establish-compatible-current-model-execution)
+requires both offline checks and an authentic retained exchange. Implementing and
+testing this command offline does not close the live gate or authorize a run.
+
 ## Environment setup
 
 1. From the repository root, create the optional local credential file:
@@ -155,11 +241,12 @@ the [model-conformance contract](../contracts/28-testing.md#288-model-conformanc
    command arguments.
 3. Set generation to use `TEST_AWS_BEARER_TOKEN_BEDROCK`.
 4. Explicitly set `TEST_EVALUATION_PROVIDER=bedrock`,
-   `TEST_EVALUATION_MODEL=global.openai.gpt-6-luna` and
+   `TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0` and
    `TEST_EVALUATION_REGION=ap-southeast-2`. The judge uses the same
    `TEST_AWS_BEARER_TOKEN_BEDROCK` credential port as generation, with independent
-   settings and accounting. Judge JSON must specify `reasoning_effort: null` and
-   `temperature: null`. Native JSON remains required; no fallback exists.
+   settings and accounting. Judge JSON specifies `reasoning_effort: "low"` and
+   `temperature: null`; the registered profile normalizes temperature to `0.1`.
+   Native JSON remains required; no fallback exists.
    See the [evaluator contract](evaluator.md#run).
 5. For direct build/evaluator commands, load the file in the invoking shell:
 
@@ -193,9 +280,9 @@ credentials. No model answer means no evidence yet about schema conformance.
   transitions, deterministic validators and publication.
 - Generation uses the model slots explicitly selected by that test's
   `.sddtoolkit.json`; all configured slots must pass the current small-model cost
-  preflight. The provider catalogue must declare `global.openai.gpt-6-luna`
-  with `json: true` in `ap-southeast-2`; slots omit `reasoningEffort`. The compiled
-  profile omits temperature and uses the documented provider default reasoning.
+  preflight. The provider catalogue must declare `openai.gpt-oss-20b-1:0`
+  with `json: true` in `ap-southeast-2`; Spec generation and repair select
+  `reasoningEffort: "low"`. The compiled profile uses temperature `0.1`.
 - The current production provider is Bedrock; its internal test credential is
   `TEST_AWS_BEARER_TOKEN_BEDROCK`.
 - The harness supplies a validated credential snapshot to the shared runtime. The CLI
@@ -209,7 +296,7 @@ credentials. No model answer means no evidence yet about schema conformance.
   that invocation and grades those exact captured bytes against the case's rubric.
 - The judge selection uses `TEST_EVALUATION_PROVIDER`, `TEST_EVALUATION_MODEL`, the
   selected `TEST_` credential and any required region. The current permitted live
-  grading combination is Bedrock / `global.openai.gpt-6-luna` / `ap-southeast-2`.
+  grading combination is Bedrock / `openai.gpt-oss-20b-1:0` / `ap-southeast-2`.
 - The case's `evaluation_config` supplies explicit reasoning, timeout, retry and
   total-budget settings; no provider or model is selected by a fallback.
 - Judge settings and credentials are validated before generation starts.
@@ -220,15 +307,15 @@ credentials. No model answer means no evidence yet about schema conformance.
 - The engine enforces the workflow's cumulative actual-token budget; the evaluator has
   its separate cumulative budget.
 - Provider-owned response limits still apply and are reported as provider stops.
-- Bedrock generation, grading and diagnostics share the Converse codec. Luna's
-  registered profile supplies its required strict JSON flag, sends no reasoning
-  or temperature override, and projects any configured output allowance to
+- Bedrock generation, grading and diagnostics share the Converse codec. GPT-OSS-20B's
+  registered profile supplies native JSON Schema, the selected reasoning effort
+  and temperature `0.1`, and projects any configured output allowance to
   `inferenceConfig.maxTokens`. Provider reasoning counts toward output usage;
   the engine accounts actual reported tokens separately from provider quotas.
-  The [AWS Luna model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-luna.html)
-  confirms native JSON support, global-profile Sydney availability, default
-  medium reasoning, Standard tier and no CountTokens support. No live model
-  qualification is inferred from these API facts.
+  The separate registered Luna profile retains its strict JSON flag and omitted
+  temperature/reasoning overrides. Its production capability contract remains
+  available, but the live-test policy rejects it. Registration does not establish
+  live compatibility or semantic quality for either model.
 
 - Every generation call and both evaluator providers use the engine's short [universal
   JSON framing instruction](../decisions/0014-universal-response-format-guidance.md).
@@ -513,6 +600,23 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
   bindings, dispatch and report behavior offline.
 - `zig build test-e2e-call-launcher --summary all` checks argument forwarding,
   checkout discovery and environment handling with fake Zig.
+- `zig build test-provider-compatibility --summary all` checks fresh-request
+  argument/preflight rules, one-send and publication guards, classification,
+  partial/error capture and report finalization offline.
+- `zig build test-integration --summary all` also exercises fresh production
+  configuration/request/authorization through the real runtime with a fake first
+  exchange, covering unrelated domains, cancellation, uncertain transport failure,
+  capture failure, missing usage, malformed responses, noncandidate stops and
+  exact request/response/accounting identity checks. These are integration tests,
+  not authentic Bedrock or E2E evidence.
+- `zig build test-provider-compatibility-launcher --summary all` checks explicit
+  argument forwarding, environment handling and failure exit status with fake Zig.
+- `zig build build-provider-compatibility` builds without provider calls;
+  `zig build smoke-provider-compatibility --summary all` exercises standalone
+  startup with live model connections compiled out.
+- `zig build provider-compatibility -- --case <explicit-case-path> --live` is the
+  separately approved live compatibility diagnostic; it is not a verification
+  dependency, workflow publication test or rubric-quality measurement.
 - `zig build build-e2e-call` builds the call diagnostic without API calls;
   `zig build smoke-e2e-call --summary all` checks its standalone startup and
   required selectors without live connections.

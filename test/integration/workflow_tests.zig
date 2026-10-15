@@ -2955,8 +2955,8 @@ fn verifyRetainedStoryReviews(allocator: std.mem.Allocator, runner: *@import("..
         // and unchanged record batches retain their complete original requests.
         const changed = switch (subject) {
             .candidate_field => |field| field.slot == .primary_user_story,
-            .collection, .entity_applicability, .candidate_support => true,
-            .source_preservation, .reference_signal => false,
+            .collection, .entity_applicability => true,
+            .source_preservation, .reference => false,
         };
         var first: ?Origin = null;
         var last: ?Origin = null;

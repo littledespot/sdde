@@ -641,7 +641,7 @@ fn responseFacts(a: std.mem.Allocator, receipt: Receipt) !ResponseFacts {
         return result;
     };
     defer raw.deinit();
-    var decoded = @import("../adapters/provider/bedrock_response.zig").decodeConverse(a, raw.value) catch |err| {
+    var decoded = @import("../adapters/provider/bedrock_response.zig").decodeConverse(a, raw.value, null) catch |err| {
         if (err == error.OutOfMemory) return err;
         result.rejection = "InvalidProviderResponse";
         return result;

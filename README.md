@@ -213,12 +213,13 @@ source snapshot explicitly show that source navigation is unavailable.
 selection, retained evidence and result interpretation. Each agent-initiated
 E2E run requires explicit user approval under [AGENTS.md](AGENTS.md).
 
-Live development tests permit only Bedrock `global.openai.gpt-6-luna` from
+Live development tests permit only Bedrock `openai.gpt-oss-20b-1:0` from
 `ap-southeast-2`, with native JSON Schema. Generation and grading use the same
 explicit model tuple with separate settings and accounting. The registered
-profile omits temperature and reasoning overrides; AWS documents default medium
-reasoning. Its global routing may leave Australia. Sonnet, Sol, Haiku, direct
-OpenAI and historical selections reject before credentials or network use.
+profile uses temperature `0.1`; Spec generation, repair and grading select low
+reasoning. Sonnet, Sol, Haiku, Luna, direct OpenAI and unregistered selections
+reject before credentials or network use. Luna remains registered for explicitly
+configured production use; changing the test selection does not remove its codec.
 These API contracts do not establish model quality or authorize a live run.
 
 ```sh
@@ -244,7 +245,7 @@ effort:
 ./scripts/e2e-call.sh \
   --run 'zig-out/e2e-spec/<UTC-date-time>-<unique-id>' \
   --workflow spec-generation --call 1 \
-  --model global.openai.gpt-6-luna --reasoning-effort none --repeats 3
+  --model openai.gpt-oss-20b-1:0 --reasoning-effort low --repeats 3
 ```
 
 Replace the run placeholder with a real capture; the command never selects the
@@ -255,8 +256,8 @@ semantic quality is not assessed. The launcher shares `.env.e2e` setup with
 `e2e-spec.sh`; `--help` and offline builds make no API calls. Live diagnostics
 require explicit approval for the selected calls and repeat count. They do not
 establish full-workflow E2E acceptance or change browser replay behavior.
-`--reasoning-effort none` omits the override; it does not disable provider-default
-reasoning. Captured catalogues and controls must already admit the Luna tuple.
+Captured catalogues and controls must already admit the GPT-OSS-20B tuple and
+selected reasoning effort.
 
 The [historical authoring-role diagnostics](test/calibration/authoring-roles/README.md)
 retain frozen experiment evidence. FIX03 Phase 5 removes that production classifier

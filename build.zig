@@ -146,6 +146,33 @@ pub fn build(b: *std.Build) void {
     // Only live E2E execution embeds the checkout identity. Offline test builds
     // must not be invalidated by changes to unrelated provenance inputs.
     e2e_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
+    const compatibility_module = b.createModule(.{
+        .root_source_file = b.path("provider_compatibility.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
+            .{ .name = "unicode_normalization", .module = unicode_module },
+        },
+    });
+    compatibility_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
+    const compatibility_executable = b.addExecutable(.{ .name = "sdde-provider-compatibility", .root_module = compatibility_module });
+    const run_compatibility = b.addRunArtifact(compatibility_executable);
+    run_compatibility.has_side_effects = true;
+    if (b.args) |args| run_compatibility.addArgs(args);
+    b.step("provider-compatibility", "Manually inspect one fresh production GPT-OSS-20B exchange (explicit --live required)").dependOn(&run_compatibility.step);
+    b.step("build-provider-compatibility", "Build the compatibility diagnostic without an API call").dependOn(&compatibility_executable.step);
+    const compatibility_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("provider_compatibility.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
+            .{ .name = "unicode_normalization", .module = unicode_module },
+        },
+    }) }));
+    compatibility_tests.setCwd(b.path("."));
+    b.step("test-provider-compatibility", "Test one-exchange limits and diagnostic reports offline").dependOn(&compatibility_tests.step);
     const all_tests_module = b.createModule(.{
         .root_source_file = b.path("tests.zig"),
         .target = target,
@@ -181,6 +208,11 @@ pub fn build(b: *std.Build) void {
     integration_step.dependOn(&run_integration_tests.step);
     integration_step.dependOn(&launcher_tests.step);
     integration_step.dependOn(&integration_script_tests.step);
+    const compatibility_launcher_tests = b.addSystemCommand(&.{"sh"});
+    compatibility_launcher_tests.addFileArg(b.path("test/harness/integration/compatibility_launcher_test.sh"));
+    compatibility_launcher_tests.addFileArg(b.path("scripts/provider-compatibility.sh"));
+    integration_step.dependOn(&compatibility_launcher_tests.step);
+    b.step("test-provider-compatibility-launcher", "Test compatibility launcher arguments and credentials offline").dependOn(&compatibility_launcher_tests.step);
     const call_launcher_tests = b.addSystemCommand(&.{"sh"});
     call_launcher_tests.addFileArg(b.path("test/harness/integration/call_launcher_test.sh"));
     call_launcher_tests.addFileArg(b.path("scripts/e2e-call.sh"));
@@ -224,6 +256,29 @@ pub fn build(b: *std.Build) void {
     e2e_extra_case.expectStdErrEqual("Select exactly one E2E case with --case; use --help.\n");
     e2e_smoke.dependOn(&e2e_extra_case.step);
     test_step.dependOn(e2e_smoke);
+    const compatibility_directory = b.addTempFiles();
+    const compatibility_offline = offlineExecutable(b, compatibility_executable);
+    const compatibility_binary = compatibility_directory.addCopyFile(compatibility_offline.getEmittedBin(), compatibility_offline.out_filename);
+    const compatibility_help = std.Build.Step.Run.create(b, "run standalone compatibility help without assets or credentials");
+    compatibility_help.addFileArg(compatibility_binary);
+    compatibility_help.addArg("--help");
+    compatibility_help.setCwd(compatibility_directory.getDirectory());
+    compatibility_help.clearEnvironment();
+    compatibility_help.expectExitCode(0);
+    compatibility_help.expectStdErrEqual("");
+    const compatibility_denied = std.Build.Step.Run.create(b, "reject compatibility without explicit case and live opt-in");
+    compatibility_denied.addFileArg(compatibility_binary);
+    compatibility_denied.addArgs(&.{ "--case", "case.json" });
+    compatibility_denied.setCwd(compatibility_directory.getDirectory());
+    compatibility_denied.clearEnvironment();
+    compatibility_denied.expectExitCode(1);
+    compatibility_denied.expectStdOutEqual("");
+    compatibility_denied.expectStdErrEqual("Select one explicit --case <path> --live; use --help. No API call made.\n");
+    const compatibility_smoke = b.step("smoke-provider-compatibility", "Test standalone compatibility startup without model connections");
+    compatibility_smoke.dependOn(&compatibility_executable.step);
+    compatibility_smoke.dependOn(&compatibility_help.step);
+    compatibility_smoke.dependOn(&compatibility_denied.step);
+    test_step.dependOn(compatibility_smoke);
     const call_directory = b.addTempFiles();
     const call_offline = offlineExecutable(b, call_executable);
     const call_binary = call_directory.addCopyFile(call_offline.getEmittedBin(), call_offline.out_filename);
@@ -267,20 +322,20 @@ pub fn build(b: *std.Build) void {
     evaluator_smoke.dependOn(&evaluator_exe.step);
     evaluator_smoke.dependOn(&evaluator_help.step);
     evaluator_smoke.dependOn(&evaluator_denied.step);
-    _ = evaluator_directory.add("judge.json", "{\"schema\":\"evaluation-config/v1\",\"reasoning_effort\":null,\"temperature\":null,\"timeout_ms\":1000,\"retry_limit\":0,\"retry_delay_ms\":0,\"total_token_budget\":100}");
+    _ = evaluator_directory.add("judge.json", "{\"schema\":\"evaluation-config/v1\",\"reasoning_effort\":\"low\",\"temperature\":null,\"timeout_ms\":1000,\"retry_limit\":0,\"retry_delay_ms\":0,\"total_token_budget\":100}");
     for ([_]struct { name: []const u8, provider: []const u8 = "openai", region: ?[]const u8 = null, model: ?[]const u8, key: ?[]const u8, key_name: []const u8 = "TEST_OPENAI_API_KEY", expected: []const u8 }{
         .{ .name = "reject missing test evaluation model", .provider = "bedrock", .region = null, .model = null, .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.\n" },
-        .{ .name = "reject production credential as Bedrock evaluator fallback", .provider = "bedrock", .region = "ap-southeast-2", .model = "global.openai.gpt-6-luna", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "TEST_AWS_BEARER_TOKEN_BEDROCK is missing. No API call made.\n" },
-        .{ .name = "accept current Bedrock Luna selection then reject unavailable input before any API call", .provider = "bedrock", .region = "ap-southeast-2", .model = "global.openai.gpt-6-luna", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = "test-only-credential", .expected = "Invalid or unavailable case, rubric, source or specification. No API call made.\n" },
-        .{ .name = "reject current Bedrock evaluator without an explicit region", .provider = "bedrock", .region = null, .model = "global.openai.gpt-6-luna", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.\n" },
-        .{ .name = "reject invalid Bedrock evaluator credential", .provider = "bedrock", .region = "ap-southeast-2", .model = "global.openai.gpt-6-luna", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = "invalid key", .expected = "TEST_AWS_BEARER_TOKEN_BEDROCK is invalid. No API call made.\n" },
-        .{ .name = "reject superseded Haiku evaluation before credentials", .provider = "bedrock", .region = "ap-southeast-2", .model = "au.anthropic.claude-haiku-5-5", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=global.openai.gpt-6-luna and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
-        .{ .name = "reject unknown Bedrock evaluation model before credentials", .provider = "bedrock", .region = "ap-southeast-2", .model = "unregistered-model", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=global.openai.gpt-6-luna and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
-        .{ .name = "reject historical Bedrock evaluation model before invalid credentials", .provider = "bedrock", .region = "ap-southeast-2", .model = "openai.gpt-oss-20b-1:0", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = "invalid key", .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=global.openai.gpt-6-luna and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
-        .{ .name = "reject Sonnet evaluation before credentials", .provider = "bedrock", .region = "ap-southeast-2", .model = "au.anthropic.claude-sonnet-5-5", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=global.openai.gpt-6-luna and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
-        .{ .name = "reject Sol evaluation before missing credentials", .provider = "openai", .region = null, .model = "gpt-6-sol", .key_name = "TEST_OPENAI_API_KEY", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=global.openai.gpt-6-luna and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
-        .{ .name = "reject Sol evaluation before invalid credentials", .provider = "openai", .region = null, .model = "gpt-6.1-sol", .key_name = "TEST_OPENAI_API_KEY", .key = "invalid key", .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=global.openai.gpt-6-luna and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
-        .{ .name = "reject direct OpenAI Luna evaluation before credentials", .provider = "openai", .region = null, .model = "gpt-6-luna", .key_name = "TEST_OPENAI_API_KEY", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=global.openai.gpt-6-luna and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject production credential as Bedrock evaluator fallback", .provider = "bedrock", .region = "ap-southeast-2", .model = "openai.gpt-oss-20b-1:0", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "TEST_AWS_BEARER_TOKEN_BEDROCK is missing. No API call made.\n" },
+        .{ .name = "accept current Bedrock GPT-OSS-20B selection then reject unavailable input before any API call", .provider = "bedrock", .region = "ap-southeast-2", .model = "openai.gpt-oss-20b-1:0", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = "test-only-credential", .expected = "Invalid or unavailable case, rubric, source or specification. No API call made.\n" },
+        .{ .name = "reject current Bedrock evaluator without an explicit region", .provider = "bedrock", .region = null, .model = "openai.gpt-oss-20b-1:0", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Invalid TEST_EVALUATION_PROVIDER, TEST_EVALUATION_MODEL or TEST_EVALUATION_REGION. No API call made.\n" },
+        .{ .name = "reject invalid Bedrock evaluator credential", .provider = "bedrock", .region = "ap-southeast-2", .model = "openai.gpt-oss-20b-1:0", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = "invalid key", .expected = "TEST_AWS_BEARER_TOKEN_BEDROCK is invalid. No API call made.\n" },
+        .{ .name = "reject superseded Haiku evaluation before credentials", .provider = "bedrock", .region = "ap-southeast-2", .model = "au.anthropic.claude-haiku-5-5", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject unknown Bedrock evaluation model before credentials", .provider = "bedrock", .region = "ap-southeast-2", .model = "unregistered-model", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject Bedrock Luna evaluation before invalid credentials", .provider = "bedrock", .region = "ap-southeast-2", .model = "global.openai.gpt-6-luna", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = "invalid key", .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject Sonnet evaluation before credentials", .provider = "bedrock", .region = "ap-southeast-2", .model = "au.anthropic.claude-sonnet-5-5", .key_name = "TEST_AWS_BEARER_TOKEN_BEDROCK", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject Sol evaluation before missing credentials", .provider = "openai", .region = null, .model = "gpt-6-sol", .key_name = "TEST_OPENAI_API_KEY", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject Sol evaluation before invalid credentials", .provider = "openai", .region = null, .model = "gpt-6.1-sol", .key_name = "TEST_OPENAI_API_KEY", .key = "invalid key", .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
+        .{ .name = "reject direct OpenAI Luna evaluation before credentials", .provider = "openai", .region = null, .model = "gpt-6-luna", .key_name = "TEST_OPENAI_API_KEY", .key = null, .expected = "Live judge model rejected by the test cost policy. Explicitly select TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0 and TEST_EVALUATION_REGION=ap-southeast-2. No API call made.\n" },
     }) |fixture| {
         const check = std.Build.Step.Run.create(b, fixture.name);
         check.addFileArg(evaluator_binary);
@@ -662,6 +717,7 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("harness.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));
     lint_command.addFileArg(b.path("e2e_call.zig"));
+    lint_command.addFileArg(b.path("provider_compatibility.zig"));
     lint_command.addFileArg(b.path("tests.zig"));
     lint_command.addFileArg(b.path("integration.zig"));
     lint_command.addDirectoryArg(b.path("build"));
@@ -687,7 +743,7 @@ pub fn build(b: *std.Build) void {
             std.mem.eql(u8, name, "smoke") or std.mem.startsWith(u8, name, "test-") or
             std.mem.startsWith(u8, name, "smoke-"))
         {
-            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step, &run_call.step }) catch |err|
+            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step, &run_call.step, &run_compatibility.step }) catch |err|
                 std.debug.panic("automated step {s} violates manual-only model execution: {s}", .{ name, @errorName(err) });
         }
     }

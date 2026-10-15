@@ -225,6 +225,76 @@ test "response inspection reuses extraction and reports the exact schema path an
     try std.testing.expectEqual(.unavailable, count.schema);
 }
 
+test "response inspection admits retained native usage through existing normalization and selected schema" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture: Fixture = undefined;
+    try fixture.init(a);
+    defer fixture.environment.deinit();
+    // Exact provider response and selected response_schema from the retained
+    // 2026-10-15T20-29-20Z GPT-OSS-20B compatibility exchange. This is offline
+    // codec/admission evidence; it does not claim live compatibility or quality.
+    const bytes = @embedFile("test_fixtures/bedrock_converse_usage/response.json");
+    var selected = description;
+    selected.schema = @embedFile("test_fixtures/bedrock_converse_usage/schema.json");
+    selected.response_mode = .native_schema;
+    const checked = try fixture.provider.provider().inspect(a, selected, bytes);
+    try std.testing.expectEqual(.valid, checked.extraction);
+    try std.testing.expectEqual(.valid, checked.json);
+    try std.testing.expectEqual(.valid, checked.schema);
+    try std.testing.expectEqual(.removed_leading_brace_quote, checked.normalization);
+    try std.testing.expectEqual(@as(?u64, 2106), checked.input_tokens);
+    try std.testing.expectEqual(@as(?u64, 148), checked.output_tokens);
+    try std.testing.expectEqual(@as(u64, 2254), checked.input_tokens.? + checked.output_tokens.?);
+    try std.testing.expectEqual(@as(?u32, 923), checked.latency_ms);
+    try std.testing.expect(checked.reason == null);
+    const raw = try @import("domain/strict_json.zig").decode(std.json.Value, a, bytes, .{ .maximum_depth = 64 });
+    const blocks = raw.object.get("output").?.object.get("message").?.object.get("content").?.array.items;
+    const original_text = blocks[1].object.get("text").?.string;
+    try std.testing.expectEqualStrings(original_text, checked.model_text.?);
+    try std.testing.expect(std.mem.startsWith(u8, checked.model_text.?, "{\"{ \"kind\":"));
+    try std.testing.expectEqual(@as(usize, 1), checked.reasoning.len);
+    try std.testing.expectEqualStrings(blocks[0].object.get("reasoningContent").?.object.get("reasoningText").?.object.get("text").?.string, checked.reasoning[0].text.text);
+    try std.testing.expectEqual(@as(?[]const u8, null), checked.reasoning[0].text.signature);
+    const claims = checked.parsed.?.object.get("claims").?.array.items;
+    try std.testing.expectEqual(@as(usize, 3), claims.len);
+    try std.testing.expectEqualStrings("claims", checked.parsed.?.object.get("kind").?.string);
+    try std.testing.expectEqualStrings("The application must start successfully.", claims[0].object.get("content").?.object.get("segments").?.string);
+    try std.testing.expectEqual(@as(usize, 0), fixture.wire.calls);
+}
+
+test "response inspection preserves canonical envelope rejection reason and field path" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var fixture: Fixture = undefined;
+    try fixture.init(a);
+    defer fixture.environment.deinit();
+    const original = try debugResponse(a, "{\"answer\":\"kept\"}");
+    const cases = [_]struct { usage: []const u8, reason: []const u8, path: []const u8 }{
+        .{ .usage = "\"serverToolUsage\":null,", .reason = "Expected provider response object", .path = "/usage/serverToolUsage" },
+        .{ .usage = "\"serverToolUsage\":[],", .reason = "Expected provider response object", .path = "/usage/serverToolUsage" },
+        .{ .usage = "\"serverToolUsage\":{\"unsupported\":true},", .reason = "Unknown provider response field", .path = "/usage/serverToolUsage/unsupported" },
+        .{ .usage = "\"serverToolUsage\":{},\"unregistered/~\":true,", .reason = "Unknown provider response field", .path = "/usage/unregistered~1~0" },
+    };
+    for (cases) |case| {
+        const replacement = try std.mem.concat(a, u8, &.{ case.usage, "\"inputTokens\":" });
+        const malformed = try std.mem.replaceOwned(u8, a, original, "\"inputTokens\":", replacement);
+        try std.testing.expect(!std.mem.eql(u8, malformed, original));
+        const checked = try fixture.provider.provider().inspect(a, description, malformed);
+        try std.testing.expectEqual(.invalid, checked.extraction);
+        try std.testing.expectEqual(.unavailable, checked.json);
+        try std.testing.expectEqual(.unavailable, checked.schema);
+        try std.testing.expectEqualStrings(case.reason, checked.reason.?);
+        try std.testing.expectEqualStrings(case.path, checked.path.?);
+        try std.testing.expect(checked.input_tokens == null);
+        try std.testing.expect(checked.output_tokens == null);
+        try std.testing.expect(checked.model_text == null);
+    }
+    try std.testing.expectEqual(@as(usize, 0), fixture.wire.calls);
+}
+
 const LogSink = struct {
     a: std.mem.Allocator,
     rows: std.ArrayList(u8) = .empty,

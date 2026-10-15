@@ -5,6 +5,8 @@ const packet = @import("packet.zig");
 test {
     _ = @import("model_cost_policy.zig");
     _ = @import("generation_comparison.zig");
+    _ = @import("e2e/tests.zig");
+    _ = @import("compatibility/tests.zig");
     _ = @import("call/tests.zig");
     _ = @import("call/capture_test.zig");
     _ = @import("call/report_test.zig");
@@ -285,7 +287,7 @@ test "evaluation selection is required from test environment and reaches request
     }
     try environment.put("TEST_EVALUATION_PROVIDER", "bedrock");
     try environment.put("TEST_EVALUATION_REGION", "ap-southeast-2");
-    for ([_][]const u8{"global.openai.gpt-6-luna"}) |model| {
+    for ([_][]const u8{"openai.gpt-oss-20b-1:0"}) |model| {
         try environment.put("TEST_EVALUATION_MODEL", model);
         const config = try configuration.parse(a, config_bytes, try test_environment.selection(&environment));
         const inputs = try capture(a);
@@ -333,7 +335,7 @@ test "Bedrock evaluation validates explicit test selection and registered contro
         try environment.put("TEST_EVALUATION_MODEL", entry.model.bytes);
         try environment.put("TEST_EVALUATION_REGION", @tagName(entry.bedrock_regions[0]));
         const selection: configuration.Selection = .{ .api = .bedrock_converse, .model = entry.model, .region = entry.bedrock_regions[0] };
-        if (std.mem.eql(u8, entry.model.bytes, "global.openai.gpt-6-luna")) {
+        if (std.mem.eql(u8, entry.model.bytes, "openai.gpt-oss-20b-1:0")) {
             try std.testing.expectEqualDeep(selection, try test_environment.selection(&environment));
         } else try std.testing.expectError(error.DisallowedTestModel, test_environment.selection(&environment));
         if (entry.capabilities.structured_response != .bedrock_json_schema) {
@@ -381,6 +383,10 @@ test "live evaluator cost rejection precedes credential use and adapter construc
         config.model = model;
         try std.testing.expectError(error.DisallowedTestModel, @import("live.zig").run(std.testing.io, a, config, "invalid key", inputs, store));
     }
+    config.api = .bedrock_converse;
+    config.region = .@"ap-southeast-2";
+    config.model = "global.openai.gpt-6-luna";
+    try std.testing.expectError(error.DisallowedTestModel, @import("live.zig").run(std.testing.io, a, config, "invalid key", inputs, store));
 }
 
 test "Bedrock evaluator reads only its test credential without other provider or production fallback" {

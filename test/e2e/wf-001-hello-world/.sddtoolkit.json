@@ -5,16 +5,17 @@
   },
   "models": {
     "slots": {
-      "audit_analysis": { "provider": "aws-bedrock", "model": "global.openai.gpt-6-luna" },
-      "drift_analysis": { "provider": "aws-bedrock", "model": "global.openai.gpt-6-luna" },
+      "audit_analysis": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
+      "drift_analysis": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
       "spec_generation": {
         "provider": "aws-bedrock",
-        "model": "global.openai.gpt-6-luna",
+        "model": "openai.gpt-oss-20b-1:0",
+        "reasoningEffort": "low",
         "maxOutputTokens": 16384
       },
-      "repair": { "provider": "aws-bedrock", "model": "global.openai.gpt-6-luna" },
-      "design_section_generation": { "provider": "aws-bedrock", "model": "global.openai.gpt-6-luna" },
-      "implementation": { "provider": "aws-bedrock", "model": "global.openai.gpt-6-luna" }
+      "repair": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0", "reasoningEffort": "low" },
+      "design_section_generation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" },
+      "implementation": { "provider": "aws-bedrock", "model": "openai.gpt-oss-20b-1:0" }
     }
   },
   "validation": { "sourcePreservationCheck": false },

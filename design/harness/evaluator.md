@@ -2,7 +2,7 @@
 
 Implements the evaluator-only path in [H-001–H-006](01-rubric-evaluator.md).
 It sends captured requirements, a supplied specification and its rubric to
-the permitted Bedrock Luna target, validates the returned judgments, and writes
+the permitted Bedrock GPT-OSS-20B target, validates the returned judgments, and writes
 JSON/Markdown reports. The retained OpenAI adapter is tested offline.
 It does **not** run Specify or require a deterministic definition of good prose.
 
@@ -52,8 +52,8 @@ The internal test environment supplies the evaluation selection:
 | Variable | Required value |
 | --- | --- |
 | `TEST_EVALUATION_PROVIDER` | Explicit `bedrock` for the permitted live cohort. The parser recognizes the retained OpenAI adapter, but the live policy rejects its selection. Unknown or missing providers reject. |
-| `TEST_EVALUATION_MODEL` | Explicit `global.openai.gpt-6-luna`. Missing, expensive, historical and other IDs reject before credentials or network use. |
-| `TEST_EVALUATION_REGION` | Explicit `ap-southeast-2` (Sydney) for the registered Luna global profile. Its routing may leave Australia. |
+| `TEST_EVALUATION_MODEL` | Explicit `openai.gpt-oss-20b-1:0`. Missing, expensive, Luna and other IDs reject before credentials or network use. |
+| `TEST_EVALUATION_REGION` | Explicit `ap-southeast-2` (Sydney) for the registered GPT-OSS-20B binding. |
 | `TEST_OPENAI_API_KEY` | Retained OpenAI credential port, exercised offline; direct OpenAI live selection is disallowed. No fallback to `OPENAI_API_KEY`. |
 | `TEST_AWS_BEARER_TOKEN_BEDROCK` | Credential when evaluating through Bedrock; no fallback to production AWS credentials or the OpenAI test key. |
 
@@ -65,10 +65,10 @@ The internal test environment supplies the evaluation selection:
 - It is not forwarded to production credential loading.
 - No environment values are compiled into either executable.
 - The shared [cost policy](../../test/harness/model_cost_policy.zig) allows only
-  `aws-bedrock` / `global.openai.gpt-6-luna`.
+  `aws-bedrock` / `openai.gpt-oss-20b-1:0`.
   Environment selection checks it before credentials are read, and shared live
   composition checks it before constructing a provider adapter. Sonnet, Sol,
-  Haiku, direct OpenAI, historical models and other aliases cannot reach a live request.
+  Haiku, Luna, direct OpenAI and other model IDs or aliases cannot reach a live request.
   This development restriction supplies no default and does not restrict the
   production engine's independent model catalogue.
 
@@ -81,8 +81,8 @@ The internal test environment supplies the evaluation selection:
 | Field | Value / responsibility |
 | --- | --- |
 | `schema` | `"evaluation-config/v1"` |
-| `reasoning_effort` | Explicit `null` for the live Luna profile. The closed parser retains other effort values for offline adapter conformance, but Luna rejects every explicit override until its Converse wire contract is verified. |
-| `temperature` | Explicit `null` for live Luna; no temperature is sent. Offline Bedrock profiles derive their required control from registered capabilities; explicit `0.1` is accepted only when registered. The retained OpenAI parser supports `null` or a number from 0 through 2. |
+| `reasoning_effort` | The selected GPT-OSS-20B judge uses explicit `"low"`. The closed parser retains other registered effort values for adapter conformance; reports retain the independently configured judge setting. |
+| `temperature` | The selected GPT-OSS-20B judge uses `0.1`, derived from the engine's fixed supported-temperature control. Bedrock resolves explicit `null` to the same required `0.1`; other values reject. The retained OpenAI parser supports `null` or a number from 0 through 2. |
 | `timeout_ms` | Positive integer deadline for each network attempt. |
 | `retry_limit` | Integer 0–65535; additional attempts, not total attempts. Zero disables retries. |
 | `retry_delay_ms` | Nonnegative integer; must be positive when retries are enabled. |
@@ -129,28 +129,26 @@ The internal test environment supplies the evaluation selection:
 - Bedrock grading requires native JSON Schema capability from the existing model
   registry in addition to the live-test policy. Explicitly select
   `TEST_EVALUATION_PROVIDER=bedrock`,
-  `TEST_EVALUATION_MODEL=global.openai.gpt-6-luna` and
-  `TEST_EVALUATION_REGION=ap-southeast-2`. The current Luna profile satisfies
-  both gates. Its global routing is not an Australian-residency guarantee.
+  `TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0` and
+  `TEST_EVALUATION_REGION=ap-southeast-2`. The selected GPT-OSS-20B profile satisfies
+  both gates.
   No model or response mode falls back.
 - Unknown, mismatched or schema-incapable selections reject before a provider call;
   no model, region, credential chain or endpoint is inferred.
 - The compiled `BedrockRequestProfile` and capability owner admit only verified
-  request fields. Luna sends no explicit reasoning or temperature override;
-  AWS documents its default medium reasoning. Broader effort options on the
-  model card do not establish their Converse wire mapping. Offline fixtures
-  exercise existing GPT-OSS controls without granting live selection.
+  request fields. The selected GPT-OSS-20B judge sends explicit low effort through
+  `additionalModelRequestFields.reasoning_effort` and temperature `0.1` through
+  `inferenceConfig`. Offline fixtures may exercise other registered profiles
+  without granting live selection.
 - These are the repository's registered contracts, not a catalogue of all models
   available from the provider.
 
 - The native-schema grading requirement remains in force. The canonical Converse
   encoder requests `outputConfig.textFormat.type: "json_schema"` and passes the
   schema string through `outputConfig.textFormat.structure.jsonSchema.schema`.
-  Luna's registered request profile additionally sets
-  `additionalModelRequestFields.text.format.strict: true`, as required by the
-  [AWS Luna contract](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-luna.html).
-  Common supported controls use `inferenceConfig`; explicit reasoning and
-  temperature are omitted for this evidence-backed subset. These are the
+  The selected GPT-OSS profile does not add Luna's
+  `additionalModelRequestFields.text.format.strict` field.
+  Common supported controls use `inferenceConfig`. These are the
   [Converse structured-output fields](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html).
 - `packet.resultSchema` derives one schema from the native judgment type; that
   same schema supplies prompt guidance and the serialized native schema string.

@@ -23,7 +23,7 @@ fn command(init: std.process.Init) !bool {
     var arguments: std.ArrayList([]const u8) = .empty;
     while (iterator.next()) |argument| try arguments.append(allocator, argument);
     if (arguments.items.len == 1 and std.mem.eql(u8, arguments.items[0], "--help")) {
-        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-spec -- --case <relative-workflow.case.json>\nRuns the real LLM selected by the case's .sddtoolkit.json, then grades its published specification against the case rubric. This command makes live API calls. Live generation and grading permit only Bedrock global.openai.gpt-6-luna from ap-southeast-2. Explicitly set TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=global.openai.gpt-6-luna, TEST_EVALUATION_REGION=ap-southeast-2 and TEST_AWS_BEARER_TOKEN_BEDROCK. Load .env.e2e explicitly before running. Retains one UTC-dated run under zig-out/e2e-spec.\n");
+        try std.Io.File.stdout().writeStreamingAll(io, "Usage: zig build e2e-spec -- --case <relative-workflow.case.json>\nRuns the real LLM selected by the case's .sddtoolkit.json, then grades its published specification against the case rubric. This command makes live API calls. Live generation and grading permit only Bedrock openai.gpt-oss-20b-1:0 from ap-southeast-2. Explicitly set TEST_EVALUATION_PROVIDER=bedrock, TEST_EVALUATION_MODEL=openai.gpt-oss-20b-1:0, TEST_EVALUATION_REGION=ap-southeast-2 and TEST_AWS_BEARER_TOKEN_BEDROCK. Load .env.e2e explicitly before running. Retains one UTC-dated run under zig-out/e2e-spec.\n");
         return true;
     }
     const case_path = parse(arguments.items) catch {
@@ -96,7 +96,7 @@ fn execute(io: std.Io, allocator: std.mem.Allocator, environment: *const std.pro
     const reconstruction = try @import("build_evidence.zig").save(store, @embedFile("build_provenance"));
     report.build.?.inputs_file = "build-inputs.json";
     report.build.?.reconstruction = reconstruction;
-    const specification = try @import("invoke.zig").run(io, allocator, project, selected, captured, generation_key, store, report);
+    const specification = try @import("invoke.zig").run(io, allocator, project, selected, captured, generation_key, store, report, .{ .purpose = .whole_workflow });
     if (!try verifySources(io, allocator, case_path, case_bytes, captured, report)) return;
     const published = specification orelse return;
     const inputs = try @import("evaluation.zig").inputs(allocator, report.*, captured.evaluation, published, execution_id);

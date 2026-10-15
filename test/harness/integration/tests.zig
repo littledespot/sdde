@@ -262,7 +262,7 @@ test "production E2E binding honors configured models and cannot succeed without
         var project = std.testing.tmpDir(.{});
         defer project.cleanup();
         try fixture.materialize(io, project.dir, captured);
-        const model = if (example == 0) "global.openai.gpt-6-luna" else "anthropic.claude-3-5-haiku-20241022-v1:0";
+        const model = if (example == 0) "openai.gpt-oss-20b-1:0" else "anthropic.claude-3-5-haiku-20241022-v1:0";
         if (example == 1) {
             var model_config = try std.json.parseFromSlice(std.json.Value, a, captured.config, .{});
             defer model_config.deinit();
@@ -274,7 +274,7 @@ test "production E2E binding honors configured models and cannot succeed without
             }
             try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, model_config.value, .{}) });
             const catalogue = try @import("../files.zig").read(io, a, project.dir, ".sddtoolkit/providers/.sddproviders.json");
-            const model_catalogue = try std.mem.replaceOwned(u8, a, catalogue, "global.openai.gpt-6-luna", model);
+            const model_catalogue = try std.mem.replaceOwned(u8, a, catalogue, "openai.gpt-oss-20b-1:0", model);
             // This registered model only supports prompt guidance.
             const replaced = try std.mem.replaceOwned(u8, a, model_catalogue, "\"json\": true", "\"json\": false");
             try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit/providers/.sddproviders.json", .data = try std.mem.replaceOwned(u8, a, replaced, "ap-southeast-2", "us-west-2") });
@@ -284,7 +284,7 @@ test "production E2E binding honors configured models and cannot succeed without
         var evidence_run = std.testing.tmpDir(.{});
         defer evidence_run.cleanup();
         const store: @import("../evidence.zig").Store = .{ .io = io, .allocator = a, .run = evidence_run.dir, .secrets = &.{} };
-        const output = try @import("../e2e/invoke.zig").run(io, a, project.dir, choice, captured, null, store, &report);
+        const output = try @import("../e2e/invoke.zig").run(io, a, project.dir, choice, captured, null, store, &report, .{ .purpose = .whole_workflow });
         try std.testing.expect(output == null);
         try std.testing.expectEqual(.live, report.origin);
         try std.testing.expectEqual(.workflow_failed, report.status);

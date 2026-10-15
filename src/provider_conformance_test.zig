@@ -887,6 +887,134 @@ test "Converse response rejects malformed UTF8 unknown fields duplicate values a
     }
 }
 
+test "Converse accepts empty server tool usage across registered profiles and unrelated contents" {
+    for (contracts.registry.entries) |contract| {
+        for ([_][]const u8{ "{\"answer\":\"orchard\"}", "{\"loan\":{\"days\":14},\"allowed\":false}" }) |content| {
+            for ([_]bool{ false, true }) |has_server_tool_usage| {
+                var fixture: Fixture = undefined;
+                try fixture.init(std.testing.allocator, .bedrock);
+                defer fixture.deinit();
+                fixture.base.registry_entry.provider = contract.provider;
+                fixture.base.registry_entry.model = contract.model;
+                fixture.base.registry_entry.capabilities = contract.capabilities;
+                fixture.base.registry_entry.json = contract.capabilities.structured_response == .bedrock_json_schema;
+                fixture.base.registry_entry.bedrock_request_profile = contract.bedrock_request_profile;
+                fixture.base.registry_entry.config = .{ .aws_bedrock = .{ .region = contract.bedrock_regions[0] } };
+                fixture.base.registry_entry.supported_reasoning_efforts = contract.supported_reasoning_efforts;
+                fixture.base.provider_binding.controls = contract.capabilities.inferenceControls();
+                fixture.base.request.controls = fixture.base.provider_binding.controls;
+                fixture.base.request.binding_id = fixture.base.provider_binding.bindingId();
+                fixture.base.request.response_guidance_mode = fixture.base.registry_entry.responseMode();
+                fixture.wire.expected_json = fixture.base.registry_entry.json;
+                const text = try std.json.Stringify.valueAlloc(std.testing.allocator, content, .{});
+                defer std.testing.allocator.free(text);
+                const bytes = try std.fmt.allocPrint(
+                    std.testing.allocator,
+                    "{{\"output\":{{\"message\":{{\"role\":\"assistant\",\"content\":[{{\"text\":{s}}}]}}}},\"stopReason\":\"end_turn\",\"usage\":{{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12{s}}}}}",
+                    .{ text, if (has_server_tool_usage) ",\"serverToolUsage\":{}" else "" },
+                );
+                defer std.testing.allocator.free(bytes);
+                fixture.wire.result = .{ .received = .{ .status = 200, .body = bytes } };
+                const authorized = try fixture.start(.inference);
+                var observed = try fixture.call(authorized);
+                defer observed.deinit();
+                try std.testing.expectEqual(@as(usize, 1), fixture.effects());
+                const complete = observed.completed.raw_result.complete;
+                try std.testing.expectEqualStrings(content, complete.content.bytes);
+                try std.testing.expectEqualDeep(operation.ProviderUsage{ .input_tokens = 10, .output_tokens = 2, .total_tokens = 12 }, complete.usage);
+            }
+        }
+    }
+}
+
+test "Converse retained native response preserves exact answer reasoning and actual usage" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator, .bedrock);
+    defer fixture.deinit();
+    // Native response and selected schema are retained verbatim from the
+    // 2026-10-15T20-29-20Z GPT-OSS-20B compatibility exchange. This offline
+    // regression proves codec behavior, not live model quality or E2E success.
+    const bytes = @embedFile("test_fixtures/bedrock_converse_usage/response.json");
+    var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = std.math.maxInt(usize) }, false, null);
+    defer parsed.deinit();
+    const content = parsed.value.object.get("output").?.object.get("message").?.object.get("content").?.array.items;
+    const expected_text = content[1].object.get("text").?.string;
+    const expected_reasoning = content[0].object.get("reasoningContent").?.object.get("reasoningText").?.object.get("text").?.string;
+    try std.testing.expect(std.mem.startsWith(u8, expected_text, "{\"{ \"kind\":"));
+    var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = bytes } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
+    defer observed.deinit();
+    const complete = observed.completed.raw_result.complete;
+    try std.testing.expectEqualStrings(expected_text, complete.content.bytes);
+    try std.testing.expectEqualDeep(operation.ProviderUsage{ .input_tokens = 2106, .output_tokens = 148, .total_tokens = 2254 }, complete.usage);
+    try std.testing.expectEqual(@as(?u32, 923), complete.provider_latency_ms);
+    const reasoning = complete.reasoning.?.blocks;
+    try std.testing.expectEqual(@as(usize, 1), reasoning.len);
+    try std.testing.expectEqualStrings(expected_reasoning, reasoning[0].text.text);
+    try std.testing.expectEqual(@as(?[]const u8, null), reasoning[0].text.signature);
+}
+
+test "Converse invalid server tool usage retains owned precise envelope diagnostics" {
+    const a = std.testing.allocator;
+    const cases = [_]struct { metadata: []const u8, path: []const u8, reason: @FieldType(response.DecodeDiagnostic, "reason") }{
+        .{ .metadata = "\"serverToolUsage\":null", .path = "/usage/serverToolUsage", .reason = .expected_object },
+        .{ .metadata = "\"serverToolUsage\":false", .path = "/usage/serverToolUsage", .reason = .expected_object },
+        .{ .metadata = "\"serverToolUsage\":1", .path = "/usage/serverToolUsage", .reason = .expected_object },
+        .{ .metadata = "\"serverToolUsage\":\"empty\"", .path = "/usage/serverToolUsage", .reason = .expected_object },
+        .{ .metadata = "\"serverToolUsage\":[]", .path = "/usage/serverToolUsage", .reason = .expected_object },
+        .{ .metadata = "\"serverToolUsage\":{\"unsupported\":true}", .path = "/usage/serverToolUsage/unsupported", .reason = .unknown_field },
+        .{ .metadata = "\"serverToolUsage\":{},\"unregistered/~\":true", .path = "/usage/unregistered~1~0", .reason = .unknown_field },
+    };
+    for (cases) |case| {
+        var diagnostic: ?response.DecodeDiagnostic = null;
+        defer if (diagnostic) |*value| value.deinit(a);
+        {
+            const bytes = try std.fmt.allocPrint(a, "{{\"stopReason\":\"end_turn\",\"usage\":{{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12,{s}}}}}", .{case.metadata});
+            defer a.free(bytes);
+            var parsed = try strict.parse(a, bytes, .{ .maximum_depth = std.math.maxInt(usize) }, false, null);
+            defer parsed.deinit();
+            try std.testing.expectError(error.InvalidResponse, response.decodeConverse(a, parsed.value, &diagnostic));
+        }
+        // Diagnostic storage must outlive the parsed wire value and source.
+        try std.testing.expectEqual(case.reason, diagnostic.?.reason);
+        try std.testing.expectEqualStrings(case.path, diagnostic.?.path);
+    }
+}
+
+fn converseDiagnosticAllocationScenario(a: std.mem.Allocator, expected: @FieldType(response.DecodeDiagnostic, "reason")) !void {
+    const bytes: []const u8 = switch (expected) {
+        .unknown_field => "{\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12,\"serverToolUsage\":{\"unregistered/~\":true}}}",
+        .expected_object => "{\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12,\"serverToolUsage\":null}}",
+        .invalid_response => "{\"usage\":{\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":11,\"serverToolUsage\":{}}}",
+    };
+    var diagnostic: ?response.DecodeDiagnostic = null;
+    defer if (diagnostic) |value| value.deinit(a);
+    {
+        var parsed = try strict.parse(a, bytes, .{ .maximum_depth = std.math.maxInt(usize) }, false, null);
+        defer parsed.deinit();
+        if (response.decodeConverse(a, parsed.value, &diagnostic)) |value| {
+            var admitted = value;
+            defer admitted.deinit(a);
+            return error.UnexpectedConverseAdmission;
+        } else |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.InvalidResponse => {},
+        }
+    }
+    try std.testing.expectEqual(expected, diagnostic.?.reason);
+    try std.testing.expectEqualStrings(switch (expected) {
+        .unknown_field => "/usage/serverToolUsage/unregistered~1~0",
+        .expected_object => "/usage/serverToolUsage",
+        .invalid_response => "",
+    }, diagnostic.?.path);
+}
+
+test "Converse envelope diagnostic allocation failures preserve cleanup and exact rejection" {
+    for (std.meta.tags(@FieldType(response.DecodeDiagnostic, "reason"))) |reason| {
+        try converseDiagnosticAllocationScenario(std.testing.allocator, reason);
+        try std.testing.checkAllAllocationFailures(std.testing.allocator, converseDiagnosticAllocationScenario, .{reason});
+    }
+}
+
 test "Converse separates typed reasoning and joins text exactly without interpreting provider text" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator, .bedrock);
@@ -979,7 +1107,7 @@ test "Converse accounts cached input tokens and validates cache details without 
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator, .bedrock);
     defer fixture.deinit();
-    const bytes = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"cacheReadInputTokens\":20,\"cacheWriteInputTokens\":30,\"cacheDetails\":[{\"ttl\":\"1h\",\"inputTokens\":15},{\"ttl\":\"5m\",\"inputTokens\":15}],\"outputTokens\":2,\"totalTokens\":62},\"metrics\":{\"latencyMs\":42},\"serviceTier\":{\"type\":\"default\"},\"performanceConfig\":{\"latency\":\"standard\"}}";
+    const bytes = "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"{}\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":10,\"cacheReadInputTokens\":20,\"cacheWriteInputTokens\":30,\"cacheDetails\":[{\"ttl\":\"1h\",\"inputTokens\":15},{\"ttl\":\"5m\",\"inputTokens\":15}],\"outputTokens\":2,\"totalTokens\":62,\"serverToolUsage\":{}},\"metrics\":{\"latencyMs\":42},\"serviceTier\":{\"type\":\"default\"},\"performanceConfig\":{\"latency\":\"standard\"}}";
     var observed = try response.inference(std.testing.allocator, .{ .received = .{ .status = 200, .body = bytes } }, &fixture.base.provider_binding, &fixture.base.request, fixture.base.id(.inference));
     defer observed.deinit();
     const complete = observed.completed.raw_result.complete;
@@ -994,6 +1122,9 @@ test "Converse accounts cached input tokens and validates cache details without 
         .{ "\"ttl\":\"1h\"", "\"ttl\":\"5m\"" },
         .{ "\"inputTokens\":15", "\"inputTokens\":14" },
         .{ "\"cacheDetails\":[", "\"unknown\":true,\"cacheDetails\":[" },
+        .{ "\"serverToolUsage\":{}", "\"serverToolUsage\":null" },
+        .{ "\"serverToolUsage\":{}", "\"serverToolUsage\":[]" },
+        .{ "\"serverToolUsage\":{}", "\"serverToolUsage\":{\"unknown\":0}" },
         .{ "\"latencyMs\":42", "\"latencyMs\":4294967296" },
     }) |change| {
         const invalid = try std.mem.replaceOwned(u8, std.testing.allocator, bytes, change[0], change[1]);
@@ -1247,7 +1378,7 @@ fn ownedReasoningScenario(a: std.mem.Allocator) !void {
         defer a.free(bytes);
         var parsed = try strict.parse(a, bytes, .{ .maximum_depth = std.math.maxInt(usize) }, false, null);
         defer parsed.deinit();
-        break :blk try response.decodeConverse(a, parsed.value);
+        break :blk try response.decodeConverse(a, parsed.value, null);
     };
     defer decoded.deinit(a);
     // All views survive the parsed response and its wire buffer.
@@ -1282,7 +1413,7 @@ test "Converse preserves reasoning on stopped rejected and missing-answer respon
         defer std.testing.allocator.free(bytes);
         var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = std.math.maxInt(usize) }, false, null);
         defer parsed.deinit();
-        var decoded = try response.decodeConverse(std.testing.allocator, parsed.value);
+        var decoded = try response.decodeConverse(std.testing.allocator, parsed.value, null);
         defer decoded.deinit(std.testing.allocator);
         try std.testing.expectEqual(case.output, std.meta.activeTag(decoded.output));
         try std.testing.expectEqual(case.reason_count, decoded.reasoning.len);
@@ -1311,7 +1442,7 @@ test "Converse rejects malformed reasoning unions signatures and redacted payloa
         defer std.testing.allocator.free(bytes);
         var parsed = try strict.parse(std.testing.allocator, bytes, .{ .maximum_depth = std.math.maxInt(usize) }, false, null);
         defer parsed.deinit();
-        var decoded = try response.decodeConverse(std.testing.allocator, parsed.value);
+        var decoded = try response.decodeConverse(std.testing.allocator, parsed.value, null);
         defer decoded.deinit(std.testing.allocator);
         try std.testing.expectEqual(.invalid_content, decoded.output.invalid);
         try std.testing.expectEqual(@as(usize, 0), decoded.reasoning.len);

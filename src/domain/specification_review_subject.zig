@@ -5,17 +5,20 @@ const spec = @import("specification.zig");
 const provenance = @import("specification_provenance.zig");
 
 pub const Field = struct { slot: authority.Slot, text: []const u8, provenance: spec.Provenance, record: ?spec.IdentifiedRecord = null };
+/// A reference obligation keeps its native subject through support review and
+/// omission attribution. Surrounding authored content does not redefine it.
+pub const ReferenceSubject = union(enum) {
+    source: @import("reference_identity.zig").SourceId,
+    signal: @import("source_omission_context.zig").Signal,
+    token: @import("model_evidence.zig").Token,
+    conflict: @import("source_omission_context.zig").Conflict,
+};
 pub const Subject = union(enum) {
     source_preservation: struct {},
     candidate_field: Field,
     collection: Collection,
     entity_applicability: EntityApplicability,
-    reference_signal: struct { signal: @import("model_evidence.zig").Signal, exact_value: ?[]const u8 = null },
-    candidate_support: struct {
-        instruction: []const u8 = "Assess the assigned requirement in the surrounding candidate. Preserve required, optional, excluded and prohibited roles; matching words or citations alone do not establish support. Resolve passive references to their display values; a filename does not express the behavior in that file. Accept source-backed exclusions; optional sections need no filler.",
-        candidate: ?spec.IdentifiedContent,
-        brief: ?spec.Brief,
-    },
+    reference: ReferenceSubject,
 };
 
 /// Purpose-free business facts. Review instructions belong to the selected prompt.
@@ -88,6 +91,12 @@ pub fn projectBusiness(a: std.mem.Allocator, inputs: authority.Inputs, context: 
 
 /// Focus the current target without changing evidence eligibility.
 pub fn project(a: std.mem.Allocator, inputs: authority.Inputs, context: provenance.Context, id: authority.Id) (provenance.Error || authority.Error)!Subject {
+    if (authority.policy(id) == null) return error.InvalidRequiredAuthority;
+    switch (id.unit) {
+        .source, .signal, .token, .conflict => return .{ .reference = try projectReference(a, inputs, context, id) },
+        .feature, .record => {},
+        .decision => return error.InvalidRequiredAuthority,
+    }
     const target = try field(a, inputs, context, id);
     if (target) |selected| return .{ .candidate_field = selected };
     if (inputs.specification != null and inputs.brief != null and id.unit == .feature) switch (id.slot) {
@@ -95,21 +104,32 @@ pub fn project(a: std.mem.Allocator, inputs: authority.Inputs, context: provenan
         .entities => return .{ .entity_applicability = (try projectBusiness(a, inputs, context, id)).entity_applicability },
         else => {},
     };
-    if (id.unit == .signal) {
-        const records = inputs.references orelse return error.InvalidRequiredAuthority;
-        for (records.signals) |signal| if (std.meta.eql(signal.id, id.unit.signal)) {
-            const view = (try @import("model_evidence.zig").signals(a, &.{signal}))[0];
-            const exact_value = if (signal.value.content == .preserved_token) value: {
-                if (signal.value.claim_ids.len != 1) return error.InvalidRequiredAuthority;
-                const token = @import("reference_support.zig").exact(records.items, signal.value.claim_ids[0]) catch return error.InvalidRequiredAuthority;
-                break :value token.value.raw_value.bytes;
-            } else null;
-            return .{ .reference_signal = .{ .signal = view, .exact_value = exact_value } };
-        };
-        return error.InvalidRequiredAuthority;
-    }
-    if (inputs.specification == null and inputs.brief == null) return .{ .source_preservation = .{} };
-    return .{ .candidate_support = .{ .candidate = inputs.specification, .brief = inputs.brief } };
+    if (id.unit == .feature and inputs.specification == null) return .{ .source_preservation = .{} };
+    return error.InvalidRequiredAuthority;
+}
+
+fn projectReference(a: std.mem.Allocator, inputs: authority.Inputs, context: provenance.Context, id: authority.Id) (provenance.Error || authority.Error)!ReferenceSubject {
+    const records = inputs.references orelse return error.InvalidRequiredAuthority;
+    return switch (id.unit) {
+        .source => |source| found: {
+            for (context.inputs.corpus.sources) |selected| if (std.meta.eql(selected.id, source)) break :found .{ .source = source };
+            return error.InvalidRequiredAuthority;
+        },
+        .signal => |signal_id| found: {
+            for (records.signals) |signal| if (std.meta.eql(signal.id, signal_id)) break :found .{ .signal = try @import("source_omission_context.zig").projectSignal(a, records, context, signal) };
+            return error.InvalidRequiredAuthority;
+        },
+        .token => |token| found: {
+            const view = try @import("model_evidence.zig").project(a, records.items.entries);
+            for (view.preserved_tokens) |selected| if (std.meta.eql(selected.id, token)) break :found .{ .token = selected };
+            return error.InvalidRequiredAuthority;
+        },
+        .conflict => |conflict_id| found: {
+            for (records.conflicts) |conflict| if (std.meta.eql(conflict.id, conflict_id)) break :found .{ .conflict = try @import("source_omission_context.zig").projectConflict(a, records, context, conflict) };
+            return error.InvalidRequiredAuthority;
+        },
+        .feature, .record, .decision => error.InvalidRequiredAuthority,
+    };
 }
 
 /// Attribution compares business values, not canonical fragment bookkeeping.
@@ -119,35 +139,15 @@ pub const LossSubject = union(enum) {
     business: BusinessSubject,
     brief_field: struct { slot: authority.Slot, text: []const u8, brief: @import("specification_projection.zig").Brief },
     pending_subject: struct { slot: authority.Slot, brief: ?@import("specification_projection.zig").Brief = null },
-    reference: union(enum) {
-        source: @import("reference_identity.zig").SourceId,
-        signal: @import("source_omission_context.zig").Signal,
-        token: @import("model_evidence.zig").Token,
-        conflict: @import("source_omission_context.zig").Conflict,
-    },
+    reference: ReferenceSubject,
 };
 
 pub fn projectLoss(a: std.mem.Allocator, inputs: authority.Inputs, context: provenance.Context, id: authority.Id) (provenance.Error || authority.Error)!LossSubject {
-    if (id.unit != .feature and id.unit != .record) {
-        const evidence = @import("model_evidence.zig");
-        const records = inputs.references orelse return error.InvalidRequiredAuthority;
-        return .{ .reference = switch (id.unit) {
-            .source => |source| .{ .source = source },
-            .signal => |signal_id| found: {
-                for (records.signals) |signal| if (std.meta.eql(signal.id, signal_id)) break :found .{ .signal = try @import("source_omission_context.zig").projectSignal(a, records, context, signal) };
-                return error.InvalidRequiredAuthority;
-            },
-            .token => |token| found: {
-                const view = try evidence.project(a, records.items.entries);
-                for (view.preserved_tokens) |selected| if (std.meta.eql(selected.id, token)) break :found .{ .token = selected };
-                return error.InvalidRequiredAuthority;
-            },
-            .conflict => |conflict_id| found: {
-                for (records.conflicts) |conflict| if (std.meta.eql(conflict.id, conflict_id)) break :found .{ .conflict = try @import("source_omission_context.zig").projectConflict(a, records, context, conflict) };
-                return error.InvalidRequiredAuthority;
-            },
-            else => return error.InvalidRequiredAuthority,
-        } };
+    if (authority.policy(id) == null) return error.InvalidRequiredAuthority;
+    switch (id.unit) {
+        .source, .signal, .token, .conflict => return .{ .reference = try projectReference(a, inputs, context, id) },
+        .feature, .record => {},
+        .decision => return error.InvalidRequiredAuthority,
     }
     if (inputs.specification != null and inputs.brief != null) return .{ .business = try projectBusiness(a, inputs, context, id) };
     if (inputs.brief) |brief| {

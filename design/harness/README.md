@@ -36,17 +36,15 @@ calibration and broader acceptance remain open. **Reviewed:** 2026-10-15 (docume
 - The supplied-spec evaluator uses Responses/Converse with native HTTPS without a new
   dependency.
 - The shared [live-test cost policy](../../test/harness/model_cost_policy.zig)
-  permits only `aws-bedrock` / `global.openai.gpt-6-luna`, through Converse in
-  source region `ap-southeast-2`. It rejects Sonnet, Sol, Haiku, direct OpenAI,
-  historical models and other aliases before credentials or network use. It
+  permits only `aws-bedrock` / `openai.gpt-oss-20b-1:0`, through Converse in
+  source region `ap-southeast-2`. It rejects Sonnet, Sol, Haiku, Luna, direct OpenAI
+  and other aliases before credentials or network use. It
   supplies no model default and leaves production catalogue policy independent.
-- The current generation and rubric targets both use Luna with native JSON
-  Schema. Its registered request profile adds the required strict-format flag,
-  omits temperature and explicit reasoning overrides, and uses the provider's
-  documented default medium reasoning. The global profile can route worldwide;
-  the source region does not guarantee Australian residency. These are API
-  contracts, not model-quality evidence. Offline provider fixtures grant no live
-  permission; see the [Luna contract](../features/F0007-AWSBedrockProvider.md).
+- The current generation and rubric targets both use GPT-OSS-20B with native JSON
+  Schema. Spec generation, repair and grading select low reasoning; registered
+  controls supply temperature `0.1`. These are API contracts, not model-quality
+  evidence. Offline provider fixtures grant no live permission; see the
+  [provider contract](../features/F0007-AWSBedrockProvider.md).
 - Exact model and limits are mandatory operator selections; draft rubric scoring is
   visible in the rubric file, not a production policy or calibrated result.
 - This is development-only evaluation of the engine in isolated test projects.

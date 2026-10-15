@@ -250,13 +250,12 @@ Optional CountTokens uses its `input.converse` shape, without inference-only
 configuration or an encoded legacy chat body. Models without registered count support do
 not acquire it merely because the API exists.
 
-The current small-model test binding is `global.openai.gpt-6-luna` from
-`ap-southeast-2`, native JSON Schema with the registered strict-output field,
-temperature omitted, and optional provider output allowance. Explicit reasoning
-effort is omitted; the protocol records AWS's documented default medium without
-guessing an unverified Converse control mapping. Its registered verified subset
-has no CountTokens, temperature or explicit effort controls, consistent with the
-[AWS model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-luna.html).
+The user-selected small-model test binding is `openai.gpt-oss-20b-1:0` from
+`ap-southeast-2`, using native JSON Schema, low reasoning for Spec generation,
+repair and grading, registered temperature `0.1`, and an optional provider output
+allowance. The prospective comparison protocol records these exact settings.
+The separately registered Luna profile retains its strict-output field, omitted
+temperature/reasoning controls and unavailable CountTokens capability.
 This is mechanical support, not a live compatibility or semantic-quality claim.
 The test cost policy is development-only; it cannot change production authority.
 Historical captures follow the immutable inspection/replay boundary in

@@ -64,12 +64,11 @@ human approval is claimed by the offline fixtures.
   `TEST_AWS_BEARER_TOKEN_BEDROCK` for the selected provider.
 - Bedrock additionally requires `TEST_EVALUATION_REGION`.
 - The shared [live-test cost policy](../../test/harness/model_cost_policy.zig)
-  permits only Bedrock `global.openai.gpt-6-luna` from `ap-southeast-2`.
-  Sonnet, Sol, Haiku, direct OpenAI, historical models and other aliases reject
+  permits only Bedrock `openai.gpt-oss-20b-1:0` from `ap-southeast-2`.
+  Sonnet, Sol, Haiku, Luna, direct OpenAI and other aliases reject
   before credentials or network activity. The judge retains its native-schema
-  gate; Luna's registered Converse request profile adds the required strict JSON
-  flag and admits only omitted temperature/reasoning controls. The documented
-  provider default is medium reasoning. No response mode falls back.
+  gate; GPT-OSS-20B uses the registered Converse profile with low reasoning and
+  temperature `0.1`. No response mode falls back.
 - Other settings/budget remain mandatory judge JSON configuration.
 - The production executable consumes none of these test variables.
 - Numeric scoring choices live in the draft rubric, not evaluator code or release

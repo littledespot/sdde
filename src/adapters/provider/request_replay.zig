@@ -95,15 +95,27 @@ pub const Adapter = struct {
         var result: debug.Validation = .{};
         // Token-count observations contain no generated candidate to validate.
         if (description.operation_kind != .inference) return result;
-        var raw = strict.parse(a, body, .{ .maximum_depth = std.math.maxInt(usize) }, false, null) catch |err| {
+        var syntax: ?strict.Diagnostic = null;
+        defer if (syntax) |value| value.deinit(a);
+        var raw = strict.parse(a, body, .{ .maximum_depth = std.math.maxInt(usize) }, false, &syntax) catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
             result.extraction = .invalid;
+            result.reason = "Invalid provider response JSON";
+            if (syntax) |value| if (value.context) |context_value| {
+                result.path = try a.dupe(u8, context_value.path);
+            };
             return result;
         };
         defer raw.deinit();
-        var decoded = @import("bedrock_response.zig").decodeConverse(a, raw.value) catch |err| {
+        var provider_diagnostic: ?@import("bedrock_response.zig").DecodeDiagnostic = null;
+        defer if (provider_diagnostic) |value| value.deinit(a);
+        var decoded = @import("bedrock_response.zig").decodeConverse(a, raw.value, &provider_diagnostic) catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
             result.extraction = .invalid;
+            if (provider_diagnostic) |value| {
+                result.reason = value.explanation();
+                result.path = try a.dupe(u8, value.path);
+            }
             return result;
         };
         defer decoded.deinit(a);

@@ -95,11 +95,11 @@ quality conclusion follows from API availability.
 - Existing GPT-OSS and earlier Haiku registrations remain production contracts and
   offline conformance representatives. They do not qualify current-model outcomes.
 - The separate development [live-test cost policy](../../test/harness/model_cost_policy.zig)
-  permits only Bedrock `global.openai.gpt-6-luna` for generation, grading and
-  captured-call diagnostics. Sonnet, Sol, Haiku, direct OpenAI, historical models
+  permits only Bedrock `openai.gpt-oss-20b-1:0` for generation, grading and
+  captured-call diagnostics. Sonnet, Sol, Haiku, Luna, direct OpenAI
   and other aliases reject before credentials or network use. Production
   catalogue policy remains independent.
-- The rubric judge retains its native-schema gate; Luna satisfies the registered
+- The rubric judge retains its native-schema gate; GPT-OSS-20B satisfies the registered
   capability contract without fallback. See the [evaluator contract](../harness/evaluator.md).
 
 Separate counting is an explicit YAML operation and cannot authorize inference or
@@ -202,6 +202,17 @@ accepts the same Converse input where the selected model supports counting.
   cacheReadInputTokens + cacheWriteInputTokens`; inclusive input plus output must
   equal `totalTokens`. Implicit caching can occur without explicit cache points.
   Optional validated `metrics.latencyMs` remains provider-reported metadata.
+- `usage.serverToolUsage` is optional and accepts only a closed empty object.
+  This supported wire shape comes from the captured native Converse response on
+  16 October 2026 (07:29 Melbourne), retained as an
+  [offline regression fixture](../../src/test_fixtures/bedrock_converse_usage/response.json).
+  AWS's published [TokenUsage schema](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_TokenUsage.html)
+  does not describe this field. No nonempty member contract is inferred: null,
+  scalar, array and nonempty object values reject. This metadata grants no tool
+  capability and changes neither token arithmetic nor candidate authority.
+- Response inspection retains the shared decoder's rejection reason and escaped
+  field path. Unknown usage remains unaccountable; compatibility reports preserve
+  the decoding diagnostic instead of replacing it with a missing-usage label.
 - `stopReason: "end_turn"` with an assistant `output.message` permits candidate
   text extraction. Text blocks concatenate exactly in order without separators,
   JSON scanning, reasoning-tag stripping or rewriting provider text.

@@ -77,6 +77,64 @@ implemented changes, finished experiments and their verification. A failed
 experiment is completed execution, not completed semantic acceptance. Outstanding
 work remains below.
 
+**16 October 2026 — native reference review subjects:** source, signal, exact-token
+and conflict reviews now resolve the same native subject used by omission
+comparison and localization. Initial and correction packets keep the assigned
+reference's source meaning, use and conditions; authored fields and collections
+retain their own assessments. This removes the broad whole-candidate reference
+fallback. It does not authorize new repair targets or reassess accepted findings.
+Regression coverage includes unrelated source domains, pending and assembled
+candidates, stale/foreign targets and continued refusal of unsafe token repairs.
+
+The separately authorized [07:54 full loan-renewal baseline](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/report.json)
+stopped before source review: two record-generation groups emitted competing
+duplicate records. `UnsafeSpecificationRepair` blocked publication after 13 calls
+and 25,508 tokens. Existing per-group association and content-only repair authority
+cannot select, merge or delete those competing owners. Collection-level initial
+record authoring remains a separate design decision under §17.3 and ADR 0020;
+this presentation correction does not enact it.
+
+Offline verification passed `zig build test-specification-generation --summary all`
+(324/324 tests), `zig build lint test-architecture test-integration --summary all`
+(240/240 tests), and `zig build verify --summary all` (149/149 steps,
+1,555/1,555 tests, including clean native packaging smoke).
+The authorized post-fix command was
+`./scripts/e2e-spec.sh --case test/e2e/wf-002-loan-renewal/workflow.case.json`.
+Its [08:09 full run](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/report.json)
+failed with `WorkflowTokenBudgetExceeded`: 37 calls consumed 101,002 tokens
+against the 100,000-token workflow budget. The stop occurred during the third
+entity's business-meaning source review, before native signal/token/conflict
+reviews. The shared reference correction therefore remains unverified live.
+No candidate repair ran, no specification was published, and publication/rubric
+checks were not run. Captured earlier reviews include a rejected literal-only
+story, unsupported entity findings and inconsistent omission judgments; this run
+does not establish semantic quality or justify weakening a gate or raising a
+budget automatically.
+
+**16 October 2026 — observed request compatibility:** the separately authorized
+[07:46 probe](../zig-out/provider-compatibility/2026-10-15T20-46-55Z-cb4fdfbfe3b6aff88bc99e68fa980506/report.json)
+passed the selected first production request's compatibility checks: HTTP 200,
+2,254 accounted tokens, accepted candidate/schema and existing prefix
+normalization. Its intentional one-send cancellation produced no specification
+or rubric grade. This qualifies that exchange, not workflow quality or completion.
+
+**16 October 2026 — Converse usage metadata correction:** the 07:29 Melbourne
+native response returned HTTP 200, but the shared codec rejected the optional
+empty `usage.serverToolUsage` object before token accounting or candidate
+normalization. The codec now explicitly validates this closed empty metadata
+shape; unsupported nested fields and wrong types still reject. Canonical replay
+inspection and compatibility reports retain decoder reasons and field paths.
+Offline regressions use the exact response to check 2,254-token accounting,
+existing approved prefix normalization and selected-schema validation. This
+does not change prompts, correction policy, model settings or publication gates.
+
+**16 October 2026 — user-directed test model switch:** current generation,
+repair, rubric evaluation and diagnostics select Bedrock
+`openai.gpt-oss-20b-1:0` from `ap-southeast-2`. Spec generation, repair and grading
+use low reasoning with registered temperature `0.1`. This supersedes the Luna
+test selection recorded below; retained offline results remain historical evidence
+and no live run is authorized by the switch.
+
 **15 October 2026 — FIX04 evaluation foundation and Converse:** the user-requested
 Phase 0 prepares a frozen current-small-model protocol, 24 source-backed features
 with 72 variants, six labelled specimens and feature-level accounting with no
@@ -90,6 +148,37 @@ generation topology and semantic acceptance rules are unchanged.
 record the completed scope/checks: **Phase 0 complete offline**, with full
 verification at 145/145 build steps and 1,671/1,671 tests. No live
 compatibility, model-quality, brittleness or E2E gate is closed by offline tests.
+
+**15 October 2026 — FIX04 Phase 1 bounded compatibility scenario:** the subsequent
+user-authorized **offline implementation is complete and mechanically verified**.
+Final full verification passed **155/155 build steps and 1,786/1,786 tests**,
+including architecture, offline integration and native clean-directory packaging.
+The implementation prepares the first production model request from an
+explicit case, reusing configuration, compiled workflow, request authorization,
+Converse transport and immutable capture owners. The development command
+`zig build provider-compatibility -- --case <explicit-case-path> --live` and its
+launcher permit only the registered Bedrock global Luna/Sydney native-schema
+binding, with the case's existing output allowance and omitted explicit
+temperature/reasoning controls. A transport-owned bound permits at most one
+physical inference send; usage survives typed cancellation and no replacement
+send, retry, repair, judge or workflow publication is authorized. Retained JSON
+and Markdown reports separate request compatibility from workflow completion and
+semantic quality. Typed invocation/step outputs and side effects block publication
+before child execution, even before the first send. Read-only inspection joins
+canonical bytes/identity, the closed trace transport outcome and production usage;
+transport-observed request/response SHA-256 values reject substituted readback
+without granting engine state/predecessor authority. Unknown actual tokens are
+nullable and distinct from the explicitly retained accounted total; HTTP rejection
+alone remains inconclusive.
+Bodies from interrupted/uncertain delivery remain unvalidated and inconclusive.
+Guard/CLI/report tests belong to `test-provider-compatibility`; fresh production
+runtime scenarios with fake exchanges belong to `test-integration`. See
+[the offline evidence record](../test/calibration/semantic-simplicity/phase1-offline-results.md),
+[FIX04 Phase 1](FIX04.md#phase-1--establish-compatible-current-model-execution)
+and the [harness operating contract](../design/harness/e2e.md#test-one-fresh-provider-exchange).
+That implementation request authorized offline work/checks, not a live diagnostic
+or E2E run. The later separately authorized 16 October compatibility result is
+recorded above. No generation assignment or semantic acceptance gate changed.
 
 ## 3. Remaining work and feasibility
 

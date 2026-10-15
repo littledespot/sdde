@@ -2,6 +2,7 @@
 //! production candidates or publication capability.
 const std = @import("std");
 const comparison = @import("../harness/generation_comparison.zig");
+const Temperature = @import("../../src/domain/model_controls.zig").Temperature;
 const root = "test/calibration/semantic-simplicity";
 const output = ".zig-cache/semantic-simplicity/phase0";
 
@@ -70,7 +71,13 @@ test "test.integration.generation_protocol Phase 0 prepares sources and accounts
     const protocol = try comparison.parseProtocol(a, @embedFile("../calibration/semantic-simplicity/protocol.json"));
     try std.testing.expectEqual(.small, protocol.cohort);
     try std.testing.expect(!protocol.live_authorized);
-    try std.testing.expectEqualStrings("global.openai.gpt-6-luna", protocol.model);
+    try std.testing.expectEqualStrings("aws-bedrock", protocol.provider);
+    try std.testing.expectEqualStrings("openai.gpt-oss-20b-1:0", protocol.model);
+    try std.testing.expectEqualStrings("ap-southeast-2", protocol.region);
+    try std.testing.expectEqual(.low, protocol.reasoning_effort);
+    try std.testing.expectEqual(.native_schema, protocol.response_mode);
+    try std.testing.expectEqual(Temperature.fixed.wireValue(), protocol.temperature);
+    try std.testing.expectEqual(@as(u32, 16384), protocol.max_output_tokens);
     try std.testing.expectEqual(@as(usize, 72), inventory.cases.len);
     var development: u32 = 0;
     var qualification: u32 = 0;

@@ -468,11 +468,10 @@ approved controlled calls are still needed to measure model outcomes under §28.
 - Tagged `oneOf` becomes disjoint `anyOf`; unsupported bounds stay engine-enforced.
 - Explicit token counting uses the same text input as inference.
 - The current live-test Specify catalogue selects Bedrock
-  `global.openai.gpt-6-luna` with `json: true` from `ap-southeast-2`. All six
-  generation slots omit explicit reasoning controls, and temperature is omitted.
-  The judge independently selects the same Luna profile and retains its native
-  schema gate. Luna native mode requires the compiled request profile's
-  `additionalModelRequestFields.text.format.strict: true` flag.
+  `openai.gpt-oss-20b-1:0` with `json: true` from `ap-southeast-2`. Spec generation
+  and repair select low reasoning with registered temperature `0.1`.
+  The judge independently selects the same GPT-OSS-20B tuple and low reasoning,
+  retaining its native schema gate.
   Earlier `json: true` GPT-OSS runs, prompt-only runs and native tagged-schema
   failures remain historical evidence; changing a mode or model is not live
   evidence that those failures have been resolved.

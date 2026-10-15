@@ -63,30 +63,27 @@ defect requires a new versioned experiment freeze, not silent holdout retuning.
 
 ## Model and comparison
 
-The user selects **Luna only on Bedrock**, excluding Sonnet, Sol and Haiku from
-live tests. Phase 0 freezes `aws-bedrock / global.openai.gpt-6-luna /
-ap-southeast-2`, using Converse, native JSON Schema, no temperature field and a
-provider-requested allowance of 16,384 output tokens. The registered profile
-includes the required `additionalModelRequestFields.text.format.strict: true`.
-AWS documents the current release, global profile and native JSON support in the
-[model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-luna.html).
-The global inference profile supports the Sydney source endpoint; it does not
-promise AU-only routing. This is the user-selected binding, not a quality-qualified winner.
-No immutable dated version is exposed by this selected ID: record date and exact
-binding/capture, and stop for configuration drift.
+On 16 October 2026 the user switched the selected test model back to
+**GPT-OSS-20B on Bedrock**. The prospective protocol freezes
+`aws-bedrock / openai.gpt-oss-20b-1:0 / ap-southeast-2`, using Converse, native JSON
+Schema, explicit low reasoning, the engine's fixed temperature `0.1` and a
+provider-requested allowance of 16,384 output tokens. The registered GPT-OSS
+profile sends `additionalModelRequestFields.reasoning_effort: "low"`; it does not
+send Luna's additional strict-output field. This selection does not qualify model
+quality. Record the evaluation date and exact binding/capture, and stop for
+configuration drift.
 
 The shared [live-test cost policy](../../harness/model_cost_policy.zig) permits
 only this exact Bedrock tuple before credentials/network, for generation,
-diagnostics and rubric evaluation. Direct OpenAI API selection and other Luna
-profile aliases are not allowed test alternatives. The native-schema judge
+diagnostics and rubric evaluation. Luna, direct OpenAI API selection and other
+GPT-OSS IDs or aliases are not allowed test alternatives. The native-schema judge
 contract is preserved. Offline mocks may exercise other provider contracts
 without creating paid requests.
 
-The explicit reasoning control is omitted: AWS documents default medium effort,
-but inspected primary sources do not establish its Converse field mapping.
-The protocol records `reasoning_effort: null`, `reasoning_mode: provider_default`
-and `documented_default_effort: medium`; unsupported explicit effort and temperature
-controls reject. This registers a verified subset, not every advertised setting.
+The closed prospective protocol requires `reasoning_effort: "low"` and
+`temperature: 0.1`. Omitted/null controls, other effort/temperature values and the
+superseded Luna-only protocol fields reject. The native schema remains the
+engine's acceptance contract.
 Any reasoning actually supplied by the API is retained separately as owned
 diagnostics; absent or redacted reasoning is never invented as readable text.
 
@@ -198,3 +195,7 @@ The integration scenario writes `.zig-cache/semantic-simplicity/phase0/`:
 authority exclusions and unmeasured/live-not-run status. These are regenerated
 projections, not hand-maintained source files. Retained evidence and limitations
 are recorded in [phase0-results.md](phase0-results.md).
+The retained 15 October results and `phase0-dry-run.json` describe the earlier
+Luna freeze and remain historical. A fresh integration run writes the current
+GPT-OSS model and new protocol SHA-256 to the cache report; that offline report
+does not qualify an authentic exchange or reuse historical quality results.
