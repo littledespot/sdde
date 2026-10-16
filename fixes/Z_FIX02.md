@@ -1701,6 +1701,120 @@ remain the latest code validation: 535/535 targeted tests and 1,659/1,659 comple
 verification tests passed. This investigation changed only tracking documents
 and wrote ignored diagnostic artifacts; text whitespace checks passed.
 
+#### 5.4.6 Offline native exact-value recognition prototype
+
+**16 October 2026.** The user authorized only the first, offline step of
+[FIX04 §1.1 item 1](FIX04.md#11-path-to-the-ac-comparison-and-alignment-safeguards).
+This is engine-development diagnostic tooling, with **zero model calls**. It
+does not amend §7.1, ADR 0020 or the composition contract; production schemas,
+recognition, lineage, coverage, repair, persistence and publication are unchanged.
+Phase 1A.3 steps 2–3 remain pending rather than silently removed.
+
+The relevant authority is design §§1, 3–4, 7.1, 12, 21–22, 28 and 30–31:
+candidate data remains untrusted, required authority cannot be inferred from
+matching display text, and offline mechanical evidence is not semantic proof.
+The prototype explores the recurring representation burden, not the separate
+review-cost or authoring-boundary work.
+
+The development-only `exact_value_replay.zig` entry point and
+`test/harness/exact_value/` separate a pure raw-UTF-8 recognizer, captured-value
+measurement, Unicode properties, immutable prompt reconstruction, controls and
+filesystem acquisition. The recognizer records exact byte spans before NFC or
+case folding, retains repeated disjoint occurrences, and blocks overlapping or
+competing eligible lineages. Unbound matches remain visible without recognition
+credit. The experimental word-boundary adapter uses the existing pinned Unicode
+dependency while treating connector punctuation and format characters as word
+continuations; no production dependency or Unicode policy changes.
+
+The corpus policy is explicitly **`selected_requirement_membership`**: an
+occurrence's own claim ID must occur in the field's captured assigned/selected
+requirement set. This conservative experiment is not current ADR 0020 eligibility.
+Current explicit exact insertions can add `E` to selected `S`; the prototype does
+not decide whether a unique prose match may do the same. Same source, offered
+catalogue membership and matching spelling cannot manufacture the missing
+token-to-business-requirement relation under the experimental policy.
+
+Corpus inspection uses canonical JSON, envelope, schema, composition and source
+wire owners. Exact call identity, run scope, content and schema bind current
+native metadata; an identical sibling request cannot lend its witness. Invalid
+field bindings, unavailable source witnesses, historical schema gaps and
+insertion-adjacent boundary gaps remain explicit. Original-source witnesses take
+precedence over projected packet sources. Existing typed insertions and their
+explicitly labelled display counterfactuals never become historical plain-prose
+output. Proposed exact nodes still face current composition rules, including
+behavioral prose and the incidental entity-name exception. The canonical archive
+decoder's inherited classification of some internal allocation failures as invalid
+input is unchanged; the wrapper propagates exposed allocation failures.
+
+Independent controls fix 53 expectations before execution: **18 matched,
+22 no match, 4 ambiguous and 9 rejected**, across hello-world, loan renewal,
+technical values, Unicode and invalid inputs. All pass. Separate denial and
+punctuation-extension tests show why lexical matching cannot prove semantic
+coverage: `1.2` matches inside `1.2.3`, and `/v1/renewals` matches inside
+`/v1/renewals/archive` under the experimental word policy. These are observed
+limits of the proposed criterion, not cases hidden by domain-specific bans.
+
+The pinned integration fixture retains exact native descriptions, packets,
+schemas, raw text and SHA-256 witnesses for the 20:22 hello-world run's records
+calls 13 and 14, and the unrelated 08:09 loan-renewal run's records call 10.
+Hello-world's business-bound response exposes three unbound greeting occurrences
+(Then, FR and entity meaning); the token-bound response recognizes two (Then and
+FR). The historical loan response's encoded insertion syntax remains text, with
+native field metadata unavailable. No missing association or metadata is invented.
+
+The full offline command was:
+
+```sh
+zig build exact-value-replay -j1 --summary all -- --output zig-out/exact-value-recognition.complete.json --root zig-out --root test/calibration
+```
+
+It passed **3/3 build steps**, inventories all supported capture families beneath
+both explicit roots, and retains unsupported/missing observations. The
+[report](../zig-out/exact-value-recognition.complete.json) is 5,119,612 bytes with
+SHA-256 `591a4c8250d3d1e2e563ebdc8c6ea6a430f1703d584b50100b629da2d6c91fa6`.
+The 3,743 physical inventory rows include request-only/prepared records and
+63 unsupported archive placeholders whose inner call counts are unknown; they
+are **not** 3,743 independent model calls. There are 1,126 known exchange IDs,
+77 exact-identity/payload duplicate rows and 1,948 unknown identities. Three
+thousand unrelated nonregular filesystem entries are counted outside the capture
+denominator.
+
+Of 1,000 request rows exposing exact values, 645 have processable output.
+164 capture projections produce 454 field measurements (394 after known duplicate
+rows are excluded). Current metadata has 70 exact-origin joins, including every
+context in the latest F13 run. Physical field observations contain 29 matched
+plain runs, 63 unbound witnesses, 28 unavailable insertion-adjacent runs and
+18 invalid proposed compositions. Existing typed references (95) and explicit
+counterfactual fields (80) have separate denominators. There are 68 missing/invalid
+requirement bindings and 320 unavailable native field identities. These counts
+include mirrors and do not supply a semantic false-match rate.
+
+The remaining physical dispositions include 1,335 missing responses, one
+unavailable response, 690 unsupported legacy provider envelopes, 460 unsupported
+historical descriptions and 63 unsupported archives. Among processed rows,
+541 have no exact-value context, eight have invalid packets, two have invalid
+model JSON, and 479 declare no relevant model-text fields. Missing evidence has
+not been scored as success, and no legacy production reader has been restored.
+
+`zig build test-exact-value-replay -j1 --summary all` passed **57/57 tests** across
+**5/5 steps**. The independent controls and authentic captured regressions remain
+separate unit and integration evidence. Final
+`zig build verify -j1 --summary all` passed **163/163 steps and 1,764/1,764 tests**,
+including **122/122 integration tests**, architecture/format checks, the existing
+native packaging smoke and the helper's clean-directory scan of the three supplied
+captures (22 measured fields) without source assets, the Zig toolchain or
+credentials. The final full-check log is
+`.zig-cache/exact-value-verify-final.log`; `git diff --check` also passed.
+
+**Decision remains open.** The prototype establishes byte-level behavior and
+the available evidence, not production adoption. A representation amendment must
+resolve how prose creates exact lineage beyond selected requirements and what
+punctuation-boundary recognition is allowed to establish. Missing historical
+bindings and unsupported envelopes prevent complete retrospective qualification;
+no live fidelity or cost improvement is claimed. The
+[prototype README](../test/calibration/exact-value-recognition/README.md) records
+commands, controls, source pins and limitations.
+
 ### 5.5 Review delivery record
 
 FIX04 §6 as recorded on 16 October.

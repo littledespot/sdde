@@ -10,4 +10,9 @@ test {
     _ = @import("src/test_fixtures/scenario_timing.zig");
     _ = @import("src/adapters/provider/native_model_http.zig");
     _ = @import("test/harness/attribution/tests.zig");
+    _ = @import("test/harness/exact_value/recognition.zig");
+    _ = @import("test/harness/exact_value/recognition_tests.zig");
+    _ = @import("test/harness/exact_value/control_tests.zig");
+    _ = @import("test/harness/exact_value/corpus_tests.zig");
+    _ = @import("test/harness/exact_value/prompt_capture.zig");
 }

@@ -42,7 +42,7 @@ plausible failure classes, not the current defect rate (F7).
 | Phase 1A — composition admission | Implemented and committed (`bfec3d7`); offline gate passed; enforcement confirmed live | [Z_FIX02](Z_FIX02.md#phase-1a-plan-decisions-and-results) |
 | Phase 1A.2 — presentation from the field registry | Implemented and committed (`2e64a31`); live gate open | [Z_FIX02](Z_FIX02.md#phase-1a2-plan-decisions-and-results) |
 | Phase 1A.3 — composition correction at admission | Routing and attribution preparation implemented and committed (`6676ad8`). Two hello-world diagnostics on that build admitted records with prose with admission escape measured zero, but one blocked on exact-value coverage (F13). The exact-value decision, the presentation decision and the loan-renewal diagnostic are pending | [Z_FIX02](Z_FIX02.md#phase-1a3-plan-and-decisions-as-approved) |
-| Exact-value representation (§1, proposed) | Decision required: native recognition of exact values would replace Phase 1A.3 steps 2–3; prototype offline first | [F13](#f13--high-composition-correction-works-but-exact-values-now-fail-the-other-way-and-review-still-dominates) |
+| Exact-value representation (§1, proposed) | Offline prototype implemented and replayed with zero model calls. Binding and boundary limits remain; the production representation decision is pending, and Phase 1A.3 steps 2–3 have not been dropped | [Prototype evidence](Z_FIX02.md#546-offline-native-exact-value-recognition-prototype), [F13](#f13--high-composition-correction-works-but-exact-values-now-fail-the-other-way-and-review-still-dominates) |
 | Budget and scope decision (§5.5) | Required now; feasibility is `insufficient`, and a composition-clean hello-world run still exceeded the budget in review (F13) | [Z_FIX02](Z_FIX02.md#545-phase-2-review-and-repair-cost-investigation) |
 | Review track (FIX01 R5, R6) | Proposed changes in §1; not started | [F13](#f13--high-composition-correction-works-but-exact-values-now-fail-the-other-way-and-review-still-dominates) |
 | Phase 2 — baseline | Harness implemented; baseline not frozen | [Z_FIX02](Z_FIX02.md#phase-2-harness-implementation) |
@@ -222,7 +222,11 @@ keep the remaining work on this review's question.
 **Sequence from here (revised after F13; items 1 and 3 need your decision):**
 
 1. **Decide the exact-value representation** (§1). Prototype native recognition
-   offline against every retained capture, with no model calls. If it resolves the
+   offline against every retained capture, with no model calls. The
+   [offline prototype](../test/calibration/exact-value-recognition/README.md) is now
+   implemented; its corpus inventory preserves unsupported and missing evidence,
+   and its binding and punctuation-boundary limits leave adoption undecided.
+   If it resolves the
    failure class without false matches, amend the composition contract, §7.1 and
    ADR 0020, implement it, and drop Phase 1A.3 steps 2–3. If it is not approved,
    revise the prepared attribution panel to score whether values are carried, then

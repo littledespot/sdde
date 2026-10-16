@@ -1,0 +1,891 @@
+{
+  "version": "exact-value-retained/v1",
+  "samples": [
+    {
+      "id": "hello-world-business-binding",
+      "execution_id": "2026-10-16T09-22-35Z-898e9afbc68759f3d31039bd6bfea0c4",
+      "call": 13,
+      "context_path": "zig-out/e2e-spec/2026-10-16T09-22-35Z-898e9afbc68759f3d31039bd6bfea0c4/evidence/generation/call-000013/context.json",
+      "context_sha256": "7b1499403579d3651ae504884cf4eb0bbe71201862f5ec7499efb8a121ca57eb",
+      "description_sha256": "7575f486b66ca8b83ce55a1c8c1505659042611ce849dffba4348c171f579daa",
+      "description_version": "model-request-debug/v5",
+      "prompt_logs": [
+        {
+          "path": "zig-out/e2e-spec/2026-10-16T09-22-35Z-898e9afbc68759f3d31039bd6bfea0c4/project/specs/hello-world/logs/prompts/RUN-604502b5635cc56fa011e504300d5dbc/LOGBIND-1/0001.log",
+          "sha256": "c89694b04a2ca43efb3377afdfd1bab731ca2cfe4421f3462f85766d20f8341a"
+        }
+      ],
+      "packet": "{\"source_assignment\":{\"purpose\":\"acceptance_criterion: An observable pass/fail flow with a precondition, trigger and expected result. given: The starting situation before the trigger, without assuming the result being tested or inventing prerequisites. when: The action or event that triggers the behavior. then: The observable consequences after the trigger, including the obligations being tested.\\nuser_visible_outcome: A result, confirmation or response directly observable by the user.\\nedge_case: A boundary or exceptional condition and its expected outcome. condition: The boundary or exceptional condition. expected_outcome: The observable result, preserving conditions and obligations.\\nfunctional_requirement: Required application behavior, preserving its trigger, conditions and obligation strength.\\nbusiness_rule: A rule or constraint governing business decisions or outcomes.\\nassumption: A supported premise on which the described behavior depends.\\nnon_goal: Behavior explicitly excluded from the feature's scope.\\nprohibited_behavior: An action or behavior that must not occur.\\nentity: A business data concept with its meaning and relationships. name: The business entity's name. business_meaning: The entity's business purpose. relationships: The business relationship to another entity, including its meaning.\",\"signal\":1,\"requirements\":[{\"claim_id\":1,\"kind\":\"business\",\"meaning\":\"The application must start successfully, display the text \\\"Hello, World!\\\", and output the current date and time in UTC.\",\"source_id\":1}],\"kind\":\"records\"},\"source_groups\":[],\"context_requirements\":[],\"preserved_tokens\":[{\"claim_id\":2,\"value\":\"Hello, World!\",\"source_id\":1}],\"sources\":[{\"id\":1,\"text\":\"# Hello World Application\\n\\n## Requirements\\n\\n- The application must start successfully.\\n- When started, the application must display `Hello, World!`.\\n- Must also output date and time in UTC\\n\"}],\"passive_literals\":[],\"operation\":\"write\",\"brief\":{\"title\":\"Hello World Application\",\"description\":\"The application displays \\\"Hello, World!\\\" and outputs the current UTC date and time.\",\"primary_goal\":\"Provides a simple demonstration of application startup and time display.\"},\"record_requirements\":{\"scope\":\"assembled_specification\",\"required_families\":[\"acceptance_criterion\",\"functional_requirement\",\"entity\"],\"present_families\":[],\"unmet_required_families\":[\"acceptance_criterion\",\"functional_requirement\",\"entity\"]},\"entities\":{\"disposition\":\"required\",\"basis\":\"The application must start successfully, display the text \\\"Hello, World!\\\", and output the current date and time in UTC.\"},\"field_rules\":[{\"field\":\"records.records[].content.acceptance_criterion.given\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.acceptance_criterion.when\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.acceptance_criterion.then\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.user_visible_outcome.text\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.edge_case.condition\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.edge_case.expected_outcome\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.functional_requirement.text\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.business_rule.text\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.assumption.text\",\"instruction\":\"Write nonblank prose for this field's declared meaning or behavior as plain text.\"},{\"field\":\"records.records[].content.non_goal.text\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.prohibited_behavior.text\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.entity.name\",\"instruction\":\"Supply the identity label using only insertion alternatives listed for this field or plain text. Its occurrence does not satisfy a behavioral exact-copy obligation.\"},{\"field\":\"records.records[].content.entity.business_meaning\",\"instruction\":\"Write nonblank prose for this field's declared meaning or behavior as plain text.\"},{\"field\":\"records.records[].content.entity.relationships[]\",\"instruction\":\"Write nonblank prose for this field's declared meaning or behavior as plain text.\"},{\"field\":\"clarification.question.value\",\"instruction\":\"Write nonblank prose for this field's declared meaning or behavior as plain text.\"}],\"insertion_fields\":{\"exact_copy\":[\"records.records[].content.acceptance_criterion.given\",\"records.records[].content.acceptance_criterion.when\",\"records.records[].content.acceptance_criterion.then\",\"records.records[].content.user_visible_outcome.text\",\"records.records[].content.edge_case.condition\",\"records.records[].content.edge_case.expected_outcome\",\"records.records[].content.functional_requirement.text\",\"records.records[].content.business_rule.text\",\"records.records[].content.non_goal.text\",\"records.records[].content.prohibited_behavior.text\",\"records.records[].content.entity.name\"],\"passive\":[],\"source\":[]}}",
+      "packet_sha256": "2563779d689ae29ca1e80a30ef0c8ba7d59575191557985969b9bfe383323a9c",
+      "output": "{\"{ \"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"acceptance_criterion\",\"given\":{\"fragments\":[\"The application is not running.\"]},\"when\":{\"fragments\":[\"The user launches the application.\"]},\"then\":{\"fragments\":[\"The application starts successfully, displays \\\"Hello, World!\\\", and outputs the current date and time in UTC.\"]}}},{\"content\":{\"kind\":\"functional_requirement\",\"text\":{\"fragments\":[\"The application must start successfully, display \\\"Hello, World!\\\", and output the current date and time in UTC.\"]}}},{\"content\":{\"kind\":\"entity\",\"name\":{\"fragments\":[\"Application\"]},\"business_meaning\":{\"fragments\":[\"A software program that, when executed, displays \\\"Hello, World!\\\" and the current UTC date and time.\"]},\"relationships\":[{\"fragments\":[\"None\"]}]}}]}",
+      "output_sha256": "e7b757b3a7a97698974fffcdeae72c839d44ed935af493a8f150632285356ebd",
+      "schema": "{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"records\"},\"records\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"content\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"acceptance_criterion\"},\"given\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"when\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"then\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"given\",\"when\",\"then\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"user_visible_outcome\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"edge_case\"},\"condition\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"expected_outcome\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"condition\",\"expected_outcome\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"functional_requirement\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"business_rule\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"assumption\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"non_goal\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"prohibited_behavior\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"entity\"},\"name\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"business_meaning\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"relationships\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"maxItems\":4294967295}},\"required\":[\"kind\",\"name\",\"business_meaning\",\"relationships\"],\"additionalProperties\":false}]}},\"required\":[\"content\"],\"additionalProperties\":false},\"maxItems\":4294967295}},\"required\":[\"kind\",\"records\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"clarification\"},\"reason\":{\"enum\":[\"missing\",\"ambiguous\",\"conflicting\"]},\"question\":{\"type\":\"object\",\"properties\":{\"signal_ids\":{\"type\":\"array\",\"items\":{\"enum\":[1]},\"minItems\":1,\"maxItems\":1},\"value\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"signal_ids\",\"value\"],\"additionalProperties\":false},\"record_kind\":{\"enum\":[\"acceptance_criterion\",\"user_visible_outcome\",\"edge_case\",\"functional_requirement\",\"business_rule\",\"assumption\",\"non_goal\",\"prohibited_behavior\",\"entity\"]}},\"required\":[\"kind\",\"reason\",\"question\",\"record_kind\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"inconclusive\"},\"detail\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":2000}},\"required\":[\"kind\",\"detail\"],\"additionalProperties\":false}]}",
+      "schema_sha256": "7e7b389422b0f8b986352eac253cb7d4f33d280484d1b08a5af182a9143d5850",
+      "field_policies": [
+        {
+          "field": "spec_title",
+          "path": [
+            {
+              "variant": "brief"
+            },
+            {
+              "property": "title"
+            },
+            {
+              "property": "value"
+            }
+          ]
+        },
+        {
+          "field": "spec_description",
+          "path": [
+            {
+              "variant": "brief"
+            },
+            {
+              "property": "description"
+            },
+            {
+              "property": "value"
+            }
+          ]
+        },
+        {
+          "field": "spec_goal",
+          "path": [
+            {
+              "variant": "brief"
+            },
+            {
+              "property": "primary_goal"
+            },
+            {
+              "property": "value"
+            }
+          ]
+        },
+        {
+          "field": "spec_story",
+          "path": [
+            {
+              "variant": "primary_user_story"
+            },
+            {
+              "property": "value"
+            }
+          ]
+        },
+        {
+          "field": "spec_entity_basis",
+          "path": [
+            {
+              "variant": "entities"
+            },
+            {
+              "property": "basis"
+            },
+            {
+              "property": "value"
+            }
+          ]
+        },
+        {
+          "field": "ac_given",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "acceptance_criterion"
+            },
+            {
+              "property": "given"
+            }
+          ]
+        },
+        {
+          "field": "ac_when",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "acceptance_criterion"
+            },
+            {
+              "property": "when"
+            }
+          ]
+        },
+        {
+          "field": "ac_then",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "acceptance_criterion"
+            },
+            {
+              "property": "then"
+            }
+          ]
+        },
+        {
+          "field": "visible_outcome",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "user_visible_outcome"
+            },
+            {
+              "property": "text"
+            }
+          ]
+        },
+        {
+          "field": "edge_condition",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "edge_case"
+            },
+            {
+              "property": "condition"
+            }
+          ]
+        },
+        {
+          "field": "edge_outcome",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "edge_case"
+            },
+            {
+              "property": "expected_outcome"
+            }
+          ]
+        },
+        {
+          "field": "functional_requirement",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "functional_requirement"
+            },
+            {
+              "property": "text"
+            }
+          ]
+        },
+        {
+          "field": "business_rule",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "business_rule"
+            },
+            {
+              "property": "text"
+            }
+          ]
+        },
+        {
+          "field": "assumption",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "assumption"
+            },
+            {
+              "property": "text"
+            }
+          ]
+        },
+        {
+          "field": "non_goal",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "non_goal"
+            },
+            {
+              "property": "text"
+            }
+          ]
+        },
+        {
+          "field": "prohibited_behavior",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "prohibited_behavior"
+            },
+            {
+              "property": "text"
+            }
+          ]
+        },
+        {
+          "field": "entity_name",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "entity"
+            },
+            {
+              "property": "name"
+            }
+          ]
+        },
+        {
+          "field": "entity_meaning",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "entity"
+            },
+            {
+              "property": "business_meaning"
+            }
+          ]
+        },
+        {
+          "field": "entity_relationship",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "entity"
+            },
+            {
+              "property": "relationships"
+            },
+            {
+              "items": {}
+            }
+          ]
+        },
+        {
+          "field": "clarification_question",
+          "path": [
+            {
+              "variant": "clarification"
+            },
+            {
+              "property": "question"
+            },
+            {
+              "property": "value"
+            }
+          ]
+        }
+      ],
+      "prose_fields": [],
+      "description": "{\"version\":\"model-request-debug/v5\",\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\",\"provider_config\":{\"aws_bedrock\":{\"region\":\"ap-southeast-2\"}},\"model_slot\":\"spec_generation\",\"workflow_id\":\"spec-generation\",\"workflow_version\":1,\"request_step\":\"g27-g19-g8-generate-records-gen-prepare\",\"content\":[{\"guidance\":\"{\\n  \\\"business_value\\\": \\\"Write ordinary prose as a string. For exact-copy or reference insertions, use {\\\\\\\"fragments\\\\\\\":[text or typed insertions]}; fragments concatenate exactly as written, so strings include their own spaces and punctuation. Each relationship is one complete value in the relationships collection. Fulfil the assigned field purpose and preserve source-backed conditions and obligations.\\\",\\n  \\\"references\\\": \\\"Reference objects insert supplied display values; they do not explain their use or authorize operations.\\\",\\n  \\\"sources\\\": \\\"Original sources establish meaning, conditions and how exact values are used; code samples remain context. When signal_ids are requested, select only supplied groups that support the field purpose; several may jointly support it. Availability is not support. For record authoring, source_assignment.requirements are this batch's duties. context_requirements and prior drafts help interpret them, not replace them with another group's duties. Context cannot change fixed associations or authorized repair evidence. Do not invent decisions.\\\",\\n  \\\"clarification\\\": \\\"A missing user decision: state known facts, the choice, its impact and the expected answer. Missing prewritten sections are not user decisions.\\\",\\n  \\\"inconclusive\\\": \\\"Unresolved interpretation of the supplied evidence.\\\"\\n}\\n\"},{\"guidance\":\"Write records using the assigned requirements, brief and record-family purposes.\\nPreserve all assigned obligations across the record collection.\\nWhen supplied, record_requirements applies across the assembled specification.\\nFamily presence is structural; it does not establish that assigned obligations\\nhave been fulfilled.\\nInclude only supported records; optional families need no filler. Preserve each\\nstatement's role and obligation strength. Do not relabel positive requirements as\\nassumptions or non-goals, invent conditions, or repeat records to fill sections.\\nAcceptance criteria may test behavior stated by functional requirements.\\nFollow the supplied entity decision.\\n\"},{\"user\":\"{\\\"source_assignment\\\":{\\\"purpose\\\":\\\"acceptance_criterion: An observable pass/fail flow with a precondition, trigger and expected result. given: The starting situation before the trigger, without assuming the result being tested or inventing prerequisites. when: The action or event that triggers the behavior. then: The observable consequences after the trigger, including the obligations being tested.\\\\nuser_visible_outcome: A result, confirmation or response directly observable by the user.\\\\nedge_case: A boundary or exceptional condition and its expected outcome. condition: The boundary or exceptional condition. expected_outcome: The observable result, preserving conditions and obligations.\\\\nfunctional_requirement: Required application behavior, preserving its trigger, conditions and obligation strength.\\\\nbusiness_rule: A rule or constraint governing business decisions or outcomes.\\\\nassumption: A supported premise on which the described behavior depends.\\\\nnon_goal: Behavior explicitly excluded from the feature's scope.\\\\nprohibited_behavior: An action or behavior that must not occur.\\\\nentity: A business data concept with its meaning and relationships. name: The business entity's name. business_meaning: The entity's business purpose. relationships: The business relationship to another entity, including its meaning.\\\",\\\"signal\\\":1,\\\"requirements\\\":[{\\\"claim_id\\\":1,\\\"kind\\\":\\\"business\\\",\\\"meaning\\\":\\\"The application must start successfully, display the text \\\\\\\"Hello, World!\\\\\\\", and output the current date and time in UTC.\\\",\\\"source_id\\\":1}],\\\"kind\\\":\\\"records\\\"},\\\"source_groups\\\":[],\\\"context_requirements\\\":[],\\\"preserved_tokens\\\":[{\\\"claim_id\\\":2,\\\"value\\\":\\\"Hello, World!\\\",\\\"source_id\\\":1}],\\\"sources\\\":[{\\\"id\\\":1,\\\"text\\\":\\\"# Hello World Application\\\\n\\\\n## Requirements\\\\n\\\\n- The application must start successfully.\\\\n- When started, the application must display `Hello, World!`.\\\\n- Must also output date and time in UTC\\\\n\\\"}],\\\"passive_literals\\\":[],\\\"operation\\\":\\\"write\\\",\\\"brief\\\":{\\\"title\\\":\\\"Hello World Application\\\",\\\"description\\\":\\\"The application displays \\\\\\\"Hello, World!\\\\\\\" and outputs the current UTC date and time.\\\",\\\"primary_goal\\\":\\\"Provides a simple demonstration of application startup and time display.\\\"},\\\"record_requirements\\\":{\\\"scope\\\":\\\"assembled_specification\\\",\\\"required_families\\\":[\\\"acceptance_criterion\\\",\\\"functional_requirement\\\",\\\"entity\\\"],\\\"present_families\\\":[],\\\"unmet_required_families\\\":[\\\"acceptance_criterion\\\",\\\"functional_requirement\\\",\\\"entity\\\"]},\\\"entities\\\":{\\\"disposition\\\":\\\"required\\\",\\\"basis\\\":\\\"The application must start successfully, display the text \\\\\\\"Hello, World!\\\\\\\", and output the current date and time in UTC.\\\"},\\\"field_rules\\\":[{\\\"field\\\":\\\"records.records[].content.acceptance_criterion.given\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.acceptance_criterion.when\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.acceptance_criterion.then\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.user_visible_outcome.text\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.edge_case.condition\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.edge_case.expected_outcome\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.functional_requirement.text\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.business_rule.text\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.assumption.text\\\",\\\"instruction\\\":\\\"Write nonblank prose for this field's declared meaning or behavior as plain text.\\\"},{\\\"field\\\":\\\"records.records[].content.non_goal.text\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.prohibited_behavior.text\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.entity.name\\\",\\\"instruction\\\":\\\"Supply the identity label using only insertion alternatives listed for this field or plain text. Its occurrence does not satisfy a behavioral exact-copy obligation.\\\"},{\\\"field\\\":\\\"records.records[].content.entity.business_meaning\\\",\\\"instruction\\\":\\\"Write nonblank prose for this field's declared meaning or behavior as plain text.\\\"},{\\\"field\\\":\\\"records.records[].content.entity.relationships[]\\\",\\\"instruction\\\":\\\"Write nonblank prose for this field's declared meaning or behavior as plain text.\\\"},{\\\"field\\\":\\\"clarification.question.value\\\",\\\"instruction\\\":\\\"Write nonblank prose for this field's declared meaning or behavior as plain text.\\\"}],\\\"insertion_fields\\\":{\\\"exact_copy\\\":[\\\"records.records[].content.acceptance_criterion.given\\\",\\\"records.records[].content.acceptance_criterion.when\\\",\\\"records.records[].content.acceptance_criterion.then\\\",\\\"records.records[].content.user_visible_outcome.text\\\",\\\"records.records[].content.edge_case.condition\\\",\\\"records.records[].content.edge_case.expected_outcome\\\",\\\"records.records[].content.functional_requirement.text\\\",\\\"records.records[].content.business_rule.text\\\",\\\"records.records[].content.non_goal.text\\\",\\\"records.records[].content.prohibited_behavior.text\\\",\\\"records.records[].content.entity.name\\\"],\\\"passive\\\":[],\\\"source\\\":[]}}\"}],\"protocol_prompt\":\"Return exactly one JSON object matching the supplied schema. No Markdown fences or surrounding text.\",\"schema\":\"{\\\"oneOf\\\":[{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"records\\\"},\\\"records\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"content\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"acceptance_criterion\\\"},\\\"given\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"when\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"then\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"given\\\",\\\"when\\\",\\\"then\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"user_visible_outcome\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"edge_case\\\"},\\\"condition\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"expected_outcome\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"condition\\\",\\\"expected_outcome\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"functional_requirement\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"business_rule\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"assumption\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"non_goal\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"prohibited_behavior\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"entity\\\"},\\\"name\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"business_meaning\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"relationships\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"kind\\\",\\\"name\\\",\\\"business_meaning\\\",\\\"relationships\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"content\\\"],\\\"additionalProperties\\\":false},\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"kind\\\",\\\"records\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"clarification\\\"},\\\"reason\\\":{\\\"enum\\\":[\\\"missing\\\",\\\"ambiguous\\\",\\\"conflicting\\\"]},\\\"question\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"signal_ids\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"enum\\\":[1]},\\\"minItems\\\":1,\\\"maxItems\\\":1},\\\"value\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"signal_ids\\\",\\\"value\\\"],\\\"additionalProperties\\\":false},\\\"record_kind\\\":{\\\"enum\\\":[\\\"acceptance_criterion\\\",\\\"user_visible_outcome\\\",\\\"edge_case\\\",\\\"functional_requirement\\\",\\\"business_rule\\\",\\\"assumption\\\",\\\"non_goal\\\",\\\"prohibited_behavior\\\",\\\"entity\\\"]}},\\\"required\\\":[\\\"kind\\\",\\\"reason\\\",\\\"question\\\",\\\"record_kind\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"inconclusive\\\"},\\\"detail\\\":{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":2000}},\\\"required\\\":[\\\"kind\\\",\\\"detail\\\"],\\\"additionalProperties\\\":false}]}\",\"response_mode\":\"native_schema\",\"controls\":{\"temperature\":\"fixed\",\"max_output_tokens\":{\"value\":16384}},\"reasoning_effort\":\"low\",\"operation_kind\":\"inference\",\"original_sources\":[{\"source_id\":{\"ordinal\":1},\"bytes\":\"# Hello World Application\\n\\n## Requirements\\n\\n- The application must start successfully.\\n- When started, the application must display `Hello, World!`.\\n- Must also output date and time in UTC\\n\"}],\"prose_fields\":[],\"field_policies\":[{\"field\":\"spec_title\",\"path\":[{\"variant\":\"brief\"},{\"property\":\"title\"},{\"property\":\"value\"}]},{\"field\":\"spec_description\",\"path\":[{\"variant\":\"brief\"},{\"property\":\"description\"},{\"property\":\"value\"}]},{\"field\":\"spec_goal\",\"path\":[{\"variant\":\"brief\"},{\"property\":\"primary_goal\"},{\"property\":\"value\"}]},{\"field\":\"spec_story\",\"path\":[{\"variant\":\"primary_user_story\"},{\"property\":\"value\"}]},{\"field\":\"spec_entity_basis\",\"path\":[{\"variant\":\"entities\"},{\"property\":\"basis\"},{\"property\":\"value\"}]},{\"field\":\"ac_given\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"acceptance_criterion\"},{\"property\":\"given\"}]},{\"field\":\"ac_when\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"acceptance_criterion\"},{\"property\":\"when\"}]},{\"field\":\"ac_then\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"acceptance_criterion\"},{\"property\":\"then\"}]},{\"field\":\"visible_outcome\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"user_visible_outcome\"},{\"property\":\"text\"}]},{\"field\":\"edge_condition\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"edge_case\"},{\"property\":\"condition\"}]},{\"field\":\"edge_outcome\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"edge_case\"},{\"property\":\"expected_outcome\"}]},{\"field\":\"functional_requirement\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"functional_requirement\"},{\"property\":\"text\"}]},{\"field\":\"business_rule\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"business_rule\"},{\"property\":\"text\"}]},{\"field\":\"assumption\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"assumption\"},{\"property\":\"text\"}]},{\"field\":\"non_goal\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"non_goal\"},{\"property\":\"text\"}]},{\"field\":\"prohibited_behavior\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"prohibited_behavior\"},{\"property\":\"text\"}]},{\"field\":\"entity_name\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"entity\"},{\"property\":\"name\"}]},{\"field\":\"entity_meaning\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"entity\"},{\"property\":\"business_meaning\"}]},{\"field\":\"entity_relationship\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"entity\"},{\"property\":\"relationships\"},{\"items\":{}}]},{\"field\":\"clarification_question\",\"path\":[{\"variant\":\"clarification\"},{\"property\":\"question\"},{\"property\":\"value\"}]}]}"
+    },
+    {
+      "id": "hello-world-token-binding",
+      "execution_id": "2026-10-16T09-22-35Z-898e9afbc68759f3d31039bd6bfea0c4",
+      "call": 14,
+      "context_path": "zig-out/e2e-spec/2026-10-16T09-22-35Z-898e9afbc68759f3d31039bd6bfea0c4/evidence/generation/call-000014/context.json",
+      "context_sha256": "fc49e9b1abeae6c9f67a2d2f2be407f63f0e6d0903c2b41346fe2e286437ce32",
+      "description_sha256": "417e73718f7a9f4bada9cb7b4fec91bf9661822a01d06582d1e42802db857a24",
+      "description_version": "model-request-debug/v5",
+      "prompt_logs": [
+        {
+          "path": "zig-out/e2e-spec/2026-10-16T09-22-35Z-898e9afbc68759f3d31039bd6bfea0c4/project/specs/hello-world/logs/prompts/RUN-604502b5635cc56fa011e504300d5dbc/LOGBIND-1/0001.log",
+          "sha256": "c89694b04a2ca43efb3377afdfd1bab731ca2cfe4421f3462f85766d20f8341a"
+        }
+      ],
+      "packet": "{\"source_assignment\":{\"purpose\":\"acceptance_criterion: An observable pass/fail flow with a precondition, trigger and expected result. given: The starting situation before the trigger, without assuming the result being tested or inventing prerequisites. when: The action or event that triggers the behavior. then: The observable consequences after the trigger, including the obligations being tested.\\nuser_visible_outcome: A result, confirmation or response directly observable by the user.\\nedge_case: A boundary or exceptional condition and its expected outcome. condition: The boundary or exceptional condition. expected_outcome: The observable result, preserving conditions and obligations.\\nfunctional_requirement: Required application behavior, preserving its trigger, conditions and obligation strength.\\nbusiness_rule: A rule or constraint governing business decisions or outcomes.\\nassumption: A supported premise on which the described behavior depends.\\nnon_goal: Behavior explicitly excluded from the feature's scope.\\nprohibited_behavior: An action or behavior that must not occur.\\nentity: A business data concept with its meaning and relationships. name: The business entity's name. business_meaning: The entity's business purpose. relationships: The business relationship to another entity, including its meaning.\",\"signal\":2,\"requirements\":[{\"claim_id\":2,\"kind\":\"preserved_token\",\"meaning\":\"Hello, World!\",\"source_id\":1}],\"kind\":\"records\"},\"source_groups\":[],\"context_requirements\":[{\"claim_id\":1,\"kind\":\"business\",\"meaning\":\"The application must start successfully, display the text \\\"Hello, World!\\\", and output the current date and time in UTC.\",\"source_id\":1}],\"preserved_tokens\":[{\"claim_id\":2,\"value\":\"Hello, World!\",\"source_id\":1}],\"sources\":[{\"id\":1,\"text\":\"# Hello World Application\\n\\n## Requirements\\n\\n- The application must start successfully.\\n- When started, the application must display `Hello, World!`.\\n- Must also output date and time in UTC\\n\"}],\"passive_literals\":[],\"operation\":\"write\",\"brief\":{\"title\":\"Hello World Application\",\"description\":\"The application displays \\\"Hello, World!\\\" and outputs the current UTC date and time.\",\"primary_goal\":\"Provides a simple demonstration of application startup and time display.\"},\"record_requirements\":{\"scope\":\"assembled_specification\",\"required_families\":[\"acceptance_criterion\",\"functional_requirement\",\"entity\"],\"present_families\":[\"acceptance_criterion\",\"functional_requirement\",\"entity\"],\"unmet_required_families\":[]},\"entities\":{\"disposition\":\"required\",\"basis\":\"The application must start successfully, display the text \\\"Hello, World!\\\", and output the current date and time in UTC.\"},\"field_rules\":[{\"field\":\"records.records[].content.acceptance_criterion.given\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.acceptance_criterion.when\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.acceptance_criterion.then\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.user_visible_outcome.text\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.edge_case.condition\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.edge_case.expected_outcome\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.functional_requirement.text\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.business_rule.text\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.assumption.text\",\"instruction\":\"Write nonblank prose for this field's declared meaning or behavior as plain text.\"},{\"field\":\"records.records[].content.non_goal.text\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.prohibited_behavior.text\",\"instruction\":\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\"},{\"field\":\"records.records[].content.entity.name\",\"instruction\":\"Supply the identity label using only insertion alternatives listed for this field or plain text. Its occurrence does not satisfy a behavioral exact-copy obligation.\"},{\"field\":\"records.records[].content.entity.business_meaning\",\"instruction\":\"Write nonblank prose for this field's declared meaning or behavior as plain text.\"},{\"field\":\"records.records[].content.entity.relationships[]\",\"instruction\":\"Write nonblank prose for this field's declared meaning or behavior as plain text.\"},{\"field\":\"clarification.question.value\",\"instruction\":\"Write nonblank prose for this field's declared meaning or behavior as plain text.\"}],\"insertion_fields\":{\"exact_copy\":[\"records.records[].content.acceptance_criterion.given\",\"records.records[].content.acceptance_criterion.when\",\"records.records[].content.acceptance_criterion.then\",\"records.records[].content.user_visible_outcome.text\",\"records.records[].content.edge_case.condition\",\"records.records[].content.edge_case.expected_outcome\",\"records.records[].content.functional_requirement.text\",\"records.records[].content.business_rule.text\",\"records.records[].content.non_goal.text\",\"records.records[].content.prohibited_behavior.text\",\"records.records[].content.entity.name\"],\"passive\":[],\"source\":[]}}",
+      "packet_sha256": "b45f610241ba419c651793edca42877dee1c00c49471576ba1dd1a585d3e6cf4",
+      "output": "{\"{ \"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"acceptance_criterion\",\"given\":\"The application is launched and has not yet displayed any output.\",\"when\":\"The application starts and begins its initialization sequence.\",\"then\":\"The application displays the text \\\"Hello, World!\\\" and outputs the current date and time in UTC.\"}},{\"content\":{\"kind\":\"functional_requirement\",\"text\":\"The application must start successfully, display the text \\\"Hello, World!\\\", and output the current UTC date and time.\"}},{\"content\":{\"kind\":\"entity\",\"name\":\"HelloWorldApp\",\"business_meaning\":\"Represents the simple application that demonstrates startup and time display.\",\"relationships\":[\"None\"]}}]}",
+      "output_sha256": "fd17991f51298113a0d9ca5127935ba81d1becc44e8cb5d1461230ab857163b1",
+      "schema": "{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"records\"},\"records\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"content\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"acceptance_criterion\"},\"given\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"when\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"then\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"given\",\"when\",\"then\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"user_visible_outcome\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"edge_case\"},\"condition\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"expected_outcome\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"condition\",\"expected_outcome\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"functional_requirement\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"business_rule\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"assumption\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"non_goal\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"prohibited_behavior\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"entity\"},\"name\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"business_meaning\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"relationships\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"maxItems\":4294967295}},\"required\":[\"kind\",\"name\",\"business_meaning\",\"relationships\"],\"additionalProperties\":false}]}},\"required\":[\"content\"],\"additionalProperties\":false},\"maxItems\":4294967295}},\"required\":[\"kind\",\"records\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"clarification\"},\"reason\":{\"enum\":[\"missing\",\"ambiguous\",\"conflicting\"]},\"question\":{\"type\":\"object\",\"properties\":{\"signal_ids\":{\"type\":\"array\",\"items\":{\"enum\":[2]},\"minItems\":1,\"maxItems\":1},\"value\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"signal_ids\",\"value\"],\"additionalProperties\":false},\"record_kind\":{\"enum\":[\"acceptance_criterion\",\"user_visible_outcome\",\"edge_case\",\"functional_requirement\",\"business_rule\",\"assumption\",\"non_goal\",\"prohibited_behavior\",\"entity\"]}},\"required\":[\"kind\",\"reason\",\"question\",\"record_kind\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"inconclusive\"},\"detail\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":2000}},\"required\":[\"kind\",\"detail\"],\"additionalProperties\":false}]}",
+      "schema_sha256": "33da2084e781ce6730758cad388de9d9df356ee687c6e6c11c353642cacffe9a",
+      "field_policies": [
+        {
+          "field": "spec_title",
+          "path": [
+            {
+              "variant": "brief"
+            },
+            {
+              "property": "title"
+            },
+            {
+              "property": "value"
+            }
+          ]
+        },
+        {
+          "field": "spec_description",
+          "path": [
+            {
+              "variant": "brief"
+            },
+            {
+              "property": "description"
+            },
+            {
+              "property": "value"
+            }
+          ]
+        },
+        {
+          "field": "spec_goal",
+          "path": [
+            {
+              "variant": "brief"
+            },
+            {
+              "property": "primary_goal"
+            },
+            {
+              "property": "value"
+            }
+          ]
+        },
+        {
+          "field": "spec_story",
+          "path": [
+            {
+              "variant": "primary_user_story"
+            },
+            {
+              "property": "value"
+            }
+          ]
+        },
+        {
+          "field": "spec_entity_basis",
+          "path": [
+            {
+              "variant": "entities"
+            },
+            {
+              "property": "basis"
+            },
+            {
+              "property": "value"
+            }
+          ]
+        },
+        {
+          "field": "ac_given",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "acceptance_criterion"
+            },
+            {
+              "property": "given"
+            }
+          ]
+        },
+        {
+          "field": "ac_when",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "acceptance_criterion"
+            },
+            {
+              "property": "when"
+            }
+          ]
+        },
+        {
+          "field": "ac_then",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "acceptance_criterion"
+            },
+            {
+              "property": "then"
+            }
+          ]
+        },
+        {
+          "field": "visible_outcome",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "user_visible_outcome"
+            },
+            {
+              "property": "text"
+            }
+          ]
+        },
+        {
+          "field": "edge_condition",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "edge_case"
+            },
+            {
+              "property": "condition"
+            }
+          ]
+        },
+        {
+          "field": "edge_outcome",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "edge_case"
+            },
+            {
+              "property": "expected_outcome"
+            }
+          ]
+        },
+        {
+          "field": "functional_requirement",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "functional_requirement"
+            },
+            {
+              "property": "text"
+            }
+          ]
+        },
+        {
+          "field": "business_rule",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "business_rule"
+            },
+            {
+              "property": "text"
+            }
+          ]
+        },
+        {
+          "field": "assumption",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "assumption"
+            },
+            {
+              "property": "text"
+            }
+          ]
+        },
+        {
+          "field": "non_goal",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "non_goal"
+            },
+            {
+              "property": "text"
+            }
+          ]
+        },
+        {
+          "field": "prohibited_behavior",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "prohibited_behavior"
+            },
+            {
+              "property": "text"
+            }
+          ]
+        },
+        {
+          "field": "entity_name",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "entity"
+            },
+            {
+              "property": "name"
+            }
+          ]
+        },
+        {
+          "field": "entity_meaning",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "entity"
+            },
+            {
+              "property": "business_meaning"
+            }
+          ]
+        },
+        {
+          "field": "entity_relationship",
+          "path": [
+            {
+              "variant": "records"
+            },
+            {
+              "property": "records"
+            },
+            {
+              "items": {}
+            },
+            {
+              "property": "content"
+            },
+            {
+              "variant": "entity"
+            },
+            {
+              "property": "relationships"
+            },
+            {
+              "items": {}
+            }
+          ]
+        },
+        {
+          "field": "clarification_question",
+          "path": [
+            {
+              "variant": "clarification"
+            },
+            {
+              "property": "question"
+            },
+            {
+              "property": "value"
+            }
+          ]
+        }
+      ],
+      "prose_fields": [],
+      "description": "{\"version\":\"model-request-debug/v5\",\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\",\"provider_config\":{\"aws_bedrock\":{\"region\":\"ap-southeast-2\"}},\"model_slot\":\"spec_generation\",\"workflow_id\":\"spec-generation\",\"workflow_version\":1,\"request_step\":\"g27-g19-g8-generate-records-gen-prepare\",\"content\":[{\"guidance\":\"{\\n  \\\"business_value\\\": \\\"Write ordinary prose as a string. For exact-copy or reference insertions, use {\\\\\\\"fragments\\\\\\\":[text or typed insertions]}; fragments concatenate exactly as written, so strings include their own spaces and punctuation. Each relationship is one complete value in the relationships collection. Fulfil the assigned field purpose and preserve source-backed conditions and obligations.\\\",\\n  \\\"references\\\": \\\"Reference objects insert supplied display values; they do not explain their use or authorize operations.\\\",\\n  \\\"sources\\\": \\\"Original sources establish meaning, conditions and how exact values are used; code samples remain context. When signal_ids are requested, select only supplied groups that support the field purpose; several may jointly support it. Availability is not support. For record authoring, source_assignment.requirements are this batch's duties. context_requirements and prior drafts help interpret them, not replace them with another group's duties. Context cannot change fixed associations or authorized repair evidence. Do not invent decisions.\\\",\\n  \\\"clarification\\\": \\\"A missing user decision: state known facts, the choice, its impact and the expected answer. Missing prewritten sections are not user decisions.\\\",\\n  \\\"inconclusive\\\": \\\"Unresolved interpretation of the supplied evidence.\\\"\\n}\\n\"},{\"guidance\":\"Write records using the assigned requirements, brief and record-family purposes.\\nPreserve all assigned obligations across the record collection.\\nWhen supplied, record_requirements applies across the assembled specification.\\nFamily presence is structural; it does not establish that assigned obligations\\nhave been fulfilled.\\nInclude only supported records; optional families need no filler. Preserve each\\nstatement's role and obligation strength. Do not relabel positive requirements as\\nassumptions or non-goals, invent conditions, or repeat records to fill sections.\\nAcceptance criteria may test behavior stated by functional requirements.\\nFollow the supplied entity decision.\\n\"},{\"user\":\"{\\\"source_assignment\\\":{\\\"purpose\\\":\\\"acceptance_criterion: An observable pass/fail flow with a precondition, trigger and expected result. given: The starting situation before the trigger, without assuming the result being tested or inventing prerequisites. when: The action or event that triggers the behavior. then: The observable consequences after the trigger, including the obligations being tested.\\\\nuser_visible_outcome: A result, confirmation or response directly observable by the user.\\\\nedge_case: A boundary or exceptional condition and its expected outcome. condition: The boundary or exceptional condition. expected_outcome: The observable result, preserving conditions and obligations.\\\\nfunctional_requirement: Required application behavior, preserving its trigger, conditions and obligation strength.\\\\nbusiness_rule: A rule or constraint governing business decisions or outcomes.\\\\nassumption: A supported premise on which the described behavior depends.\\\\nnon_goal: Behavior explicitly excluded from the feature's scope.\\\\nprohibited_behavior: An action or behavior that must not occur.\\\\nentity: A business data concept with its meaning and relationships. name: The business entity's name. business_meaning: The entity's business purpose. relationships: The business relationship to another entity, including its meaning.\\\",\\\"signal\\\":2,\\\"requirements\\\":[{\\\"claim_id\\\":2,\\\"kind\\\":\\\"preserved_token\\\",\\\"meaning\\\":\\\"Hello, World!\\\",\\\"source_id\\\":1}],\\\"kind\\\":\\\"records\\\"},\\\"source_groups\\\":[],\\\"context_requirements\\\":[{\\\"claim_id\\\":1,\\\"kind\\\":\\\"business\\\",\\\"meaning\\\":\\\"The application must start successfully, display the text \\\\\\\"Hello, World!\\\\\\\", and output the current date and time in UTC.\\\",\\\"source_id\\\":1}],\\\"preserved_tokens\\\":[{\\\"claim_id\\\":2,\\\"value\\\":\\\"Hello, World!\\\",\\\"source_id\\\":1}],\\\"sources\\\":[{\\\"id\\\":1,\\\"text\\\":\\\"# Hello World Application\\\\n\\\\n## Requirements\\\\n\\\\n- The application must start successfully.\\\\n- When started, the application must display `Hello, World!`.\\\\n- Must also output date and time in UTC\\\\n\\\"}],\\\"passive_literals\\\":[],\\\"operation\\\":\\\"write\\\",\\\"brief\\\":{\\\"title\\\":\\\"Hello World Application\\\",\\\"description\\\":\\\"The application displays \\\\\\\"Hello, World!\\\\\\\" and outputs the current UTC date and time.\\\",\\\"primary_goal\\\":\\\"Provides a simple demonstration of application startup and time display.\\\"},\\\"record_requirements\\\":{\\\"scope\\\":\\\"assembled_specification\\\",\\\"required_families\\\":[\\\"acceptance_criterion\\\",\\\"functional_requirement\\\",\\\"entity\\\"],\\\"present_families\\\":[\\\"acceptance_criterion\\\",\\\"functional_requirement\\\",\\\"entity\\\"],\\\"unmet_required_families\\\":[]},\\\"entities\\\":{\\\"disposition\\\":\\\"required\\\",\\\"basis\\\":\\\"The application must start successfully, display the text \\\\\\\"Hello, World!\\\\\\\", and output the current date and time in UTC.\\\"},\\\"field_rules\\\":[{\\\"field\\\":\\\"records.records[].content.acceptance_criterion.given\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.acceptance_criterion.when\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.acceptance_criterion.then\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.user_visible_outcome.text\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.edge_case.condition\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.edge_case.expected_outcome\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.functional_requirement.text\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.business_rule.text\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.assumption.text\\\",\\\"instruction\\\":\\\"Write nonblank prose for this field's declared meaning or behavior as plain text.\\\"},{\\\"field\\\":\\\"records.records[].content.non_goal.text\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.prohibited_behavior.text\\\",\\\"instruction\\\":\\\"Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field.\\\"},{\\\"field\\\":\\\"records.records[].content.entity.name\\\",\\\"instruction\\\":\\\"Supply the identity label using only insertion alternatives listed for this field or plain text. Its occurrence does not satisfy a behavioral exact-copy obligation.\\\"},{\\\"field\\\":\\\"records.records[].content.entity.business_meaning\\\",\\\"instruction\\\":\\\"Write nonblank prose for this field's declared meaning or behavior as plain text.\\\"},{\\\"field\\\":\\\"records.records[].content.entity.relationships[]\\\",\\\"instruction\\\":\\\"Write nonblank prose for this field's declared meaning or behavior as plain text.\\\"},{\\\"field\\\":\\\"clarification.question.value\\\",\\\"instruction\\\":\\\"Write nonblank prose for this field's declared meaning or behavior as plain text.\\\"}],\\\"insertion_fields\\\":{\\\"exact_copy\\\":[\\\"records.records[].content.acceptance_criterion.given\\\",\\\"records.records[].content.acceptance_criterion.when\\\",\\\"records.records[].content.acceptance_criterion.then\\\",\\\"records.records[].content.user_visible_outcome.text\\\",\\\"records.records[].content.edge_case.condition\\\",\\\"records.records[].content.edge_case.expected_outcome\\\",\\\"records.records[].content.functional_requirement.text\\\",\\\"records.records[].content.business_rule.text\\\",\\\"records.records[].content.non_goal.text\\\",\\\"records.records[].content.prohibited_behavior.text\\\",\\\"records.records[].content.entity.name\\\"],\\\"passive\\\":[],\\\"source\\\":[]}}\"}],\"protocol_prompt\":\"Return exactly one JSON object matching the supplied schema. No Markdown fences or surrounding text.\",\"schema\":\"{\\\"oneOf\\\":[{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"records\\\"},\\\"records\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"content\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"acceptance_criterion\\\"},\\\"given\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"when\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"then\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"given\\\",\\\"when\\\",\\\"then\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"user_visible_outcome\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"edge_case\\\"},\\\"condition\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"expected_outcome\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"condition\\\",\\\"expected_outcome\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"functional_requirement\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"business_rule\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"assumption\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"non_goal\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"prohibited_behavior\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"entity\\\"},\\\"name\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"}},\\\"required\\\":[\\\"kind\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"business_meaning\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"relationships\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"kind\\\",\\\"name\\\",\\\"business_meaning\\\",\\\"relationships\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"content\\\"],\\\"additionalProperties\\\":false},\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"kind\\\",\\\"records\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"clarification\\\"},\\\"reason\\\":{\\\"enum\\\":[\\\"missing\\\",\\\"ambiguous\\\",\\\"conflicting\\\"]},\\\"question\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"signal_ids\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"enum\\\":[2]},\\\"minItems\\\":1,\\\"maxItems\\\":1},\\\"value\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"signal_ids\\\",\\\"value\\\"],\\\"additionalProperties\\\":false},\\\"record_kind\\\":{\\\"enum\\\":[\\\"acceptance_criterion\\\",\\\"user_visible_outcome\\\",\\\"edge_case\\\",\\\"functional_requirement\\\",\\\"business_rule\\\",\\\"assumption\\\",\\\"non_goal\\\",\\\"prohibited_behavior\\\",\\\"entity\\\"]}},\\\"required\\\":[\\\"kind\\\",\\\"reason\\\",\\\"question\\\",\\\"record_kind\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"inconclusive\\\"},\\\"detail\\\":{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":2000}},\\\"required\\\":[\\\"kind\\\",\\\"detail\\\"],\\\"additionalProperties\\\":false}]}\",\"response_mode\":\"native_schema\",\"controls\":{\"temperature\":\"fixed\",\"max_output_tokens\":{\"value\":16384}},\"reasoning_effort\":\"low\",\"operation_kind\":\"inference\",\"original_sources\":[{\"source_id\":{\"ordinal\":1},\"bytes\":\"# Hello World Application\\n\\n## Requirements\\n\\n- The application must start successfully.\\n- When started, the application must display `Hello, World!`.\\n- Must also output date and time in UTC\\n\"}],\"prose_fields\":[],\"field_policies\":[{\"field\":\"spec_title\",\"path\":[{\"variant\":\"brief\"},{\"property\":\"title\"},{\"property\":\"value\"}]},{\"field\":\"spec_description\",\"path\":[{\"variant\":\"brief\"},{\"property\":\"description\"},{\"property\":\"value\"}]},{\"field\":\"spec_goal\",\"path\":[{\"variant\":\"brief\"},{\"property\":\"primary_goal\"},{\"property\":\"value\"}]},{\"field\":\"spec_story\",\"path\":[{\"variant\":\"primary_user_story\"},{\"property\":\"value\"}]},{\"field\":\"spec_entity_basis\",\"path\":[{\"variant\":\"entities\"},{\"property\":\"basis\"},{\"property\":\"value\"}]},{\"field\":\"ac_given\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"acceptance_criterion\"},{\"property\":\"given\"}]},{\"field\":\"ac_when\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"acceptance_criterion\"},{\"property\":\"when\"}]},{\"field\":\"ac_then\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"acceptance_criterion\"},{\"property\":\"then\"}]},{\"field\":\"visible_outcome\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"user_visible_outcome\"},{\"property\":\"text\"}]},{\"field\":\"edge_condition\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"edge_case\"},{\"property\":\"condition\"}]},{\"field\":\"edge_outcome\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"edge_case\"},{\"property\":\"expected_outcome\"}]},{\"field\":\"functional_requirement\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"functional_requirement\"},{\"property\":\"text\"}]},{\"field\":\"business_rule\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"business_rule\"},{\"property\":\"text\"}]},{\"field\":\"assumption\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"assumption\"},{\"property\":\"text\"}]},{\"field\":\"non_goal\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"non_goal\"},{\"property\":\"text\"}]},{\"field\":\"prohibited_behavior\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"prohibited_behavior\"},{\"property\":\"text\"}]},{\"field\":\"entity_name\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"entity\"},{\"property\":\"name\"}]},{\"field\":\"entity_meaning\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"entity\"},{\"property\":\"business_meaning\"}]},{\"field\":\"entity_relationship\",\"path\":[{\"variant\":\"records\"},{\"property\":\"records\"},{\"items\":{}},{\"property\":\"content\"},{\"variant\":\"entity\"},{\"property\":\"relationships\"},{\"items\":{}}]},{\"field\":\"clarification_question\",\"path\":[{\"variant\":\"clarification\"},{\"property\":\"question\"},{\"property\":\"value\"}]}]}"
+    },
+    {
+      "id": "loan-renewal-embedded-syntax",
+      "execution_id": "2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d",
+      "call": 10,
+      "context_path": "zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000010/context.json",
+      "context_sha256": "589e14d22010001e2184c036cea4589d29af1f98f1536032b6f054d60e1b12cb",
+      "description_sha256": "e853fabf4eee28261ad167122bbef58e992285f59d27af7e02db037aeeede846",
+      "description_version": "model-request-debug/v3",
+      "prompt_logs": [
+        {
+          "path": "zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/project/specs/loan-renewal/logs/prompts/RUN-c3e91494aa1086eda7642fb101fee613/LOGBIND-1/0001.log",
+          "sha256": "d1414a8080d18e823a4bb50ed8982e54c0bca5772c56cdc84b22facec1270aa4"
+        }
+      ],
+      "packet": "{\"source_assignment\":{\"purpose\":\"acceptance_criterion: An observable pass/fail flow with a precondition, trigger and expected result. given: The starting situation before the trigger, without assuming the result being tested or inventing prerequisites. when: The action or event that triggers the behavior. then: The observable consequences after the trigger, including the obligations being tested.\\nuser_visible_outcome: A result, confirmation or response directly observable by the user.\\nedge_case: A boundary or exceptional condition and its expected outcome. condition: The boundary or exceptional condition. expected_outcome: The observable result, preserving conditions and obligations.\\nfunctional_requirement: Required application behavior, preserving its trigger, conditions and obligation strength.\\nbusiness_rule: A rule or constraint governing business decisions or outcomes.\\nassumption: A supported premise on which the described behavior depends.\\nnon_goal: Behavior explicitly excluded from the feature's scope.\\nprohibited_behavior: An action or behavior that must not occur.\\nentity: A business data concept with its meaning and relationships. name: The business entity's name. business_meaning: The entity's business purpose. relationships: The business relationship to another entity, including its meaning.\",\"signal\":1,\"requirements\":[{\"claim_id\":1,\"kind\":\"business\",\"meaning\":\"A borrower may renew an active loan that has not yet been renewed; the renewal extends the loan’s due date by fourteen calendar days and displays the message `Loan renewed!` along with the new due date. The loan may be renewed only once; if the loan is inactive or has already been renewed, the renewal is refused, the due date remains unchanged, and the message `Renewal refused.` is displayed.\",\"source_id\":1}],\"kind\":\"records\"},\"source_groups\":[],\"context_requirements\":[],\"preserved_tokens\":[{\"claim_id\":2,\"value\":\"Loan renewed!\",\"source_id\":1},{\"claim_id\":3,\"value\":\"Renewal refused.\",\"source_id\":1}],\"sources\":[{\"id\":1,\"text\":\"# Library Loan Renewal\\n\\n## Requirements\\n\\n- A borrower must be able to renew an active loan that has not previously been renewed.\\n- Successful renewal must extend the existing due date by fourteen calendar days.\\n- After successful renewal, display `Loan renewed!` and the new due date to the borrower.\\n- A loan may be renewed only once.\\n- Refuse renewal if the loan is inactive or has previously been renewed; leave its due date unchanged and display `Renewal refused.`.\\n\"}],\"passive_literals\":[],\"operation\":\"write\",\"brief\":{\"title\":\"Loan renewed!Renewal refused.\",\"description\":\"A borrower may renew an active loan that has not yet been renewed; the renewal extends the loan’s due date by fourteen calendar days and displays the message Loan renewed! along with the new due date. The loan may be renewed only once; if the loan is inactive or has already been renewed, the renewal is refused, the due date remains unchanged, and the message Renewal refused. is displayed.\",\"primary_goal\":\"The feature enables borrowers to conveniently extend the loan period once, ensuring they can continue using the borrowed item without interruption.\"},\"record_requirements\":{\"scope\":\"assembled_specification\",\"required_families\":[\"acceptance_criterion\",\"functional_requirement\",\"entity\"],\"present_families\":[],\"unmet_required_families\":[\"acceptance_criterion\",\"functional_requirement\",\"entity\"]},\"entities\":{\"disposition\":\"required\",\"basis\":\"A borrower may renew an active loan that has not yet been renewed; the renewal extends the loan’s due date by fourteen calendar days and displays the message `Loan renewed!` along with the new due date. The loan may be renewed only once; if the loan is inactive or has already been renewed, the renewal is refused, the due date remains unchanged, and the message `Renewal refused.` is displayed.\"}}",
+      "packet_sha256": "f8373d5c85e02245e9e1183fb7ad0e932e3fea72e7f610ad5a7c8f6b895f13c5",
+      "output": "{\"{ \"kind\":\"records\",\"records\":[{\"content\":{\"kind\":\"acceptance_criterion\",\"given\":\"The loan is active and has not been renewed before\",\"when\":\"The borrower clicks the renew button\",\"then\":\"The system extends the due date by fourteen calendar days and displays the message {\\\"fragments\\\":[{\\\"kind\\\":\\\"exact_copy\\\",\\\"claim_id\\\":2}] } along with the new due date\"}},{\"content\":{\"kind\":\"functional_requirement\",\"text\":\"The system must allow a borrower to renew an active loan that has not previously been renewed, extending the due date by fourteen calendar days and displaying the message {\\\"fragments\\\":[{\\\"kind\\\":\\\"exact_copy\\\",\\\"claim_id\\\":2}] } with the new due date. If the loan is inactive or has already been renewed, the system must refuse the renewal, leave the due date unchanged, and display the message {\\\"fragments\\\":[{\\\"kind\\\":\\\"exact_copy\\\",\\\"claim_id\\\":3}] }\"}},{\"content\":{\"kind\":\"entity\",\"name\":\"Loan\",\"business_meaning\":\"Represents a borrowed item with a due date and renewal status\",\"relationships\":[\"has a due date\",\"has a renewal status\"]}}]}",
+      "output_sha256": "5a2a489e509e907ae2d109087e66b5d2f411291097175c362e8e4414dba89828",
+      "schema": "{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"records\"},\"records\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"content\":{\"oneOf\":[{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"acceptance_criterion\"},\"given\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"when\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"then\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"given\",\"when\",\"then\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"user_visible_outcome\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"edge_case\"},\"condition\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"expected_outcome\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"condition\",\"expected_outcome\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"functional_requirement\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"business_rule\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"assumption\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"non_goal\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"prohibited_behavior\"},\"text\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"kind\",\"text\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"entity\"},\"name\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"business_meaning\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"relationships\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]},\"maxItems\":4294967295}},\"required\":[\"kind\",\"name\",\"business_meaning\",\"relationships\"],\"additionalProperties\":false}]}},\"required\":[\"content\"],\"additionalProperties\":false},\"maxItems\":4294967295}},\"required\":[\"kind\",\"records\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"clarification\"},\"reason\":{\"enum\":[\"missing\",\"ambiguous\",\"conflicting\"]},\"question\":{\"type\":\"object\",\"properties\":{\"signal_ids\":{\"type\":\"array\",\"items\":{\"enum\":[1]},\"minItems\":1,\"maxItems\":1},\"value\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"},\"claim_id\":{\"enum\":[2,3]}},\"required\":[\"kind\",\"claim_id\"],\"additionalProperties\":false}]},\"minItems\":1,\"maxItems\":4294967295}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}},\"required\":[\"signal_ids\",\"value\"],\"additionalProperties\":false},\"record_kind\":{\"enum\":[\"acceptance_criterion\",\"user_visible_outcome\",\"edge_case\",\"functional_requirement\",\"business_rule\",\"assumption\",\"non_goal\",\"prohibited_behavior\",\"entity\"]}},\"required\":[\"kind\",\"reason\",\"question\",\"record_kind\"],\"additionalProperties\":false},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"inconclusive\"},\"detail\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":2000}},\"required\":[\"kind\",\"detail\"],\"additionalProperties\":false}]}",
+      "schema_sha256": "c6994e5200f0df7131f1e2438e479b21382caca22698e97cd8bdddc4e3d1660a",
+      "field_policies": [],
+      "prose_fields": [],
+      "description": "{\"version\":\"model-request-debug/v3\",\"provider\":\"aws-bedrock\",\"model\":\"openai.gpt-oss-20b-1:0\",\"provider_config\":{\"aws_bedrock\":{\"region\":\"ap-southeast-2\"}},\"model_slot\":\"spec_generation\",\"workflow_id\":\"spec-generation\",\"workflow_version\":1,\"request_step\":\"g27-g19-g8-generate-records-gen-prepare\",\"content\":[{\"guidance\":\"{\\n  \\\"business_value\\\": \\\"Write ordinary prose as a string. For exact-copy or reference insertions, use {\\\\\\\"fragments\\\\\\\":[text or typed insertions]}; fragments concatenate exactly as written, so strings include their own spaces and punctuation. Each relationship is one complete value in the relationships collection. Fulfil the assigned field purpose and preserve source-backed conditions and obligations.\\\",\\n  \\\"exact_copy\\\": \\\"When reproducing a supplied preserved_tokens literal, insert an exact_copy object instead of typing the literal inside a string. Put any surrounding prose in separate string fragments. Include claim_id only when the selected schema requires it.\\\",\\n  \\\"references\\\": \\\"Reference objects insert supplied display values; they do not explain their use or authorize operations.\\\",\\n  \\\"sources\\\": \\\"Original sources establish meaning, conditions and how exact values are used; code samples remain context. When signal_ids are requested, select only supplied groups that support the field purpose; several may jointly support it. Availability is not support. For record authoring, source_assignment.requirements are this batch's duties. context_requirements and prior drafts help interpret them, not replace them with another group's duties. Context cannot change fixed associations or authorized repair evidence. Do not invent decisions.\\\",\\n  \\\"clarification\\\": \\\"A missing user decision: state known facts, the choice, its impact and the expected answer. Missing prewritten sections are not user decisions.\\\",\\n  \\\"inconclusive\\\": \\\"Unresolved interpretation of the supplied evidence.\\\"\\n}\\n\"},{\"guidance\":\"Write records using the assigned requirements, brief and record-family purposes.\\nPreserve all assigned obligations across the record collection.\\nWhen supplied, record_requirements applies across the assembled specification.\\nFamily presence is structural; it does not establish that assigned obligations\\nhave been fulfilled.\\nInclude only supported records; optional families need no filler. Preserve each\\nstatement's role and obligation strength. Do not relabel positive requirements as\\nassumptions or non-goals, invent conditions, or repeat records to fill sections.\\nAcceptance criteria may test behavior stated by functional requirements.\\nFollow the supplied entity decision.\\n\"},{\"user\":\"{\\\"source_assignment\\\":{\\\"purpose\\\":\\\"acceptance_criterion: An observable pass/fail flow with a precondition, trigger and expected result. given: The starting situation before the trigger, without assuming the result being tested or inventing prerequisites. when: The action or event that triggers the behavior. then: The observable consequences after the trigger, including the obligations being tested.\\\\nuser_visible_outcome: A result, confirmation or response directly observable by the user.\\\\nedge_case: A boundary or exceptional condition and its expected outcome. condition: The boundary or exceptional condition. expected_outcome: The observable result, preserving conditions and obligations.\\\\nfunctional_requirement: Required application behavior, preserving its trigger, conditions and obligation strength.\\\\nbusiness_rule: A rule or constraint governing business decisions or outcomes.\\\\nassumption: A supported premise on which the described behavior depends.\\\\nnon_goal: Behavior explicitly excluded from the feature's scope.\\\\nprohibited_behavior: An action or behavior that must not occur.\\\\nentity: A business data concept with its meaning and relationships. name: The business entity's name. business_meaning: The entity's business purpose. relationships: The business relationship to another entity, including its meaning.\\\",\\\"signal\\\":1,\\\"requirements\\\":[{\\\"claim_id\\\":1,\\\"kind\\\":\\\"business\\\",\\\"meaning\\\":\\\"A borrower may renew an active loan that has not yet been renewed; the renewal extends the loan’s due date by fourteen calendar days and displays the message `Loan renewed!` along with the new due date. The loan may be renewed only once; if the loan is inactive or has already been renewed, the renewal is refused, the due date remains unchanged, and the message `Renewal refused.` is displayed.\\\",\\\"source_id\\\":1}],\\\"kind\\\":\\\"records\\\"},\\\"source_groups\\\":[],\\\"context_requirements\\\":[],\\\"preserved_tokens\\\":[{\\\"claim_id\\\":2,\\\"value\\\":\\\"Loan renewed!\\\",\\\"source_id\\\":1},{\\\"claim_id\\\":3,\\\"value\\\":\\\"Renewal refused.\\\",\\\"source_id\\\":1}],\\\"sources\\\":[{\\\"id\\\":1,\\\"text\\\":\\\"# Library Loan Renewal\\\\n\\\\n## Requirements\\\\n\\\\n- A borrower must be able to renew an active loan that has not previously been renewed.\\\\n- Successful renewal must extend the existing due date by fourteen calendar days.\\\\n- After successful renewal, display `Loan renewed!` and the new due date to the borrower.\\\\n- A loan may be renewed only once.\\\\n- Refuse renewal if the loan is inactive or has previously been renewed; leave its due date unchanged and display `Renewal refused.`.\\\\n\\\"}],\\\"passive_literals\\\":[],\\\"operation\\\":\\\"write\\\",\\\"brief\\\":{\\\"title\\\":\\\"Loan renewed!Renewal refused.\\\",\\\"description\\\":\\\"A borrower may renew an active loan that has not yet been renewed; the renewal extends the loan’s due date by fourteen calendar days and displays the message Loan renewed! along with the new due date. The loan may be renewed only once; if the loan is inactive or has already been renewed, the renewal is refused, the due date remains unchanged, and the message Renewal refused. is displayed.\\\",\\\"primary_goal\\\":\\\"The feature enables borrowers to conveniently extend the loan period once, ensuring they can continue using the borrowed item without interruption.\\\"},\\\"record_requirements\\\":{\\\"scope\\\":\\\"assembled_specification\\\",\\\"required_families\\\":[\\\"acceptance_criterion\\\",\\\"functional_requirement\\\",\\\"entity\\\"],\\\"present_families\\\":[],\\\"unmet_required_families\\\":[\\\"acceptance_criterion\\\",\\\"functional_requirement\\\",\\\"entity\\\"]},\\\"entities\\\":{\\\"disposition\\\":\\\"required\\\",\\\"basis\\\":\\\"A borrower may renew an active loan that has not yet been renewed; the renewal extends the loan’s due date by fourteen calendar days and displays the message `Loan renewed!` along with the new due date. The loan may be renewed only once; if the loan is inactive or has already been renewed, the renewal is refused, the due date remains unchanged, and the message `Renewal refused.` is displayed.\\\"}}\"}],\"protocol_prompt\":\"Return exactly one JSON object matching the supplied schema. No Markdown fences or surrounding text.\",\"schema\":\"{\\\"oneOf\\\":[{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"records\\\"},\\\"records\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"content\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"acceptance_criterion\\\"},\\\"given\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"when\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"then\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"given\\\",\\\"when\\\",\\\"then\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"user_visible_outcome\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"edge_case\\\"},\\\"condition\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"expected_outcome\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"condition\\\",\\\"expected_outcome\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"functional_requirement\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"business_rule\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"assumption\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"non_goal\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"prohibited_behavior\\\"},\\\"text\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"kind\\\",\\\"text\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"entity\\\"},\\\"name\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"business_meaning\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"relationships\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]},\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"kind\\\",\\\"name\\\",\\\"business_meaning\\\",\\\"relationships\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"content\\\"],\\\"additionalProperties\\\":false},\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"kind\\\",\\\"records\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"clarification\\\"},\\\"reason\\\":{\\\"enum\\\":[\\\"missing\\\",\\\"ambiguous\\\",\\\"conflicting\\\"]},\\\"question\\\":{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"signal_ids\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"enum\\\":[1]},\\\"minItems\\\":1,\\\"maxItems\\\":1},\\\"value\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"fragments\\\":{\\\"type\\\":\\\"array\\\",\\\"items\\\":{\\\"oneOf\\\":[{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":4294967295},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"exact_copy\\\"},\\\"claim_id\\\":{\\\"enum\\\":[2,3]}},\\\"required\\\":[\\\"kind\\\",\\\"claim_id\\\"],\\\"additionalProperties\\\":false}]},\\\"minItems\\\":1,\\\"maxItems\\\":4294967295}},\\\"required\\\":[\\\"fragments\\\"],\\\"additionalProperties\\\":false}]}},\\\"required\\\":[\\\"signal_ids\\\",\\\"value\\\"],\\\"additionalProperties\\\":false},\\\"record_kind\\\":{\\\"enum\\\":[\\\"acceptance_criterion\\\",\\\"user_visible_outcome\\\",\\\"edge_case\\\",\\\"functional_requirement\\\",\\\"business_rule\\\",\\\"assumption\\\",\\\"non_goal\\\",\\\"prohibited_behavior\\\",\\\"entity\\\"]}},\\\"required\\\":[\\\"kind\\\",\\\"reason\\\",\\\"question\\\",\\\"record_kind\\\"],\\\"additionalProperties\\\":false},{\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"kind\\\":{\\\"const\\\":\\\"inconclusive\\\"},\\\"detail\\\":{\\\"type\\\":\\\"string\\\",\\\"minLength\\\":1,\\\"maxLength\\\":2000}},\\\"required\\\":[\\\"kind\\\",\\\"detail\\\"],\\\"additionalProperties\\\":false}]}\",\"response_mode\":\"native_schema\",\"controls\":{\"temperature\":\"fixed\",\"max_output_tokens\":{\"value\":16384}},\"reasoning_effort\":\"low\",\"operation_kind\":\"inference\"}"
+    }
+  ]
+}

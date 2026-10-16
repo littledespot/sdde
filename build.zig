@@ -22,6 +22,14 @@ pub fn build(b: *std.Build) void {
     unicode_module.addIncludePath(unicode_dependency.path(""));
     unicode_module.addCMacro("UTF8PROC_STATIC", "1");
     unicode_module.addCSourceFile(.{ .file = unicode_dependency.path("utf8proc.c"), .flags = &.{"-DUTF8PROC_STATIC"} });
+    const exact_value_unicode = b.createModule(.{
+        .root_source_file = b.path("test/harness/exact_value/unicode_properties.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    });
+    exact_value_unicode.addIncludePath(unicode_dependency.path(""));
     b.getInstallStep().dependOn(&b.addInstallFileWithDir(unicode_dependency.path("LICENSE.md"), .prefix, "share/licenses/utf8proc/LICENSE.md").step);
     const yaml_dependency = b.dependency("yaml", .{
         .target = target,
@@ -143,6 +151,48 @@ pub fn build(b: *std.Build) void {
     const attribution_tests = b.addRunArtifact(b.addTest(.{ .root_module = attribution_module }));
     attribution_tests.setCwd(b.path("."));
     b.step("test-attribution-replay", "Test offline attribution preparation and scoring contracts").dependOn(&attribution_tests.step);
+    const exact_value_module = b.createModule(.{
+        .root_source_file = b.path("exact_value_replay.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "unicode_normalization", .module = unicode_module },
+            .{ .name = "exact_value_unicode", .module = exact_value_unicode },
+        },
+    });
+    const exact_value_executable = b.addExecutable(.{ .name = "sdde-exact-value-replay", .root_module = exact_value_module });
+    const run_exact_value = b.addRunArtifact(exact_value_executable);
+    run_exact_value.setCwd(b.path("."));
+    run_exact_value.has_side_effects = true;
+    if (b.args) |args| run_exact_value.addArgs(args);
+    b.step("exact-value-replay", "Prototype exact-value recognition over retained captures offline; never send model requests").dependOn(&run_exact_value.step);
+    const exact_value_tests = b.addRunArtifact(b.addTest(.{ .root_module = exact_value_module }));
+    exact_value_tests.setCwd(b.path("."));
+    const exact_value_test_step = b.step("test-exact-value-replay", "Test prototype recognition, independent controls and retained-capture accounting offline");
+    exact_value_test_step.dependOn(&exact_value_tests.step);
+    const exact_value_unicode_tests = b.addRunArtifact(b.addTest(.{ .root_module = exact_value_unicode }));
+    exact_value_test_step.dependOn(&exact_value_unicode_tests.step);
+    const exact_value_directory = b.addTempFiles();
+    const exact_value_binary = exact_value_directory.addCopyFile(exact_value_executable.getEmittedBin(), exact_value_executable.out_filename);
+    _ = exact_value_directory.addCopyFile(b.path("test/calibration/exact-value-recognition/retained.json"), "captures/retained.json");
+    const exact_value_help = std.Build.Step.Run.create(b, "run standalone exact-value prototype help without development assets or credentials");
+    exact_value_help.addFileArg(exact_value_binary);
+    exact_value_help.addArg("--help");
+    exact_value_help.setCwd(exact_value_directory.getDirectory());
+    exact_value_help.clearEnvironment();
+    exact_value_help.expectExitCode(0);
+    exact_value_help.expectStdErrEqual("");
+    const exact_value_scan = std.Build.Step.Run.create(b, "scan supplied captures with standalone exact-value prototype without source assets or credentials");
+    exact_value_scan.addFileArg(exact_value_binary);
+    exact_value_scan.addArgs(&.{ "--root", "captures", "--output", "report.json" });
+    exact_value_scan.setCwd(exact_value_directory.getDirectory());
+    exact_value_scan.clearEnvironment();
+    exact_value_scan.expectExitCode(0);
+    exact_value_scan.expectStdErrEqual("");
+    exact_value_scan.expectStdOutEqual("Offline corpus: 3 captures, 22 measured fields; report report.json. Zero model calls.\n");
+    const exact_value_smoke = b.step("smoke-exact-value-replay", "Test isolated offline exact-value prototype startup");
+    exact_value_smoke.dependOn(&exact_value_help.step);
+    exact_value_smoke.dependOn(&exact_value_scan.step);
     const e2e_module = b.createModule(.{
         .root_source_file = b.path("e2e.zig"),
         .target = target,
@@ -240,6 +290,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
             .{ .name = "unicode_normalization", .module = unicode_module },
+            .{ .name = "exact_value_unicode", .module = exact_value_unicode },
         },
     });
     const all_tests = b.addRunArtifact(b.addTest(.{ .name = "repository-tests", .root_module = all_tests_module }));
@@ -252,6 +303,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
             .{ .name = "unicode_normalization", .module = unicode_module },
+            .{ .name = "exact_value_unicode", .module = exact_value_unicode },
         },
     });
     // Imported engine modules retain their own tests in the repository suite.
@@ -424,6 +476,8 @@ pub fn build(b: *std.Build) void {
     const unicode_tests = b.addTest(.{ .root_module = unicode_module });
     const run_unicode_tests = b.addRunArtifact(unicode_tests);
     test_step.dependOn(&run_unicode_tests.step);
+    test_step.dependOn(&exact_value_unicode_tests.step);
+    test_step.dependOn(exact_value_smoke);
 
     const result_schema_tests = b.addTest(.{
         .root_module = b.createModule(.{
@@ -785,6 +839,7 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("e2e.zig"));
     lint_command.addFileArg(b.path("e2e_call.zig"));
     lint_command.addFileArg(b.path("attribution_replay.zig"));
+    lint_command.addFileArg(b.path("exact_value_replay.zig"));
     lint_command.addFileArg(b.path("provider_compatibility.zig"));
     lint_command.addFileArg(b.path("baseline.zig"));
     lint_command.addFileArg(b.path("tests.zig"));
@@ -802,7 +857,7 @@ pub fn build(b: *std.Build) void {
     verify_step.dependOn(integration_step);
     verify_step.dependOn(smoke_step);
     @import("build/test_registration.zig").check(b.allocator, verify_step, &.{
-        all_tests, run_integration_tests, run_executable_tests, run_yaml_safety_tests, run_unicode_tests,
+        all_tests, run_integration_tests, run_executable_tests, run_yaml_safety_tests, run_unicode_tests, exact_value_unicode_tests,
     }) catch |err| std.debug.panic("full-suite test registration failed: {s}", .{@errorName(err)});
     // Live execution is reachable only from the explicitly selected manual
     // commands. Check transitive dependencies, including every targeted suite.

@@ -432,11 +432,16 @@ unfinished gates. This tracking authorizes no implementation or live call.
    or automated quality guarantees. Retain the wider §8 audit without silently
    expanding the immediate implementation.
 
-FIX04 sequences the generation-assignment evaluation separately: Phase 1A.3's
-remaining live items, the budget and scope decision, then the Phase 2 baseline
+FIX04 sequences the generation-assignment evaluation separately: the exact-value
+representation decision, Phase 1A.3's remaining live items, the budget and scope
+decision, then the Phase 2 baseline
 ([FIX04 §1.1](FIX04.md#11-path-to-the-ac-comparison-and-alignment-safeguards)). R6's
 source-review direction work and R5's review-workload measurement are the review and
 repair contracts that FIX04 depends on, so progress on them serves both records.
+The [native exact-value recognition prototype](Z_FIX02.md#546-offline-native-exact-value-recognition-prototype)
+is implemented offline, with no model calls. Its selected-requirement binding and
+whole-word limits are decision evidence, not approval of the representation or a
+replacement for Phase 1A.3's live gates.
 
 This is proposed sequencing, not approval of code changes, policy amendments or
 live invocations. The active record owns open work; completed execution history
