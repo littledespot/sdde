@@ -26,7 +26,7 @@ and the files were removed.
 | FIX01-02 — diagnosis evidence to recovery (10–11 Oct) | Phase 0 recovery proof; Phase 2 reporting; the explicit `missing_obligation` handoff; native-owned assessed collections; citation guidance; Phase 4 offline integration; six panels, 298 diagnostic calls (§2) | The actual source-review direction and coverage defect, then production E2E: FIX01 R6 | [archive](archive/FIX01-02.md) |
 | FIX03 — Spec workflow reliability review (11–14 Oct) | Phases 0, 1, 3 and 6; Phase 2's presentation work and its 14 October shared reliability follow-up (state v14); Phase 4's bounded AC transport; Phase 5's replacement contract and its 50 approved responses (§3) | Phases 7–11 and the live exits of Phases 2, 4, 5 and 6: FIX01 R2, R7, R11 and FIX04 | [archive](archive/FIX03.md) |
 | FIX02 — independently configured assessments (10 Oct) | Nothing: the proposal was never implemented (§4) | Carried forward with FIX03 Phase 9: FIX01 R11 | [archive](archive/FIX02.md) |
-| FIX04 — semantic simplicity evaluation (15–16 Oct) | Phase 0 protocol; Phase 1 compatibility harness and live gate; decoder correction; model switch; native reference review subjects; Phase 2 harness, audit and cost investigation; Phases 1A, 1A.2 and 1A.3 offline; five full-workflow diagnostics and findings F9–F12 (§5) | Phase 1A.3's live items, the budget and scope decision, the Phase 2 baseline and Phases 3–6: FIX04 | [FIX04](FIX04.md) (active) |
+| FIX04 — semantic simplicity evaluation (15–16 Oct) | Phase 0 protocol; Phase 1 compatibility harness and live gate; decoder correction; model switch; native reference review subjects; Phase 2 harness, audit and cost investigation; Phases 1A, 1A.2 and 1A.3 offline; seven full-workflow diagnostics and findings F9–F12 (§5), with F13 in FIX04 | Phase 1A.3's live items, the budget and scope decision, the Phase 2 baseline and Phases 3–6: FIX04 | [FIX04](FIX04.md) (active) |
 
 ## 1. FIX01-01 — Bound preservation comparisons (10 October 2026)
 
@@ -305,7 +305,7 @@ FIX01's implementation history. FIX04 keeps condensed findings and phase summari
 under the same headings. Section references (§) and phase names in the moved text
 refer to FIX04; links point to current locations.
 
-The separately authorized full-workflow diagnostics, in Melbourne time on 16 October:
+The full-workflow diagnostics, in Melbourne time on 16 October:
 
 | Run | Case | Build | Calls | Tokens | Outcome |
 | --- | --- | --- | ---: | ---: | --- |
@@ -314,6 +314,8 @@ The separately authorized full-workflow diagnostics, in Melbourne time on 16 Oct
 | 09:18 | hello-world | uncommitted `94e2838` (source `2a30ee8d…`) | 41 | 101,134 | `WorkflowTokenBudgetExceeded` in review, which used 77% of the tokens |
 | 16:20 | hello-world | committed `bfec3d7` | 8 | 12,896 | `RepairNoProgress`: the insertion-only title was rejected at admission and the repair repeated it |
 | 18:58 | hello-world | `54de975` with uncommitted Phase 1A.2 code (source `fbd52cd8…`) | 14 | 20,374 | `RepairNoProgress` at record generation; admission escape measured zero |
+| 20:22 | hello-world | committed `6676ad8` | 14 | 22,780 | Blocked at native exact-copy coverage before review: the value was typed, never inserted ([FIX04 F13](FIX04.md#f13--high-composition-correction-works-but-exact-values-now-fail-the-other-way-and-review-still-dominates)) |
+| 20:33 | hello-world | committed `6676ad8` | 42 | 100,884 | `WorkflowTokenBudgetExceeded` during re-review, with review at 75.6% of the tokens ([FIX04 F13](FIX04.md#f13--high-composition-correction-works-but-exact-values-now-fail-the-other-way-and-review-still-dominates)) |
 
 Twenty-two one-send compatibility probes also ran between 15 October 16:25 and
 16 October 16:16. Eighteen received HTTP 403 access rejections, one exposed the

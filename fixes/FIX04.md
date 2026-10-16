@@ -41,15 +41,18 @@ plausible failure classes, not the current defect rate (F7).
 | Phase 1 — compatible execution | Offline implementation complete; bounded live gate passed for the observed first request only | [Z_FIX02](Z_FIX02.md#phase-1-implementation-and-live-gate) |
 | Phase 1A — composition admission | Implemented and committed (`bfec3d7`); offline gate passed; enforcement confirmed live | [Z_FIX02](Z_FIX02.md#phase-1a-plan-decisions-and-results) |
 | Phase 1A.2 — presentation from the field registry | Implemented and committed (`2e64a31`); live gate open | [Z_FIX02](Z_FIX02.md#phase-1a2-plan-decisions-and-results) |
-| Phase 1A.3 — composition correction at admission | Routing and attribution preparation implemented and committed (`6676ad8`); attribution sends, presentation correction and committed-build diagnostics pending | [Z_FIX02](Z_FIX02.md#phase-1a3-plan-and-decisions-as-approved) |
-| Budget and scope decision (§5.5) | Required now; feasibility is `insufficient` | [Z_FIX02](Z_FIX02.md#545-phase-2-review-and-repair-cost-investigation) |
+| Phase 1A.3 — composition correction at admission | Routing and attribution preparation implemented and committed (`6676ad8`). Two hello-world diagnostics on that build admitted records with prose with admission escape measured zero, but one blocked on exact-value coverage (F13). The exact-value decision, the presentation decision and the loan-renewal diagnostic are pending | [Z_FIX02](Z_FIX02.md#phase-1a3-plan-and-decisions-as-approved) |
+| Exact-value representation (§1, proposed) | Decision required: native recognition of exact values would replace Phase 1A.3 steps 2–3; prototype offline first | [F13](#f13--high-composition-correction-works-but-exact-values-now-fail-the-other-way-and-review-still-dominates) |
+| Budget and scope decision (§5.5) | Required now; feasibility is `insufficient`, and a composition-clean hello-world run still exceeded the budget in review (F13) | [Z_FIX02](Z_FIX02.md#545-phase-2-review-and-repair-cost-investigation) |
+| Review track (FIX01 R5, R6) | Proposed changes in §1; not started | [F13](#f13--high-composition-correction-works-but-exact-values-now-fail-the-other-way-and-review-still-dominates) |
 | Phase 2 — baseline | Harness implemented; baseline not frozen | [Z_FIX02](Z_FIX02.md#phase-2-harness-implementation) |
 | Phases 3–6 — A/C comparison to adoption | Not started | — |
 
-Five full-workflow development diagnostics ran on 16 October, two on loan-renewal
-and three on hello-world. None published a specification or ran rubric evaluation;
-F9–F12 record what they show. No semantic benefit, reduced brittleness or useful
-publication is claimed. §1.1 sets the path from here to the A/C comparison.
+Seven full-workflow development diagnostics ran on 16 October, two on loan-renewal
+and five on hello-world. None published a specification or ran rubric evaluation;
+F9–F13 record what they show, and §1 records the architectural weaknesses they point
+to. No semantic benefit, reduced brittleness or useful publication is claimed. §1.1
+sets the path from here to the A/C comparison.
 Findings were first reviewed at `5816d9bed631acabcb256025e911bb565b8f9771`; each live
 report records its exact source identity.
 
@@ -82,6 +85,32 @@ representation and admission gap, not a record-authoring boundary, so the A/C
 comparison cannot address it and would inherit it. Phases 1A to 1A.3 close it at
 the shared owners, so that every arm runs under the same admission contract; their
 remaining live checks are the last prerequisite before the baseline (§1.1).
+
+**The recurring failures point to three architectural weaknesses (F13).** The
+deterministic core holds: native admission caught every malformed value, each
+failure ended as a typed outcome, and no value breaking a declared native rule has
+escaped admission since Phase 1A. The same failure classes nonetheless recur through
+every contract iteration, because they come from what the small model is asked to do
+and from what the engine does with its answers. Each change below is a proposal: it
+amends accepted contracts or this plan, so it needs an explicit decision.
+
+| Weakness | Evidence | Proposed change |
+| --- | --- | --- |
+| The model keeps exact-value bookkeeping inside its prose: it must splice an `exact_copy` insertion into a sentence, and typed characters never count | Every run that reached generation since 13 October, in both directions: insertion-only values and insertion syntax typed into prose (F10–F12), then values typed with no insertion (F13). Near-identical requests produced opposite failures (F13) | Recognise exact values natively. The model quotes values in plain prose; native code records the occurrence wherever the exact bytes appear in a field bound to that value's requirement, at whole-word boundaries, and blocks ambiguous matches. `exact_copy` leaves the model-facing schema. This amends the composition contract, §7.1 and ADR 0020; [FIX01 R6](FIX01.md#proposed-recovery-follow-up-and-implementation-order) item 4 already names a simpler shared business-value representation as a candidate. Prototype it offline against every retained capture first |
+| Small-model review is per field, judges the same model's output, and its findings trigger repair automatically | Four of the five runs that reached review stopped on the token budget, and the fifth ended invalid at 84,705 tokens; review took 21–32 sends and 75–78% of the tokens where measured. Every reviewed run examined had wrong finding types, and one had a harmful repair that re-review accepted (F9, F13) | Review a whole unit or collection per call. Let a finding that nothing corroborates become a note or clarification, or an input to regenerating the unit, rather than an automatic content repair. Optionally use a separate assessment model ([FIX01 R11](FIX01.md#r11--carried-forward-from-the-archived-fix02-and-fix03-records)), which the live-test policy currently blocks. This amends §17.3 and §22 and belongs to FIX01 R5 and R6 |
+| Authoring boundaries follow mechanical source groups, including a group that holds only a preserved value | Competing or duplicate records in four runs (F9, F13) | Candidate C, this review's comparison (§5.2) |
+
+The first two weaknesses are not A/C candidates: the representation is shared by
+every arm, and §5.2 sends review-dominated cost to its own owner. The third is this
+review's question. Phases 1A to 1A.3 tightened and re-explained the exact-value rule
+but left the bookkeeping with the model, contrary to this review's principle of
+leaving bookkeeping to deterministic code; the proposed representation change applies
+that principle. Two secondary weaknesses are measured rather than changed for now.
+Six model requests precede authoring even on a three-line source, and extraction has
+merged the hello-world requirements into one claim in every sample since Phase 1A.
+And single live runs have been used to decide changes, although near-identical
+requests give opposite results. A stronger model would likely hide these weaknesses
+rather than remove them, and the live-test policy permits only GPT-OSS-20B.
 
 A small JSON result, one action responsibility and a simple semantic assignment
 are different properties. A concrete design concern is record generation: one
@@ -154,12 +183,17 @@ keep the remaining work on this review's question.
    rule. A model that keeps failing under a coherent contract is a baseline result.
    Phase 2 measures it as first-pass fidelity, mechanical enforcement and admission
    escape, and the A/C comparison then measures whether either assignment reduces it.
+   F13's coverage block meets this test, because the guidance says exact copies "may"
+   carry a value while native coverage requires one. It is resolved within Phase 1A.3,
+   structurally if the representation change in §1 is approved.
 2. **Decide prerequisites on more than one case.** Hello-world has three short
    requirements and one preserved token, so it cannot show whether a presentation
    rule generalizes. A further presentation or contract decision needs evidence from
    at least two unrelated development cases, starting with the hello-world and
    loan-renewal diagnostics that Phase 1A.3's exit gate requires. Its rationale must
-   not depend on one case's literal or field.
+   not depend on one case's literal or field. Near-identical requests have also
+   produced opposite failures (F13), so a single run cannot decide such a change:
+   use replays with repetitions.
 3. **Never tune on qualification cases.** Prerequisite diagnostics use development
    cases or retained captures only. The sixteen reserved qualification features stay
    unseen until Phase 5 (§5.5, Phase 2).
@@ -176,7 +210,8 @@ keep the remaining work on this review's question.
    user, its options are listed in §5.5, and it must be recorded before the Phase 2
    freeze.
 6. **Work on review and repair cost in parallel, under its own owners.** Review used
-   77% of the tokens in that diagnostic (F9). The source-review omission contract, the
+   77% of the tokens in that diagnostic (F9) and 75.6% in the first run whose
+   generation passed every native check (F13). The source-review omission contract, the
    repair projection and any review batching are FIX01 R5 and R6 work, with their own
    qualification. They need not wait for generation work, and generation changes
    must not compensate for them.
@@ -184,18 +219,29 @@ keep the remaining work on this review's question.
    critical path only if it states how it makes A and C measurable under one
    contract. Otherwise it belongs in FIX01.
 
-**Sequence from here:**
+**Sequence from here (revised after F13; items 1 and 3 need your decision):**
 
-1. **Close Phase 1A.3** (§5.6): run the 21 attribution sends after separate
-   approval; apply the presentation correction they support, or record a decision
-   that none is needed; commit; then run one hello-world and one loan-renewal
-   diagnostic on that committed build, each separately approved. This also closes
-   Phase 1A.2's live gate.
-2. **In parallel, now:** the budget and scope decision, and the review and repair
-   contract work in FIX01 R5 and R6.
-3. **Freeze the Phase 2 baseline** on a committed build with the recorded budget
+1. **Decide the exact-value representation** (§1). Prototype native recognition
+   offline against every retained capture, with no model calls. If it resolves the
+   failure class without false matches, amend the composition contract, §7.1 and
+   ADR 0020, implement it, and drop Phase 1A.3 steps 2–3. If it is not approved,
+   revise the prepared attribution panel to score whether values are carried, then
+   run steps 2–3 (§5.6).
+2. **Close Phase 1A.3:** commit, then run one hello-world and one loan-renewal
+   diagnostic on that build, each separately approved. Loan-renewal has not run on
+   any build since Phase 1A. This also closes Phase 1A.2's live gate.
+3. **In parallel, now: the budget and scope decision.** The recommended option is to
+   run Phases 2–3 at generation-only diagnostic scope, with controlled predecessors
+   and no review or repair, and to defer complete-workflow qualification until the
+   review track qualifies. A composition-clean hello-world run still exceeded the
+   budget in review (F13). The experiment stops still need revisiting: at that run's
+   generation cost alone (5 sends, 12,077 tokens), the 144 development workloads
+   would approach the current stops before any correction.
+4. **In parallel: the review track** in FIX01 R5 and R6, using the review changes in
+   §1 and F13's findings as development cases.
+5. **Freeze the Phase 2 baseline** on a committed build with the recorded budget
    decision and sufficient cost evidence, then measure it on the development panel.
-4. **Run Phase 3's A/C comparison**, then Phases 4–6 as their gates allow.
+6. **Run Phase 3's A/C comparison**, then Phases 4–6 as their gates allow.
 
 ## 2. Authority and evidence boundaries
 
@@ -676,6 +722,60 @@ the approved normalizer is not widened without a decision. The
 [full record](Z_FIX02.md#f12--high-descriptive-fields-recover-but-record-fields-collapse-to-insertions)
 keeps the call-level evidence.
 
+### F13 — High: composition correction works, but exact values now fail the other way and review still dominates
+
+Two hello-world diagnostics ran on committed `6676ad8`, unmodified:
+[20:22](../zig-out/e2e-spec/2026-10-16T09-22-35Z-898e9afbc68759f3d31039bd6bfea0c4/report.json)
+and [20:33](../zig-out/e2e-spec/2026-10-16T09-33-15Z-d749fce107972fd4feaad6c9ac902538/report.json).
+Neither published a specification or ran rubric evaluation. The classifications are
+this review's source-based reading of the retained outputs, not human adjudication.
+
+**Phase 1A.3 worked as designed.** At 20:22 the story came back insertion-only twice;
+admission rejected it, and the bounded protocol correction produced prose on the
+third attempt. Records were admitted with prose in both runs, and admission escape
+was measured zero (23 and 24 admitted values).
+
+**Exact values now fail the other way.** The two runs' generation outputs typed
+`Hello, World!` verbatim 9 and 6 times and inserted it 2 and 1 times; both 20:22
+insertions were the rejected story attempts. Native coverage credits only an
+`exact_copy` insertion, and by contract a missing one has no repair route: the
+[coverage repair owner](../src/domain/specification_coverage_repair.zig#L56) always
+blocks. The 20:22 run therefore blocked at coverage after 14 calls and 22,780 tokens,
+before any review; the 20:33 run passed on its single insertion, in the brief's
+description. The presentation never states the rule: field rules say exact copies
+"may carry" the obligation, and the correction says insertions "may supplement" prose
+([text_field_policy.zig:75](../src/domain/text_field_policy.zig#L75),
+[:105](../src/domain/text_field_policy.zig#L105)). The 20:33 records request matched
+the 18:58 one in system prompt, schema, field rules and insertion list, differing only
+in its upstream brief and entity text, yet one collapsed into insertions and the other
+used none. One captured request cannot settle the wording, and the prepared
+attribution panel scores field shapes and admission, not whether a value is carried.
+
+**Review is still the binding constraint, and it did harm.** At 20:33 generation
+passed every native check and reached review, the first run to do so since Phase 1A.
+Review took 29 sends and 76,224 tokens (75.6%), and the run stopped on the token budget
+at call 42, with 100,884 tokens used and re-review outstanding. Invented entity names
+(twice) and the relationship "None" were reported as `candidate_omission`, and their
+loss comparisons returned `lost` for those non-obligations. An acceptance criterion's
+Given was reported as missing "The application must start successfully"; the repair
+wrote that into the Given, so the precondition now assumes the result under test, and
+re-review accepted it. The false `required` entity disposition was judged supported.
+
+**Generation repeats known classes.** In both runs the group holding only the
+preserved value received its own record batch, which re-authored the whole acceptance
+criterion, requirement and entity set. The entity was marked required for a feature
+with no business data, extraction again merged the three requirements into one claim,
+and token classification needed a protocol correction for a `{"token{` prefix. The
+invented and duplicated entity records cost 9 review sends and 21,106 tokens at 20:33.
+
+**Implication.** The deterministic core held, but the same failure classes have
+recurred through every contract iteration since 13 October. §1 records the three
+architectural weaknesses they point to and the proposed changes, and §1.1 revises the
+sequence. The coverage block meets safeguard 1's engine-defect test. Do not patch
+coverage locally, for example by converting typed text inside the coverage repair
+route, and do not add entity-specific rules, sampling changes or an automatic budget
+increase: the representation change is a contract decision at its owner.
+
 ## 4. Critical feasibility assessment and revised proposal
 
 ### 4.1 Feasible diagnostic; incomplete production design
@@ -1033,6 +1133,7 @@ Use this decision rule after the frozen comparison:
 | Quality looks promising but association or scoring is unresolved | Resolve that specific boundary; do not claim production qualification. |
 | Baseline failures or cost concentrate in review or repair rather than generation | Generation decomposition is not the next intervention. Resolve the measured review or repair boundary first, through its owning contract and with its own qualification; do not compensate with generation changes. |
 | Failures are structurally detectable but escape native admission (F10) | Not a decomposition question. Close the shared representation and admission contract first, then re-establish the baseline; a gain from adding such a rule to one arm is not a decomposition benefit. |
+| The same presentation yields opposite composition failures, so the model's exact-value bookkeeping fails in both directions (F13) | Not a wording question. Move the bookkeeping to its native owner through the representation contract, then re-establish the baseline; the change applies to every arm. |
 
 ### 5.3 Concrete contract for collection-level authoring
 
@@ -1453,7 +1554,10 @@ Under §1.1 this is the last prerequisite sub-phase.
    with three repetitions per arm, and the insertion-only rate is recorded per field
    and arm. The replays use the
    [single-request debugger](../design/decisions/0019-single-request-debugger.md) and
-   carry no workflow authority.
+   carry no workflow authority. The panel scores field shapes and admission, not
+   whether a preserved value is carried, so it cannot detect F13's failure: revise it
+   to score that before any send, or drop it if the representation change in §1 is
+   approved.
 3. **Correct presentation at its owner, as the attribution indicates.** In
    `model_field_presentation.zig`, state the composition rule once (prose is required;
    a permitted exact copy goes inside a sentence and never forms the whole value), list
@@ -1461,6 +1565,10 @@ Under §1.1 this is the last prerequisite sub-phase.
    permission without obligation wording. The selected schema stays the authority for
    what is permitted. No field-, case- or model-specific text. If the attribution shows
    no presentation effect, record that decision instead of changing the wording.
+   F13 shows the opposite failure under the same presentation, so removing the
+   obligation wording alone risks making it worse. If wording stays the route, state
+   both halves of the rule: prose is required, and a stated preserved value is carried
+   only by an `exact_copy` inside the sentence.
 4. **Decide the repair granularity for composition failures. Decided and implemented:
    option (a), approved by the user, 16 October 2026.** Composition rules are checked
    at response admission for every response type, and one rejection reports every
@@ -1477,6 +1585,12 @@ Under §1.1 this is the last prerequisite sub-phase.
 6. **Keep** temperature, retry allowances and the envelope normalizer unchanged, with
    no field- or model-specific code.
 
+**Proposed replacement of steps 2–3 (decision required).** If the representation
+change in §1 is approved, it replaces steps 2 and 3: exact values are recognised
+natively, `exact_copy` leaves the model-facing schema, and the attribution panel is no
+longer needed. It amends the composition contract, §7.1 and ADR 0020, and resolves
+this phase's remaining defect rather than opening another sub-phase.
+
 **Test:** presentation projection tests for the chosen wording and deduplication at
 the same owner, then `zig build verify --summary all`. The routing tests and the
 extended replay already pass.
@@ -1488,7 +1602,11 @@ build. Each must either admit records with prose, or end in a typed composition
 failure after the bounded protocol correction with the complete request, with
 admission escape measured zero. This also closes Phase 1A.2's live gate. It is
 mechanical evidence, not quality. A run that ends in that typed failure is a baseline
-result under §1.1, not a reason for another prerequisite sub-phase. The
+result under §1.1, not a reason for another prerequisite sub-phase. The two F13
+hello-world runs on committed `6676ad8` meet these mechanical criteria for
+hello-world. They count toward this gate only if no further presentation or
+representation change follows; loan-renewal has not run on any build since
+Phase 1A. The
 [full plan and implementation record](Z_FIX02.md#phase-1a3-plan-and-decisions-as-approved) are retained.
 
 #### Phase 2 — Establish baseline quality and failure sensitivity
@@ -1505,10 +1623,11 @@ each scope.
 decision in §5.5. With the compiled 100,000-token workflow budget, complete
 production runs ended in budget exhaustion during review (F9), and part of that
 review cost followed defects that native admission now rejects (F10). Since
-Phase 1A, runs fail earlier, at generation (F11 and F12), so no complete-run cost has
-yet been observed. The decision belongs to the user, can be made now, and must be
-recorded before the baseline is frozen; re-measure feasibility under it after
-Phase 1A.3.
+Phase 1A, most runs have failed earlier, at generation (F11 to F13); the one whose
+generation passed every native check exhausted the budget in review (F13), so no
+complete-run cost has yet been observed. The decision belongs to the user, can be
+made now, and must be recorded before the baseline is frozen; re-measure feasibility
+under it after Phase 1A.3.
 
 **Test:** measure every §5.5 outcome, audit material disagreements between evaluation
 and source expectations, and identify reproducible failure classes. Record whether
@@ -1699,10 +1818,10 @@ production dependency was added. Each change's verification, its exact commands 
 the live records are in [Z_FIX02](Z_FIX02.md#5-fix04--completed-evaluation-foundation-compatibility-and-admission-work-1516-october-2026). Test counts differ between commands
 and revisions, so they are not comparable.
 
-The live work of 15–16 October was separately authorized: twenty-two one-send
-compatibility probes, three of them `compatible`, and five full-workflow development
-diagnostics, none of which published a specification or ran rubric evaluation. No
-live debugger replay has been performed. Source labels, review and the F9–F12
+The live work of 15–16 October comprised twenty-two one-send compatibility probes,
+three of them `compatible`, and seven full-workflow development diagnostics, none of
+which published a specification or ran rubric evaluation. No live debugger replay
+has been performed. Source labels, review and the F9–F13
 semantic interpretations remain model-assisted or reviewer readings of retained
 outputs. Phases 1A to 1A.3 add mechanical evidence about where defects stop. No
 semantic benefit, reduced brittleness or useful publication is claimed, and
