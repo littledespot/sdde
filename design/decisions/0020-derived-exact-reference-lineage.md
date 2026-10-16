@@ -13,10 +13,11 @@
   settle and implement shared composition admission, field-specific exact-copy
   coverage, source-aware wire syntax and unchanged-repair exhaustion.
 - **16 October 2026 Phase 1A.2 amendment authority:** explicit user approval of
-  [FIX04 Phase 1A.2](../../fixes/FIX04.md#phase-1a2--make-model-facing-presentation-consistent-with-admission)
+  [FIX04 Phase 1A.2](../../fixes/Z_FIX02.md#phase-1a2-plan-decisions-and-results)
   decision 1, prohibiting exact-copy insertions in descriptive fields whose
   occurrences cannot satisfy coverage. Implemented offline, 16 October 2026;
-  separately approved live diagnostics remain required by FIX04 Phase 1A.2.
+  separately approved live diagnostics remain required by
+  [FIX05 B3](../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model).
 
 ## Composition and coverage amendment — 16 October 2026
 

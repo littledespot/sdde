@@ -5,7 +5,7 @@ verification passed. The authentic
 Bedrock exchange is **not run**; Phase 1's live exit gate remains pending.
 
 This implements the four requested local deliverables in
-[FIX04 Phase 1](../../../fixes/FIX04.md#phase-1--establish-compatible-selected-model-execution):
+[FIX04 Phase 1](../../../fixes/Z_FIX02.md#phase-1-implementation-and-live-gate):
 a fresh production request, at most one physical send, retained compatibility
 reports and offline regression checks. It changes development harness behavior,
 not production generation assignments, semantic acceptance, provider codecs or

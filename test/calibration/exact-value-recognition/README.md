@@ -1,6 +1,7 @@
 # Offline native exact-value recognition prototype
 
-This implements only the offline prototype in [FIX04 §1.1 item 1](../../../fixes/FIX04.md#11-path-to-the-ac-comparison-and-alignment-safeguards).
+This implements only the offline prototype in [FIX05 B3](../../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model)
+(former FIX04 §1.1 item 1).
 It makes no model calls and does not change production representation, schemas,
 admission, coverage, repair, state or publication. ADR 0020 and the composition
 contract remain authoritative; adoption still needs a decision.

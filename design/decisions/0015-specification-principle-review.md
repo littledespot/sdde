@@ -63,6 +63,6 @@ approve a live run or amend the pending shared-lineage repair decision.
 
 [§28](../contracts/28-testing.md) owns conformance requirements;
 [historical delivery record](../../fixes/archive/IMP_001.md#spec-principle-review--approved-design-and-native-delivery)
-retains implementation evidence, and [FIX01](../../fixes/FIX01.md) tracks remaining work. Better conflict
+retains implementation evidence, and [FIX05](../../fixes/FIX05.md) tracks remaining work. Better conflict
 detection is the intended improvement; fewer clarifications or live success is not
 guaranteed.

@@ -1,22 +1,21 @@
 # Fix records
 
-[FIX01](FIX01.md) is the sole active backlog and current focus. It contains the
-outstanding findings, proposed sequence and required verification. Keep
-implementation progress there instead of maintaining parallel implementation files
-or task checklists.
+[FIX05](FIX05.md) is the sole active fix record and current focus. It holds the
+17 October 2026 architecture review, the outstanding work, the decisions it needs,
+the proposed sequence and the required verification. Keep implementation progress
+there instead of maintaining parallel implementation files or task checklists.
 
-[FIX04](FIX04.md) is the active evaluation design for semantically simpler
-generation assignments: its findings, experiment design and evidence gates. It keeps
-a short status table, not a progress log; the implementation work it needs is
-tracked in FIX01. [claude_connector.md](claude_connector.md) proposes a direct
-Anthropic provider and is neither accepted nor implemented.
+FIX05 replaced FIX01 (Spec reliability backlog) and FIX04 (semantic-simplicity
+evaluation), which were deleted on 17 October 2026. Their open items keep their
+former IDs in FIX05, and their full text remains in git at `b2f10a3`.
+[claude_connector.md](claude_connector.md) proposes a direct Anthropic provider and
+is neither accepted nor implemented.
 
 Completed implementation, executed comparisons and their supporting dated reviews
 are in [Z_FIX01](Z_FIX01.md), for earlier FIX01 work, and [Z_FIX02](Z_FIX02.md), for
 the FIX01-01, FIX01-02, FIX03 and FIX04 work of 10–16 October 2026 and the
 unimplemented FIX02 proposal. Outstanding semantic quality, clarification, resource
-and live acceptance work remains in FIX01 and FIX04; cleanup does not mark it
-complete. FIX01 §8 preserves the broader unresolved audit scope.
+and live acceptance work remains in FIX05; cleanup does not mark it complete.
 
 The [archive](archive/) retains the original records, approval records,
 implementation/run history and experiment evidence referenced by the design.

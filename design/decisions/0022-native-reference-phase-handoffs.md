@@ -8,7 +8,7 @@
 - **10 October 2026 amendment authority:** Explicit user instruction to implement
   summary union coverage and proven duplicate normalization, followed by validated
   single-child carry-forward, under
-  [FIX01 §9.20 recommendations 1–2](../../fixes/FIX01.md#920-cross-model-response-variation-and-summary-recovery--10-october-2026).
+  [FIX01 §9.20 recommendations 1–2](../../fixes/Z_FIX01.md#920-completed-summary-recommendations-and-supporting-review--10-october-2026).
 - **10 October 2026 iteration correction authority:** Explicit user instruction
   to replace the summary-reuse retry limit with iteration bounded by validated
   partitions and required forward progress; amends pipeline contracts §§6.2–6.3.

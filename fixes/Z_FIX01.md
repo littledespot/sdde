@@ -2,17 +2,17 @@
 
 **Archived:** 10 October 2026, Australia/Melbourne.
 
-[FIX01](FIX01.md) is the sole active work record. This file preserves completed
+[FIX05](FIX05.md) is the sole active work record. This file preserves completed
 implementation, executed comparisons, approvals, validation evidence and the
 supporting reviews that explain their scope and limitations. Earlier proposals,
 open findings and “current/latest” statements below describe their dated context;
 they do not create a second backlog, grant new approval or establish live success.
-Current unresolved work and revised feasibility are consolidated in FIX01.
+Current unresolved work and revised feasibility are consolidated in FIX05.
 
 Original section identifiers and evidence links are retained for traceability.
 Old run/build artifacts that were already unavailable have not been recreated.
 The completed §9.20 recommendations and supporting review are archived below;
-[FIX01 §9.20](FIX01.md#920-cross-model-response-variation-and-summary-recovery--10-october-2026)
+[FIX05](FIX05.md#summary-hierarchy-and-cross-model-variation)
 retains only their outstanding acceptance and proposed follow-ups.
 
 ## Completed work index
@@ -1357,7 +1357,7 @@ All are feasible in principle; none should be hidden inside a prompt cleanup.
 ## 5. Revised implementation sequence
 
 The sequence below records the earlier programme. The 10 October review in
-[§9.20](FIX01.md#920-cross-model-response-variation-and-summary-recovery--10-october-2026)
+[§9.20](#920-completed-summary-recommendations-and-supporting-review--10-october-2026)
 sets the immediate proposed priority: shared summary variation handling, followed
 by native single-child carry-forward. Other outstanding work remains in scope;
 this priority does not authorize implementation or live calls.
@@ -3358,7 +3358,7 @@ their original scope; [§9.21](#921-summary-coverage-and-native-duplicate-projec
 and [§9.22](#922-validated-single-child-summary-carry-forward--10-october-2026)
 remain the implementation and verification records. Dated statements about pending
 work are historical. Current acceptance gaps and proposed recommendations 3–5 stay
-in [FIX01 §9.20](FIX01.md#920-cross-model-response-variation-and-summary-recovery--10-october-2026).
+in [FIX05](FIX05.md#summary-hierarchy-and-cross-model-variation).
 This move grants no new implementation or live-run approval.
 
 #### Original review context
@@ -3670,7 +3670,7 @@ live acceptance work.
 16 approved diagnostic calls finished. The semantic quality gate failed; archiving
 this executed work does not mark the recovery objective complete. Current limits,
 latest E2E findings and the proposed recovery follow-up remain in
-[active R6](FIX01.md#r6--semantic-repair-attribution-and-remaining-recovery-policy).
+[active R6](FIX05.md#r6-semantic-repair-attribution-and-recovery).
 Historical verification below was not rerun during this documentation move.
 
 The tagged localization schema and source/producer comparison evidence are implemented

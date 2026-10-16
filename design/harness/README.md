@@ -82,7 +82,7 @@ calibration and broader acceptance remain open. **Reviewed:** 2026-10-15 (docume
 | Full-workflow harness | Real configured generation, publication identity checks, live grading and failure reports. | H-017 broader live/rerun/failure evidence; see retained run results. |
 
 - Historical runs failed before publication and grading.
-- [FIX01](../../fixes/FIX01.md) tracks current corrective work and remaining
+- [FIX05](../../fixes/FIX05.md) tracks current corrective work and remaining
   acceptance; [earlier records](../../fixes/README.md) retain dated findings and
   implementation evidence.
 - No successful scored live baseline is claimed.

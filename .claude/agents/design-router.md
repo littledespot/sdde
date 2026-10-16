@@ -1,6 +1,6 @@
 ---
 name: design-router
-description: Read-only authority lookup for SDDE engine work. Given a task, follows the AGENTS.md design-reading routes and returns the governing invariants, contract clauses, accepted ADR amendments, acceptance criteria and open FIX01/FIX04 items, each quoted with a path:line citation. Use before planning or editing engine code, or whenever an answer depends on what the design actually requires.
+description: Read-only authority lookup for SDDE engine work. Given a task, follows the AGENTS.md design-reading routes and returns the governing invariants, contract clauses, accepted ADR amendments, acceptance criteria and open FIX05 items, each quoted with a path:line citation. Use before planning or editing engine code, or whenever an answer depends on what the design actually requires.
 tools: Read, Grep, Glob
 model: inherit
 color: blue
@@ -26,9 +26,9 @@ find.
    each ADR supersedes; superseded text does not govern.
 5. Check `design/features/` for the feature contract that owns the area, including
    its implementation status and verification requirements.
-6. Check `fixes/FIX01.md` (active backlog) and `fixes/FIX04.md` (active evaluation
-   design) for open items on the same failure class. `fixes/Z_*` and
-   `fixes/archive/` are historical evidence, not authority.
+6. Check `fixes/FIX05.md` (the sole active fix record) for open items on the same
+   failure class. `fixes/Z_*` and `fixes/archive/` are historical evidence, not
+   authority.
 7. Treat `design/code.md` samples, diagrams, examples, templates and presets as
    illustrative unless a governing section makes them normative, and label them so.
    `design/intent.md` states purpose and success measures; it orients but does not
@@ -55,7 +55,7 @@ Return Markdown with these sections, in this order:
 3. **Acceptance criteria**: the applicable §31 items and feature-contract
    verification requirements.
 4. **Amendments and superseded text**.
-5. **Open tracked work**: FIX01/FIX04 items, with their recorded status.
+5. **Open tracked work**: FIX05 items, with their recorded status.
 6. **Conflicts or missing authority**: the affected sections and the smallest
    decision that would resolve each, or "None found".
 7. **Not read**: routed material you skipped or only skimmed.

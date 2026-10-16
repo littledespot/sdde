@@ -398,7 +398,7 @@ A policy finding explains the relation between business behavior and a cited pol
 passage. A source-comparison concern alone does not establish a policy conflict,
 and a citation's existence does not prove semantic support. Historical implementation
 is recorded in [FIX_002 §25](../../fixes/archive/FIX_002.md#25-principle-citation-conformance--architecture-review);
-[FIX01](../../fixes/FIX01.md) tracks remaining semantic validation.
+[FIX05](../../fixes/FIX05.md) tracks remaining semantic validation.
 
 - Source-preservation review remains independent: it distinguishes missing source
   authority from extraction/reconciliation loss. Principles are policy evidence,

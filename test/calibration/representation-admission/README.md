@@ -1,7 +1,8 @@
 # Representation admission: retained offline evidence
 
 [retained.json](retained.json) copies authentic request, response, transport outcome,
-model-output and context bytes from the five development diagnostics in FIX04 F10
+model-output and context bytes from the five development diagnostics in
+[FIX04 F10](../../../fixes/Z_FIX02.md#f10--high-model-text-composition-is-not-admitted-against-its-field-purpose)
 and the 16 October 2026 F11 and 18:58 F12 diagnostics. SHA-256 values bind each
 artifact, original source and selected wire value. The closed
 `representation-admission-capture/v3` fixture has no workflow authority.

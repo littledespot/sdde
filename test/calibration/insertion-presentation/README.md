@@ -1,8 +1,10 @@
 # Insertion presentation attribution
 
 **Prepared offline, 16 October 2026. Zero model sends. Dispatch is not authorized
-by this manifest.** FIX04 Phase 1A.3 step 2 requires a committed build and separate
-approval before this panel runs. The panel consists of **21 single-request sends**,
+by this manifest.** Former FIX04 Phase 1A.3 step 2, now tracked in
+[FIX05 B3](../../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model),
+requires a committed build and separate approval before this panel runs. If the
+native exact-value representation is approved, it replaces this panel. The panel consists of **21 single-request sends**,
 without retries, corrections, repair, judges, workflow continuation or publication.
 
 The immutable [sources](sources/provenance.json) copy the 18:58 hello-world run

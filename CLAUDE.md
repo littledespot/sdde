@@ -24,7 +24,7 @@ computed reliably. Weigh engine changes by their effect on:
 Passing structural tests, or getting more model calls to succeed, is not enough. The
 intent statement guides judgment but is not contract authority. Its proposed
 refinement toward smaller semantic decisions is still being evaluated in
-[FIX04](fixes/FIX04.md).
+[FIX05](fixes/FIX05.md).
 
 ## Navigating authority and work
 
@@ -34,7 +34,7 @@ refinement toward smaller semantic decisions is still being evaluated in
   [design/decisions/](design/decisions/), indexed in design.md §32.
 - These documents are large. Use the `design-router` agent to collect the governing
   clauses with citations instead of reading whole files into the main conversation.
-- [fixes/FIX01.md](fixes/FIX01.md) is the sole active backlog.
+- [fixes/FIX05.md](fixes/FIX05.md) is the sole active fix record.
   [fixes/README.md](fixes/README.md) defines the fix-record convention.
 
 ## Commands

@@ -400,7 +400,7 @@ diagnostics justify neither more decomposition nor workflow completion authority
 
 The table distinguishes implemented guidance from remaining assessments; linked
 contracts own each boundary. [Chunk 18's historical follow-up](../../fixes/archive/IMP_001.md#r45-follow-up--brief-conformance-after-child-object-guidance)
-retains its sequencing and approval record; [FIX01](../../fixes/FIX01.md) tracks
+retains its sequencing and approval record; [FIX05](../../fixes/FIX05.md) tracks
 current work. R38 repeated incorrect nested wrappers
 despite the correct schema; R39 corrected its JSON and then reached a separate
 semantic-review problem. Measure structural compliance and semantic quality separately.

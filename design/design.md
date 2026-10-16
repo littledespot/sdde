@@ -8,13 +8,13 @@
 [decision index in §32](#32-accepted-and-deferred-implementation-choices) records
 accepted amendments without accepting the remainder of the design. Current
 implementation and known gaps are tracked in the [feature contracts](features/)
-and [FIX01](../fixes/FIX01.md); design requirements are not
+and [FIX05](../fixes/FIX05.md); design requirements are not
 claims that the engine already satisfies them.
 
 **22 September corrective design:** [§12.8.1](contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
 owns clarification admission and candidate-failure precedence;
 [FIX_002](../fixes/archive/FIX_002.md) retains the historical implementation record;
-[FIX01](../fixes/FIX01.md) tracks remaining work. Shared admission and repair
+[FIX05](../fixes/FIX05.md) tracks remaining work. Shared admission and repair
 precedence have offline verification; the
 approved D1 response shapes follow §12.7. Verdict reassessment remains unapproved.
 The overall design remains Proposed.
@@ -39,7 +39,7 @@ preserves the decision scope; subsequent defect reviews do not grant new authori
 [ADR 0015](decisions/0015-specification-principle-review.md) adds early Spec
 requirement–principle assessment and shared actionable-question preparation.
 Current implementation and semantic acceptance gaps are tracked in
-[FIX01](../fixes/FIX01.md). Business and policy ownership stay separate.
+[FIX05](../fixes/FIX05.md). Business and policy ownership stay separate.
 
 [ADR 0016](decisions/0016-configured-json-response-composition.md) records the
 user-directed generic JSON response decomposition and deterministic assembly design.

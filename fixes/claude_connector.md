@@ -8,9 +8,9 @@ documentation (§12).
 the work needed to add a second production model provider that calls the
 Anthropic Messages API directly. It changes provider architecture, so it needs an
 accepted ADR and the decisions in §10 before any code change. It is not an active
-backlog: [FIX01](FIX01.md) remains the sole active fix record under the
+backlog: [FIX05](FIX05.md) is the sole active fix record under the
 [fix-record convention](README.md). Once accepted, its normative content moves into
-an ADR and a feature document (§9), and implementation progress is recorded in FIX01.
+an ADR and a feature document (§9), and implementation progress is recorded in FIX05.
 It authorizes no live call, no E2E run and no production dependency. The governing
 [design](../design/design.md) remains **Proposed design**.
 
@@ -29,7 +29,7 @@ the Anthropic code itself but removing Bedrock assumptions from shared types (§
 | --- | --- | --- | --- | --- |
 | R1 | **Blocker until measured** | Anthropic structured outputs allow at most **16 parameters with union types** and **24 optional parameters** per request, and reject larger grammars with 400 "Schema is too complex for compilation". The workflow's projected records-generation schema has **32** `anyOf` nodes; content extraction has **16** (§3.3). | Structured-outputs documentation; schemas measured from the 08:09 loan-renewal run's request captures | Native schema mode (`json: true`) is likely rejected for record generation. The exact counting rule is not published, so one cheap live check is needed (§8 step 0). If confirmed, Claude entries must use prompt-only mode or the affected requests must fail typed before send; no silent per-request fallback (§7). |
 | R2 | **Blocker until measured** | Every model call has a hard **60-second** wall-clock deadline: `timeout-ms: 60000` in the shared `model-request-body` subgraph becomes the operation deadline enforced by the HTTP timer. GPT-OSS calls take about 1 second; Claude latency with adaptive thinking, plus first-request grammar compilation, is unmeasured. | [spec.workflow.yaml](../design/workflows/spec.workflow.yaml) `authorize` step; [workflow_provider_authorization.zig:20-24](../src/application/workflow_provider_authorization.zig#L20-L24); [bedrock_http.zig:48-75](../src/adapters/provider/bedrock_http.zig#L48-L75) | Calls exceeding 60 s end as `timeout` failures. The deadline is a workflow-definition parameter shared by all providers; raising it is a workflow change, and a per-provider deadline would need a new typed policy (§10.9). Streaming would not help: the deadline bounds total time. |
-| R3 | High | `max_tokens` is a hard limit on thinking **plus** visible text, and thinking is billed as output. Opus 5.5 cannot disable thinking. | Effort and thinking documentation | Thinking tokens add to the compiled 100,000-token workflow budget, which small features already exhaust ([FIX04 F9](FIX04.md#f9--high-selected-binding-full-workflow-diagnostics-expose-generation-review-and-budget-failures)). Effort must be set explicitly per slot and measured with `usage.output_tokens_details.thinking_tokens`. |
+| R3 | High | `max_tokens` is a hard limit on thinking **plus** visible text, and thinking is billed as output. Opus 5.5 cannot disable thinking. | Effort and thinking documentation | Thinking tokens add to the compiled 100,000-token workflow budget, which small features already exhaust ([FIX04 F9](Z_FIX02.md#f9--high-selected-binding-full-workflow-diagnostics-expose-generation-review-and-budget-failures)). Effort must be set explicitly per slot and measured with `usage.output_tokens_details.thinking_tokens`. |
 | R4 | Medium | The Bedrock HTTP adapter is about 90% provider-neutral (deadline timer, body retention, redirect and framing rules). Only the endpoint, the `Bearer` header and two `x-amzn-*` response headers are Bedrock-specific. | [bedrock_http.zig](../src/adapters/provider/bedrock_http.zig) | A separate `anthropic_http.zig` would duplicate delicate transport code. Extract one shared HTTPS exchange core with a closed per-provider endpoint and header projection (§5.6). |
 | R5 | Medium | The authorization adapter is a single port that rejects any non-Bedrock configuration, and composition builds one provider. A missing key fails as `authentication_failed`, detected only when that provider's call is authorized. | [bedrock_authorization.zig](../src/adapters/provider/bedrock_authorization.zig); [model_provider_runtime.zig](../src/composition/model_provider_runtime.zig) | Mixed-provider workflows need per-provider authorization and credential material, dispatched by registry entry (§4, §10.8). |
 | R6 | Medium | `count_tokens` returns an **estimate** that "might differ by a small amount" and can include system-added tokens. | Token-counting documentation | It must not be registered as the engine's exact token counter. The Spec workflow never counts tokens, so the first increment registers no counting capability (§3.7). |
@@ -181,7 +181,7 @@ Rules:
   runs are attributable.
 - **Evaluation cohorts stay separate.** Mixing providers is valid for production
   configuration. An evaluation protocol that freezes one model, such as
-  [FIX04](FIX04.md)'s GPT-OSS-only panel, must not mix providers within a comparison.
+  the [semantic-simplicity protocol](../test/calibration/semantic-simplicity/README.md)'s GPT-OSS-only panel, must not mix providers within a comparison.
 
 ## 3. External API contract
 
@@ -573,7 +573,7 @@ schema the bound steps can send) or per request is part of the ADR.
 | Lenient decoding of unknown fields | Rejected by default | Closed parsing is required for external data. Decision §10.3 records the maintenance cost. |
 | A separate Anthropic HTTP stack | Rejected | Duplicates the transport policy in `bedrock_http.zig` (§5.6). |
 | Streaming to avoid the 60-second deadline | Rejected as a fix for R2 | The deadline bounds total exchange time; streaming changes delivery, not duration. It remains a later option for outputs that exceed non-streaming limits. |
-| Prompt caching | Deferred | Could cut repeated-prefix cost, which matters for the token budget in [FIX04 F9](FIX04.md#f9--high-selected-binding-full-workflow-diagnostics-expose-generation-review-and-budget-failures): cache reads cost 5% of base input on Opus 5.5 and Sonnet 5.5. It changes request bytes and accounting, and the minimum cacheable prefix may exceed current prompts. Needs its own decision and measurement. |
+| Prompt caching | Deferred | Could cut repeated-prefix cost, which matters for the token budget in [FIX04 F9](Z_FIX02.md#f9--high-selected-binding-full-workflow-diagnostics-expose-generation-review-and-budget-failures): cache reads cost 5% of base input on Opus 5.5 and Sonnet 5.5. It changes request bytes and accounting, and the minimum cacheable prefix may exceed current prompts. Needs its own decision and measurement. |
 | Claude on Bedrock through the existing connector | Out of scope | Already possible by registering Bedrock tuples; it is not the direct API. |
 
 ## 8. Implementation sequence
@@ -590,7 +590,7 @@ external behavior. Each step ends with all existing tests passing.
      intended effort and `maxOutputTokens`, recording wall-clock latency, first-request
      compilation latency, `output_tokens` and `thinking_tokens`.
 
-   Record the results in FIX01, then decide the response mode (§10.2a) and the
+   Record the results in FIX05, then decide the response mode (§10.2a) and the
    deadline (§10.9). Cost is a few cents. These calls are diagnostic evidence only.
 1. **Generalize provider facts, routing and authorization, Bedrock only.** Replace the
    Bedrock fields with the provider-fact union, add `requires_max_output_tokens`,
@@ -654,7 +654,7 @@ external behavior. Each step ends with all existing tests passing.
   a single provider; and the workflow definition if the deadline changes.
 - **Harness documentation:** credential and launcher rules in
   [e2e.md](../design/harness/e2e.md) and `.env.e2e.example`.
-- **FIX01:** record step-0 results, implementation progress and verification there
+- **FIX05:** record step-0 results, implementation progress and verification there
   once accepted.
 
 ## 10. Decisions required
@@ -677,7 +677,7 @@ external behavior. Each step ends with all existing tests passing.
 5. **Live-test cost policy.** [model_cost_policy.zig](../test/harness/model_cost_policy.zig)
    permits only Bedrock `openai.gpt-oss-20b-1:0` and rejects Claude tuples. Any live
    Anthropic probe or E2E run needs an explicit policy change naming the exact tuple.
-   Mixing a Claude slot into [FIX04](FIX04.md)'s GPT-OSS-only evaluation would mix
+   Mixing a Claude slot into the [semantic-simplicity protocol](../test/calibration/semantic-simplicity/README.md)'s GPT-OSS-only evaluation would mix
    cohorts and is not permitted by that protocol.
 6. **Billing, spend-cap and spend-limit errors.** Map 402 `billing_error`, the
    spend-cap 429 and the user-set spend-limit 400 to existing causes, or add a
@@ -686,7 +686,7 @@ external behavior. Each step ends with all existing tests passing.
 7. **Workflow token budget.** Claude output includes billed thinking tokens and a
    different tokenizer. The compiled 100,000-token workflow budget already stops full
    workflows on small features
-   ([FIX04 F9](FIX04.md#f9--high-selected-binding-full-workflow-diagnostics-expose-generation-review-and-budget-failures)).
+   ([FIX04 F9](Z_FIX02.md#f9--high-selected-binding-full-workflow-diagnostics-expose-generation-review-and-budget-failures)).
    A Claude slot does not change that decision, but adds to it.
 8. **Credential check timing in mixed workflows.** Today a missing credential is
    detected only when that provider's call is authorized, so the other provider's
@@ -718,7 +718,7 @@ The connector is complete only when:
   probe is `compatible`.
 
 Compatibility establishes request and response handling only. It does not establish
-semantic quality, workflow completion or any FIX04 qualification.
+semantic quality, workflow completion or any FIX05 qualification.
 
 ## 12. Sources
 

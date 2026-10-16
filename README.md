@@ -26,7 +26,7 @@ and publication evidence control workflow authority.
   workload and publication assurance work are open. Connected
   generation does not establish complete Specify acceptance. See
   [F0100](design/features/F0100-SpecWorkflow.md) and the
-  [current FIX01 review and remaining work](fixes/FIX01.md).
+  [current FIX05 review and remaining work](fixes/FIX05.md).
 - The development harness runs real generation and grades the actual published
   specification through the selected OpenAI or Bedrock evaluator. A successful
   scored live baseline, human rubric calibration and broader acceptance remain
@@ -298,16 +298,16 @@ remain separate from E2E and workflow authority.
 | [Feature contracts](design/features/) | Component responsibilities, implementation scope and verification requirements. |
 | [Diagrams](design/diagrams/) | Markdown-fenced Mermaid views of the architecture and workflows. |
 | [Harness backlog](design/harness/README.md) | Remaining integration, calibration and live acceptance work. |
-| [FIX01](fixes/FIX01.md) | Current corrective focus, code findings, remaining work and required acceptance evidence. |
+| [FIX05](fixes/FIX05.md) | Architecture review, current corrective focus, remaining work and required acceptance evidence. |
 | [Fix records](fixes/README.md) | Active tracking and historical decision/evidence records. |
 
 ### Fix records
 
-[FIX01](fixes/FIX01.md) is the sole active fix record. Keep outstanding work and
+[FIX05](fixes/FIX05.md) is the sole active fix record. Keep outstanding work and
 its implementation/verification status there; remove completed tasks from active
-tracking. Completed FIX01 work and its supporting dated reviews live in
-[Z_FIX01](fixes/Z_FIX01.md); older records and experiments remain under
-`fixes/archive/`. Historical proposals and status statements do not
+tracking. Completed work and its supporting dated reviews live in
+[Z_FIX01](fixes/Z_FIX01.md) and [Z_FIX02](fixes/Z_FIX02.md); older records and
+experiments remain under `fixes/archive/`. Historical proposals and status statements do not
 create current work, grant approval or establish successful live acceptance.
 
 [Templates](design/templates/), [legacy preset source examples](design/toolchainPresets/)

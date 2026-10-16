@@ -848,7 +848,7 @@ This contract is deliberately domain-neutral. Adding a new requirement kind requ
 This section replaces blanket unsupported/uncertain → clarification interpretations
 in §§12, 17 and 21. The overall design remains Proposed. It does not authorize
 verdict reassessment prohibited by §22.1. [FIX_002](../../fixes/archive/FIX_002.md)
-retains the separate decision history; [FIX01](../../fixes/FIX01.md) tracks current work.
+retains the separate decision history; [FIX05](../../fixes/FIX05.md) tracks current work.
 
 **Admission:** `needs_user` requires a current required subject and an identifiable
 decision the user can supply. Existing review/generation evidence must establish

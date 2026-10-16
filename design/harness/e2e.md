@@ -223,7 +223,7 @@ and useful publication are not assessed.
 A compatible first exchange qualifies only that observed request/settings; it
 does not qualify every workflow request shape or establish complete E2E acceptance.
 
-The [FIX04 Phase 1 gate](../../fixes/FIX04.md#phase-1--establish-compatible-selected-model-execution)
+The [FIX04 Phase 1 gate](../../fixes/Z_FIX02.md#phase-1-implementation-and-live-gate)
 requires both offline checks and an authentic retained exchange. Implementing and
 testing this command offline does not close the live gate or authorize a run.
 
@@ -677,4 +677,4 @@ Metadata echoes and whole-candidate wrappers still reject against the selected s
 - Earlier reports based on scripted generation or golden comparison are not live E2E
   evidence.
 
-Active corrective work and required evidence are tracked in [FIX01](../../fixes/FIX01.md).
+Active corrective work and required evidence are tracked in [FIX05](../../fixes/FIX05.md).

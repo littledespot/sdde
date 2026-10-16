@@ -5,7 +5,7 @@ It explains what the engine is for and how success is judged. It orients judgmen
 it is not contract authority. It does not accept the [Proposed design](design.md),
 amend an [ADR](decisions/) or establish that any capability is implemented or
 proven. The refinement toward smaller semantic decisions remains under evaluation
-in [FIX04](../fixes/FIX04.md). Where this statement and a governing contract
+in [FIX05](../fixes/FIX05.md). Where this statement and a governing contract
 differ, report the difference rather than choosing between them.
 
 ---

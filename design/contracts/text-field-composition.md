@@ -1,7 +1,7 @@
 # Text-field composition — accepted Phase 1A amendment, 16 October 2026
 
 Authority: the user's explicit instruction to settle the four Phase 1A decisions
-and implement [FIX04 Phase 1A](../../fixes/FIX04.md#phase-1a--close-the-representation-admission-gap-before-the-baseline).
+and implement [FIX04 Phase 1A](../../fixes/Z_FIX02.md#phase-1a-plan-decisions-and-results).
 The policy decisions amend §§7.1, 17.3, 22 and ADR 0020. ADR 0019 records the
 debug-description/replay serialization needed to retain their native witnesses;
 the overall design remains Proposed.
@@ -36,9 +36,9 @@ normal lineage and semantic checks, without satisfying behavioral coverage.
 ## Phase 1A.2 amendment — exact copies only where they can carry an obligation
 
 **Approved and implemented offline, 16 October 2026.** Authority: the user's explicit
-approval of [FIX04 Phase 1A.2](../../fixes/FIX04.md#phase-1a2--make-model-facing-presentation-consistent-with-admission)
+approval of [FIX04 Phase 1A.2](../../fixes/Z_FIX02.md#phase-1a2-plan-decisions-and-results)
 decision 1, following the live evidence in
-[FIX04 F11](../../fixes/FIX04.md#f11--high-admission-now-stops-the-defect-but-generation-cannot-recover-from-it).
+[FIX04 F11](../../fixes/Z_FIX02.md#f11--high-admission-now-stops-the-defect-but-generation-cannot-recover-from-it).
 The native registry now enforces this amendment; separately approved live diagnostics
 remain required before closing Phase 1A.2's exit gate.
 
@@ -122,9 +122,9 @@ User answers retain their separate input contract.
 ## Phase 1A.3 amendment — composition defects are corrected as a unit
 
 **Approved and implemented offline, 16 October 2026.** Authority: the user's explicit
-approval of [FIX04 Phase 1A.3](../../fixes/FIX04.md#phase-1a3--attribute-insertion-presentation-and-repair-collapsed-units-as-units)
+approval of [FIX04 Phase 1A.3](../../fixes/Z_FIX02.md#phase-1a3-plan-and-decisions-as-approved)
 decision 4, option (a), following the live evidence in
-[FIX04 F12](../../fixes/FIX04.md#f12--high-descriptive-fields-recover-but-record-fields-collapse-to-insertions).
+[FIX04 F12](../../fixes/Z_FIX02.md#f12--high-descriptive-fields-recover-but-record-fields-collapse-to-insertions).
 Implementation and verification are recorded in
 [the Phase 1A.3 record](../../fixes/Z_FIX02.md#543-phase-1a3-admission-routing-and-attribution-preparation).
 Live attribution and the separately approved workflow diagnostics remain open.

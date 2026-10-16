@@ -12,7 +12,7 @@ consistency review and shared actionable-question preparation to this design.
 Native assessment and question-preparation owners exist; complete semantic readiness
 is outstanding. The corrective [§12.8.1 clarification gate](../contracts/12-model-boundary.md#1281-clarification-admission-and-candidate-failure-precedence)
 has offline-verified admission and repair-precedence coverage.
-[FIX01](../../fixes/FIX01.md) tracks remaining semantic acceptance work;
+[FIX05](../../fixes/FIX05.md) tracks remaining semantic acceptance work;
 [FIX_002](../../fixes/archive/FIX_002.md) retains the approved D1 delivery record
 under §12.7. Historical delivery
 notes below do not establish live question necessity or completed readiness.
@@ -1568,7 +1568,7 @@ Shared retained-claim eligibility (C3) remains consolidated in the provenance ow
 **Known implementation gaps**
 
 Authenticated answer acceptance and remaining publication/readback assurance remain
-open. [FIX01](../../fixes/FIX01.md) tracks current gaps; the
+open. [FIX05](../../fixes/FIX05.md) tracks current gaps; the
 [historical delivery record](../../fixes/archive/IMP_001.md#spec-principle-review--approved-design-and-native-delivery)
 retains the earlier assessment/question-preparation implementation. Offline verification
 does not establish complete Specify or live E2E acceptance.
