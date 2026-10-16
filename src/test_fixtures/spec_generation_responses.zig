@@ -373,6 +373,8 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
         .specification_unit => {
             const current = try @import("../application/specification_workflow.zig").readSession(&view);
             const context = try @import("../application/specification_workflow.zig").readContext(&view);
+            const provenance = @import("../domain/specification_provenance.zig");
+            const references = @import("../domain/reference_support.zig").records(context.references);
             const all = try @import("../domain/specification_provenance.zig").items(context);
             const dispositions = @import("../domain/reference_support.zig").records(context.references).dispositions;
             const first = for (dispositions) |disposition| {
@@ -391,14 +393,14 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                                 .then => "The return deadline is extended by seven days.",
                                 else => return error.UnexpectedScriptedRepair,
                             } } }} };
-                            return @import("../domain/model_candidate_json.zig").encode(struct { value: g.spec.BusinessValue }, allocator, .{ .value = replacement });
+                            return @import("../domain/model_candidate_json.zig").encode(struct { value: g.spec.BusinessValue }, allocator, .{ .value = try provenance.modelValue(allocator, references, replacement) });
                         }
                         const mode = options.story_omission orelse return error.UnexpectedScriptedRepair;
                         const replacement = if (mode == .invalid_repair)
                             g.spec.BusinessValue{ .segments = &.{.{ .literal = .{ .value = " " } }} }
                         else
                             try storyValue(allocator, all, mode == .recover, options.omission_merges + 1);
-                        return @import("../domain/model_candidate_json.zig").encode(struct { value: g.spec.BusinessValue }, allocator, .{ .value = replacement });
+                        return @import("../domain/model_candidate_json.zig").encode(struct { value: g.spec.BusinessValue }, allocator, .{ .value = try provenance.modelValue(allocator, references, replacement) });
                     }
                     const kind = try @import("../domain/specification_coverage_repair.zig").omissionRecordKind(state.authorization.rule.omission.requirement);
                     const replacement: g.spec.Wire.RecordProposal = .{ .content = switch (kind) {
@@ -406,13 +408,13 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         .acceptance_criterion => .{ .acceptance_criterion = .{ .given = value.value, .when = value.value, .then = value.value } },
                         else => return error.UnexpectedScriptedRepair,
                     } };
-                    return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, replacement);
+                    return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = try provenance.modelRecord(allocator, references, replacement.content) });
                 }
                 if (view.contains(.specification_repair_authorization)) {
                     const state = try @import("../application/specification_values.zig").storage.read(&view, @import("../application/specification_repair_workflow.zig").authorization_schema, .repair_authorization);
                     const auth = state.authorization;
                     if (auth.operation == .replace and auth.operation.replace == .value) {
-                        const wire = try @import("../domain/model_candidate_json.zig").encode(struct { value: g.spec.BusinessValue }, allocator, .{ .value = value.value });
+                        const wire = try @import("../domain/model_candidate_json.zig").encode(struct { value: g.spec.BusinessValue }, allocator, .{ .value = try provenance.modelValue(allocator, references, value.value) });
                         return if (options.repeated_provenance_fault) try withForbiddenProvenance(allocator, wire) else wire;
                     }
                     if (auth.rule.group != null and auth.rule.group.? == .membership) {
@@ -424,7 +426,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                             .{ .entity = .{ .name = content_value, .business_meaning = value.value, .relationships = &.{} } }
                         else
                             .{ .business_rule = .{ .text = content_value } }, .provenance = membership.fixed_provenance orelse value.provenance };
-                        return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = record.content });
+                        return @import("../domain/model_candidate_json.zig").encode(g.spec.Wire.RecordProposal, allocator, .{ .content = try provenance.modelRecord(allocator, references, record.content) });
                     }
                 }
                 return if (options.failed_repair) "{\"provenance\":{\"claim_ids\":[999999]}}" else error.UnexpectedScriptedRepair;
@@ -516,7 +518,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 }
             }
             try associateFixtureResponse(allocator, context, assigned, &proposed);
-            const wire = try @import("../domain/model_candidate_json.zig").encode(g.ModelResponse, allocator, try g.ModelResponse.from(allocator, proposed));
+            const wire = try @import("../domain/model_candidate_json.zig").encode(g.ModelResponse, allocator, try g.ModelResponse.from(allocator, context, proposed));
             return wire;
         },
         .semantic_review => {
@@ -1066,6 +1068,7 @@ fn storyValue(allocator: std.mem.Allocator, all: r.Items, repaired: bool, revisi
         }
     } else try segments.append(allocator, .{ .literal = .{ .value = if (revision % 2 == 0) "MOCK kind exact_copy " else "MOCK exact_copy kind " } });
     for (all.entries) |item| if (item.claim.content == .preserved_token) {
+        if (segments.items.len != 0) try segments.append(allocator, .{ .literal = .{ .value = " " } });
         try segments.append(allocator, .{ .exact_copy = .{ .claim_id = item.claim.id } });
     };
     return .{ .segments = segments.items };

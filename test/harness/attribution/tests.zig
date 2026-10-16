@@ -84,11 +84,47 @@ test "attribution diagnostic decoders reject unknown metadata and duplicate fiel
         try std.testing.expectError(error.InvalidJsonDocument, p.decodeCalls(a, bad));
     }
 }
+test "attribution historical metadata cannot acquire current exact scope or version" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const captured = try p.description(a, .records);
+    const bytes = try p.json(a, captured);
+    _ = try strict.decode(p.CapturedDescription, a, bytes, .{ .maximum_depth = 64 });
+    var value = try std.json.parseFromSliceLeaky(std.json.Value, a, bytes, .{});
+    try value.object.put(a, "exact_scope", .null);
+    try std.testing.expectError(error.InvalidJsonDocument, strict.decode(p.CapturedDescription, a, try p.json(a, value), .{ .maximum_depth = 64 }));
+    _ = value.object.orderedRemove("exact_scope");
+    value.object.getPtr("version").?.* = .{ .string = "model-request-debug/v6" };
+    try std.testing.expectError(error.InvalidJsonDocument, strict.decode(p.CapturedDescription, a, try p.json(a, value), .{ .maximum_depth = 64 }));
+
+    const record: s.CapturedRequestRecord = .{
+        .id = "MOCK-history",
+        .run = "MOCK-run",
+        .sequence = 1,
+        .parent_run = p.run,
+        .parent_call = p.parentId(.records),
+        .original_run = p.run,
+        .original_call = p.parentId(.records),
+        .node = "MOCK-node",
+        .mode = .exact,
+        .description = captured,
+        .body = p.requestBytes(.records),
+    };
+    var replay = try std.json.parseFromSliceLeaky(std.json.Value, a, try p.json(a, record), .{});
+    _ = try s.decodeRequest(a, try p.json(a, replay));
+    try replay.object.getPtr("description").?.object.put(a, "exact_scope", .null);
+    try std.testing.expectError(error.InvalidJsonDocument, s.decodeRequest(a, try p.json(a, replay)));
+    _ = replay.object.getPtr("description").?.object.orderedRemove("exact_scope");
+    replay.object.getPtr("version").?.* = .{ .string = "request-replay/v7" };
+    try std.testing.expectError(error.InvalidJsonDocument, s.decodeRequest(a, try p.json(a, replay)));
+}
 test "attribution scorer distinguishes invalid provider content from explicit stops" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const description: @import("../../../src/domain/request_debugger.zig").Description = .{
+    const description: p.CapturedDescription = .{
+        .version = .@"model-request-debug/v5",
         .provider = "aws-bedrock",
         .model = "openai.gpt-oss-20b-1:0",
         .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } },
@@ -103,6 +139,9 @@ test "attribution scorer distinguishes invalid provider content from explicit st
         .controls = .{ .temperature = .fixed },
         .reasoning_effort = "low",
         .operation_kind = .inference,
+        .original_sources = &.{},
+        .prose_fields = &.{},
+        .field_policies = &.{},
     };
     for ([_]struct { stop: []const u8, expected: s.State }{
         .{ .stop = "end_turn", .expected = .invalid_provider },

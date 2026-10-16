@@ -60,7 +60,7 @@ test "test.integration.insertion_presentation prepares frozen 21 trial panel wit
         }
         var expected_description = original;
         expected_description.content = edit.content;
-        var record: @import("../../src/domain/request_debugger.zig").RequestRecord = .{
+        var record: s.CapturedRequestRecord = .{
             .id = "MOCK-replay-1",
             .run = "MOCK-run",
             .sequence = 1,
@@ -83,6 +83,8 @@ test "test.integration.insertion_presentation prepares frozen 21 trial panel wit
         try std.testing.expectError(error.ReplayLineageDrift, s.validateRequest(a, trial, record));
     }
     try s.validateReceiptSet(bundle, .{ .version = .@"insertion-presentation-receipts/v1", .trials = &.{} });
+    try std.testing.expectError(error.HistoricalDispatchUnsupported, p.dispatchRequest(a, bundle.manifest.trials[0], &.{}));
+    try std.testing.expectError(error.InvalidJsonDocument, @import("../../src/domain/model_request_description.zig").Description.decode(a, p.descriptionBytes(.records)));
     try std.testing.expectError(error.TrialOrder, s.validateReceiptSet(bundle, .{ .version = .@"insertion-presentation-receipts/v1", .trials = &.{.{ .trial_id = bundle.manifest.trials[1].id, .request_record = "request.json", .response_record = "response.json" }} }));
 }
 test "test.integration.insertion_presentation rejected schema answers remain in raw denominators" {
@@ -113,6 +115,9 @@ test "test.integration.insertion_presentation retained records retain raw reject
     defer arena.deinit();
     const a = arena.allocator();
     const value = try s.measure(a, try p.description(a, .records), .{ .id = "retained-records", .outcome = .received, .status = 200, .body = p.sourceArtifact("records.response.json").? });
+    try std.testing.expectEqual(.historical_v5, value.captured_contract);
+    try std.testing.expect(!value.native_exact_scope_available);
+    try std.testing.expect(!value.current_model_admission_assessed);
     try std.testing.expectEqual(s.State.composition_invalid, value.state);
     try std.testing.expect(value.schema_valid.?);
     try std.testing.expectEqual(@as(usize, 4), value.composition_diagnostics.len);

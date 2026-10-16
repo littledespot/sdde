@@ -9,6 +9,8 @@ const extraction = @import("../reference_extraction_test.zig");
 const authority = @import("../domain/required_authority.zig");
 const support = @import("../domain/specification_support.zig").Source;
 const comparison = @import("../domain/source_omission_comparison.zig");
+const provenance = @import("../domain/specification_provenance.zig");
+const spec = @import("../domain/specification.zig");
 const codec = @import("../domain/model_candidate_json.zig");
 const packets = @import("../domain/model_input_packet.zig");
 const cases_root = "test/calibration/source-loss-attribution/bound-preservation/obligation";
@@ -48,7 +50,6 @@ pub fn run() !void {
     @memcpy(cases[retained.len..], controls);
     var parser: @import("../adapters/parsers/model_result_schemas.zig").Adapter = .{};
     const schema = try parser.compiler().compile(a, try read(a, "design/workflows/spec/support.schema.json"));
-    try currentAssociationChecks(a, cases[0]);
     try runCitationCompleteness(a, schema, cases);
 }
 
@@ -229,6 +230,79 @@ pub const PreparedContext = struct {
     context: @import("../domain/specification_provenance.zig").Context,
     passive: text.Prepared,
 };
+
+/// Current diagnostic candidates are admitted through the production owner;
+/// frozen captured text supplies no pre-existing canonical exact authority.
+pub fn admitAttributed(a: std.mem.Allocator, context: provenance.Context, value: spec.AttributedValue, field: @import("../domain/text_field_policy.zig").Field) !spec.AttributedValue {
+    var inspection: provenance.Inspection = .{};
+    return provenance.inspectAttributed(.model, a, text.validator, context, .{
+        .value = try provenance.modelValue(a, @import("../domain/reference_support.zig").records(context.references), value.value),
+        .source_group_ids = value.source_group_ids,
+        .provenance = .{ .claim_ids = value.provenance.claim_ids, .clarification_response_ids = value.provenance.clarification_response_ids },
+    }, field, &inspection) catch |err| {
+        if (inspection.text_issue) |issue| switch (issue.reason) {
+            .ambiguous_exact => return error.AmbiguousCalibrationExactValue,
+            .embedded_insertion_syntax => return error.EmbeddedCalibrationInsertionSyntax,
+            else => {},
+        };
+        return err;
+    };
+}
+
+pub fn admitBrief(a: std.mem.Allocator, context: provenance.Context, brief: spec.Brief) !spec.Brief {
+    return .{
+        .title = try admitAttributed(a, context, brief.title, .spec_title),
+        .description = try admitAttributed(a, context, brief.description, .spec_description),
+        .primary_goal = try admitAttributed(a, context, brief.primary_goal, .spec_goal),
+    };
+}
+
+pub fn admitContent(a: std.mem.Allocator, context: provenance.Context, content: spec.IdentifiedContent) !spec.IdentifiedContent {
+    var result = content;
+    result.display_name = try admitAttributed(a, context, content.display_name, .spec_title);
+    result.primary_user_story = try admitAttributed(a, context, content.primary_user_story, .spec_story);
+    result.entities.basis = try admitAttributed(a, context, content.entities.basis, .spec_entity_basis);
+    const records = try a.dupe(spec.IdentifiedRecord, content.records);
+    for (records) |*record| {
+        const value = record.proposal;
+        var inspection: provenance.Inspection = .{};
+        record.proposal = provenance.inspectRecord(.model, a, text.validator, context, .{
+            .content = try provenance.modelRecord(a, @import("../domain/reference_support.zig").records(context.references), value.content),
+            .source_group_ids = value.source_group_ids,
+            .provenance = .{ .claim_ids = value.provenance.claim_ids, .clarification_response_ids = value.provenance.clarification_response_ids },
+        }, &inspection) catch |err| {
+            if (inspection.text_issue) |issue| switch (issue.reason) {
+                .ambiguous_exact => return error.AmbiguousCalibrationExactValue,
+                .embedded_insertion_syntax => return error.EmbeddedCalibrationInsertionSyntax,
+                else => {},
+            };
+            return err;
+        };
+    }
+    result.records = records;
+    return result;
+}
+
+/// A current native admission rejection is a measured negative case, never an
+/// omitted panel row or a fabricated review request. Frozen inputs stay intact.
+pub const AdmissionReason = enum { ambiguous_exact, embedded_insertion_syntax };
+pub const AdmissionRejection = struct { case_id: []const u8, reason: AdmissionReason };
+pub fn admissionReason(err: anyerror) ?AdmissionReason {
+    return switch (err) {
+        error.AmbiguousCalibrationExactValue => .ambiguous_exact,
+        error.EmbeddedCalibrationInsertionSyntax => .embedded_insertion_syntax,
+        else => null,
+    };
+}
+pub fn writeAdmissionRejection(a: std.mem.Allocator, directory: []const u8, rejection: AdmissionRejection) !void {
+    try writeAt(a, directory, rejection.case_id, "native-admission.json", try std.json.Stringify.valueAlloc(a, .{
+        .case_id = rejection.case_id,
+        .stage = @as(enum { pre_review }, .pre_review),
+        .native_issue = rejection.reason,
+        .review_request = @as(?[]const u8, null),
+        .model_calls = @as(usize, 0),
+    }, .{}));
+}
 const Prepared = struct {
     inputs: authority.Inputs,
     context: @import("../domain/specification_provenance.zig").Context,
@@ -290,16 +364,16 @@ pub fn prepareContext(a: std.mem.Allocator, example: Case) !PreparedContext {
     for (example.source_group_ids, ids_selected) |id, *selected| selected.* = .{ .ordinal = id };
     const assigned = try @import("../domain/specification_source_binding.zig").resolveGroups(a, records, sources, ids_selected, .content);
     const attribution = try @import("../domain/specification_provenance.zig").select(a, provenance_context, assigned.selection);
-    const spec = @import("../domain/specification.zig");
     const value: spec.AttributedValue = .{ .value = .{ .segments = try a.dupe(r.text.BusinessSegment, &.{.{ .literal = .{ .value = example.description } }}) }, .source_group_ids = assigned.source_group_ids, .provenance = attribution };
     var brief: spec.Brief = .{ .title = value, .description = value, .primary_goal = value };
     var candidate: ?spec.IdentifiedContent = null;
     if (example.candidate_file) |path| {
         const captured = try @import("../domain/strict_json.zig").decode(struct { brief: spec.Brief, candidate: spec.IdentifiedContent }, a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, path, a, .unlimited), .{ .maximum_depth = 128 });
         brief = captured.brief;
-        candidate = captured.candidate;
+        candidate = try admitContent(a, provenance_context, captured.candidate);
+        brief = try admitBrief(a, provenance_context, brief);
         try @import("../domain/specification_provenance.zig").validateStored(a, sources, .{ .records = passive.registry.records, .occurrences = passive.registry.occurrences }, records, brief, candidate.?);
-    }
+    } else brief = try admitBrief(a, provenance_context, brief);
     const inputs = try @import("../domain/specification_authority.zig").project(a, sources.corpus.feature_id, finished, candidate, if (example.mode == .signal) null else brief);
     return .{ .inputs = inputs, .context = provenance_context, .passive = passive };
 }
@@ -497,9 +571,18 @@ fn isolatedPacket(a: std.mem.Allocator, packet: *const packets.Packet, id: compa
 fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../domain/model_result_schema.zig").Schema, cases: []const Case) !void {
     try std.Io.Dir.cwd().createDirPath(std.testing.io, output);
     const prompt = try read(a, "design/workflows/spec/support-loss.prompt.md");
+    var admission_rejections: std.ArrayList(AdmissionRejection) = .empty;
+    var prepared_cases: usize = 0;
     for (cases) |example| {
-        const prepared = try prepare(a, example);
+        const prepared = prepare(a, example) catch |err| {
+            const rejection: AdmissionRejection = .{ .case_id = example.id, .reason = admissionReason(err) orelse return err };
+            try admission_rejections.append(a, rejection);
+            try writeAdmissionRejection(a, output, rejection);
+            continue;
+        };
         defer prepared.passive.deinit();
+        prepared_cases += 1;
+        if (prepared_cases == 1) try currentAssociationChecks(a, example);
         const assigned = try support.comparisonAssignment(a, prepared.inputs, prepared.context, prepared.pending);
         const packet = try support.packetForLoss(a, prepared.inputs, prepared.context, prepared.pending);
         defer packets.release(packet);
@@ -557,6 +640,19 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
             try consumeReviewReceipt(a, schema, example.id, repetition, prepared, review_packet);
         }
     }
+    // Both frozen negatives remain counted: an invented encoded insertion and
+    // competing equal-label identities cannot enter semantic review.
+    try std.testing.expectEqualDeep(@as([]const AdmissionRejection, &.{
+        .{ .case_id = "captured-description", .reason = .embedded_insertion_syntax },
+        .{ .case_id = "dual-ready", .reason = .ambiguous_exact },
+    }), admission_rejections.items);
+    try std.testing.expectEqual(cases.len, prepared_cases + admission_rejections.items.len);
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/native-admission.json", .data = try std.json.Stringify.valueAlloc(a, .{
+        .input_cases = cases.len,
+        .prepared_cases = prepared_cases,
+        .pre_review_rejections = admission_rejections.items,
+        .model_calls = @as(usize, 0),
+    }, .{}) });
     try prepareHandoffControls(a, schema);
 }
 

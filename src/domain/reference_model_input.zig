@@ -28,7 +28,7 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
         .passive_literals = try passiveChoices(scratch, registry, inputs, &.{scope}),
         .exact_candidates = selected.items,
     };
-    const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
+    const body = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
     const packet = try packets.create(allocator, body, .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = scope.state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } } }, .initial_generation, null);
     defer packets.release(packet);
     const witnessed = try packets.withOriginalSources(allocator, packet, inputs);
@@ -36,7 +36,7 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
     const policies = @import("model_candidate_json.zig").fieldBindings(@import("reference_extraction_parser.zig").Response, scratch, .{ .reference_phase = .extraction }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceExtraction;
     const bound = try packets.withFieldPolicies(allocator, witnessed, policies);
     defer packets.release(bound);
-    return withTextChoices(allocator, bound, try passiveIds(scratch, payload.passive_literals), &.{});
+    return withTextChoices(allocator, bound, try passiveIds(scratch, payload.passive_literals));
 }
 
 pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, guidance_scope: Constraint.Scope) ReconciliationError!*packets.Packet {
@@ -99,8 +99,8 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
             .constraints = try reconciliationGuidance(scratch, input.purpose, presentation.shared),
             .passive_literals = common.passive_literals,
         };
-        break :shared try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
-    } else try @import("model_candidate_json.zig").encode(@TypeOf(common), scratch, common);
+        break :shared try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
+    } else try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(common), scratch, common);
     const slot = try std.fmt.allocPrint(scratch, "reconciliation-{d}", .{input.partition.id.ordinal});
     const packet = try packets.create(allocator, body, .{ .reference_global = .{ .reference_state_id = .{ .bytes = inputs.corpus.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, .{ .bytes = @tagName(input.purpose) });
     defer packets.release(packet);
@@ -121,7 +121,7 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     else
         try packets.retain(bound);
     defer packets.release(summary_context);
-    const selected = try withTextChoices(allocator, summary_context, try passiveIds(scratch, common.passive_literals), &.{});
+    const selected = try withTextChoices(allocator, summary_context, try passiveIds(scratch, common.passive_literals));
     if (presentation == .shared) return selected;
     defer packets.release(selected);
     const assignment = presentation.composed.assignment;
@@ -129,7 +129,7 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
         const constraints = try reconciliationGuidance(scratch, input.purpose, .{ .assignment = assignment });
         if (assignment == .conflicts) {
             const conflict_context = .{ .constraints = constraints };
-            break :other try @import("model_candidate_json.zig").encode(@TypeOf(conflict_context), scratch, conflict_context);
+            break :other try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(conflict_context), scratch, conflict_context);
         }
         const assignment_context = .{
             .purpose = hierarchy.purpose,
@@ -139,7 +139,7 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
             .summaries = hierarchy.summaries,
             .constraints = constraints,
         };
-        break :other try @import("model_candidate_json.zig").encode(@TypeOf(assignment_context), scratch, assignment_context);
+        break :other try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(assignment_context), scratch, assignment_context);
     };
     const contextual = try packets.withAssignmentContexts(allocator, selected, &.{.{ .id = packets.AssignmentContextId.parse(@tagName(assignment)).?, .body = context_body }});
     if (assignment != .summary and assignment != .signals) return contextual;
@@ -175,34 +175,28 @@ pub fn withSemanticChoices(a: std.mem.Allocator, packet: *const packets.Packet, 
     return packets.withIntegerChoices(a, narrowed, &.{.{ .target = .{ .path = &.{ .{ .property = field }, .{ .items = {} }, .{ .property = "claim_ids" } } }, .definition = definition_id, .allowed = ids, .collection = .unique_subset }});
 }
 /// Availability projects existing evidence, not semantics or a second registry.
-/// Reference text has no exact-copy variant; its owner leaves that choice alone.
-pub fn withTextChoices(a: std.mem.Allocator, packet: *const packets.Packet, passive: []const i64, exact_copy: []const i64) packets.Error!*packets.Packet {
+/// Engine-derived exact occurrences never have a selectable model alternative.
+pub fn withTextChoices(a: std.mem.Allocator, packet: *const packets.Packet, passive: []const i64) packets.Error!*packets.Packet {
     const schema = @import("model_result_schema.zig");
     var excluded: std.ArrayList(schema.ExcludedVariant) = .empty;
     defer excluded.deinit(a);
     // Narrow text availability without discarding unrelated decisions already
     // bound to this packet (for example, Spec's fixed entity disposition).
     for (packet.excludedVariants()) |entry| {
-        if (std.mem.eql(u8, entry.kind, "passive") or std.mem.eql(u8, entry.kind, "exact_copy")) continue;
+        if (std.mem.eql(u8, entry.kind, "passive")) continue;
         try excluded.append(a, entry);
     }
     if (passive.len == 0) {
         try excluded.append(a, .{ .kind = "passive" });
     }
-    if (exact_copy.len == 0) {
-        try excluded.append(a, .{ .kind = "exact_copy" });
-    }
     var choices: std.ArrayList(schema.IntegerChoice) = .empty;
     defer choices.deinit(a);
     for (packet.integerChoices()) |entry| {
-        if (entry.target == .tagged and (std.mem.eql(u8, entry.target.tagged.kind, "passive") or std.mem.eql(u8, entry.target.tagged.kind, "exact_copy"))) continue;
+        if (entry.target == .tagged and std.mem.eql(u8, entry.target.tagged.kind, "passive")) continue;
         try choices.append(a, entry);
     }
     if (passive.len != 0) {
         try choices.append(a, .{ .target = .{ .tagged = .{ .kind = "passive", .field = "passive_literal_id" } }, .allowed = passive });
-    }
-    if (exact_copy.len != 0) {
-        try choices.append(a, .{ .target = .{ .tagged = .{ .kind = "exact_copy", .field = "claim_id" } }, .allowed = exact_copy, .singleton = .construct });
     }
     return packets.withRestrictions(a, packet, excluded.items, choices.items);
 }

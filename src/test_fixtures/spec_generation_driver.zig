@@ -719,6 +719,7 @@ fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/
     try std.testing.expect(@import("../domain/model_request_identity.zig").unitOwnerEql(packet.unit(), current.id().immutable_unit_owner_id));
     try std.testing.expectEqualStrings(packet.purpose().atomic_repair.bytes, current.id().purpose.atomic_repair.bytes);
     try std.testing.expectEqualDeep(packet.originalSources(), request.original_sources);
+    try std.testing.expect(@import("../domain/model_exact_values.zig").same(packet.exactScope(), request.exact_scope));
     try std.testing.expectEqualDeep(packet.fieldPolicies(), request.field_policies);
     // Exercise the real provider serializer, without making a network call.
     const wire = try @import("../adapters/provider/bedrock_request.zig").encode(a, request, .inference, policy);

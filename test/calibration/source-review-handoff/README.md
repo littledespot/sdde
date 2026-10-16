@@ -1,5 +1,19 @@
 # Actual reviewer-to-loss handoff preparation
 
+**B3 current-contract refresh — 17 October 2026:** fixture candidates now pass
+through current native raw-prose admission before canonical validation. The frozen
+`dual-ready` input has two eligible occurrences with identical exact bytes, so the
+approved policy records `ambiguous_exact` before review. The frozen
+`captured-description` contains invented encoded insertion syntax and records
+`embedded_insertion_syntax` before review. Neither case prepares a review or loss
+request. Their original data, expectations and historical evidence remain
+unchanged. Current preparation accounts for all 12 inputs as 10 prepared cases
+and two explicit admission rejections: 20 review and at most 20 conditional loss
+sends, rather than the historical 24/24 plan below. The generated manifest and
+per-case native-admission records keep those denominators and reasons separate.
+This is offline preparation in progress, not a new frozen panel, semantic result
+or live-run authorization.
+
 This unexecuted plan is regenerated during FIX03 Phase 4 for current native
 preparation/admission code, schema, guidance and approved fixed temperature 0.1.
 Its selected duties use explicit focused `.finding` packets; the separate record

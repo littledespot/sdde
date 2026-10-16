@@ -139,7 +139,7 @@ pub fn run() !void {
         for (seeds) |seed| {
             if (index == 0 and current.completed == 1) try singletonConstructionChecks(a, schema, current, prepared.context);
             const request = try exportRequest(a, schema, example.id, current, prepared.context);
-            if (index == 0 and current.completed == 0) try receiptChecks(a, request, try codec.encode(g.ModelResponse, a, try g.ModelResponse.from(a, seed)));
+            if (index == 0 and current.completed == 0) try receiptChecks(a, request, try codec.encode(g.ModelResponse, a, try g.ModelResponse.from(a, prepared.context, seed)));
             try addTrials(a, &trials, example.id, request);
             for (0..2) |_| try starts.append(a, current);
             physical_sends += 2;
@@ -476,7 +476,7 @@ fn recordSeed(a: std.mem.Allocator, seed: RecordSeed, assigned: binding.RecordBo
     return records.items;
 }
 fn admittedSeed(a: std.mem.Allocator, schema: *const schema_owner.Schema, current: session.Session, context: @import("../domain/specification_provenance.zig").Context, proposed: g.Response) !session.Session {
-    const bytes = try codec.encode(g.ModelResponse, a, try g.ModelResponse.from(a, proposed));
+    const bytes = try codec.encode(g.ModelResponse, a, try g.ModelResponse.from(a, context, proposed));
     const checked = switch (try admitResponse(a, schema, current, context, bytes)) {
         .valid => |checked| checked,
         .invalid => return error.InvalidCalibrationSeed,
@@ -508,7 +508,10 @@ pub fn admitResponse(a: std.mem.Allocator, schema: *const schema_owner.Schema, c
 }
 
 fn singletonConstructionChecks(a: std.mem.Allocator, schema: *const schema_owner.Schema, current: session.Session, context: @import("../domain/specification_provenance.zig").Context) !void {
-    const wire = "{\"kind\":\"primary_user_story\",\"value\":{\"fragments\":[{\"kind\":\"exact_copy\"},\" MOCK The application starts successfully and displays its greeting and UTC date and time.\"]},\"signal_ids\":[1,2]}";
+    const occurrences = try @import("../domain/specification_provenance.zig").exactOccurrences(a, @import("../domain/reference_support.zig").records(context.references), null);
+    if (occurrences.len != 1) return error.InvalidCalibrationSingleton;
+    const prose = try std.fmt.allocPrint(a, "{s} MOCK The application starts successfully and displays its greeting and UTC date and time.", .{occurrences[0].bytes});
+    const wire = try codec.encode(g.ModelResponse, a, .{ .primary_user_story = .{ .value = try business(a, prose), .signal_ids = &.{ .{ .ordinal = 1 }, .{ .ordinal = 2 } } } });
     const checked = switch (try admitResponse(a, schema, current, context, wire)) {
         .valid => |checked| checked,
         .invalid => return error.InvalidCalibrationSingleton,

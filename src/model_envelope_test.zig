@@ -6,7 +6,7 @@ const schema = @import("domain/model_result_schema.zig");
 const Fixture = @import("provider_invocation_test_fixture.zig").Fixture;
 
 const model_text_schema =
-    \\{"type":"object","properties":{"text":{"oneOf":[{"type":"string","minLength":1,"maxLength":4294967295},{"type":"object","properties":{"fragments":{"type":"array","minItems":1,"maxItems":4294967295,"items":{"oneOf":[{"type":"string","minLength":1,"maxLength":4294967295},{"type":"object","properties":{"kind":{"const":"exact_copy"}},"required":["kind"],"additionalProperties":false}]}}},"required":["fragments"],"additionalProperties":false}]}},"required":["text"],"additionalProperties":false}
+    \\{"type":"object","properties":{"text":{"oneOf":[{"type":"string","minLength":1,"maxLength":4294967295},{"type":"object","properties":{"fragments":{"type":"array","minItems":1,"maxItems":4294967295,"items":{"oneOf":[{"type":"string","minLength":1,"maxLength":4294967295},{"type":"object","properties":{"kind":{"const":"passive"},"passive_literal_id":{"type":"integer","minimum":1,"maximum":4294967295}},"required":["kind","passive_literal_id"],"additionalProperties":false}]}}},"required":["fragments"],"additionalProperties":false}]}},"required":["text"],"additionalProperties":false}
 ;
 
 const raw_prose_schema =
@@ -551,7 +551,7 @@ test "response composition aggregates concrete sibling fields typed reasons and 
     const composition = @import("domain/model_text_composition.zig");
     var document = try @import("domain/strict_json.zig").parse(std.testing.allocator, aggregate_body, .{ .maximum_depth = schema.max_json_depth }, false, null);
     defer document.deinit();
-    const diagnostic = (try composition.check(std.testing.allocator, document.value, aggregate_bindings, aggregate_questions, &.{})).?;
+    const diagnostic = (try composition.check(std.testing.allocator, document.value, aggregate_bindings, aggregate_questions, &.{}, .{ .exact_scope = null })).?;
     defer diagnostic.deinit(std.testing.allocator);
     const expected = [_]struct { path: []const u8, field: @import("domain/text_field_policy.zig").Field, reason: @FieldType(@import("domain/typed_text.zig").Issue, "reason") }{
         .{ .path = "/records/0/given", .field = .ac_given, .reason = .reference_only },
@@ -576,7 +576,7 @@ test "response composition aggregates concrete sibling fields typed reasons and 
     try std.testing.checkAllAllocationFailures(std.testing.allocator, aggregateAllocation, .{document.value});
 }
 fn aggregateAllocation(a: std.mem.Allocator, value: std.json.Value) !void {
-    const diagnostic = (try @import("domain/model_text_composition.zig").check(a, value, aggregate_bindings, aggregate_questions, &.{})).?;
+    const diagnostic = (try @import("domain/model_text_composition.zig").check(a, value, aggregate_bindings, aggregate_questions, &.{}, .{ .exact_scope = null })).?;
     defer diagnostic.deinit(a);
     const copied = try diagnostic.copy(a);
     defer copied.deinit(a);
@@ -604,7 +604,7 @@ test "selected root leaves source witnesses malformed shapes and unrelated prose
         var parsed = try @import("domain/strict_json.zig").parse(std.testing.allocator, case.body, .{ .maximum_depth = schema.max_json_depth }, false, null);
         defer parsed.deinit();
         const sources: []const @import("domain/model_text_wire.zig").SourceText = if (case.source) |bytes| &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = bytes }} else &.{};
-        const diagnostic = try composition.check(std.testing.allocator, parsed.value, bindings, &.{}, sources);
+        const diagnostic = try composition.check(std.testing.allocator, parsed.value, bindings, &.{}, sources, .{ .exact_scope = null });
         defer if (diagnostic) |failure| failure.deinit(std.testing.allocator);
         if (case.reason) |reason| {
             try std.testing.expectEqual(@as(usize, 1), diagnostic.?.fields.len);
@@ -612,7 +612,7 @@ test "selected root leaves source witnesses malformed shapes and unrelated prose
             try std.testing.expectEqualStrings("", diagnostic.?.fields[0].path);
         } else try std.testing.expect(diagnostic == null);
         // The same bytes in a schema's unrelated string have no field policy.
-        const unrelated = try composition.check(std.testing.allocator, parsed.value, &.{}, &.{}, sources);
+        const unrelated = try composition.check(std.testing.allocator, parsed.value, &.{}, &.{}, sources, .{ .exact_scope = null });
         try std.testing.expect(unrelated == null);
     }
 }
@@ -621,11 +621,57 @@ test "aggregate admission and protocol diagnostic copying clean every failed all
     var fixture: Fixture = undefined;
     try fixture.initWithFieldPolicies(model_text_schema, &.{}, &.{}, &.{.{ .field = .functional_requirement, .path = &.{.{ .property = "text" }} }});
     defer fixture.deinit();
-    fixture.fake.invocation_plan.complete.content = "{\"text\":{\"fragments\":[{\"kind\":\"exact_copy\"}]}}";
+    fixture.fake.invocation_plan.complete.content = "{\"text\":{\"fragments\":[{\"kind\":\"passive\",\"passive_literal_id\":3}]}}";
     var response = try fixture.response();
     defer response.deinit();
     var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
     defer validated.deinit();
     try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ validated.evidence.result().complete, false });
     try std.testing.expectEqual(@as(usize, 1), fixture.fake.invocation_call_count);
+}
+
+test "native exact scope classifies raw prose without granting semantic support or crossing opaque references" {
+    const composition = @import("domain/model_text_composition.zig");
+    const field_policy = @import("domain/text_field_policy.zig");
+    const native: @import("domain/model_exact_values.zig").Scope = .{ .reference_state = .{ .bytes = "REF-current" }, .occurrences = &.{.{ .claim_id = .{ .ordinal = 2 }, .bytes = "ACTIVE" }} };
+    const competing: @import("domain/model_exact_values.zig").Scope = .{ .reference_state = native.reference_state, .occurrences = &.{ native.occurrences[0], .{ .claim_id = .{ .ordinal = 3 }, .bytes = "ACTIVE" } } };
+    const Reason = @FieldType(@import("domain/typed_text.zig").Issue, "reason");
+    const Case = struct { value: []const u8, field: field_policy.Field = .ac_then, scope: @import("domain/model_exact_values.zig").Scope = native, reason: ?Reason = null };
+    for ([_]Case{
+        .{ .value = "\"ACTIVE\"", .reason = .reference_only },
+        .{ .value = "\"Display ACTIVE.\"" },
+        .{ .value = "\"ACTIVE-suffix\"" },
+        .{ .value = "\"ACTIVE\"", .scope = competing, .reason = .ambiguous_exact },
+        .{ .value = "{\"fragments\":[{\"kind\":\"passive\",\"passive_literal_id\":7},\"ACTIVE\"]}" },
+        .{ .value = "{\"fragments\":[\"ACT\",{\"kind\":\"passive\",\"passive_literal_id\":7},\"IVE\"]}" },
+        .{ .value = "\"ACTIVE\"", .field = .entity_meaning },
+        .{ .value = "\"ACTIVE\"", .field = .entity_name },
+    }) |case| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const bytes = try std.mem.concat(a, u8, &.{ "{\"value\":", case.value, "}" });
+        const document = try @import("domain/strict_json.zig").parse(a, bytes, .{ .maximum_depth = schema.max_json_depth }, false, null);
+        const bindings: []const @import("domain/model_text_field.zig").Binding = &.{.{ .field = case.field, .path = &.{.{ .property = "value" }} }};
+        const diagnostic = try composition.check(a, document.value, bindings, &.{}, &.{}, .{ .exact_scope = case.scope });
+        if (case.reason) |expected| {
+            try std.testing.expectEqual(@as(usize, 1), diagnostic.?.fields.len);
+            try std.testing.expectEqual(expected, diagnostic.?.fields[0].issue.reason);
+            try std.testing.expectEqualStrings("/value", diagnostic.?.fields[0].path);
+        } else try std.testing.expect(diagnostic == null);
+        // A null composition diagnostic assesses structure only. In particular,
+        // attached suffixes and opaque references supply no occurrence evidence;
+        // the separate native coverage owner still checks exact obligations.
+        try std.testing.expectEqualStrings(bytes, try std.json.Stringify.valueAlloc(a, document.value, .{}));
+    }
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, nativeCompositionAllocation, .{});
+}
+fn nativeCompositionAllocation(a: std.mem.Allocator) !void {
+    const raw = "{\"value\":\"ACTIVE\"}";
+    var document = try @import("domain/strict_json.zig").parse(a, raw, .{ .maximum_depth = schema.max_json_depth }, false, null);
+    defer document.deinit();
+    const diagnostic = (try @import("domain/model_text_composition.zig").check(a, document.value, &.{.{ .field = .ac_then, .path = &.{.{ .property = "value" }} }}, &.{}, &.{}, .{ .exact_scope = .{ .reference_state = .{ .bytes = "REF-current" }, .occurrences = &.{.{ .claim_id = .{ .ordinal = 2 }, .bytes = "ACTIVE" }} } })).?;
+    defer diagnostic.deinit(a);
+    try std.testing.expectEqual(@as(usize, 1), diagnostic.fields.len);
+    try std.testing.expectEqual(.reference_only, diagnostic.fields[0].issue.reason);
 }

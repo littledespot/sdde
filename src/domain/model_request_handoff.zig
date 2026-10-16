@@ -104,6 +104,7 @@ pub const Request = opaque {
             .original_sources = if (self.packet()) |packet_value| packet_value.originalSources() else &.{},
             .prose_fields = if (self.packet()) |packet_value| packet_value.proseFields() else &.{},
             .field_policies = if (self.packet()) |packet_value| packet_value.fieldPolicies() else &.{},
+            .exact_scope = if (self.packet()) |packet_value| packet_value.exactScope() else null,
         };
     }
 
@@ -226,6 +227,7 @@ pub const Selection = struct {
         const definition = current.packet.resultDefinition() orelse return false;
         if (!std.mem.eql(u8, definition.bytes, prior.result_definition.?.bytes) or
             !std.mem.eql(u8, current.packet.body(), old.packet.body())) return false;
+        if (!@import("model_exact_values.zig").same(current.packet.exactScope(), old.packet.exactScope())) return false;
         const canonical = self.result.content.result_schema.select(definition) orelse return false;
         if (canonical != prior.result.content.result_schema) return false;
         const Restrictions = struct {

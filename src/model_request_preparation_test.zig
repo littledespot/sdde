@@ -6,6 +6,47 @@ const compilation = @import("domain/workflow_compilation.zig");
 const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
 const Fixture = @import("provider_authorization_test_fixture.zig").Fixture;
 
+test "current exact-capable fields require an explicit native scope even with no occurrences" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const compiled = try compiler.compiler().compile(fixture.schema_arena.allocator(), "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"string\",\"maxLength\":256}},\"required\":[\"value\"],\"additionalProperties\":false}");
+    const resource: compilation.CompiledResource = .{ .id = .{ .bytes = "value-result" }, .content = .{ .result_schema = compiled } };
+    var selected = try source(&fixture, &resource);
+    selected.field_policies = &.{.{ .field = .ac_then, .path = &.{.{ .property = "value" }} }};
+    const content: []const provider.ModelVisibleContent = &.{.{ .user = "Describe the assigned value." }};
+    try std.testing.expectError(error.InvalidProviderNeutralModelRequest, preparation.build(std.testing.allocator, selected, content));
+    selected.exact_scope = .{ .reference_state = .{ .bytes = "TEST-empty-reference" }, .occurrences = &.{} };
+    var owned = try preparation.build(std.testing.allocator, selected, content);
+    defer owned.deinit();
+    try preparation.validateRequest(selected, owned.request);
+    try std.testing.expectEqual(@as(usize, 0), owned.request.exact_scope.?.occurrences.len);
+    var missing = owned.request.*;
+    missing.exact_scope = null;
+    try std.testing.expectError(error.InvalidProviderNeutralModelRequest, missing.validate());
+    const Description = @import("domain/model_request_description.zig").Description;
+    var described = Description.from(owned.request, &fixture.provider_binding, .inference);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    _ = try Description.decode(a, try std.json.Stringify.valueAlloc(a, described, .{}));
+    described.exact_scope = null;
+    try std.testing.expectError(error.InvalidJsonDocument, Description.decode(a, try std.json.Stringify.valueAlloc(a, described, .{})));
+    selected.exact_scope = null;
+    selected.field_policies = &.{};
+    selected.prose_fields = &.{.{ .field = .ac_then, .path = &.{.{ .property = "value" }} }};
+    try std.testing.expectError(error.InvalidProviderNeutralModelRequest, preparation.build(std.testing.allocator, selected, content));
+    selected.prose_fields = &.{};
+    for ([_]@import("domain/text_field_policy.zig").Field{ .spec_goal, .extraction_business, .reconciliation_business }) |field| {
+        selected.exact_scope = null;
+        selected.field_policies = &.{ .{ .field = field, .path = &.{.{ .property = "value" }} }, .{ .field = .ac_then, .path = &.{.{ .property = "absent" }} } };
+        var prohibited = try preparation.build(std.testing.allocator, selected, content);
+        defer prohibited.deinit();
+        try std.testing.expect(prohibited.request.exact_scope == null);
+    }
+}
+
 test "native raw prose selectors are deep owned schema bound and absent from provider content" {
     const wire = @import("domain/model_text_wire.zig");
     var fixture: Fixture = undefined;
@@ -463,5 +504,96 @@ test "request mode cannot override catalogue JSON selection" {
         try std.testing.expect(fixture.request.matchesBinding(fixture.provider_binding));
         fixture.request.response_guidance_mode = if (json) .prompt_only else .native_schema;
         try std.testing.expect(!fixture.request.matchesBinding(fixture.provider_binding));
+    }
+}
+
+test "native exact occurrence scope is deep owned and bound across request descriptions" {
+    const exact = @import("domain/model_exact_values.zig");
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const resource = resultResource(&fixture);
+    var selected = try source(&fixture, &resource);
+    var bytes = "ACTIVE".*;
+    var occurrences = [_]@import("domain/exact_value_recognition.zig").Occurrence{.{ .claim_id = .{ .ordinal = 7 }, .bytes = &bytes }};
+    selected.exact_scope = .{ .reference_state = .{ .bytes = "REF-1" }, .occurrences = &occurrences };
+    const content = [_]provider.ModelVisibleContent{.{ .user = "Describe the assigned behavior." }};
+    var owned = try preparation.build(std.testing.allocator, selected, &content);
+    defer owned.deinit();
+    const scope = owned.request.exact_scope.?;
+    try std.testing.expect(exact.same(selected.exact_scope, scope));
+    try std.testing.expect(scope.occurrences.ptr != occurrences[0..].ptr);
+    try std.testing.expect(scope.occurrences[0].bytes.ptr != bytes[0..].ptr);
+    try std.testing.expectEqualDeep(@as([]const provider.ModelVisibleContent, &content), owned.request.content);
+    var bound_id = owned.request.model_request_id.*;
+    bound_id.immutable_unit_owner_id = .{ .reference_global = .{ .reference_state_id = scope.reference_state, .unit_slot_id = .{ .bytes = "native-unit" } } };
+    var bound_request = owned.request.*;
+    bound_request.model_request_id = &bound_id;
+    try bound_request.validate();
+    bound_id.immutable_unit_owner_id.reference_global.reference_state_id.bytes = "FOREIGN";
+    try std.testing.expectError(error.InvalidProviderNeutralModelRequest, bound_request.validate());
+    bytes[0] = 'X';
+    try std.testing.expectEqualStrings("ACTIVE", scope.occurrences[0].bytes);
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.validateRequest(selected, owned.request));
+    bytes[0] = 'A';
+    occurrences[0].claim_id.ordinal = 8;
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.validateRequest(selected, owned.request));
+    occurrences[0].claim_id.ordinal = 7;
+    selected.exact_scope.?.reference_state.bytes = "REF-2";
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.validateRequest(selected, owned.request));
+    selected.exact_scope = scope;
+    try preparation.validateRequest(selected, owned.request);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const description = @import("domain/model_request_description.zig").Description;
+    const encoded = try std.json.Stringify.valueAlloc(a, description.from(owned.request, &fixture.provider_binding, .inference), .{});
+    const restored = try description.decode(a, encoded);
+    try std.testing.expect(exact.same(scope, restored.exact_scope));
+    const old = try std.mem.replaceOwned(u8, a, encoded, "model-request-debug/v6", "model-request-debug/v5");
+    try std.testing.expectError(error.InvalidJsonDocument, description.decode(a, old));
+}
+
+test "native exact packet scope narrows without widening and cleans every failed allocation" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, exactPacketAllocation, .{});
+}
+
+fn exactPacketAllocation(a: std.mem.Allocator) !void {
+    const packets = @import("domain/model_input_packet.zig");
+    const exact = @import("domain/model_exact_values.zig");
+    const base = try packets.create(a, "{\"input\":\"original\"}", .workflow_step, .initial_generation, null);
+    defer packets.release(base);
+    const scope: exact.Scope = .{ .reference_state = .{ .bytes = "REF-1" }, .occurrences = &.{ .{ .claim_id = .{ .ordinal = 7 }, .bytes = "ACTIVE" }, .{ .claim_id = .{ .ordinal = 9 }, .bytes = "READY" } } };
+    const scoped = try packets.withExactScope(a, base, scope);
+    defer packets.release(scoped);
+    const narrow = try packets.withExactScope(a, scoped, .{ .reference_state = scope.reference_state, .occurrences = scope.occurrences[1..] });
+    defer packets.release(narrow);
+    const clone = try packets.withBody(a, narrow, "{\"input\":\"projected\"}");
+    defer packets.release(clone);
+    try std.testing.expect(base.exactScope() == null);
+    try std.testing.expect(exact.same(narrow.exactScope(), clone.exactScope()));
+    try std.testing.expect(clone.exactScope().?.occurrences.ptr != narrow.exactScope().?.occurrences.ptr);
+    try std.testing.expectEqualStrings("{\"input\":\"projected\"}", clone.body());
+    try std.testing.expectEqualStrings("{\"input\":\"original\"}", base.body());
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withExactScope(a, clone, scope));
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withExactScope(a, scoped, .{ .reference_state = .{ .bytes = "REF-2" }, .occurrences = scope.occurrences }));
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withExactScope(a, scoped, .{ .reference_state = scope.reference_state, .occurrences = &.{.{ .claim_id = .{ .ordinal = 7 }, .bytes = "CHANGED" }} }));
+}
+
+test "native exact packet scopes must match reference-backed owner snapshots" {
+    const packets = @import("domain/model_input_packet.zig");
+    const ids = @import("domain/model_request_identity.zig");
+    const scope: @import("domain/model_exact_values.zig").Scope = .{ .reference_state = .{ .bytes = "REF-1" }, .occurrences = &.{} };
+    for ([_]ids.ImmutableUnitOwnerId{
+        .{ .reference_chunk = .{ .reference_state_id = scope.reference_state, .chunk_id = .{ .bytes = "chunk-1" } } },
+        .{ .reference_global = .{ .reference_state_id = scope.reference_state, .unit_slot_id = .{ .bytes = "unit" } } },
+        .{ .specification_unit = .{ .reference_state_id = scope.reference_state, .feature_id = .{ .bytes = "feature" }, .unit_slot_id = .{ .bytes = "unit" } } },
+        .{ .semantic_review = .{ .parent_unit_owner_id = .{ .reference_global = .{ .reference_state_id = scope.reference_state, .unit_slot_id = .{ .bytes = "unit" } } }, .review_slot_id = .{ .bytes = "review" } } },
+    }) |owner| {
+        const base = try packets.create(std.testing.allocator, "{}", owner, if (owner == .semantic_review) .{ .semantic_review = .{ .bytes = "review" } } else .initial_generation, null);
+        defer packets.release(base);
+        const bound = try packets.withExactScope(std.testing.allocator, base, scope);
+        defer packets.release(bound);
+        try std.testing.expectError(error.InvalidModelInputPacket, packets.withExactScope(std.testing.allocator, base, .{ .reference_state = .{ .bytes = "FOREIGN" }, .occurrences = &.{} }));
     }
 }

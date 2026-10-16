@@ -80,11 +80,20 @@ pub fn run() !void {
     var trials: std.ArrayList(Trial) = .empty;
     var development: usize = 0;
     var qualification: usize = 0;
+    var prepared_development: usize = 0;
+    var prepared_qualification: usize = 0;
+    var admission_rejections: std.ArrayList(shared.AdmissionRejection) = .empty;
     for (cases, 0..) |example, index| {
         for (cases[0..index]) |prior| try std.testing.expect(!std.mem.eql(u8, prior.id, example.id));
         if (example.cohort == .development) development += 1 else qualification += 1;
-        const prepared = try prepare(a, example, retained);
+        const prepared = prepare(a, example, retained) catch |err| {
+            const rejection: shared.AdmissionRejection = .{ .case_id = example.id, .reason = shared.admissionReason(err) orelse return err };
+            try admission_rejections.append(a, rejection);
+            try shared.writeAdmissionRejection(a, output, rejection);
+            continue;
+        };
         defer prepared.passive.deinit();
+        if (example.cohort == .development) prepared_development += 1 else prepared_qualification += 1;
         const target = try targetId(example.target);
         const ledger = try authority.build(a, prepared.inputs);
         const ordinal = for (ledger.requirements, 1..) |required, number| {
@@ -115,13 +124,20 @@ pub fn run() !void {
     }
     try std.testing.expectEqual(@as(usize, 15), development);
     try std.testing.expectEqual(@as(usize, 9), qualification);
-    try std.testing.expectEqual(@as(usize, 96), trials.items.len);
+    try std.testing.expectEqualDeep(@as([]const shared.AdmissionRejection, &.{
+        .{ .case_id = "d5-ready-payer-field", .reason = .ambiguous_exact },
+        .{ .case_id = "d5-ready-fr-other-occurrence", .reason = .ambiguous_exact },
+    }), admission_rejections.items);
+    try std.testing.expectEqual(@as(usize, 13), prepared_development);
+    try std.testing.expectEqual(@as(usize, 9), prepared_qualification);
+    try std.testing.expectEqual(@as(usize, 88), trials.items.len);
     try taxonomyProbes(a);
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/preparation.json", .data = try std.json.Stringify.valueAlloc(a, .{
         .status = "offline_prepared_no_live_dispatch_authority",
         .factor = "Source-review scope presentation: current production assessment_scope and its referring prompt; baseline omits only that field and uses the pinned prior prompt.",
         .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = temperature_policy.temperature, .response_mode = "native_schema", .max_output_tokens = 16384, .seed = "absent", .top_p = "absent" },
         .limits = .{ .repetitions_per_arm = 2, .development_assignments = development, .reserved_qualification_assignments = qualification, .maximum_physical_sends = trials.items.len, .stop_at_actual_input_plus_output_tokens = 600000, .retries_corrections_repairs_loss_calls_model_judges_e2e = 0 },
+        .native_admission = .{ .input_cases = cases.len, .prepared_development = prepared_development, .prepared_qualification = prepared_qualification, .pre_review_rejections = admission_rejections.items },
         .cases = try filePin(a, root ++ "/cases.json"),
         .baseline_prompt = try filePin(a, root ++ "/baseline.prompt.md"),
         .candidate_prompt = try filePin(a, "design/workflows/spec/support.prompt.md"),
@@ -182,7 +198,11 @@ fn prepare(a: std.mem.Allocator, example: Case, retained: []const shared.Case) !
         }
         candidate = .{ .display_name = brief.title, .primary_user_story = try attributed(a, prepared.context, example.story orelse base.description, base.source_group_ids), .records = identified, .entities = .{ .disposition = .not_applicable, .basis = try attributed(a, prepared.context, "No separate business entity records are supplied in this diagnostic candidate.", base.source_group_ids) } };
     }
-    if (candidate) |value| try provenance.validateStored(a, prepared.context.inputs, .{ .records = prepared.context.registry.records, .occurrences = prepared.context.registry.occurrences }, @import("../domain/reference_support.zig").records(prepared.context.references), brief, value);
+    brief = try shared.admitBrief(a, prepared.context, brief);
+    if (candidate) |value| {
+        candidate = try shared.admitContent(a, prepared.context, value);
+        try provenance.validateStored(a, prepared.context.inputs, .{ .records = prepared.context.registry.records, .occurrences = prepared.context.registry.occurrences }, @import("../domain/reference_support.zig").records(prepared.context.references), brief, candidate.?);
+    }
     prepared.inputs = try @import("../domain/specification_authority.zig").project(a, prepared.context.inputs.corpus.feature_id, prepared.context.references, candidate, brief);
     return prepared;
 }

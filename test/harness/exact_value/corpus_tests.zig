@@ -6,8 +6,11 @@ const classifier: corpus.recognition.LexicalClassifier = .{ .boundary_fn = @impo
 const packet =
     \\{"preserved_tokens":[{"claim_id":1,"value":"ACTIVE"}],"source_assignment":{"requirements":[{"claim_id":1}]}}
 ;
-const text_schema =
+const historical_text_schema =
     \\{"oneOf":[{"type":"string","minLength":1,"maxLength":4096},{"type":"object","properties":{"fragments":{"type":"array","items":{"oneOf":[{"type":"string","minLength":1,"maxLength":4096},{"type":"object","properties":{"kind":{"const":"exact_copy"},"claim_id":{"enum":[1]}},"required":["kind","claim_id"],"additionalProperties":false}]},"minItems":1,"maxItems":16}},"required":["fragments"],"additionalProperties":false}]}
+;
+const text_schema =
+    \\{"oneOf":[{"type":"string","minLength":1,"maxLength":4096},{"type":"object","properties":{"fragments":{"type":"array","items":{"oneOf":[{"type":"string","minLength":1,"maxLength":4096},{"type":"object","properties":{"kind":{"const":"passive"},"passive_literal_id":{"enum":[1]}},"required":["kind","passive_literal_id"],"additionalProperties":false}]},"minItems":1,"maxItems":16}},"required":["fragments"],"additionalProperties":false}]}
 ;
 const root_schema = "{\"type\":\"object\",\"properties\":{\"value\":" ++ text_schema ++ "},\"required\":[\"value\"],\"additionalProperties\":false}";
 fn valueOutput(a: std.mem.Allocator, output: []const u8) ![]const u8 {
@@ -17,10 +20,14 @@ fn valueSchema(a: std.mem.Allocator, schema: []const u8) ![]const u8 {
     return std.fmt.allocPrint(a, "{{\"type\":\"object\",\"properties\":{{\"value\":{s}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{schema});
 }
 fn measure(a: std.mem.Allocator, output: []const u8, field: policy.Field) !corpus.Measurement {
+    return measureContract(a, output, field, .current_v6);
+}
+fn measureContract(a: std.mem.Allocator, output: []const u8, field: policy.Field, contract: corpus.MetadataContract) !corpus.Measurement {
     return corpus.measure(a, .{
         .packet = packet,
         .output = try valueOutput(a, output),
-        .schema = root_schema,
+        .schema = if (contract == .current_v6) root_schema else "{\"type\":\"object\",\"properties\":{\"value\":" ++ historical_text_schema ++ "},\"required\":[\"value\"],\"additionalProperties\":false}",
+        .metadata_contract = contract,
         .field_policies = &.{.{ .field = field, .path = &.{.{ .property = "value" }} }},
         .original_sources = &.{},
     }, classifier);
@@ -56,9 +63,9 @@ test "prototype retained typed insertions and encoded syntax are never healed by
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const insertion = try measure(a,
+    const insertion = try measureContract(a,
         \\{"fragments":[{"kind":"exact_copy","claim_id":1}]}
-    , .ac_then);
+    , .ac_then, .historical_v5);
     const selected = insertion.fields[0];
     try std.testing.expectEqual(@as(usize, 0), selected.plain_runs.len);
     try std.testing.expectEqual(@as(usize, 1), selected.typed_exact_references.len);
@@ -179,14 +186,55 @@ test "prototype native field metadata must fit the selected response schema" {
     const measured = try corpus.measure(a, .{
         .packet = packet,
         .output = "{\"value\":\"ACTIVE\"}",
-        .schema = root_schema,
-        // This field's native policy prohibits exact copies, while the selected
-        // response schema offers that alternative to the model.
+        .schema = "{\"type\":\"object\",\"properties\":{\"value\":" ++ historical_text_schema ++ "},\"required\":[\"value\"],\"additionalProperties\":false}",
+        // Every current model field prohibits exact-copy input. This historical
+        // alternative must not acquire current model metadata authority.
         .field_policies = &.{.{ .field = .clarification_question, .path = &.{.{ .property = "value" }} }},
     }, classifier);
     try std.testing.expectEqual(.invalid_field_metadata, measured.state);
     try std.testing.expectEqual(@as(usize, 0), measured.fields.len);
     try std.testing.expect(!measured.workflow_authority and !measured.semantic_quality_assessed);
+
+    const historical = try measureContract(a, "\"ACTIVE\"", .entity_name, .historical_v5);
+    try std.testing.expectEqual(corpus.State.measured, historical.state);
+    try std.testing.expectEqual(corpus.MetadataContract.historical_v5, historical.metadata_contract);
+    try std.testing.expect(historical.native_exact_scope == null);
+    try std.testing.expect(!historical.workflow_authority and !historical.semantic_quality_assessed);
+
+    const wrong_leaf = try corpus.measure(a, .{
+        .packet = packet,
+        .output = "{\"value\":true}",
+        .schema = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"boolean\"}},\"required\":[\"value\"],\"additionalProperties\":false}",
+        .field_policies = &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }},
+        .metadata_contract = .historical_v5,
+    }, classifier);
+    try std.testing.expectEqual(corpus.State.invalid_field_metadata, wrong_leaf.state);
+}
+
+test "current native occurrence facts remain separate from historical membership diagnostics" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const input: corpus.Input = .{
+        .packet = "{\"source_assignment\":{\"requirements\":[{\"claim_id\":1}]}}",
+        .output = "{\"value\":\"Display ACTIVE.\"}",
+        .schema = root_schema,
+        .field_policies = &.{.{ .field = .ac_then, .path = &.{.{ .property = "value" }} }},
+        .exact_scope = .{ .reference_state = .{ .bytes = "REF-current" }, .occurrences = &.{.{ .claim_id = .{ .ordinal = 2 }, .bytes = "ACTIVE" }} },
+    };
+    const measured = try corpus.measure(a, input, classifier);
+    try std.testing.expectEqual(corpus.State.measured, measured.state);
+    try std.testing.expectEqual(@as(usize, 1), measured.occurrence_count);
+    try std.testing.expectEqual(@as(u32, 2), measured.native_exact_scope.?.occurrences[0].claim_id.ordinal);
+    try std.testing.expectEqual(.selected_requirement_membership, measured.binding_policy);
+    try std.testing.expectEqual(@as(usize, 0), measured.fields[0].plain_runs[0].result.matches.len);
+    try std.testing.expectEqual(@as(usize, 1), measured.fields[0].plain_runs[0].result.unbound_matches.len);
+    var forged_history = input;
+    forged_history.metadata_contract = .historical_v5;
+    const rejected = try corpus.measure(a, forged_history, classifier);
+    try std.testing.expectEqual(corpus.State.invalid_field_metadata, rejected.state);
+    try std.testing.expectEqual(@as(usize, 0), rejected.fields.len);
+    try std.testing.expect(rejected.native_exact_scope == null);
 }
 
 test "prototype lexical matches inside encoded insertion syntax cannot repair the native rejection" {
@@ -217,9 +265,9 @@ test "prototype literal runs do not invent whole word boundaries next to typed i
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
-    const separated = try measure(a,
+    const separated = try measureContract(a,
         \\{"fragments":["ACT",{"kind":"exact_copy","claim_id":1},"IVE"]}
-    , .ac_then);
+    , .ac_then, .historical_v5);
     try std.testing.expectEqual(@as(usize, 2), separated.fields[0].plain_runs.len);
     for (separated.fields[0].plain_runs) |run| {
         try std.testing.expectEqual(.unavailable_boundary_context, run.result.state);
@@ -248,11 +296,12 @@ test "prototype omitted typed occurrence identity requires constructed singleton
     ;
     // A historical schema that merely makes the identity optional supplies no
     // canonical construction witness, despite the sole available catalogue item.
-    const optional_identity_schema = try std.mem.replaceOwned(u8, a, text_schema, "\"required\":[\"kind\",\"claim_id\"]", "\"required\":[\"kind\"]");
+    const optional_identity_schema = try std.mem.replaceOwned(u8, a, historical_text_schema, "\"required\":[\"kind\",\"claim_id\"]", "\"required\":[\"kind\"]");
     const unknown = try corpus.measure(a, .{
         .packet = packet,
         .output = try valueOutput(a, output),
         .schema = try valueSchema(a, optional_identity_schema),
+        .metadata_contract = .historical_v5,
         .field_policies = &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }},
     }, classifier);
     try std.testing.expectEqual(.measured, unknown.state);
@@ -261,12 +310,13 @@ test "prototype omitted typed occurrence identity requires constructed singleton
     try std.testing.expectEqual(null, unknown.fields[0].typed_exact_references[0].occurrence);
     try std.testing.expectEqual(null, unknown.fields[0].historical_typed_counterfactual);
 
-    const no_identity_property = try std.mem.replaceOwned(u8, a, text_schema, ",\"claim_id\":{\"enum\":[1]}", "");
+    const no_identity_property = try std.mem.replaceOwned(u8, a, historical_text_schema, ",\"claim_id\":{\"enum\":[1]}", "");
     const constructed_schema = try std.mem.replaceOwned(u8, a, no_identity_property, "\"required\":[\"kind\",\"claim_id\"]", "\"required\":[\"kind\"]");
     const constructed = try corpus.measure(a, .{
         .packet = packet,
         .output = try valueOutput(a, output),
         .schema = try valueSchema(a, constructed_schema),
+        .metadata_contract = .historical_v5,
         .field_policies = &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }},
     }, classifier);
     try std.testing.expectEqual(.measured, constructed.state);
@@ -274,7 +324,7 @@ test "prototype omitted typed occurrence identity requires constructed singleton
     try std.testing.expectEqual(@as(?u32, 1), constructed.fields[0].typed_exact_references[0].occurrence);
     try std.testing.expectEqual(.matched, constructed.fields[0].historical_typed_counterfactual.?.result.state);
 
-    const required = try measure(a, output, .entity_name);
+    const required = try measureContract(a, output, .entity_name, .historical_v5);
     try std.testing.expectEqual(.schema_invalid, required.state);
     try std.testing.expectEqual(@as(usize, 0), required.fields.len);
 }

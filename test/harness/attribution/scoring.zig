@@ -21,6 +21,9 @@ pub const FieldCount = struct {
 };
 pub const ClaimStructure = struct { kind: ?[]const u8, citation_count: ?usize };
 pub const Measurement = struct {
+    captured_contract: enum { historical_v5 } = .historical_v5,
+    native_exact_scope_available: bool = false,
+    current_model_admission_assessed: bool = false,
     state: State,
     provider_response_sha256: ?[]const u8 = null,
     model_text_sha256: ?[]const u8 = null,
@@ -45,13 +48,31 @@ pub const Report = struct {
     diagnostic_only: bool = true,
     semantic_quality_assessed: bool = false,
     workflow_admission_assessed: bool = false,
+    captured_contract: enum { historical_v5 } = .historical_v5,
+    current_model_admission_assessed: bool = false,
     planned: u8 = 21,
     attempted: usize,
     trials: []const TrialResult,
     arms: []const Summary,
 };
-pub fn decodeRequest(a: std.mem.Allocator, bytes: []const u8) !debug.RequestRecord {
-    return strict.decode(debug.RequestRecord, a, bytes, .{ .maximum_depth = 64 });
+pub const CapturedRequestRecord = struct {
+    version: enum { @"request-replay/v6" } = .@"request-replay/v6",
+    id: []const u8,
+    run: []const u8,
+    sequence: u64,
+    parent_run: []const u8,
+    parent_call: []const u8,
+    original_run: []const u8,
+    original_call: []const u8,
+    node: []const u8,
+    mode: debug.Mode,
+    description: p.CapturedDescription,
+    source_snapshot: ?@import("../../../src/domain/request_source_snapshot.zig").Snapshot = null,
+    source_overrides: bool = false,
+    body: []const u8,
+};
+pub fn decodeRequest(a: std.mem.Allocator, bytes: []const u8) !CapturedRequestRecord {
+    return strict.decode(CapturedRequestRecord, a, bytes, .{ .maximum_depth = 64 });
 }
 pub fn validateReceiptSet(bundle: p.Bundle, receipts: Receipts) !void {
     if (receipts.trials.len > bundle.manifest.trials.len) return error.ExtraTrial;
@@ -64,7 +85,7 @@ pub fn validateReceiptSet(bundle: p.Bundle, receipts: Receipts) !void {
         }
     }
 }
-pub fn validateRequest(a: std.mem.Allocator, trial: p.Trial, record: debug.RequestRecord) !void {
+pub fn validateRequest(a: std.mem.Allocator, trial: p.Trial, record: CapturedRequestRecord) !void {
     const selected = p.source(trial.arm);
     if (!std.mem.eql(u8, record.parent_run, p.run) or !std.mem.eql(u8, record.parent_call, p.parentId(selected)) or !std.mem.eql(u8, record.original_run, p.run) or !std.mem.eql(u8, record.original_call, p.parentId(selected))) return error.ReplayLineageDrift;
     if (record.mode != (if (p.baseline(trial.arm)) debug.Mode.exact else debug.Mode.modified)) return error.ReplayModeDrift;
@@ -73,7 +94,7 @@ pub fn validateRequest(a: std.mem.Allocator, trial: p.Trial, record: debug.Reque
     expected.content = (try p.edit(a, original, trial.arm)).content;
     if (!std.mem.eql(u8, try p.json(a, record.description), try p.json(a, expected)) or !std.mem.eql(u8, record.body, try p.request(a, expected))) return error.ReplayRequestDrift;
 }
-pub fn measure(a: std.mem.Allocator, description: debug.Description, response: debug.ResponseRecord) !Measurement {
+pub fn measure(a: std.mem.Allocator, description: p.CapturedDescription, response: debug.ResponseRecord) !Measurement {
     if (response.outcome != .received or response.status != 200 or response.body == null or response.redacted or response.encoding != .utf8) return .{ .state = .unavailable_response };
     const body = response.body.?;
     var result: Measurement = .{ .state = .invalid_provider, .provider_response_sha256 = try p.hash(a, body) };
@@ -130,7 +151,9 @@ pub fn measure(a: std.mem.Allocator, description: debug.Description, response: d
     const schema_json = try strict.parse(a, description.schema, .{ .maximum_depth = @import("../../../src/domain/model_result_schema.zig").max_json_depth }, true, null);
     const compiled = try @import("../../../src/domain/model_result_schema.zig").compileSelected(a, schema_json.value, description.schema);
     result.schema_valid = @import("../../../src/domain/model_payload_schema.zig").validateValue(envelope.value(&document.parsed.value), compiled.root()) == null;
-    const defect = try composition.check(a, document.parsed.value, description.field_policies, description.prose_fields, description.original_sources);
+    // Frozen v5 evidence has no native B3 eligibility projection. Inspect its
+    // original wire composition only; never infer a current recognition scope.
+    const defect = try composition.check(a, document.parsed.value, description.field_policies, description.prose_fields, description.original_sources, .{ .exact_scope = null });
     result.composition_valid = defect == null;
     if (defect) |diagnostic| result.composition_diagnostics = try diagnostic.describe(a);
     if (!result.schema_valid.?) {

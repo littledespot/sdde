@@ -9,10 +9,10 @@ Their last text is at `b2f10a3` (`git show b2f10a3:fixes/FIX01.md`,
 Phases 0–6) are kept for traceability. Completed work and dated evidence remain in
 [Z_FIX01](Z_FIX01.md) and [Z_FIX02](Z_FIX02.md).
 
-Everything below is a finding or a proposal. Items marked **Decision** amend an
-accepted ADR, contract or scope and need explicit user approval first. This record
-authorizes no code change, live call or E2E run. The governing design remains
-**Proposed design**.
+Unless a dated user approval is recorded below, items are findings or proposals.
+Items marked **Decision** amend an accepted ADR, contract or scope and need
+explicit user approval first. A proposal authorizes no code change, live call or
+E2E run. The governing design remains **Proposed design**.
 
 **Evidence:** the code at `b2f10a3`, `zig build code-heuristics`, git history, the
 run records in Z_FIX02 and the retained 16 October 22:00 run. No tests or live calls
@@ -250,7 +250,75 @@ controls. Further calls need bounded approval.
 
 ### B3. Exact-value bookkeeping is left to the model
 
-The model must splice `exact_copy` insertions into its prose, and native coverage
+**Approval — 17 October 2026:** the user approved B3, first settling the offline
+requirement-binding and punctuation rules, with B2 and W1 to be decided separately.
+The user then explicitly approved both concrete choices from the
+[offline policy comparison](../test/calibration/exact-value-recognition/README.md#b3-policy-comparison--17-october-2026):
+
+1. Recognize current native request-eligible exact occurrences even when their
+   claim IDs are outside selected support `S`; derive `E` while preserving `S`.
+2. Use contextual complete-value delimiters: actual field edges, Unicode
+   whitespace, balanced enclosing wrappers and terminal prose punctuation before
+   a delimiter. A reference-adjacent literal-run edge is not a field edge.
+
+The coordinated native implementation is complete and verified offline. Governing
+amendments are recorded in [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026)
+and the [composition contract](../design/contracts/text-field-composition.md#native-exact-values--approved-17-october-2026).
+
+**Offline completion checks — 17 October 2026:** the final ladder passed in order:
+
+```sh
+zig build test-exact-value-admission test-exact-value-replay test-model-request-preparation test-model-request-workflow test-model-envelope test-model-candidate-json test-specification-generation test-workflow-repair-retry -j1 --summary all
+zig build test-architecture -j1 --summary all
+zig build verify -j1 --summary all
+```
+
+The targeted run passed **26/26 steps and 1,151/1,151 tests**; architecture passed
+**3/3 steps and 151/151 tests**; full verification passed **163/163 steps and
+1,819/1,819 tests**, including integration, schema and clean native packaging
+smoke checks. `git diff HEAD --check` also passed. Logs are
+`.zig-cache/b3-final-targeted.log`, `.zig-cache/b3-final-architecture.log` and
+`.zig-cache/b3-final-verify.log`.
+
+**Production-admission replay:** `zig build test-exact-value-admission -j1 --summary all`
+repeats the integration check and writes
+`.zig-cache/exact-value-production-admission/report.json` (SHA-256
+`5e07666a28f749784c70dd6ca694e2c1736f88332af6067f4cdb0a2869c0640a`).
+The [replay record](../test/calibration/exact-value-recognition/README.md#current-production-admission-replay--17-october-2026)
+documents the immutable raw bytes and explicitly fresh, scripted native context:
+
+- 16:20 insertion-only title: typed `prohibited_exact` rejection.
+- 18:58 collapsed records: typed `reference_only` rejections.
+- 20:22 prose values: admitted with unchanged `S`, one added exact claim and two
+  behavioral exact-coverage targets; canonical stored validation also passes.
+- 22:00 insertion syntax in prose: typed `embedded_insertion_syntax` rejection.
+- An unrelated, explicitly scripted loan control admits through the same native
+  path. It is not a live or retained loan-run result.
+
+Admission escape is **zero among the four actually replayed captures**. The
+20:33 run's raw capture and its inventoried mirrors could not be found; the report
+retains its exact execution identity as unavailable, not a fifth replay success.
+It introduces no distinct B3 admission class beyond the admitted-generation
+control, but its harmful review/repair and later budget failure are not reproduced
+or claimed resolved. Historical descriptions remain historical observations;
+their metadata is not promoted into current request authority.
+
+**Independent review:** the `contract-reviewer` reviewed the complete B3 diff and
+the production-admission additions. No contract findings remain. Its reported
+test-helper diagnostic-path lifetime defect was fixed before the final checks.
+
+The shared recognizer, native request scope, response composition, value and
+membership repair bounds, progress comparison and stored readback are integrated.
+Completed/pending state now use `specification-state/v15`; current diagnostic
+requests use `model-request-debug/v6`. Superseded contracts reject; frozen older
+captures remain historical observations and cannot acquire current authority.
+
+No live fidelity, cost or publication improvement is claimed. The Phase 1A.3 live
+gate remains open and needs separate approval for each explicit E2E case. B2 and W1
+are outside this implementation; the user's subsequent follow-on instruction is
+recorded in §6. It supplies no per-run approval for live calls.
+
+**Diagnosis before this cutover:** the model had to splice `exact_copy` insertions into its prose, and native coverage
 credits only an insertion ([coverage](../src/domain/specification_coverage.zig#L77)).
 A missing insertion has no repair route
 ([coverage repair](../src/domain/specification_coverage_repair.zig#L60)).
@@ -270,29 +338,31 @@ Near-identical requests produced opposite failures. This contradicts the
 supersedes the former R6 item 4 candidate of a simpler shared business-value
 representation.
 
-**Decision** (amends the [composition contract](../design/contracts/text-field-composition.md),
+**Approved decision** (amends the [composition contract](../design/contracts/text-field-composition.md),
 §7.1 and ADR 0020): recognise exact values natively.
 
 - The model writes plain prose.
-- Native code records an occurrence wherever the exact bytes appear, at whole-word
-  boundaries, in a field bound to that value's requirement, and blocks ambiguous
-  matches.
-- `exact_copy` leaves the model-facing schema.
+- Native code recognizes raw exact bytes before NFC in the current snapshot/request
+  eligible occurrence scope, using the approved contextual delimiter policy.
+  Competing lineages or overlapping eligible spans reject the whole field.
+- Canonical exact nodes, field roles and repair evidence bounds remain; `S` is
+  unchanged and recognized `E` contributes through the existing lineage owner.
+- `exact_copy` leaves model-facing types, codecs and schemas.
 
 The [offline prototype](../test/calibration/exact-value-recognition/README.md) replays
 every retained capture with no model calls
 ([evidence](Z_FIX02.md#546-offline-native-exact-value-recognition-prototype)). Its
-selected-requirement binding and punctuation-boundary limits remain open.
+selected-membership and whole-word observations remain dated historical evidence;
+the approved native scope and delimiter policies supersede them for production.
 
 Open gates of the former Phases 1A.2 and 1A.3
 ([approved plan](Z_FIX02.md#phase-1a3-plan-and-decisions-as-approved)):
 
-- **If approved,** the representation change replaces Phase 1A.3 steps 2–3: the
+- The approved representation change replaces Phase 1A.3 steps 2–3: the
   21-send [attribution panel](../test/calibration/insertion-presentation/README.md)
-  and the presentation rewording. It also resolves the coverage block.
-- **If not approved,** revise that panel to score whether values are carried before
-  any send, then run steps 2–3.
-- **Either way,** close the live gate on a committed build with one separately
+  and the presentation rewording. Its implementation must address the mechanical
+  coverage block without claiming semantic fulfillment.
+- Close the live gate on a committed build with one separately
   approved hello-world diagnostic and one loan-renewal diagnostic.
   - Each must admit records with prose, or end in a typed composition failure after
     bounded protocol correction, with admission escape measured zero.
@@ -695,20 +765,35 @@ repair workload.
 
 ## 6. Recommended order
 
-This is proposed sequencing, not approval.
+**User-directed sequence — 17 October 2026:** the latest instruction supersedes
+the earlier proposed order for B3, B2, W1 and W2:
 
-1. **A4, W2 and W5 first:** rejection reasons, the R9 evidence gaps, the duplicate
-   upstream-repair path and the identical sibling steps. They're cheap, need no ADR,
-   and A4 speeds up every later step.
-2. **Decide B3, B2, B4 and W1 now.** They're independent of each other.
-3. Implement an approved B3, then close the Phase 1A.3 live gate.
-4. Implement an approved B2 and W1, and measure review workload and finding-type
-   accuracy.
-5. Decide A1–A3, W3 and A6's scope freeze before starting Plan. Implement A1 before
+1. Finish B3 offline: targeted tests, architecture checks, full verification and
+   retained-capture replay through production admission. Record admitted or typed
+   failed outcomes and admission escape. Obtain the `contract-reviewer` review,
+   then commit. This establishes mechanics, not semantic improvement.
+2. On that committed build, run one hello-world and one loan-renewal diagnostic,
+   each only after its own explicit billed-run approval. Preserve generation
+   failure as a baseline result under §7; do not open another rewording phase.
+3. Decide and implement B2 and W1 together after those diagnostics: review findings
+   without deterministic corroboration remain advisory, and post-generation
+   attribution upstream ends as a typed outcome or clarification, never an
+   automatic rebuild. Include W2 by deleting the unused post-generation upstream
+   path and merge variants. Add A4 rejection reasons only if debugging needs them.
+4. Rerun the same two separately approved diagnostics, measuring review's share of
+   cost and finding-type accuracy. Governing amendments and their tests accompany
+   the B2/W1 implementation; they are not part of the B3 change.
+
+The remaining recommendations below are proposals, not additional authorization:
+
+1. Consider A4's broader evidence gaps and W5's identical sibling steps separately
+   from the debugging-only A4 scope above.
+2. B4 remains a separate budget/scope decision.
+3. Decide A1–A3, W3 and A6's scope freeze before starting Plan. Implement A1 before
    adding operations for another workflow.
-6. Freeze the Phase 2 baseline under B4's decision. Measure W4 on retained captures,
+4. Freeze the Phase 2 baseline under B4's decision. Measure W4 on retained captures,
    and run B5's A/C comparison only if generation-boundary failures remain.
-7. Treat R2 as a separate required feature. Decide R1 and R8 before promising stronger
+5. Treat R2 as a separate required feature. Decide R1 and R8 before promising stronger
    provenance or automated quality gates. Gather R6 and R7 evidence after B2.
 
 ## 7. Acceptance and evidence rules

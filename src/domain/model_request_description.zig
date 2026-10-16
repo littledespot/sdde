@@ -3,7 +3,7 @@ const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
 pub const Description = struct {
-    version: enum { @"model-request-debug/v5" } = .@"model-request-debug/v5",
+    version: enum { @"model-request-debug/v6" } = .@"model-request-debug/v6",
     provider: []const u8,
     model: []const u8,
     provider_config: @import("llm_provider_contracts.zig").ValidatedProviderConfig,
@@ -21,6 +21,7 @@ pub const Description = struct {
     original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
     prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
     field_policies: []const @import("model_text_field.zig").Binding = &.{},
+    exact_scope: ?@import("model_exact_values.zig").Scope = null,
 
     pub fn from(request: *const provider.IdentifiedProviderNeutralModelRequest, selected: *const binding.ValidatedProviderModelBinding, kind: provider.ProviderOperationKind) Description {
         return .{
@@ -41,6 +42,7 @@ pub const Description = struct {
             .original_sources = request.original_sources,
             .prose_fields = request.prose_fields,
             .field_policies = request.field_policies,
+            .exact_scope = request.exact_scope,
         };
     }
 
@@ -48,13 +50,15 @@ pub const Description = struct {
         const value = try @import("strict_json.zig").decode(Description, a, bytes, .{ .maximum_depth = 64 });
         if (!@import("model_text_wire.zig").validSources(value.original_sources) or !@import("model_text_wire.zig").validProseFields(value.prose_fields)) return error.InvalidJsonDocument;
         if (!@import("model_text_field.zig").valid(value.field_policies)) return error.InvalidJsonDocument;
+        if (value.exact_scope) |scope| if (!@import("model_exact_values.zig").valid(scope)) return error.InvalidJsonDocument;
         var scratch: std.heap.ArenaAllocator = .init(a);
         defer scratch.deinit();
         // Schema keyword bounds use the compiler's native numeric contract,
         // just as the canonical schema syntax adapter does.
         const parsed_schema = try @import("strict_json.zig").parse(scratch.allocator(), value.schema, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth }, true, null);
         const selected_schema = @import("model_result_schema.zig").compileSelected(scratch.allocator(), parsed_schema.value, value.schema) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidJsonDocument;
-        if (!@import("model_text_field.zig").validSchema(selected_schema.root(), value.field_policies)) return error.InvalidJsonDocument;
+        const fields = @import("model_text_field.zig").inspectSchema(selected_schema.root(), value.field_policies, value.prose_fields);
+        if (!fields.valid or (fields.requires_exact_scope and value.exact_scope == null)) return error.InvalidJsonDocument;
         const ids = @import("llm_provider_identity.zig");
         const workflow = @import("workflow.zig");
         if (ids.ProviderId.parse(value.provider) == null or ids.ModelId.parse(value.model) == null or ids.ModelSlotId.parse(value.model_slot) == null or

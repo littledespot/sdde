@@ -1,5 +1,16 @@
 # Source-review scope presentation comparison
 
+**B3 current-contract refresh — 17 October 2026:** all fixture text now crosses
+current native admission before canonical validation. The frozen equal-label
+inputs `d5-ready-payer-field` and `d5-ready-fr-other-occurrence` record typed
+`ambiguous_exact` rejection before review; neither an old handle nor selected
+support may choose between their competing eligible exact identities. Original
+cases, semantic expectations and historical exports remain unchanged. Current
+preparation accounts for all 24 inputs as 22 prepared and two rejected cases,
+yielding 88 possible panel sends rather than the historical 96 below. Generated
+native-admission records and the manifest separate these denominators. This is
+offline preparation in progress, not a frozen replacement panel or live approval.
+
 This is frozen **offline preparation**, with no live results or dispatch authority.
 The unexecuted plan is regenerated during FIX03 Phase 4 for current guidance,
 schema and the approved fixed temperature 0.1 policy. Both arms explicitly use

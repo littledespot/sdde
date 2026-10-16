@@ -109,6 +109,7 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
     prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
     field_policies: []const @import("model_text_field.zig").Binding = &.{},
+    exact_scope: ?@import("model_exact_values.zig").Scope = null,
 
     pub fn init(value: IdentifiedProviderNeutralModelRequest) RequestError!IdentifiedProviderNeutralModelRequest {
         try value.validate();
@@ -116,8 +117,13 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     }
 
     pub fn validate(self: IdentifiedProviderNeutralModelRequest) RequestError!void {
+        if (self.exact_scope) |scope| {
+            if (!@import("model_exact_values.zig").valid(scope)) return error.InvalidProviderNeutralModelRequest;
+            if (@import("model_request_identity.zig").referenceStateForUnit(self.model_request_id.immutable_unit_owner_id)) |state| if (!state.eql(scope.reference_state)) return error.InvalidProviderNeutralModelRequest;
+        }
         if (!@import("model_text_wire.zig").validSources(self.original_sources) or !@import("model_text_wire.zig").compatibleProseSchema(self.prose_fields, self.response_schema.root())) return error.InvalidProviderNeutralModelRequest;
-        if (!@import("model_text_field.zig").validSchema(self.response_schema.root(), self.field_policies)) return error.InvalidProviderNeutralModelRequest;
+        const fields = @import("model_text_field.zig").inspectSchema(self.response_schema.root(), self.field_policies, self.prose_fields);
+        if (!fields.valid or (fields.requires_exact_scope and self.exact_scope == null)) return error.InvalidProviderNeutralModelRequest;
         if (!self.model_request_id.model_operation_id.eql(self.model_operation_id) or
             !self.binding_id.operation_id.eql(self.model_operation_id) or
             !self.binding_id.isValid() or

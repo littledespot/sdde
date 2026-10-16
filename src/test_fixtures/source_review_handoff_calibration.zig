@@ -84,12 +84,21 @@ pub fn run() !void {
     var trials: std.ArrayList(Trial) = .empty;
     var development: usize = 0;
     var qualification: usize = 0;
+    var prepared_development: usize = 0;
+    var prepared_qualification: usize = 0;
+    var admission_rejections: std.ArrayList(shared.AdmissionRejection) = .empty;
     for (cases, 0..) |example, index| {
         for (cases[0..index]) |previous| try std.testing.expect(!std.mem.eql(u8, example.id, previous.id));
         if (example.cohort == .development) development += 1 else qualification += 1;
         const base = try sourceCase(example, retained);
-        const prepared = try prepare(a, example, base);
+        const prepared = prepare(a, example, base) catch |err| {
+            const rejection: shared.AdmissionRejection = .{ .case_id = example.id, .reason = shared.admissionReason(err) orelse return err };
+            try admission_rejections.append(a, rejection);
+            try shared.writeAdmissionRejection(a, output, rejection);
+            continue;
+        };
         defer prepared.passive.deinit();
+        if (example.cohort == .development) prepared_development += 1 else prepared_qualification += 1;
         const target = try selectedTarget(a, prepared, base, example.target_slot);
         const prior = try prefix(a, prepared, target);
         const packet = try support.packetFor(a, prepared.inputs, prepared.context, .{ .finding = target });
@@ -100,11 +109,17 @@ pub fn run() !void {
         const edit_file = try pin(a, example.id, "review.edit.json");
         const request_file = try pin(a, example.id, "review.request.json");
         for (1..3) |repetition| try trials.append(a, .{ .id = try std.fmt.allocPrint(a, "{s}-review-{d}", .{ example.id, repetition }), .case_id = example.id, .cohort = example.cohort, .repetition = @intCast(repetition), .review_packet = packet_file, .review_edit = edit_file, .review_request = request_file, .loss_request = .derive_after_exact_receipt_admission });
-        try mechanicalProbe(a, example.id, prepared, prior, target, packet, parent, request_file.sha256, index == 0);
+        try mechanicalProbe(a, example.id, prepared, prior, target, packet, parent, request_file.sha256, trials.items.len == 2);
     }
     try std.testing.expectEqual(@as(usize, 11), development);
     try std.testing.expectEqual(@as(usize, 1), qualification);
-    try std.testing.expectEqual(@as(usize, 24), trials.items.len);
+    try std.testing.expectEqualDeep(@as([]const shared.AdmissionRejection, &.{
+        .{ .case_id = "captured-description", .reason = .embedded_insertion_syntax },
+        .{ .case_id = "dual-ready", .reason = .ambiguous_exact },
+    }), admission_rejections.items);
+    try std.testing.expectEqual(@as(usize, 9), prepared_development);
+    try std.testing.expectEqual(@as(usize, 1), prepared_qualification);
+    try std.testing.expectEqual(@as(usize, 20), trials.items.len);
     const dependency_paths = [_][]const u8{
         "src/test_fixtures/source_review_handoff_calibration.zig",
         "src/test_fixtures/source_loss_calibration.zig",
@@ -145,6 +160,7 @@ pub fn run() !void {
         .measurement = "Actual admitted reviewer values to one complete native preservation assignment; semantic discovery, attribution, repair eligibility, denial and harm remain separate judgments.",
         .settings = .{ .provider = "aws-bedrock", .model = "openai.gpt-oss-20b-1:0", .region = "ap-southeast-2", .reasoning_effort = "low", .temperature = temperature_policy.temperature, .response_mode = "native_schema", .max_output_tokens = 16384, .seed = "absent", .top_p = "absent" },
         .limits = .{ .repetitions = 2, .development_assignments = development, .reserved_qualification_assignments = qualification, .review_sends = trials.items.len, .conditional_loss_sends = trials.items.len, .maximum_physical_sends = trials.items.len * 2, .stop_at_actual_input_plus_output_tokens = 250000, .retries_corrections_repairs_model_judges_e2e = 0 },
+        .native_admission = .{ .input_cases = cases.len, .prepared_development = prepared_development, .prepared_qualification = prepared_qualification, .pre_review_rejections = admission_rejections.items },
         .native_origin_available_from_replayed_receipt = false,
         .prior_findings = "MOCK bound support or inconclusive unauthored prefix; never evidence of complete production workflow validation.",
         .downstream = "Not frozen or fabricated from expectations. Derive current complete packet and request only from an exact admitted receipt; unchanged reviewer obligation, source IDs and diagnostic origin.",
@@ -154,7 +170,10 @@ pub fn run() !void {
     // Optional future receipts are local evidence only. This never dispatches.
     for (cases) |example| {
         const base = try sourceCase(example, retained);
-        const prepared = try prepare(a, example, base);
+        const prepared = prepare(a, example, base) catch |err| {
+            if (shared.admissionReason(err) != null) continue;
+            return err;
+        };
         defer prepared.passive.deinit();
         const target = try selectedTarget(a, prepared, base, example.target_slot);
         const prior = try prefix(a, prepared, target);
@@ -187,8 +206,9 @@ fn prepare(a: std.mem.Allocator, example: Case, base: shared.Case) !shared.Prepa
         };
         const assigned = try @import("../domain/specification_identity.zig").assign(a, .{ .display_name = brief.title, .primary_user_story = value, .records = &records, .entities = .{ .disposition = .not_applicable, .basis = value } }, .{});
         const context = prepared.context;
-        try @import("../domain/specification_provenance.zig").validateStored(a, context.inputs, .{ .records = context.registry.records, .occurrences = context.registry.occurrences }, @import("../domain/reference_support.zig").records(context.references), brief, assigned.content);
-        prepared.inputs = try @import("../domain/specification_authority.zig").project(a, prepared.inputs.feature, context.references, assigned.content, brief);
+        const content = try shared.admitContent(a, context, assigned.content);
+        try @import("../domain/specification_provenance.zig").validateStored(a, context.inputs, .{ .records = context.registry.records, .occurrences = context.registry.occurrences }, @import("../domain/reference_support.zig").records(context.references), brief, content);
+        prepared.inputs = try @import("../domain/specification_authority.zig").project(a, prepared.inputs.feature, context.references, content, brief);
     }
     return prepared;
 }

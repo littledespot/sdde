@@ -51,6 +51,9 @@ pub const Packet = opaque {
     pub fn originalSources(self: *const Packet) []const @import("model_text_wire.zig").SourceText {
         return storage(self).original_sources;
     }
+    pub fn exactScope(self: *const Packet) ?@import("model_exact_values.zig").Scope {
+        return storage(self).exact_scope;
+    }
     pub fn assignmentContext(self: *const Packet, id: AssignmentContextId) ?[]const u8 {
         for (storage(self).assignment_contexts) |context| {
             if (std.mem.eql(u8, context.id.bytes, id.bytes)) return context.body;
@@ -71,6 +74,7 @@ const Storage = struct {
     excluded_variants: []const schema.ExcludedVariant = &.{},
     integer_choices: []const schema.IntegerChoice = &.{},
     original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
+    exact_scope: ?@import("model_exact_values.zig").Scope = null,
     prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
     field_policies: []const @import("model_text_field.zig").Binding = &.{},
     presentation_omissions: []const @import("model_field_presentation.zig").Omission = &.{},
@@ -133,6 +137,12 @@ pub fn view(packet: *const Packet) *const Packet {
     return packet;
 }
 
+/// A native payload projection retains every bound request fact and repair
+/// authority. Changing visible evidence cannot reset out-of-band restrictions.
+pub fn withBody(a: std.mem.Allocator, base: *const Packet, body: []const u8) Error!*Packet {
+    return cloneWith(a, base, body, base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+}
+
 /// Copy native availability facts across packet projections. No model bytes
 /// can create or change these restrictions.
 pub fn withExcludedVariants(allocator: std.mem.Allocator, base: *const Packet, excluded: []const schema.ExcludedVariant) Error!*Packet {
@@ -185,6 +195,7 @@ fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8
     };
     storage(result).assignment_contexts = copied_contexts;
     try copyOriginalSources(storage(result), base.originalSources());
+    if (base.exactScope()) |scope| storage(result).exact_scope = try @import("model_exact_values.zig").clone(a, scope);
     storage(result).prose_fields = try @import("model_text_wire.zig").cloneProseFields(a, base.proseFields());
     storage(result).field_policies = try @import("model_text_field.zig").clone(a, base.fieldPolicies());
     storage(result).presentation_omissions = try @import("model_field_presentation.zig").clone(a, base.presentationOmissions());
@@ -240,6 +251,17 @@ pub fn withOriginalSourceTexts(a: std.mem.Allocator, base: *const Packet, source
     return result;
 }
 
+pub fn withExactScope(a: std.mem.Allocator, base: *const Packet, scope: @import("model_exact_values.zig").Scope) Error!*Packet {
+    const owner = @import("model_exact_values.zig");
+    if (!owner.valid(scope)) return error.InvalidModelInputPacket;
+    if (identity.referenceStateForUnit(base.unit())) |state| if (!state.eql(scope.reference_state)) return error.InvalidModelInputPacket;
+    if (base.exactScope()) |prior| if (!owner.narrows(prior, scope)) return error.InvalidModelInputPacket;
+    const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+    errdefer release(result);
+    storage(result).exact_scope = try owner.clone(storage(result).arena.allocator(), scope);
+    return result;
+}
+
 fn copyOriginalSources(owner: *Storage, sources: []const @import("model_text_wire.zig").SourceText) Error!void {
     const a = owner.arena.allocator();
     const copy = try a.alloc(@import("model_text_wire.zig").SourceText, sources.len);
@@ -272,7 +294,7 @@ pub fn withContext(comptime T: type, allocator: std.mem.Allocator, base: *const 
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
     const scratch = arena.allocator();
-    const bytes = try @import("model_candidate_json.zig").encode(T, scratch, context);
+    const bytes = try @import("model_candidate_json.zig").encodeEvidence(T, scratch, context);
     var parsed = try @import("strict_json.zig").parse(scratch, bytes, .{ .maximum_depth = schema.max_json_depth }, false, null);
     defer parsed.deinit();
     return withJsonContext(allocator, base, field, parsed.value);

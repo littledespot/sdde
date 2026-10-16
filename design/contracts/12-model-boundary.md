@@ -125,11 +125,13 @@ Each generation request contains only what the current unit needs:
   compiled schema (approved 25 September 2026). The existing schema owner derives a narrower
   view; it never adds fields, values or semantic decisions. Initial reference/specification
   requests and their repairs omit `passive` when their evidence permits no passive references.
-  At [ADR 0020's coordinated cutover](../decisions/0020-derived-exact-reference-lineage.md),
-  specification requests omit `exact_copy` when no eligible preserved-token claim
-  is available; fixed-evidence repairs use their bound choices, not unrelated
-  sibling evidence. Nonempty sets still require native ID, scope and occurrence
-  validation through the same reference owner that projects request choices.
+  Under [ADR 0020's approved 17 October amendment](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026),
+  all model-response wire contracts and schemas omit `exact_copy`. The model types required
+  values verbatim; the native packet retains current snapshot-bound eligible
+  occurrences and exact bytes separately from model-visible guidance. Fixed repair
+  scopes cannot borrow eligibility outside their fixed owning-unit `S+E` bound. That scope and the
+  native field-role metadata govern raw-byte recognition before normalization;
+  matching text or a projected catalogue cannot create the scope.
 - The integer-choice amendment approved on 26 September 2026, extended by the
   approved FIX_003 follow-up on 7 October 2026, narrows scalar and collection ID
   selectors to their native owner's eligible set. Typed atoms use their declared
@@ -209,10 +211,11 @@ Raw whole-repository listings, principle categories not selected by the configur
   repeated primitive types and overlapping alternatives reject before invocation.
 - The shared candidate codec maps declared ordinal wrappers to integers, ordinary
   prose to strings and explicit typed composition to closed `fragments` objects. Explicit
-  passive/source references and exact-copy selections remain typed candidates.
+  passive/source references remain typed candidates. Exact-copy occurrences are
+  derived natively under ADR 0020, never accepted as model-authored selections.
   A selected scalar/array repair stays inside a closed `value` object envelope.
   This lossless representation is shared by initial output, evidence and repairs;
-  native validation and stored canonical formats do not change.
+  canonical segment storage remains separate from the model-facing codec.
 
 - Allowed variants come from the workflow-declared result schema and selected generic operation.
 - A generation operation cannot return a patch; a repair operation cannot return a whole
@@ -892,7 +895,7 @@ assessment response under [§22.1](22-repair.md). The derived location must agre
 with re-admission against current canonical facts. Non-omission and principle
 findings carry no comparison. The response supplies judgments, original-source
 spans and explanations; its comparison ID binds the entire native collection.
-The current `specification-state/v14` contract in [§24.1](24-workflow-state.md#241-workflow-state)
+The current `specification-state/v15` contract in [§24.1](24-workflow-state.md#241-workflow-state)
 retains these native collections and authored associations, rejecting earlier
 snapshot contracts without supplying missing bindings. ADR 0020 governs exact lineage.
 Diagnostic eligibility never grants positive support or automatically selects citations.
@@ -1048,3 +1051,17 @@ ordinary prose is a string, and explicit composition is
 fragments, whitespace and exact occurrence identity. Initial input/output,
 protocol correction and authorized content repair use that one conversion.
 Canonical arrays remain native data; superseded bare model arrays reject.
+
+The approved 17 October B3 amendment applies the same model-wire conversion to
+generation, clarification and repair. It removes `exact_copy` from both shared
+response-codec directions and every selected response schema. Explicit native-evidence
+encoding may retain sealed identities as read-only facts, never response alternatives. Current native `exact_scope`
+metadata binds the reference snapshot and eligible occurrence bytes, while field
+bindings retain their canonical roles. Protocol correction retains these exact
+facts and its original schema; it cannot acquire a fresh occurrence scope from
+its rejected body. Admission recognizes raw prose before NFC and validates the
+derived composition through the shared owner. Ambiguous eligible spans reject the
+complete field through existing bounded correction, not a new retry route.
+`model-request-debug/v6` retains native scope for diagnostic replay; request logs
+never become workflow or persistence authority. Missing historical native scope
+stays unavailable rather than reconstructed from a visible token catalogue.

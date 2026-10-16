@@ -222,7 +222,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .source_preservation, .collection, .entity_applicability => true,
             };
             const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(subject), .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
-            const encoded = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
+            const encoded = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
             var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
             packets.omitAbsent(&projected_input);
             for (projected_input.object.getPtr("requirements").?.array.items) |*requirement| {
@@ -343,7 +343,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     .producers = try presentation.comparisonSupport(scratch, assigned.facts.records, context, assigned.finding.source_ids, claim_ids.items),
                 },
             };
-            const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
+            const body = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
             const slot = try std.fmt.allocPrint(scratch, "{s}-loss", .{try reviewSlot(scratch, inputs, assigned.finding.subject)});
             const packet = try reviewPacket(allocator, inputs, context.inputs.corpus.state_id, body, slot, .{ .bytes = "preservation_comparisons" });
             defer packets.release(packet);

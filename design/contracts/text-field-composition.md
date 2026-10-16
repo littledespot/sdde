@@ -1,10 +1,53 @@
-# Text-field composition — accepted Phase 1A amendment, 16 October 2026
+# Text-field composition — accepted amendments through 17 October 2026
 
 Authority: the user's explicit instruction to settle the four Phase 1A decisions
 and implement [FIX04 Phase 1A](../../fixes/Z_FIX02.md#phase-1a-plan-decisions-and-results).
 The policy decisions amend §§7.1, 17.3, 22 and ADR 0020. ADR 0019 records the
 debug-description/replay serialization needed to retain their native witnesses;
 the overall design remains Proposed.
+
+## Native exact values — approved 17 October 2026
+
+The user approved both B3 choices: current native request-eligible occurrences may
+contribute exact lineage `E` beyond unchanged selected support `S`, and complete
+values use contextual delimiters. [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026)
+owns the immutable snapshot/request scope, raw-byte recognition, ambiguity and
+repair bounds. This supersedes model-authored `exact_copy` choices and ordinary
+whole-word matching; B2 and W1 remain separate from this amendment.
+
+Model text uses prose strings, typing required exact values verbatim; allowed
+passive/source references may still use the closed fragments form. No model-facing
+type, codec or schema admits `exact_copy`. Native recognition runs before NFC or
+other text normalization and constructs canonical exact segments only for current
+eligible occurrences in fields whose exact role permits them. Every disjoint
+occurrence retains its source identity and raw byte span. Overlap or competing
+eligible identities rejects the entire field, without a partial usable result.
+Canonical normalization must preserve those bindings: if NFC of unmatched prose
+would create an eligible match absent from the raw response, admission rejects a
+typed exact-value defect instead of publishing inconsistent canonical authority.
+
+Both outer delimiters must reach actual field edges or pinned Unicode whitespace,
+optionally through directly balanced enclosing quote/group wrappers and terminal
+prose punctuation before a delimiter. Attached further text remains continuation,
+independent of token kind. Opaque run edges beside passive/source references are
+not field edges; internal whitespace may still delimit an occurrence. The shared
+[boundary owner](../../src/domain/exact_value_boundary.zig) holds the closed
+wrapper and terminal policy. Terminal punctuation and negation can remain
+semantically ambiguous; matching proves no correct use or fulfillment.
+
+The field inventory below remains unchanged. A prohibited field keeps matching
+bytes as prose without exact lineage. An incidental entity-name occurrence cannot
+satisfy behavioral coverage. An obligation-bearing field still requires valid
+prose composition: recognizing a whole value cannot turn a reference-only value
+into behavioral explanation. Generation, response admission/correction, fixed
+repair, canonical no-progress comparison, coverage and stored validation share
+the same owner. Repair recognition precedes canonical comparison, with unchanged
+old-value, revision, sibling, `S` and effective-evidence preconditions.
+
+The native implementation and its offline acceptance evidence are recorded in
+[FIX05 B3](../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model).
+Offline checks establish mechanics, not live reliability or semantic benefit.
+Historical prototype observations retain their original policy and denominators.
 
 ## Field inventory and insertion roles
 
@@ -27,7 +70,8 @@ semantic judgments.
 An incidental occurrence retains its exact lineage and rendering but cannot
 satisfy behavioral exact-copy coverage. Coverage credits only an occurrence in
 an obligation-bearing field whose composition validated. Exact-copy support is
-retained, and ordinary prose equal to a display value never creates an occurrence.
+retained; display equality alone never creates an occurrence outside the approved
+current native exact-occurrence scope and recognition policy.
 Entity names are the sole field allowed to omit prose; no workflow, filename,
 provider, model or current fixture creates another exception. This is not a
 fragment-count restriction: several legitimate identity components retain their
@@ -51,7 +95,7 @@ remain required before closing Phase 1A.2's exit gate.
   permitted, so the native prose-presence check still applies. Where the selected
   contract permits no insertion kind, its schema offers only literal text forms;
   native admission still checks that prose is nonblank.
-  A literal the model types there is ordinary prose: it
+  A literal the model types there is ordinary prose: the prohibited exact role
   creates no occurrence, lineage or coverage, and display equality never supplies one.
 - **Admission and readback.** Admission, protocol correction, every repair route and
   stored readback reject an exact-copy insertion in these fields as a prohibited

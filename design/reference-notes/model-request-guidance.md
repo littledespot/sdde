@@ -5,7 +5,9 @@ This summarizes the existing contracts in
 [ADR 0006](../decisions/0006-minimal-model-response.md),
 [ADR 0011](../decisions/0011-provider-owned-request-limits.md),
 [ADR 0012](../decisions/0012-workflow-owned-model-request.md) and
-[ADR 0014](../decisions/0014-universal-response-format-guidance.md).
+[ADR 0014](../decisions/0014-universal-response-format-guidance.md), with the
+approved 17 October native exact-value amendment in
+[ADR 0020](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026).
 
 ## Input and evidence representation
 
@@ -43,8 +45,10 @@ This summarizes the existing contracts in
   feed the existing summary validation/identity/build path. Stale or altered history
   fails; other summary partitions retain their existing request path. The native
   parent links to the child's retained provenance without claiming a new model call.
-- Content references preserved-token IDs; `preserved_tokens` retains exact values
-  and citations across reconciliation, generation, review and repair.
+- Canonical content references preserved-token IDs. Model-facing evidence retains
+  exact values/source context, while native packet metadata binds current eligible
+  occurrence IDs and bytes to the reference snapshot. The visible token catalogue
+  is not occurrence eligibility or a semantic source-group association by itself.
 - Extraction selects source lines as `{first: {ordinal}, last: {ordinal}}`, with
   inclusive endpoints and original line endings. Separate selections represent
   discontiguous support; exact tokens retain extractor-owned finer spans.
@@ -306,8 +310,8 @@ membership does not require empty output or establish that unrelated source duti
 belong to that batch; semantic support remains reviewed. These are projections of
 existing claims, not a new evidence ledger.
 Original source bytes remain available. Citation coordinates and extractor/token
-bookkeeping stay native; exact choices expose only the eligible occurrence, value
-and source. Initial requests use their authoring prompt; native replacements use
+bookkeeping stay native; exact-value guidance exposes authorized literal/source
+context and the packet separately retains immutable native scope. Initial requests use their authoring prompt; native replacements use
 the existing repair prompt and authorized task. Prompts own the generation, review
 or repair instructions, rather than another copy of the definitions.
 These descriptions add no optional-family requirement, semantic rejection or
@@ -319,11 +323,11 @@ applies to extraction, reconciliation, generation, correction and authorized
 repair; canonical segment/node arrays and rendering remain native.
 The shared generation context describes text by its assigned field purpose:
 a title names, a basis explains, and behavioral fields express requirements.
-Exact-copy/reference fragments insert display values; any required explanation or
-behavioral meaning comes from the surrounding text. The shared context directs
-authors to insert an exact-copy object instead of retyping a supplied preserved
-literal inside prose, with any surrounding prose in the composition's string
-fragments. Strings carry their own separators; native concatenation adds none.
+Allowed passive/source reference fragments insert display values; required
+explanation and behavioral meaning come from prose. The shared context directs
+authors to type required exact values verbatim in that prose. `exact_copy` is
+engine-derived canonical data and absent from model-response wire contracts, both response-codec
+directions and schemas. Strings carry their own separators; native concatenation adds none.
 Its selector fields still come from the selected schema. Literal-only values remain
 structurally valid where the selected schema permits them. Schema admission and
 valid provenance do not establish that a field fulfils its semantic purpose.
@@ -331,13 +335,19 @@ The [authoring-guidance comparison](../../test/calibration/authoring-guidance/RE
 separates this representation change from record-purpose/collection guidance;
 offline conformance is not evidence of semantic improvement.
 
-**Determined exact references** follow ADR 0020. A single eligible occurrence is
-constructed by native code: the model returns `{"kind":"exact_copy"}` and must
-not echo its determined `claim_id`. Multiple eligible occurrences retain the
-explicit selection. The selected schema and response construction use the same
-immutable native choice facts; protocol correction keeps that schema. Canonical
-segments and persisted lineage retain the occurrence ID. Matching literal text
-never reconstructs source identity, and this rule adds no semantic support.
+**Native exact recognition** follows ADR 0020. Raw decoded UTF-8 matches current
+native request-eligible occurrences before NFC. Contextual whole-value delimiters
+use actual field edges, the closed Unicode White_Space set, directly balanced
+wrappers and terminal prose punctuation before a delimiter. Reference-adjacent
+literal-run edges are opaque; inner whitespace may delimit a match. Any overlapping
+eligible spans or competing identities rejects the whole field without choosing by
+length, first match or catalogue order. Canonical segments retain recognized
+occurrence IDs and exact bytes. Recognized `E` may extend selected `S`; it cannot
+change `S`, select another source group or prove semantic support/use. Fixed
+repairs retain their narrower eligibility and effective-evidence bounds, and
+correction retains the original request scope and schema. Missing native scope is
+an engine rejection, not a request for model bookkeeping. Diagnostic descriptions
+retain it in `model-request-debug/v6`; historical missing scope remains unavailable.
 
 **Authored source associations** replace the independent role classifier and
 role-coverage prebinding gate under

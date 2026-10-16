@@ -307,12 +307,15 @@ as integers and literal text segments as strings. The approved 14 October 2026
 [model-facing text amendment](../contracts/07-domain-representations.md#approved-model-facing-text-amendment--14-october-2026)
 supersedes segment arrays as the whole text wire value: ordinary prose is a string,
 while explicit composition uses a closed `{"fragments":[...]}` object.
-Passive/source references and exact-copy token/citation selections
-stay explicit. A selected repair whose value can be scalar or array retains one
+Passive/source references stay explicit. The user-approved 17 October 2026
+[ADR 0020 amendment](0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026)
+supersedes model-facing exact-copy selections: both shared response-codec directions and
+schemas exclude them, while native raw-byte recognition derives canonical exact
+nodes within current request eligibility. A selected repair whose value can be scalar or array retains one
 closed object envelope (`value`); complete workflow responses remain objects.
 Bare text arrays reject. The generic codec changes only fields explicitly
 declared as typed text and preserves their native arrays without adding separators
-or inferring reference identity.
+or inferring reference identity; scoped exact recognition is a separate native owner.
 
 Configured result schemas remain acceptance authority. Native declarations only
 map wire representation to existing types; they neither choose evidence nor relax

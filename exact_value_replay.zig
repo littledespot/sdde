@@ -8,4 +8,6 @@ test {
     _ = @import("test/harness/exact_value/control_tests.zig");
     _ = @import("test/harness/exact_value/corpus_tests.zig");
     _ = @import("test/harness/exact_value/prompt_capture.zig");
+    _ = @import("test/harness/exact_value/binding_experiment.zig");
+    _ = @import("test/harness/exact_value/boundary_experiment_tests.zig");
 }

@@ -11,6 +11,7 @@ const typed = @import("../../../src/domain/typed_text.zig");
 const policy = @import("../../../src/domain/text_field_policy.zig");
 const pointer = @import("../../../src/domain/json_pointer.zig");
 pub const recognition = @import("recognition.zig");
+pub const MetadataContract = enum { current_v6, historical_v3, historical_v4, historical_v5, unavailable };
 pub const Input = struct {
     packet: []const u8,
     output: []const u8,
@@ -18,6 +19,8 @@ pub const Input = struct {
     field_policies: []const field_owner.Binding = &.{},
     prose_fields: []const wire.ProseField = &.{},
     original_sources: ?[]const wire.SourceText = null,
+    metadata_contract: MetadataContract = .current_v6,
+    exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
 };
 pub const State = enum { measured, no_exact_context, invalid_packet, invalid_model_json, missing_schema, invalid_field_metadata, unsupported_schema, schema_invalid, no_declared_text_fields };
 pub const Binding = enum { assigned_requirements, selected_groups, explicit_provenance, fixed_candidate, missing, invalid };
@@ -49,6 +52,8 @@ pub const Field = struct {
     proposed_composition_issue: ?@FieldType(typed.Issue, "reason"),
 };
 pub const Measurement = struct {
+    metadata_contract: MetadataContract,
+    native_exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
     binding_policy: enum { selected_requirement_membership } = .selected_requirement_membership,
     state: State,
     occurrence_count: usize = 0,
@@ -130,28 +135,48 @@ fn binding(a: std.mem.Allocator, packet: std.json.Value, ancestors: []const std.
     return .{ .kind = .missing, .requirements = &.{} };
 }
 pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.LexicalClassifier) !Measurement {
-    var result: Measurement = .{ .state = .invalid_packet, .output_sha256 = try hash(a, input.output) };
+    var result: Measurement = .{ .metadata_contract = input.metadata_contract, .state = .invalid_packet, .output_sha256 = try hash(a, input.output) };
     const parsed_packet = strict.parse(a, input.packet, .{ .maximum_depth = 128 }, false, null) catch |err| return if (err == error.OutOfMemory) err else result;
     var packet = parsed_packet.value;
     if (member(packet, "input")) |inner| if (inner == .object) {
         packet = inner;
     };
-    const tokens = member(packet, "preserved_tokens") orelse {
-        result.state = .no_exact_context;
-        return result;
-    };
-    if (tokens != .array) return result;
-    if (tokens.array.items.len == 0) {
-        result.state = .no_exact_context;
-        return result;
+    var occurrences: []recognition.Occurrence = undefined;
+    var occurrence_ids: []recognition.OccurrenceId = undefined;
+    if (input.exact_scope) |scope| {
+        if (input.metadata_contract != .current_v6 or !@import("../../../src/domain/model_exact_values.zig").valid(scope)) {
+            result.state = .invalid_field_metadata;
+            return result;
+        }
+        result.native_exact_scope = scope;
+        occurrences = try a.alloc(recognition.Occurrence, scope.occurrences.len);
+        occurrence_ids = try a.alloc(recognition.OccurrenceId, scope.occurrences.len);
+        for (scope.occurrences, occurrences, occurrence_ids) |native, *occurrence, *id| {
+            id.* = .{ .value = native.claim_id.ordinal };
+            occurrence.* = .{ .id = id.*, .requirements = try a.dupe(recognition.RequirementId, &.{.{ .value = id.value }}), .bytes = native.bytes };
+        }
+    } else {
+        const tokens = member(packet, "preserved_tokens") orelse {
+            result.state = .no_exact_context;
+            return result;
+        };
+        if (tokens != .array) return result;
+        if (tokens.array.items.len == 0) {
+            result.state = .no_exact_context;
+            return result;
+        }
+        occurrences = try a.alloc(recognition.Occurrence, tokens.array.items.len);
+        occurrence_ids = try a.alloc(recognition.OccurrenceId, tokens.array.items.len);
+        for (tokens.array.items, occurrences, occurrence_ids, 0..) |token, *occurrence, *id, index| {
+            id.* = .{ .value = positive(member(token, "claim_id") orelse return result) orelse return result };
+            for (occurrence_ids[0..index]) |prior| if (prior.value == id.value) return result;
+            const bytes = text(member(token, "value") orelse return result) orelse return result;
+            occurrence.* = .{ .id = id.*, .requirements = try a.dupe(recognition.RequirementId, &.{.{ .value = id.value }}), .bytes = bytes };
+        }
     }
-    const occurrences = try a.alloc(recognition.Occurrence, tokens.array.items.len);
-    const occurrence_ids = try a.alloc(recognition.OccurrenceId, tokens.array.items.len);
-    for (tokens.array.items, occurrences, occurrence_ids, 0..) |token, *occurrence, *id, index| {
-        id.* = .{ .value = positive(member(token, "claim_id") orelse return result) orelse return result };
-        for (occurrence_ids[0..index]) |prior| if (prior.value == id.value) return result;
-        const bytes = text(member(token, "value") orelse return result) orelse return result;
-        occurrence.* = .{ .id = id.*, .requirements = try a.dupe(recognition.RequirementId, &.{.{ .value = id.value }}), .bytes = bytes };
+    if (occurrences.len == 0) {
+        result.state = .no_exact_context;
+        return result;
     }
     result.occurrence_count = occurrences.len;
     result.occurrence_ids = occurrence_ids;
@@ -173,7 +198,12 @@ pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.Lexic
         result.state = .schema_invalid;
         return result;
     }
-    if (!field_owner.valid(input.field_policies) or !wire.compatibleProseSchema(input.prose_fields, compiled.root()) or (input.field_policies.len != 0 and !field_owner.validSchema(compiled.root(), input.field_policies)) or (input.original_sources != null and !wire.validSources(input.original_sources.?))) {
+    const compatible_fields = if (input.field_policies.len == 0) true else switch (input.metadata_contract) {
+        .current_v6 => field_owner.validSchema(compiled.root(), input.field_policies),
+        .historical_v3, .historical_v4, .historical_v5 => capturedFieldsFit(compiled.root(), input.field_policies),
+        .unavailable => false,
+    };
+    if (!field_owner.valid(input.field_policies) or !wire.compatibleProseSchema(input.prose_fields, compiled.root()) or !compatible_fields or (input.original_sources != null and !wire.validSources(input.original_sources.?))) {
         result.state = .invalid_field_metadata;
         return result;
     }
@@ -195,6 +225,47 @@ pub fn measure(a: std.mem.Allocator, input: Input, classifier: recognition.Lexic
     result.fields = try output.toOwnedSlice(a);
     result.state = if (result.fields.len == 0) .no_declared_text_fields else .measured;
     return result;
+}
+
+/// A frozen capture's selectors describe observations, not today's permitted
+/// model alternatives. Check only that every captured text leaf has one typed
+/// selector and every reached selector addresses text. Current metadata instead
+/// passes the production validSchema owner above. This function never returns
+/// an executable schema, admitted value, reconstructed source fact or approval.
+fn capturedFieldsFit(root: *const schema_owner.Node, bindings: []const field_owner.Binding) bool {
+    if (!field_owner.valid(bindings)) return false;
+    var path: [schema_owner.max_depth * 2 + 2]field_owner.Step = undefined;
+    return capturedFieldsAt(root, bindings, &path, 0);
+}
+fn capturedFieldsAt(node: *const schema_owner.Node, bindings: []const field_owner.Binding, path: []field_owner.Step, depth: usize) bool {
+    var length = depth;
+    if (schema_owner.discriminator(node)) |tag| {
+        if (length == path.len) return false;
+        path[length] = .{ .variant = tag };
+        length += 1;
+    }
+    var selected = false;
+    for (bindings) |declared_field| if (field_owner.samePath(declared_field.path, path[0..length])) {
+        selected = true;
+        break;
+    };
+    if (wire.textContract(node) or legacyText(node)) return selected;
+    if (selected) return node.* == .string;
+    switch (node.*) {
+        .object => |properties| for (properties) |property| {
+            if (length == path.len) return false;
+            path[length] = .{ .property = property.name };
+            if (!capturedFieldsAt(property.schema, bindings, path, length + 1)) return false;
+        },
+        .array => |array| {
+            if (length == path.len) return false;
+            path[length] = .items;
+            return capturedFieldsAt(array.items, bindings, path, length + 1);
+        },
+        .one_of => |variants| for (variants) |variant| if (!capturedFieldsAt(variant, bindings, path, length)) return false,
+        else => {},
+    }
+    return true;
 }
 fn selectNative(a: std.mem.Allocator, value: *const std.json.Value, path: []const field_owner.Step, native_field: policy.Field, map: *std.AutoHashMap(*const std.json.Value, policy.Field)) !void {
     if (path.len == 0) {

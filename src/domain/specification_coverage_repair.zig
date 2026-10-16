@@ -261,7 +261,7 @@ pub fn omissionPacket(a: std.mem.Allocator, current: sessions.Session, context: 
         try descriptions.task(arena.allocator(), authorization.rule.omission.requirement);
     const base = try sessions.packetForOptions(a, current, context, authorization.target.unit, .{ .exact_claims = allowed, .task = task });
     defer packets.release(base);
-    const contextual = try packets.withContext(g.spec.IdentifiedContent, a, base, "candidate", candidate);
+    const contextual = try packets.withContext(g.spec.IdentifiedContent, a, base, "candidate", try p.modelContent(arena.allocator(), @import("reference_support.zig").records(context.references), candidate));
     defer packets.release(contextual);
     const definition = if (authorization.target.part == .record) try std.fmt.allocPrint(a, "repair_record_{s}", .{@tagName(try omissionRecordKind(authorization.rule.omission.requirement))}) else "value";
     defer if (authorization.target.part == .record) a.free(definition);
@@ -313,8 +313,31 @@ fn mergeChecked(a: std.mem.Allocator, canonical: @import("typed_text.zig").Canon
         .record => null,
         .value => |field| .{ .value = (try candidates.attributedValue(.canonical, checked.response, field.subject, field.field)).value },
     };
-    const merged = try atomic.checkMerge(a, canonical, try sessions.ownerFor(a, current, target.unit), current.revision, expected, facts, authorization, proposed, origin);
-    const replacement = try atomic.copyReplacement(a, proposed);
+    const references = @import("reference_support.zig").records(context.references);
+    var recognition_arena: std.heap.ArenaAllocator = .init(a);
+    defer recognition_arena.deinit();
+    const scratch = recognition_arena.allocator();
+    const recognized: Replacement = switch (proposed) {
+        .value => |value| result: {
+            if (target.part != .value) return error.InvalidSpecificationCoverageRepair;
+            const field = target.part.value;
+            const policy = if (field.subject == .record) try candidates.recordTextField(checked.response.content.records[field.subject.record].content, field.field) else try candidates.singletonTextField(field.subject);
+            break :result .{ .value = p.recognizeValue(scratch, references, value, policy, try effectiveTarget(a, checked, field.subject, field.field)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationCoverageRepair };
+        },
+        .record => |record| result: {
+            var value = record;
+            value.content = p.recognizeRecord(scratch, references, record.content, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationCoverageRepair;
+            break :result .{ .record = value };
+        },
+    };
+    var merged = try atomic.checkMerge(a, canonical, try sessions.ownerFor(a, current, target.unit), current.revision, expected, facts, authorization, recognized, origin);
+    if (expected) |old| {
+        const field = target.part.value;
+        const policy = if (field.subject == .record) try candidates.recordTextField(checked.response.content.records[field.subject.record].content, field.field) else try candidates.singletonTextField(field.subject);
+        const previous: Replacement = .{ .value = try p.recognizeValue(scratch, references, old.value, policy, try effectiveTarget(a, checked, field.subject, field.field)) };
+        merged.changed = !try shared.progressEqual(Replacement, a, canonical, previous, recognized);
+    }
+    const replacement = try atomic.copyReplacement(a, recognized);
     var response = checked.response;
     const origin_target: candidates.Target = switch (target.part) {
         .value => |field| target_value: {

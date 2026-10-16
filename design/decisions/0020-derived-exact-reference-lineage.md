@@ -18,6 +18,78 @@
   occurrences cannot satisfy coverage. Implemented offline, 16 October 2026;
   separately approved live diagnostics remain required by
   [FIX05 B3](../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model).
+- **17 October 2026 B3 amendment authority:** explicit user approval of both
+  native request-eligible occurrence scope beyond selected support and contextual
+  complete-value delimiters, after the offline policy comparison. This supersedes
+  model-authored exact-copy selection and the prototype's selected-membership and
+  whole-word criteria. B2 and W1 remain separate from this amendment.
+
+## Native exact-value recognition amendment — approved 17 October 2026
+
+The model writes required exact values verbatim in ordinary prose. `exact_copy`
+is absent from model-response wire contracts, decoding, encoding and schemas; neither an
+explicit claim handle nor a singleton insertion object is a response alternative.
+Canonical business values retain engine-derived `exact_copy` segments identifying
+current preserved-token occurrences. Passive/source reference choices retain
+their existing separate contracts. Field prose requirements and prohibited,
+incidental and obligation-bearing exact roles remain authoritative.
+
+Native evidence encoding may retain engine-derived identities as read-only input
+facts. That explicit encoding purpose grants no response alternative; model-response
+decoding always rejects authored derived nodes.
+
+The current native request owns an immutable exact-occurrence scope: the bound
+reference snapshot and eligible occurrence IDs with their captured exact bytes.
+The shared reference owner derives that scope from current domain eligibility;
+fixed repairs retain their authorization's narrower evidence bounds. It is not
+an offered-catalogue guess, a same-source association, a model assertion or an
+independent source of semantic support. Missing, stale, foreign or inconsistent
+scope is an engine rejection. Request composition and protocol correction retain
+the same scope; no evidence outside its fixed owning-unit bound, previous request
+or retry may widen it.
+
+Recognition compares raw decoded UTF-8 bytes before NFC, case folding, rendering
+or escaping. Both outer delimiters must reach an actual field edge or pinned
+Unicode whitespace, optionally through directly enclosing balanced quote/group
+wrappers and conventional terminal prose punctuation. Punctuation attached to
+further text is continuation: a version prefix, path extension and suffixed
+identifier use the same lexical rule. A literal run ending beside a passive or
+source reference has an opaque reference boundary, not a field edge; it cannot
+lend a delimiter. Whitespace within that run can delimit an interior occurrence.
+The closed wrapper/terminal tables belong to the shared boundary owner, with no
+token-kind, domain, filename or fixture-specific branch.
+
+Every disjoint eligible occurrence retains its byte span and claim identity.
+Competing occurrence identities for one span or overlapping eligible spans reject
+the entire field; no partial success, longest-match, first-match or catalogue-order
+selection is permitted. Native code constructs canonical exact segments only from
+unambiguous witnesses. It preserves unmatched prose and existing reference order,
+then applies canonical normalization and existing composition validation.
+Revalidating normalized prose must retain the same canonical exact-segment
+identities and order. If NFC would create a new eligible match from raw
+nonmatching spelling, or otherwise change the exact binding, admission fails with
+a typed exact-value defect. Normalization cannot grant authority that the raw
+response lacked; exact captured source bytes remain exempt from prose NFC.
+
+Selected source support `S` stays unchanged. Recognized eligible occurrences may
+add `E` beyond `S`; derive `L = stableUnique(S + E)` and its citation union through
+the existing owner. This is exact occurrence lineage, not a new semantic
+association or evidence that the text uses a value correctly. Negation, irrelevant
+use and terminal-punctuation ambiguity remain semantic concerns. Only validated
+obligation-bearing fields contribute mechanical exact coverage; incidental entity
+names and prohibited exact roles cannot satisfy it.
+
+One policy governs response admission, generation, protocol correction, authorized
+repair, canonical progress comparison, coverage, rendering and stored validation.
+Recognition precedes normalization and repair comparison; exact old-value,
+revision, dependency, effective-evidence and sibling bounds remain unchanged.
+Canonical readback validates occurrence bindings and recomputes lineage; it never
+uses request logs, model-wire conversion or a matching display substring to repair
+missing stored authority. Earlier state/description contracts reject without a
+production compatibility reader. The coordinated implementation and complete
+offline checks passed on 17 October 2026; [FIX05 B3](../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model)
+records the exact command and results. This is not evidence of live fidelity,
+cost or publication improvement; the live gate remains open and requires separate E2E approval.
 
 ## Composition and coverage amendment — 16 October 2026
 
@@ -29,8 +101,7 @@ in successfully validated obligation-bearing fields satisfy behavioral exact-cop
 coverage. An incidental entity-name occurrence cannot discharge that duty. Under the
 approved [Phase 1A.2 amendment](../contracts/text-field-composition.md#phase-1a2-amendment--exact-copies-only-where-they-can-carry-an-obligation),
 titles and the other descriptive fields in the inventory's second row carry no
-exact-copy occurrence at all; until it is implemented, their occurrences remain
-incidental and likewise cannot discharge it. This supersedes counting an occurrence
+exact-copy occurrence at all. This supersedes counting an occurrence
 in any field. The
 policy is shared across generation, correction, repair and stored readback; it is
 not another model role classifier or support decision. Wire syntax embedded in
@@ -41,15 +112,10 @@ prose never creates an occurrence and follows the source-aware protocol rule.
 For a registered typed-content operation with one bound, validated reference
 ledger, canonical exact segments use `{"kind":"exact_copy","claim_id":N}`.
 `N` identifies one eligible preserved-token **occurrence**, not matching bytes.
-When several occurrences remain eligible, the model selects one by this handle.
-When the bound branch has exactly one eligible occurrence, the model returns
-`{"kind":"exact_copy"}` and the engine constructs `N`; an echoed determined
-handle rejects. A wholly determined field is constructed without model work.
-The existing reference owner resolves the selected or constructed handle to
-its token, citation, source scope and exact bytes. The selected schema and
-native validator use the same bound eligibility facts. A missing, ambiguous
-or stale trusted ledger/binding rejects before it offers choices. A well-shaped
-but unavailable model selection is an invalid candidate.
+The 17 October amendment makes this an engine-derived canonical shape, never a
+model selection. The reference owner resolves each recognized occurrence to its
+token, citation, source scope and exact bytes. Missing, ambiguous or stale trusted
+ledger/binding rejects; the model cannot repair that authority.
 
 For each attributed field or shared-provenance record, canonical
 `provenance.claim_ids` stores the explicitly selected reference claims `S`.
@@ -175,8 +241,8 @@ unit, validate the affected dependencies, then validate the full candidate.
 | Existing candidate | Value-only replacement bound |
 | --- | --- |
 | Valid old `L` | Keep `S` and the old effective claim **set** and derived citation **set**. Recompute canonical order; a reference addition/removal changing either set requires separately authorized coupled repair. |
-| Invalid exact handle, valid `S` | Bind once to `B = stableUnique(S + independently valid, eligible exact handles already in the original owning unit)`. Invalid handles add nothing. Keep `S`; the replacement's effective claim/citation sets must equal `B` and its citation union. Do not rebuild `B` from later rejected attempts or the entire request catalogue. |
-| Invalid `S` or insufficient `B` | Use existing evidence-repair authority first where applicable; otherwise block. An invalid handle cannot supply new authority. |
+| Invalid canonical exact handle or occurrence scope | Reject invalid native authority. The superseded model-authored exact-handle repair case grants no new eligibility or model selection. |
+| Invalid `S` or insufficient effective evidence | Use existing evidence-repair authority first where applicable; otherwise block. Recognition cannot supply unauthorized support. |
 | Missing, corrupt or stale trusted ledger/binding | Terminal engine rejection, not a model repair or user clarification. |
 
 The exact old value and revision still compare exactly; only effective evidence
@@ -187,13 +253,12 @@ repair may pass field validation yet fail exact-token coverage; that is not
 workflow recovery. Retry bounds and execution-wide token accounting do not
 change.
 
-Examples: `S=[1]` with eligible exact claim `2` yields `L=[1,2]`; removing the
-segment in a value-only repair rejects because claim `2` leaves effective
+Examples: `S=[1]` with a uniquely recognized eligible exact claim `2` yields
+`L=[1,2]`; removing the occurrence in a value-only repair rejects because claim `2` leaves effective
 evidence. With `S=[1,2]`, the same removal keeps `L=[1,2]` and may proceed to
-full validation. With `S=[1]` and unknown exact claim `9`, `B=[1]`: supported
-prose can replace the invalid segment, but a new claim `2` cannot enter on retry
-and an unfulfilled exact obligation still blocks. Invalid `S` or a stale bound
-ledger cannot be turned into a valid selection by value-only repair.
+full validation. An unknown canonical claim `9`, invalid `S` or a stale bound
+ledger rejects; value-only repair cannot turn it into current authority. A new
+claim cannot enter on retry, and an unfulfilled exact obligation still blocks.
 
 The former FIX_002 §36 authorization for a misbound token/citation tuple is
 retired when this format activates; its old tuple trigger cannot become blanket
@@ -238,6 +303,16 @@ source authority gap under §12. Canonical content and occurrence lineage remain
 persisted text meaning. Bare model arrays are replaced by plain prose or explicit
 named composition under §7.1. Fixed repair cannot derive support from dispatch
 order or expand an association to remedy an aggregate gap.
+
+The approved 17 October native-recognition cutover advances completed and
+clarification-pending state to `specification-state/v15`, retaining canonical
+`specification/v3` exact segments and field roles. Native request diagnostics use
+`model-request-debug/v6` to retain the immutable exact-occurrence scope with the
+selected field metadata. These captures are diagnostic evidence, never readback
+or continuation authority. Pending and completed state share the same version;
+their stage discriminators are unchanged. Previous versions reject without migration or a dual
+reader. Implementation and validation status are tracked in
+[FIX05 B3](../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model).
 
 This decision records the runtime contract, not a claim that live quality
 evaluation has passed. The baseline and test checkpoints remain

@@ -341,25 +341,22 @@ test "shared text choice refresh retains unrelated restrictions and replaces sta
     defer packets.release(fixed);
     const scoped = try packets.withIntegerChoices(std.testing.allocator, fixed, &.{.{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = .{ .bytes = "selection" }, .allowed = &.{3} }});
     defer packets.release(scoped);
-    const first = try input.withTextChoices(std.testing.allocator, scoped, &.{7}, &.{});
+    const first = try input.withTextChoices(std.testing.allocator, scoped, &.{7});
     defer packets.release(first);
-    try std.testing.expectEqual(@as(usize, 2), first.excludedVariants().len);
+    try std.testing.expectEqual(@as(usize, 1), first.excludedVariants().len);
     try std.testing.expectEqualStrings("source", first.excludedVariants()[0].kind);
-    try std.testing.expectEqualStrings("exact_copy", first.excludedVariants()[1].kind);
-    const second = try input.withTextChoices(std.testing.allocator, first, &.{}, &.{2});
+    const second = try input.withTextChoices(std.testing.allocator, first, &.{});
     defer packets.release(second);
     try std.testing.expectEqual(@as(usize, 2), second.excludedVariants().len);
     try std.testing.expectEqualStrings("source", second.excludedVariants()[0].kind);
     try std.testing.expectEqualStrings("passive", second.excludedVariants()[1].kind);
-    try std.testing.expectEqual(@as(usize, 2), second.integerChoices().len);
+    try std.testing.expectEqual(@as(usize, 1), second.integerChoices().len);
     try std.testing.expectEqualDeep(scoped.integerChoices()[0], second.integerChoices()[0]);
-    try std.testing.expectEqualStrings("exact_copy", second.integerChoices()[1].target.tagged.kind);
-    try std.testing.expectEqualDeep(&[_]i64{2}, second.integerChoices()[1].allowed);
-    const third = try input.withTextChoices(std.testing.allocator, second, &.{9}, &.{4});
+    const third = try input.withTextChoices(std.testing.allocator, second, &.{9});
     defer packets.release(third);
     try std.testing.expectEqualDeep(scoped.integerChoices()[0], third.integerChoices()[0]);
     try std.testing.expectEqualDeep(&[_]i64{9}, third.integerChoices()[1].allowed);
-    try std.testing.expectEqualDeep(&[_]i64{4}, third.integerChoices()[2].allowed);
+    try std.testing.expectEqual(@as(usize, 2), third.integerChoices().len);
 }
 
 test "summary and signal schemas restrict semantic claim choices while retaining native token evidence" {

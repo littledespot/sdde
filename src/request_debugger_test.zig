@@ -363,7 +363,7 @@ test "debugger reconstructs full raw request description response and rejects mi
     try std.testing.expectEqual(@as(usize, 1), calls[0].events.len);
     try std.testing.expectEqualStrings("check-evidence", calls[0].events[0].node.?);
     try std.testing.expectEqualStrings("SOURCE_SELECTIONS", calls[0].events[0].diagnostic.?);
-    const obsolete = try std.mem.replaceOwned(u8, a, sink.rows.items, "model-request-debug/v5", "model-request-debug/v3");
+    const obsolete = try std.mem.replaceOwned(u8, a, sink.rows.items, "model-request-debug/v6", "model-request-debug/v3");
     try std.testing.expect(!std.mem.eql(u8, obsolete, sink.rows.items));
     var unsupported: archive.Archive = .{ .allocator = a };
     try unsupported.ingest(obsolete);
@@ -899,6 +899,9 @@ test "selected request schemas survive capture and graph release without whole-s
             defer if (selected.restriction) |restriction| restriction.release();
             production.request.response_schema = selected.schema;
             production.request.field_policies = selected.fields;
+            // The generic selected-shape fixture intentionally has no source
+            // occurrences. Absence of native metadata is a different state.
+            production.request.exact_scope = .{ .reference_state = .{ .bytes = "TEST-empty-reference" }, .occurrences = &.{} };
             response_text = try a.dupe(u8, selected.response);
             production.request.response_guidance_mode = mode;
             production.registry_entry.json = mode == .native_schema;
@@ -936,7 +939,7 @@ test "selected request schemas survive capture and graph release without whole-s
         try std.testing.expectEqualStrings(parent.id, replayed.request.parent_call);
         _ = try fixture.replay().replay(a, replayIdentity("b" ** 32, 2), parent, .{ .call = 0, .mode = .modified, .edit = .{ .content = &.{ .{ .guidance = "Recheck the selected response." }, .{ .user = "Generate the selected data." } }, .schema = selected.schema } });
         try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
-        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v5", "model-request-debug/v2");
+        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v6", "model-request-debug/v2");
         try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, obsolete));
     };
 }

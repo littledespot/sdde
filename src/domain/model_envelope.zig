@@ -211,7 +211,7 @@ pub fn decode(allocator: std.mem.Allocator, complete: *const invocation.Complete
     };
     errdefer document.deinit();
     const request = association.request();
-    if (try @import("model_text_composition.zig").check(allocator, document.parsed.value, request.field_policies, request.prose_fields, request.original_sources)) |failure| {
+    if (try @import("model_text_composition.zig").check(allocator, document.parsed.value, request.field_policies, request.prose_fields, request.original_sources, .{ .exact_scope = request.exact_scope })) |failure| {
         if (diagnostic) |out| out.* = .{ .composition = failure } else failure.deinit(allocator);
         return error.InvalidModelEnvelope;
     }

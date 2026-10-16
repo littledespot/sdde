@@ -72,11 +72,19 @@ pub fn same(left: []const Binding, right: []const Binding) bool {
 /// The effective schema must already exclude every prohibited alternative.
 /// This allocation-free check guards prepared/provider requests and replay.
 pub fn validSchema(root: *const schema.Node, bindings: []const Binding) bool {
-    if (!valid(bindings)) return false;
-    var path: [schema.max_depth * 2 + 2]Step = undefined;
-    return checkSchema(root, bindings, &path, 0);
+    return inspectSchema(root, bindings, &.{}).valid;
 }
-fn checkSchema(node: *const schema.Node, bindings: []const Binding, path: []Step, depth: usize) bool {
+pub const SchemaInspection = struct { valid: bool, requires_exact_scope: bool };
+/// The selected schema owns activity: declarations for an excluded variant do
+/// not require a scope, while plain-prose leaves retain their canonical role.
+pub fn inspectSchema(root: *const schema.Node, bindings: []const Binding, prose: []const @import("model_text_wire.zig").ProseField) SchemaInspection {
+    if (!valid(bindings)) return .{ .valid = false, .requires_exact_scope = false };
+    var path: [schema.max_depth * 2 + 2]Step = undefined;
+    var requires_exact_scope = false;
+    const accepted = checkSchema(root, bindings, prose, &path, 0, &requires_exact_scope);
+    return .{ .valid = accepted, .requires_exact_scope = requires_exact_scope };
+}
+fn checkSchema(node: *const schema.Node, bindings: []const Binding, prose: []const @import("model_text_wire.zig").ProseField, path: []Step, depth: usize, requires_exact_scope: *bool) bool {
     var length = depth;
     if (schema.discriminator(node)) |tag| {
         if (length == path.len) return false;
@@ -86,25 +94,47 @@ fn checkSchema(node: *const schema.Node, bindings: []const Binding, path: []Step
     const binding = for (bindings) |entry| {
         if (samePath(entry.path, path[0..length])) break entry;
     } else null;
-    if (@import("model_text_wire.zig").textContract(node)) return if (binding) |entry| allowed(node, entry.field) else false;
+    if (node.* == .string or @import("model_text_wire.zig").textContract(node)) for (prose) |entry| {
+        if (sameProsePath(path[0..length], entry.path) and policy.permits(entry.field, .exact_copy)) requires_exact_scope.* = true;
+    };
+    if (@import("model_text_wire.zig").textContract(node) or (binding != null and node.* == .string)) {
+        const entry = binding orelse return false;
+        requires_exact_scope.* = requires_exact_scope.* or policy.permits(entry.field, .exact_copy);
+        return allowed(node, entry.field);
+    }
     switch (node.*) {
         .object => |properties| for (properties) |property| {
             if (length == path.len) return false;
             path[length] = .{ .property = property.name };
-            if (!checkSchema(property.schema, bindings, path, length + 1)) return false;
+            if (!checkSchema(property.schema, bindings, prose, path, length + 1, requires_exact_scope)) return false;
         },
         .array => |array| {
             if (length == path.len) return false;
             path[length] = .items;
-            return checkSchema(array.items, bindings, path, length + 1);
+            return checkSchema(array.items, bindings, prose, path, length + 1, requires_exact_scope);
         },
-        .one_of => |variants| for (variants) |variant| if (!checkSchema(variant, bindings, path, length)) return false,
+        .one_of => |variants| for (variants) |variant| if (!checkSchema(variant, bindings, prose, path, length, requires_exact_scope)) return false,
         else => {},
     }
     return true;
 }
+fn sameProsePath(path: []const Step, prose: []const schema.ChoiceStep) bool {
+    var index: usize = 0;
+    for (path) |step| switch (step) {
+        .variant => {},
+        .property => |name| {
+            if (index == prose.len or prose[index] != .property or !std.mem.eql(u8, name, prose[index].property)) return false;
+            index += 1;
+        },
+        .items => {
+            if (index == prose.len or prose[index] != .items) return false;
+            index += 1;
+        },
+    };
+    return index == prose.len;
+}
 fn allowed(node: *const schema.Node, field: policy.Field) bool {
-    if (schema.discriminator(node)) |tag| return policy.permits(field, std.meta.stringToEnum(policy.Insertion, tag) orelse return false);
+    if (schema.discriminator(node)) |tag| return policy.permitsModel(field, std.meta.stringToEnum(policy.Insertion, tag) orelse return false);
     return switch (node.*) {
         .one_of => |variants| result: {
             for (variants) |variant| if (!allowed(variant, field)) break :result false;
@@ -185,7 +215,7 @@ fn walk(a: std.mem.Allocator, node: *const schema.Node, bindings: []const Bindin
 }
 fn collectInsertions(node: *const schema.Node, field: policy.Field, result: *policy.Insertions) void {
     if (schema.discriminator(node)) |tag| {
-        if (std.meta.stringToEnum(policy.Insertion, tag)) |kind| if (policy.permits(field, kind)) result.insert(kind);
+        if (std.meta.stringToEnum(policy.Insertion, tag)) |kind| if (policy.permitsModel(field, kind)) result.insert(kind);
         return;
     }
     switch (node.*) {
@@ -196,14 +226,14 @@ fn collectInsertions(node: *const schema.Node, field: policy.Field, result: *pol
     }
 }
 fn filter(a: std.mem.Allocator, node: *const schema.Node, field: policy.Field) Error!*const schema.Node {
-    if (schema.discriminator(node)) |tag| if (!policy.permits(field, std.meta.stringToEnum(policy.Insertion, tag) orelse return error.InvalidModelResultSchema)) return error.InvalidModelResultSchema;
+    if (schema.discriminator(node)) |tag| if (!policy.permitsModel(field, std.meta.stringToEnum(policy.Insertion, tag) orelse return error.InvalidModelResultSchema)) return error.InvalidModelResultSchema;
     const copy = try a.create(schema.Node);
     copy.* = node.*;
     switch (node.*) {
         .one_of => |variants| {
             var retained: std.ArrayList(*const schema.Node) = .empty;
             for (variants) |variant| {
-                if (schema.discriminator(variant)) |tag| if (std.meta.stringToEnum(policy.Insertion, tag)) |kind| if (!policy.permits(field, kind)) continue;
+                if (schema.discriminator(variant)) |tag| if (std.meta.stringToEnum(policy.Insertion, tag)) |kind| if (!policy.permitsModel(field, kind)) continue;
                 try retained.append(a, try filter(a, variant, field));
             }
             if (retained.items.len == 0) return error.InvalidModelResultSchema;

@@ -105,6 +105,8 @@ const Native = struct {
     field_policies: []const @import("../../../src/domain/model_text_field.zig").Binding,
     prose_fields: []const @import("../../../src/domain/model_text_wire.zig").ProseField,
     original_sources: ?[]const @import("../../../src/domain/model_text_wire.zig").SourceText = null,
+    metadata_contract: c.MetadataContract = .current_v6,
+    exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
     artifact: Artifact,
     exchange_key: []const u8,
 };
@@ -213,6 +215,12 @@ fn string(value: ?std.json.Value) ?[]const u8 {
 fn version(value: std.json.Value) ?[]const u8 {
     return string(member(value, "version")) orelse string(member(value, "schema"));
 }
+fn metadataContract(bytes: []const u8) ?c.MetadataContract {
+    inline for (.{ .{ "model-request-debug/v6", c.MetadataContract.current_v6 }, .{ "model-request-debug/v5", c.MetadataContract.historical_v5 }, .{ "model-request-debug/v4", c.MetadataContract.historical_v4 }, .{ "model-request-debug/v3", c.MetadataContract.historical_v3 } }) |entry| {
+        if (std.mem.eql(u8, bytes, entry[0])) return entry[1];
+    }
+    return null;
+}
 fn json(a: std.mem.Allocator, value: anytype) ![]const u8 {
     return std.json.Stringify.valueAlloc(a, value, .{});
 }
@@ -278,12 +286,20 @@ fn requestContext(a: std.mem.Allocator, packet_bytes: []const u8) !RequestContex
     if (tokens != .array) return .{ .state = .invalid_packet };
     return .{ .state = if (tokens.array.items.len == 0) .no_exact_values else .exact_values, .occurrence_count = tokens.array.items.len };
 }
-fn measureRow(state: *State, scratch: std.mem.Allocator, base: Row, packet: []const u8, output: []const u8, schema: ?[]const u8, fields: []const @import("../../../src/domain/model_text_field.zig").Binding, prose: []const @import("../../../src/domain/model_text_wire.zig").ProseField, sources: ?[]const @import("../../../src/domain/model_text_wire.zig").SourceText) !void {
+const Metadata = struct {
+    contract: c.MetadataContract = .unavailable,
+    fields: []const @import("../../../src/domain/model_text_field.zig").Binding = &.{},
+    prose: []const @import("../../../src/domain/model_text_wire.zig").ProseField = &.{},
+    sources: ?[]const @import("../../../src/domain/model_text_wire.zig").SourceText = null,
+    exact_scope: ?@import("../../../src/domain/model_exact_values.zig").Scope = null,
+};
+fn measureRow(state: *State, scratch: std.mem.Allocator, base: Row, packet: []const u8, output: []const u8, schema: ?[]const u8, metadata: Metadata) !void {
     var result = base;
     result.disposition = .measured;
     result.request_context = try requestContext(scratch, packet);
+    if (metadata.exact_scope) |scope_facts| result.request_context = .{ .state = if (scope_facts.occurrences.len == 0) .no_exact_values else .exact_values, .occurrence_count = scope_facts.occurrences.len };
     result.payload_sha256 = try c.hash(scratch, try std.mem.concat(scratch, u8, &.{ packet, "\x00", schema orelse "", "\x00", output }));
-    result.measurement = c.measure(scratch, .{ .packet = packet, .output = output, .schema = schema, .field_policies = fields, .prose_fields = prose, .original_sources = sources }, classifier) catch |err| {
+    result.measurement = c.measure(scratch, .{ .packet = packet, .output = output, .schema = schema, .field_policies = metadata.fields, .prose_fields = metadata.prose, .original_sources = metadata.sources, .metadata_contract = metadata.contract, .exact_scope = metadata.exact_scope }, classifier) catch |err| {
         if (err == error.OutOfMemory) return err;
         result.disposition = .malformed_capture;
         result.diagnostic = @errorName(err);
@@ -342,6 +358,7 @@ fn prompt(state: *State, path: []const u8) !void {
             .field_policies = description.field_policies,
             .prose_fields = description.prose_fields,
             .original_sources = description.original_sources,
+            .exact_scope = description.exact_scope,
             .artifact = source,
             .exchange_key = key,
         };
@@ -371,7 +388,7 @@ fn prompt(state: *State, path: []const u8) !void {
             try appendRow(state, unsupported);
             continue;
         };
-        try measureRow(state, a, described, packet, output, description.schema, description.field_policies, description.prose_fields, description.original_sources);
+        try measureRow(state, a, described, packet, output, description.schema, .{ .contract = .current_v6, .fields = description.field_policies, .prose = description.prose_fields, .sources = description.original_sources, .exact_scope = description.exact_scope });
     }
 }
 fn nativeFor(state: *State, a: std.mem.Allocator, path: []const u8, content: []const u8, schema: []const u8, step: []const u8, origin: @import("../../../src/domain/model_candidate_origin.zig").Origin) !?Native {
@@ -413,7 +430,7 @@ fn contextFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: []c
     const output = try modelOutput(state, a, response_path, text_path, false, null);
     base.response = output.raw;
     base.disposition = output.disposition;
-    if (output.text) |text| try measureRow(state, a, base, packet, text, context.response_schema, if (native) |known| known.field_policies else &.{}, if (native) |known| known.prose_fields else &.{}, if (native) |known| known.original_sources else null) else try appendRow(state, base);
+    if (output.text) |text| try measureRow(state, a, base, packet, text, context.response_schema, if (native) |known| .{ .contract = known.metadata_contract, .fields = known.field_policies, .prose = known.prose_fields, .sources = known.original_sources, .exact_scope = known.exact_scope } else .{}) else try appendRow(state, base);
 }
 fn describedFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: []const u8, raw: std.json.Value, is_record: bool) !void {
     var base: Row = .{ .id = path, .family = if (is_record) .debugger_request else .calibration_call, .artifact = try artifact(state, path, bytes), .disposition = .malformed_capture };
@@ -446,16 +463,16 @@ fn describedFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: [
     };
     // This is a closed diagnostic projection of retained historical metadata,
     // never a migrated production request or an adopted compatibility reader.
-    const allowed = std.mem.eql(u8, description_version, "model-request-debug/v3") or std.mem.eql(u8, description_version, "model-request-debug/v4") or std.mem.eql(u8, description_version, "model-request-debug/v5");
-    if (!allowed) {
+    const contract = metadataContract(description_version) orelse {
         base.disposition = .unsupported_capture_version;
         base.diagnostic = description_version;
         try appendRow(state, base);
         return;
-    }
-    const policies = if (member(description, "field_policies")) |value| try strict.decode([]const @import("../../../src/domain/model_text_field.zig").Binding, a, try json(a, value), .{ .maximum_depth = 64 }) else &.{};
-    const prose = if (member(description, "prose_fields")) |value| try strict.decode([]const @import("../../../src/domain/model_text_wire.zig").ProseField, a, try json(a, value), .{ .maximum_depth = 64 }) else &.{};
-    const sources = if (member(description, "original_sources")) |value| try strict.decode([]const @import("../../../src/domain/model_text_wire.zig").SourceText, a, try json(a, value), .{ .maximum_depth = 64 }) else null;
+    };
+    const current: ?@import("../../../src/domain/model_request_description.zig").Description = if (contract == .current_v6) try @import("../../../src/domain/model_request_description.zig").Description.decode(a, try json(a, description)) else null;
+    const policies = if (current) |known| known.field_policies else if (member(description, "field_policies")) |value| try strict.decode([]const @import("../../../src/domain/model_text_field.zig").Binding, a, try json(a, value), .{ .maximum_depth = 64 }) else &.{};
+    const prose = if (current) |known| known.prose_fields else if (member(description, "prose_fields")) |value| try strict.decode([]const @import("../../../src/domain/model_text_wire.zig").ProseField, a, try json(a, value), .{ .maximum_depth = 64 }) else &.{};
+    const sources = if (current) |known| known.original_sources else if (member(description, "original_sources")) |value| try strict.decode([]const @import("../../../src/domain/model_text_wire.zig").SourceText, a, try json(a, value), .{ .maximum_depth = 64 }) else null;
     const suffix = if (is_record) ".request.json" else ".call.json";
     const simple = std.mem.eql(u8, std.fs.path.basename(path), if (is_record) "request.json" else "call.json");
     const response_path = if (simple) try prefix(a, path, "response.json") else try sibling(a, path, suffix, ".response.json");
@@ -481,7 +498,7 @@ fn describedFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: [
         }
     };
     const text = output.text orelse embedded_text orelse if (output.raw != null) exported else null;
-    if (text) |retained| try measureRow(state, a, base, packet, retained, schema, policies, prose, sources) else try appendRow(state, base);
+    if (text) |retained| try measureRow(state, a, base, packet, retained, schema, .{ .contract = contract, .fields = policies, .prose = prose, .sources = sources, .exact_scope = if (current) |known| known.exact_scope else null }) else try appendRow(state, base);
 }
 fn checkedHash(a: std.mem.Allocator, value: std.json.Value, name: []const u8, bytes: []const u8) !void {
     if (member(value, name)) |declared| {
@@ -499,7 +516,7 @@ fn embeddedChild(state: *State, a: std.mem.Allocator, source: Artifact, capture:
         const packet = packetFromContent(content.value) orelse return error.InvalidCaptureProjection;
         const output = string(member(capture, "raw_output")) orelse return error.InvalidCaptureProjection;
         try checkedHash(a, capture, "raw_output_sha256", output);
-        try measureRow(state, a, base, packet, output, context.response_schema, &.{}, &.{}, null);
+        try measureRow(state, a, base, packet, output, context.response_schema, .{});
         return;
     }
     const packet = string(member(capture, "packet")) orelse return error.InvalidCaptureProjection;
@@ -511,13 +528,18 @@ fn embeddedChild(state: *State, a: std.mem.Allocator, source: Artifact, capture:
     const policies = try strict.decode([]const @import("../../../src/domain/model_text_field.zig").Binding, a, try json(a, member(capture, "field_policies") orelse return error.InvalidCaptureProjection), .{ .maximum_depth = 64 });
     const prose = try strict.decode([]const @import("../../../src/domain/model_text_wire.zig").ProseField, a, try json(a, member(capture, "prose_fields") orelse return error.InvalidCaptureProjection), .{ .maximum_depth = 64 });
     const sources = if (string(member(capture, "description"))) |description_bytes| sources: {
-        if (std.mem.eql(u8, string(member(capture, "description_version")) orelse "", "model-request-debug/v5")) {
+        if (std.mem.eql(u8, string(member(capture, "description_version")) orelse "", "model-request-debug/v6")) {
             const description = try @import("../../../src/domain/model_request_description.zig").Description.decode(a, description_bytes);
             break :sources description.original_sources;
         }
         break :sources null;
     } else null;
-    try measureRow(state, a, base, packet, output, schema, policies, prose, sources);
+    const contract = metadataContract(string(member(capture, "description_version")) orelse "") orelse .unavailable;
+    const current: ?@import("../../../src/domain/model_request_description.zig").Description = if (contract == .current_v6) try @import("../../../src/domain/model_request_description.zig").Description.decode(a, string(member(capture, "description")) orelse return error.InvalidCaptureProjection) else null;
+    if (current) |known| {
+        if (!std.mem.eql(u8, schema, known.schema) or !@import("../../../src/domain/model_text_field.zig").same(policies, known.field_policies) or !@import("../../../src/domain/model_text_wire.zig").sameProseFields(prose, known.prose_fields)) return error.InvalidCaptureProjection;
+    }
+    try measureRow(state, a, base, packet, output, schema, .{ .contract = contract, .fields = policies, .prose = prose, .sources = sources, .exact_scope = if (current) |known| known.exact_scope else null });
 }
 fn embeddedChildObserved(state: *State, a: std.mem.Allocator, source: Artifact, capture: std.json.Value, sample: bool) !void {
     embeddedChild(state, a, source, capture, sample) catch |err| {
@@ -597,7 +619,7 @@ fn providerFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: []
     const output = try modelOutput(state, a, response_path, text_path, false, null);
     base.response = output.raw;
     base.disposition = output.disposition;
-    if (output.text) |text| try measureRow(state, a, base, packet, text, try providerSchema(a, raw), &.{}, &.{}, null) else try appendRow(state, base);
+    if (output.text) |text| try measureRow(state, a, base, packet, text, try providerSchema(a, raw), .{}) else try appendRow(state, base);
 }
 fn responseFile(state: *State, a: std.mem.Allocator, path: []const u8, bytes: []const u8) !void {
     const simple = std.mem.eql(u8, std.fs.path.basename(path), "response.json");

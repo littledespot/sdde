@@ -326,6 +326,12 @@ pub fn build(b: *std.Build) void {
     const integration_tests = b.addTest(.{ .root_module = integration_module, .filters = &.{ "test.integration.", "test.harness.integration.tests." } });
     const run_integration_tests = b.addRunArtifact(integration_tests);
     run_integration_tests.setCwd(b.path("."));
+    const exact_value_admission_tests = b.addRunArtifact(b.addTest(.{
+        .root_module = integration_module,
+        .filters = &.{"test.integration.exact_value.production_admission"},
+    }));
+    exact_value_admission_tests.setCwd(b.path("."));
+    b.step("test-exact-value-admission", "Replay retained exact-value failures through production admission offline").dependOn(&exact_value_admission_tests.step);
     const launcher_tests = b.addSystemCommand(&.{"sh"});
     launcher_tests.addFileArg(b.path("test/harness/integration/launcher_test.sh"));
     launcher_tests.addFileArg(b.path("scripts/e2e-spec.sh"));

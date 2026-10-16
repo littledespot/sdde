@@ -1,4 +1,4 @@
-//! Offline only. Generates a POST body for the existing debugger; never sends it.
+//! Offline inspection of frozen historical evidence; never sends model requests.
 const std = @import("std");
 const p = @import("preparation.zig");
 const score = @import("scoring.zig");
@@ -36,8 +36,8 @@ const help =
     \\       zig build attribution-replay -- score <bundle-directory> <receipts.json> <output.json>
     \\All modes are offline: no credential, HTTP, process or model dispatch capability.
     \\prepare materializes seven frozen debugger edits/provider bodies and 21 ordered trials. Existing files must match exactly. validate proves pins and exact deterministic regeneration.
-    \\dispatch-request selects the original parent in a saved authenticated /api/calls response and writes one body for the debugger's existing /api/replay endpoint. It does not send it or authorize dispatch.
-    \\score retains unattempted and rejected denominators, checks immutable request/response records and runs canonical mechanical validators. It assesses neither semantic claim merging nor workflow admission/quality.
+    \\dispatch-request fails HistoricalDispatchUnsupported: these v5 captures cannot become current requests. A new experiment needs current v6 captures and separate approval.
+    \\score retains historical unattempted and rejected denominators and checks immutable records and mechanical composition. It does not assess current B3 admission, semantics or workflow authority.
     \\
 ;
 pub fn main(init: std.process.Init) !void {

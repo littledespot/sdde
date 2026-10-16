@@ -146,9 +146,13 @@ pub const Origins = struct {
     }
 };
 pub const GroupPolicy = union(enum) {
-    membership: struct { disposition: g.spec.Applicability, fixed_provenance: ?g.spec.Selection, fixed_source_group_ids: []const @import("reference_reconciliation.zig").SignalId },
+    membership: struct { disposition: g.spec.Applicability, fixed_provenance: ?g.spec.Selection, fixed_source_group_ids: []const @import("reference_reconciliation.zig").SignalId, evidence_bound: ?EvidenceBound = null },
 };
 pub const GroupRepair = struct { target: StableTarget, policy: GroupPolicy };
+pub const EvidenceBound = struct {
+    effective: []const @import("reference_identity.zig").ClaimId,
+    citations: []const @import("reference_identity.zig").CitationId,
+};
 pub const ValueEvidenceBound = struct {
     target: StableTarget,
     explicit: []const @import("reference_identity.zig").ClaimId,

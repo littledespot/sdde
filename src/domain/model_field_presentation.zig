@@ -7,8 +7,9 @@ const policy = @import("text_field_policy.zig");
 const strict = @import("strict_json.zig");
 pub const Error = fields.Error || strict.Error || error{InvalidModelFieldPresentation};
 pub const BodyStep = union(enum) { property: []const u8, index: u32 };
-/// A native producer identifies catalogue data that is useful only to fields
-/// permitting this insertion kind. Paths address input data, never capabilities.
+/// A native producer identifies catalogue data useful to a field's declared
+/// reference role. Exact catalogues support native recognition; they never add
+/// model insertion alternatives. Paths address input data, never capabilities.
 pub const Omission = struct { requires: policy.Insertion, path: []const BodyStep };
 
 pub fn valid(omissions: []const Omission) bool {
@@ -70,7 +71,7 @@ pub fn prefixed(a: std.mem.Allocator, omissions: []const Omission, prefix: []con
 }
 
 const Rule = struct { field: []const u8, instruction: []const u8 };
-const InsertionFields = struct { exact_copy: []const []const u8, passive: []const []const u8, source: []const []const u8 };
+const InsertionFields = struct { passive: []const []const u8, source: []const []const u8 };
 
 /// Project once from the immutable native packet for this assignment. Array
 /// omission paths refer to original indices; corrections reuse the projection.
@@ -82,16 +83,16 @@ pub fn project(a: std.mem.Allocator, body: []const u8, selected: *const schema.N
     const active = try fields.activeBindings(scratch, selected, bindings);
     var allowed: std.EnumSet(policy.Insertion) = .initEmpty();
     var rules: std.ArrayList(Rule) = .empty;
-    var exact: std.ArrayList([]const u8) = .empty;
     var passive: std.ArrayList([]const u8) = .empty;
     var source: std.ArrayList([]const u8) = .empty;
     for (active) |binding| {
         const path = try fieldPath(scratch, binding.path);
         try rules.append(scratch, .{ .field = path, .instruction = policy.selectedGuidance(binding.field, binding.insertions).instruction });
+        if (policy.permits(binding.field, .exact_copy)) allowed.insert(.exact_copy);
         inline for (std.meta.tags(policy.Insertion)) |kind| if (binding.insertions.contains(kind)) {
             allowed.insert(kind);
             try switch (kind) {
-                .exact_copy => exact.append(scratch, path),
+                .exact_copy => return error.InvalidModelFieldPresentation,
                 .passive => passive.append(scratch, path),
                 .source => source.append(scratch, path),
             };
@@ -103,7 +104,7 @@ pub fn project(a: std.mem.Allocator, body: []const u8, selected: *const schema.N
     try omit(scratch, &parsed.value, &path, omissions, allowed);
     if (rules.items.len != 0) {
         const guidance = try std.json.Stringify.valueAlloc(scratch, rules.items, .{});
-        const insertion_fields: InsertionFields = .{ .exact_copy = exact.items, .passive = passive.items, .source = source.items };
+        const insertion_fields: InsertionFields = .{ .passive = passive.items, .source = source.items };
         const choices = try std.json.Stringify.valueAlloc(scratch, insertion_fields, .{});
         try parsed.value.object.put(scratch, "field_rules", (try strict.parse(scratch, guidance, .{ .maximum_depth = schema.max_json_depth }, false, null)).value);
         try parsed.value.object.put(scratch, "insertion_fields", (try strict.parse(scratch, choices, .{ .maximum_depth = schema.max_json_depth }, false, null)).value);
@@ -198,12 +199,12 @@ test "selected field rules remove only native-declared unusable catalogues and o
     try std.testing.expectEqual(@as(usize, 1), rules.len);
     try std.testing.expectEqualStrings("amount", rules[0].object.get("field").?.string);
     try std.testing.expectEqualStrings(policy.selectedGuidance(.spec_goal, .initEmpty()).instruction, rules[0].object.get("instruction").?.string);
-    try std.testing.expectEqual(@as(usize, 0), observed.object.get("insertion_fields").?.object.get("exact_copy").?.array.items.len);
+    try std.testing.expect(!observed.object.get("insertion_fields").?.object.contains("exact_copy"));
     const permitted = [_]fields.Binding{.{ .field = .business_rule, .path = &.{.{ .property = "amount" }} }};
     const admitted = (try strict.parse(a, try project(a, body, &selected, &permitted, &omissions), .{ .maximum_depth = schema.max_json_depth }, false, null)).value;
     try std.testing.expect(admitted.object.contains("inventory"));
     try std.testing.expectEqual(@as(usize, 4), admitted.object.get("groups").?.array.items.len);
-    try std.testing.expectEqualStrings("amount", admitted.object.get("insertion_fields").?.object.get("exact_copy").?.array.items[0].string);
+    try std.testing.expect(!admitted.object.get("insertion_fields").?.object.contains("exact_copy"));
 }
 
 test "presentation descriptors clone nested input paths and reject ambiguous selectors" {

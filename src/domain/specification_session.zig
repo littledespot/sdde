@@ -239,7 +239,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         .sources = try @import("model_evidence.zig").sources(a, context.inputs),
         .passive_literals = try @import("reference_model_input.zig").passiveChoices(a, context.registry, context.inputs, offered_scopes),
     };
-    const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), a, payload);
+    const body = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), a, payload);
     var result = try packets.create(allocator, body, try ownerFor(a, current, index), .initial_generation, .{ .bytes = switch (selected) {
         .brief => "brief",
         .primary_user_story => "primary_user_story",
@@ -247,6 +247,9 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         .records => "records",
     } });
     defer packets.release(result);
+    const scoped = try packets.withExactScope(allocator, result, .{ .reference_state = all.state_id, .occurrences = try p.exactOccurrences(a, @import("reference_support.zig").records(context.references), options.exact_claims) });
+    packets.release(result);
+    result = scoped;
     const witnessed = try packets.withOriginalSources(allocator, result, context.inputs);
     packets.release(result);
     result = witnessed;
@@ -284,8 +287,6 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
             result = contextual;
         },
     }
-    const exact_ids = try a.alloc(i64, exact_choices.items.len);
-    for (exact_choices.items, exact_ids) |choice, *id| id.* = choice.claim_id.ordinal;
     const input = @import("reference_model_input.zig");
     const passive_ids = try input.passiveIds(a, payload.passive_literals);
     if (selected == .records) {
@@ -301,7 +302,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     }
     const fixed = try packets.withExcludedVariants(allocator, result, excluded);
     defer packets.release(fixed);
-    const choices = try input.withTextChoices(allocator, fixed, passive_ids, exact_ids);
+    const choices = try input.withTextChoices(allocator, fixed, passive_ids);
     defer packets.release(choices);
     if (options.task != null or index < current.completed) return packets.withRestrictions(allocator, choices, choices.excludedVariants(), choices.integerChoices());
     return withGroupChoices(allocator, choices, context, selected, current.record_cursor);
@@ -366,7 +367,9 @@ pub fn withSelectionChoices(a: std.mem.Allocator, base: *const packets.Packet, c
     for (choices.exact_copy, exact_ids) |choice, *id| id.* = choice.claim_id.ordinal;
     const visible = try narrowDisplayCatalogues(a, base, passive_ids, exact_ids);
     defer packets.release(visible);
-    return @import("reference_model_input.zig").withTextChoices(a, visible, passive_ids, exact_ids);
+    const scoped = try packets.withExactScope(a, visible, .{ .reference_state = (try p.items(context)).state_id, .occurrences = try p.exactOccurrences(scratch, @import("reference_support.zig").records(context.references), selection.claim_ids) });
+    defer packets.release(scoped);
+    return @import("reference_model_input.zig").withTextChoices(a, scoped, passive_ids);
 }
 
 /// Keep Spec's presented display choices aligned with the bound native scope.
@@ -400,21 +403,7 @@ fn narrowDisplayCatalogues(a: std.mem.Allocator, base: *const packets.Packet, pa
         }
     }
     const body = try std.json.Stringify.valueAlloc(scratch, parsed.value, .{});
-    const projected = if (base.repairPermit()) |permit|
-        packets.createRepair(a, body, base.unit(), base.purpose(), base.resultDefinition(), permit, base.repairOrigin())
-    else
-        packets.create(a, body, base.unit(), base.purpose(), base.resultDefinition());
-    const unbound = try projected;
-    defer packets.release(unbound);
-    const witnessed = try packets.withOriginalSourceTexts(a, unbound, base.originalSources());
-    defer packets.release(witnessed);
-    const prose = try packets.withProseFields(a, witnessed, base.proseFields());
-    defer packets.release(prose);
-    const policies = try packets.withFieldPolicies(a, prose, base.fieldPolicies());
-    defer packets.release(policies);
-    const offered = try packets.withPresentationOmissions(a, policies, base.presentationOmissions());
-    defer packets.release(offered);
-    return packets.withRestrictions(a, offered, base.excludedVariants(), base.integerChoices());
+    return packets.withBody(a, base, body);
 }
 
 pub fn append(current: Session, checked: g.Checked) Error!Session {

@@ -7070,7 +7070,7 @@ const AuditCandidate = struct {
     checks: []const AuditValue,
 };
 const audit_schema =
-    \\{"$defs":{"segment":{"oneOf":[{"type":"string","maxLength":256},{"type":"object","properties":{"kind":{"const":"exact_copy"},"claim_id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","claim_id"],"additionalProperties":false}]},"value":{"type":"object","properties":{"segments":{"type":"array","maxItems":8,"items":{"$ref":"#/$defs/segment"}},"evidence":{"type":"array","maxItems":8,"items":{"type":"integer","minimum":1,"maximum":100}}},"required":["segments","evidence"],"additionalProperties":false}},"type":"object","properties":{"memo":{"type":"object","properties":{"title":{"$ref":"#/$defs/value"},"supplement":{"$ref":"#/$defs/value"}},"required":["title"],"additionalProperties":false},"checks":{"type":"array","maxItems":4,"items":{"$ref":"#/$defs/value"}}},"required":["memo","checks"],"additionalProperties":false}
+    \\{"$defs":{"value":{"type":"object","properties":{"segments":{"type":"array","minItems":1,"maxItems":8,"items":{"type":"string","maxLength":256}},"evidence":{"type":"array","maxItems":8,"items":{"type":"integer","minimum":1,"maximum":100}}},"required":["segments","evidence"],"additionalProperties":false}},"type":"object","properties":{"memo":{"type":"object","properties":{"title":{"$ref":"#/$defs/value"},"supplement":{"$ref":"#/$defs/value"}},"required":["title"],"additionalProperties":false},"checks":{"type":"array","maxItems":4,"items":{"$ref":"#/$defs/value"}}},"required":["memo","checks"],"additionalProperties":false}
 ;
 const audit_composition =
     \\{"schema":"json-composition/v1","result":"result","parts":{"memo":{"paths":["/memo"]},"checks":{"paths":["/checks"],"requires":["memo"]}}}
@@ -7092,14 +7092,28 @@ const AuditObserver = struct {
             const item = r.item(self.items, id) catch return false;
             if (item.claim.content != .model) return false;
         }
-        for (value.segments) |segment| switch (segment) {
-            .exact_copy => |selected| {
-                if (!allow_exact) return false;
-                _ = support.exact(self.items, selected.claim_id) catch return false;
-                exact.append(self.allocator, selected.claim_id) catch return error.OperationExecutionFailed;
-            },
-            else => {},
+        const recognition = @import("domain/exact_value_recognition.zig");
+        var occurrences: std.ArrayList(recognition.Occurrence) = .empty;
+        defer occurrences.deinit(self.allocator);
+        for (self.items.entries) |entry| if (entry.claim.content == .preserved_token) {
+            occurrences.append(self.allocator, .{ .claim_id = entry.claim.id, .bytes = entry.claim.content.preserved_token.value.raw_value.bytes }) catch return error.OperationExecutionFailed;
         };
+        var prose: std.ArrayList(u8) = .empty;
+        defer prose.deinit(self.allocator);
+        for (value.segments) |segment| switch (segment) {
+            .literal => |literal| prose.appendSlice(self.allocator, literal.value) catch return error.OperationExecutionFailed,
+            else => return false,
+        };
+        const matches = recognition.recognize(self.allocator, prose.items, occurrences.items, .{ .left = .field_edge, .right = .field_edge }) catch return error.OperationExecutionFailed;
+        defer matches.deinit(self.allocator);
+        switch (matches) {
+            .rejected, .ambiguous => return false,
+            .no_match => {},
+            .matched => |witnesses| {
+                if (!allow_exact) return false;
+                for (witnesses) |witness| exact.append(self.allocator, witness.claim_id) catch return error.OperationExecutionFailed;
+            },
+        }
         const claims = support.lineage(self.allocator, value.evidence, exact.items) catch |err| switch (err) {
             error.OutOfMemory => return error.OperationExecutionFailed,
             else => return false,
@@ -7132,7 +7146,6 @@ const AuditCalls = struct {
     fake: fake_provider.FakeLLMProvider,
     allocator: std.mem.Allocator,
     business: @import("domain/reference_identity.zig").ClaimId,
-    exact: @import("domain/reference_identity.zig").ClaimId,
     ineligible: bool,
     supplement: bool,
     fn interface(self: *@This()) @import("ports/llm_provider_interface.zig").LLMProviderInterface {
@@ -7145,9 +7158,9 @@ const AuditCalls = struct {
         else
             "";
         self.fake.invocation_plan.complete.content = if (std.mem.eql(u8, request.response_schema.root().object[0].name, "memo"))
-            std.fmt.allocPrint(self.allocator, "{{\"memo\":{{\"title\":{{\"segments\":[\"Inspect \",{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}],\"evidence\":[{d}]}}{s}}}}}", .{ self.exact.ordinal, self.business.ordinal, supplement }) catch return error.OutOfMemory
+            std.fmt.allocPrint(self.allocator, "{{\"memo\":{{\"title\":{{\"segments\":[\"Inspect Hello, World!\"],\"evidence\":[{d}]}}{s}}}}}", .{ self.business.ordinal, supplement }) catch return error.OutOfMemory
         else if (self.ineligible)
-            std.fmt.allocPrint(self.allocator, "{{\"checks\":[{{\"segments\":[{{\"kind\":\"exact_copy\",\"claim_id\":{d}}}],\"evidence\":[{d}]}}]}}", .{ self.exact.ordinal, self.business.ordinal }) catch return error.OutOfMemory
+            std.fmt.allocPrint(self.allocator, "{{\"checks\":[{{\"segments\":[\"Hello, World!\"],\"evidence\":[{d}]}}]}}", .{self.business.ordinal}) catch return error.OutOfMemory
         else
             std.fmt.allocPrint(self.allocator, "{{\"checks\":[{{\"segments\":[\"Verify the recorded outcome.\"],\"evidence\":[{d}]}}]}}", .{self.business.ordinal}) catch return error.OutOfMemory;
         return self.fake.interface().invoke(selected, request, reference, invoked);
@@ -7204,7 +7217,7 @@ test "registered non-Spec typed consumer composes references and enforces its ow
         const graph = try fixture.compileResources(audit_workflow, audit_schema, false, audit_composition, null);
         var runner = fixture.runner(graph, std.testing.allocator);
         defer runner.deinit();
-        var calls: AuditCalls = .{ .fake = invocationProvider(&runner, std.testing.allocator), .allocator = a, .business = business.?, .exact = exact.?, .ineligible = mode == .ineligible, .supplement = mode == .optional };
+        var calls: AuditCalls = .{ .fake = invocationProvider(&runner, std.testing.allocator), .allocator = a, .business = business.?, .ineligible = mode == .ineligible, .supplement = mode == .optional };
         fixture.native.invoke_model.action = .{ .provider = calls.interface() };
         var harness: Harness = .{ .runner = &runner };
         try std.testing.expectEqual(@as(workflow.OutcomeTag, if (mode == .valid or mode == .optional) .ok else .invalid), harness.run());
@@ -8369,7 +8382,7 @@ test "detailed and consolidated requests bind native exclusions to the same cano
 test "protocol correction retains singleton authority and assembly requirements and rejects echoed determined handles" {
     const packets = @import("domain/model_input_packet.zig");
     const schema_source =
-        \\{"type":"object","properties":{"value":{"type":"array","minItems":1,"maxItems":4,"items":{"oneOf":[{"type":"string","maxLength":80},{"type":"object","properties":{"kind":{"const":"exact_copy"},"claim_id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","claim_id"],"additionalProperties":false}]}}},"required":["value"],"additionalProperties":false}
+        \\{"type":"object","properties":{"value":{"type":"array","minItems":1,"maxItems":4,"items":{"oneOf":[{"type":"string","maxLength":80},{"type":"object","properties":{"kind":{"const":"reference"},"reference_id":{"type":"integer","minimum":1,"maximum":100}},"required":["kind","reference_id"],"additionalProperties":false}]}}},"required":["value"],"additionalProperties":false}
     ;
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);
@@ -8388,17 +8401,17 @@ test "protocol correction retains singleton authority and assembly requirements 
     };
     const contextual = try packets.withContext(@TypeOf(requirements), std.testing.allocator, base, "record_requirements", requirements);
     defer packets.release(contextual);
-    const packet = try @import("domain/reference_model_input.zig").withTextChoices(std.testing.allocator, contextual, &.{}, &.{73});
+    const packet = try packets.withIntegerChoices(std.testing.allocator, contextual, &.{.{ .target = .{ .tagged = .{ .kind = "reference", .field = "reference_id" } }, .allowed = &.{73}, .singleton = .construct }});
     const original_input = try a.dupe(u8, packet.body());
     runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
     var fake = invocationProvider(&runner, std.testing.allocator);
     fixture.native.invoke_model.action = .{ .provider = fake.interface() };
-    fake.invocation_plan.complete.content = "{\"value\":[{\"kind\":\"exact_copy\",\"claim_id\":73}]}";
+    fake.invocation_plan.complete.content = "{\"value\":[{\"kind\":\"reference\",\"reference_id\":73}]}";
     try prepareProtocolAttempt(&runner, false);
     const initial = try currentRequest(&runner);
     const original_id = initial.id();
     const original_schema = initial.prepared().?.response_schema;
-    try std.testing.expect(std.mem.indexOf(u8, original_schema.modelBytes(), "claim_id") == null);
+    try std.testing.expect(std.mem.indexOf(u8, original_schema.modelBytes(), "reference_id") == null);
     for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode" }) |step|
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
     try std.testing.expectEqual(.invalid, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
@@ -8409,12 +8422,12 @@ test "protocol correction retains singleton authority and assembly requirements 
     try std.testing.expectEqualStrings(original_input, correction.prepared().?.content[1].user);
     try std.testing.expect(correction.prepared().?.response_schema == original_schema);
     try prepareProtocolAttempt(&runner, true);
-    fake.invocation_plan.complete.content = "{\"value\":[\"MOCK meaning \",{\"kind\":\"exact_copy\"}]}";
+    fake.invocation_plan.complete.content = "{\"value\":[\"MOCK meaning \",{\"kind\":\"reference\"}]}";
     for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode", "validate-payload", "close-request" }) |step|
         try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
     const accepted = try @import("application/model_candidate_handoff.zig").read(&.{ .slots = runner.envelope.slots });
     const reconstructed = try @import("domain/model_candidate_json.zig").constructBound(a, accepted.body, packet.integerChoices());
-    try std.testing.expectEqualStrings("{\"value\":[\"MOCK meaning \",{\"kind\":\"exact_copy\",\"claim_id\":73}]}", reconstructed);
+    try std.testing.expectEqualStrings("{\"value\":[\"MOCK meaning \",{\"kind\":\"reference\",\"reference_id\":73}]}", reconstructed);
     try std.testing.expectEqual(@as(usize, 2), fake.effect_count);
 }
 
@@ -8483,7 +8496,7 @@ test "protocol correction retains summary and signal guidance selection bounds c
         const active = try @import("domain/model_text_field.zig").activeBindings(a, selected.root(), packet.fieldPolicies());
         try std.testing.expect(active.len != 0);
         try std.testing.expectEqual(active.len, visible.get("field_rules").?.array.items.len);
-        try std.testing.expectEqual(@as(usize, 0), visible.get("insertion_fields").?.object.get("exact_copy").?.array.items.len);
+        try std.testing.expect(!visible.get("insertion_fields").?.object.contains("exact_copy"));
         try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Other claims are supporting evidence") != null);
         try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "summary_purpose") != null);
         try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "Together, the statements must cover every assigned claim ID") != null);
@@ -8513,10 +8526,10 @@ test "protocol correction retains summary and signal guidance selection bounds c
 
 test "composition protocol corrections keep complete assignment and grouped defects through recovery or exhaustion" {
     const packets = @import("domain/model_input_packet.zig");
-    const text_schema = "{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":4294967295,\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]}}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}";
+    const text_schema = "{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295}";
     const result_schema = "{\"$defs\":{\"text\":" ++ text_schema ++ "},\"type\":\"object\",\"properties\":{\"first\":{\"$ref\":\"#/$defs/text\"},\"second\":{\"$ref\":\"#/$defs/text\"}},\"required\":[\"first\",\"second\"],\"additionalProperties\":false}";
-    const invalid = "{\"first\":{\"fragments\":[{\"kind\":\"exact_copy\"}]},\"second\":{\"fragments\":[{\"kind\":\"exact_copy\"}]}}";
-    const corrected = "{\"first\":{\"fragments\":[\"Display \",{\"kind\":\"exact_copy\"},\" on request.\"]},\"second\":\"The user requests the current value.\"}";
+    const invalid = "{\"first\":\"ACTIVE\",\"second\":\"ACTIVE\"}";
+    const corrected = "{\"first\":\"Display ACTIVE on request.\",\"second\":\"The user requests the current value.\"}";
     const assignment = "{\"task\":\"Describe both supported conditions.\",\"siblings\":[\"The complete original context.\"],\"eligible_catalogue\":[7]}";
     const field_bindings: []const @import("domain/model_text_field.zig").Binding = &.{
         .{ .field = .spec_story, .path = &.{.{ .property = "first" }} },
@@ -8539,7 +8552,9 @@ test "composition protocol corrections keep complete assignment and grouped defe
         defer packets.release(bound);
         const original_sources: []const @import("domain/model_text_wire.zig").SourceText = &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = "Display the exact supplied value on request." }};
         const witnessed = try packets.withOriginalSourceTexts(std.testing.allocator, bound, original_sources);
-        runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, witnessed);
+        defer packets.release(witnessed);
+        const scoped = try packets.withExactScope(std.testing.allocator, witnessed, .{ .reference_state = .{ .bytes = "REF-1" }, .occurrences = &.{.{ .claim_id = .{ .ordinal = 7 }, .bytes = "ACTIVE" }} });
+        runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, scoped);
         var fake = invocationProvider(&runner, std.testing.allocator);
         fixture.native.invoke_model.action = .{ .provider = fake.interface() };
         try prepareProtocolAttempt(&runner, false);
@@ -8559,6 +8574,7 @@ test "composition protocol corrections keep complete assignment and grouped defe
             try std.testing.expectEqualDeep(controls, active.controls);
             try std.testing.expectEqualDeep(field_bindings, active.field_policies);
             try std.testing.expectEqualDeep(original_sources, active.original_sources);
+            try std.testing.expect(@import("domain/model_exact_values.zig").same(scoped.exactScope(), active.exact_scope));
             if (recover and index == 1) {
                 for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step| try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
                 if (!consolidated) try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "decode" }).outcome);
@@ -8599,4 +8615,51 @@ test "composition protocol corrections keep complete assignment and grouped defe
         try std.testing.expectEqual(@as(usize, @intFromBool(recover)), fixture.observer.calls);
         try std.testing.expectEqual(@as(u128, attempts * 7), runner.tokenLedger().committed());
     };
+}
+
+test "retained semantic selections bind native exact scope independently of unchanged input bytes" {
+    const packets = @import("domain/model_input_packet.zig");
+    const exact = @import("domain/model_exact_values.zig");
+    const scope: exact.Scope = .{ .reference_state = .{ .bytes = "reference-current" }, .occurrences = &.{ .{ .claim_id = .{ .ordinal = 7 }, .bytes = "ACTIVE" }, .{ .claim_id = .{ .ordinal = 8 }, .bytes = "READY" } } };
+    for ([_]bool{ false, true }) |scoped| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const a = fixture.arena.allocator();
+        var definition = try withStaticContext(a, try protocolRetryYaml(&fixture));
+        definition = try std.mem.replaceOwned(u8, a, definition, ", input: input.txt", "");
+        definition = try std.mem.replaceOwned(u8, a, definition, ", input: input }", ", result-selection: input }");
+        const graph = try fixture.compileResources(definition, retention_result_schema, false, null, context_bytes);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        const base = try retentionPacket(std.testing.allocator, "{\"input\":\"unchanged\"}", "answer", &.{1}, true);
+        defer packets.release(base);
+        const packet = if (scoped) try packets.withExactScope(std.testing.allocator, base, scope) else try packets.withRestrictions(std.testing.allocator, base, base.excludedVariants(), base.integerChoices());
+        runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, packet);
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        fake.invocation_plan.complete.content = "{\"answer\":\"supported\",\"source_ids\":[1],\"value\":\"supported\"}";
+        try prepareProtocolAttempt(&runner, false);
+        for ([_][]const u8{ "call", "validate-response", "complete-operation", "decode", "validate-payload", "close-request" }) |step|
+            try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+        const request = try currentRequest(&runner);
+        const ledger = try requestLedger(&runner);
+        const origin: model_origin = .{ .request = ledger.indexOf(request.id()).?, .attempt = .{ .value = 1 } };
+        const selected = try retentionSelection(graph, request, packet);
+        try std.testing.expect(try selected.acceptsRetained(std.testing.allocator, ledger, request, origin));
+        try std.testing.expectError(error.InvalidModelInputPacket, packets.withExactScope(std.testing.allocator, base, .{ .reference_state = .{ .bytes = "REF-2" }, .occurrences = scope.occurrences }));
+        for ([_]?exact.Scope{
+            null,
+            scope,
+            .{ .reference_state = scope.reference_state, .occurrences = scope.occurrences[0..1] },
+            .{ .reference_state = scope.reference_state, .occurrences = &.{.{ .claim_id = .{ .ordinal = 7 }, .bytes = "CHANGED" }} },
+        }) |changed_scope| {
+            const changed = if (changed_scope) |value| try packets.withExactScope(std.testing.allocator, base, value) else try packets.retain(base);
+            defer packets.release(changed);
+            var replay = selected;
+            replay.input = .{ .packet = changed };
+            try std.testing.expectEqualStrings(packet.body(), changed.body());
+            try std.testing.expectEqual(exact.same(packet.exactScope(), changed_scope), try replay.acceptsRetained(std.testing.allocator, ledger, request, origin));
+        }
+    }
 }

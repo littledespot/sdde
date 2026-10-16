@@ -55,9 +55,9 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     };
     const conflict_catalogue = try @import("reference_conflict_groups.zig").catalogue(scratch, conflict_groups);
     const accepted = switch (prior) {
-        .dispositions => try json.encode(r.PartitionId, scratch, current.partition.id),
-        .signals => |value| try json.encode(@TypeOf(.{ .dispositions = value.dispositions, .signals = value.proposal.signals }), scratch, .{ .dispositions = value.dispositions, .signals = value.proposal.signals }),
-        .conflicts => |value| try json.encode(Facts, scratch, .{ .dispositions = value.prior.dispositions, .signals = accepted_groups, .conflict_groups = conflict_catalogue }),
+        .dispositions => try json.encodeEvidence(r.PartitionId, scratch, current.partition.id),
+        .signals => |value| try json.encodeEvidence(@TypeOf(.{ .dispositions = value.dispositions, .signals = value.proposal.signals }), scratch, .{ .dispositions = value.dispositions, .signals = value.proposal.signals }),
+        .conflicts => |value| try json.encodeEvidence(Facts, scratch, .{ .dispositions = value.prior.dispositions, .signals = accepted_groups, .conflict_groups = conflict_catalogue }),
     };
     const values = std.json.parseFromSlice(std.json.Value, scratch, accepted, .{}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
     const with_facts = try packets.withJsonContext(a, selected, "accepted", values.value);

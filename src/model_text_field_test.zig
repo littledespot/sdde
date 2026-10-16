@@ -26,7 +26,9 @@ test "every declared field schema offers exactly its permitted insertion alterna
         const binding: []const fields.Binding = &.{.{ .field = field, .path = &.{.{ .property = "value" }} }};
         const selected = try schema.restrictFieldPolicies(a, canonical, &.{}, &.{}, binding);
         defer selected.release();
-        try std.testing.expect(fields.validSchema(selected.selected().root(), binding));
+        const inspected = fields.inspectSchema(selected.selected().root(), binding, &.{});
+        try std.testing.expect(inspected.valid);
+        try std.testing.expectEqual(policy.permits(field, .exact_copy), inspected.requires_exact_scope);
         try std.testing.expect(try accepted(a, selected.selected(), "{\"value\":\"Observe the requested behavior.\"}"));
         for (std.meta.tags(policy.Insertion)) |kind| {
             const id = switch (kind) {
@@ -35,15 +37,15 @@ test "every declared field schema offers exactly its permitted insertion alterna
                 .source => "source_id",
             };
             const bytes = try std.fmt.allocPrint(a, "{{\"value\":{{\"fragments\":[\"Observe \",{{\"kind\":\"{s}\",\"{s}\":1}}]}}}}", .{ @tagName(kind), id });
-            try std.testing.expectEqual(policy.permits(field, kind), try accepted(a, selected.selected(), bytes));
+            try std.testing.expectEqual(policy.permitsModel(field, kind), try accepted(a, selected.selected(), bytes));
         }
         // Both provider grammar views serialize the already restricted owner.
         const bedrock = try @import("domain/model_schema_projection.zig").render(a, selected.selected(), .bedrock);
         const full = try @import("domain/model_schema_projection.zig").render(a, selected.selected(), .complete);
         for (std.meta.tags(policy.Insertion)) |kind| {
             const marker = try std.fmt.allocPrint(a, "\"const\":\"{s}\"", .{@tagName(kind)});
-            try std.testing.expectEqual(policy.permits(field, kind), std.mem.indexOf(u8, full, marker) != null);
-            try std.testing.expectEqual(policy.permits(field, kind), std.mem.indexOf(u8, bedrock, marker) != null);
+            try std.testing.expectEqual(policy.permitsModel(field, kind), std.mem.indexOf(u8, full, marker) != null);
+            try std.testing.expectEqual(policy.permitsModel(field, kind), std.mem.indexOf(u8, bedrock, marker) != null);
         }
     }
     try std.testing.expect(!fields.validSchema(canonical.root(), &.{}));
@@ -139,35 +141,36 @@ test "selected field presentation intersects policy with raw prose and excluded 
     try std.testing.expectEqual(@as(usize, 0), active_question[0].insertions.count());
     const question_body = (try @import("domain/strict_json.zig").parse(a, try presentation.project(a, body, raw.root(), question, omissions), .{ .maximum_depth = schema.max_json_depth }, false, null)).value.object;
     inline for (.{ "exact_catalogue", "passive_catalogue", "source_catalogue" }) |name| try std.testing.expect(!question_body.contains(name));
-    inline for (std.meta.tags(policy.Insertion)) |kind| try std.testing.expectEqual(@as(usize, 0), question_body.get("insertion_fields").?.object.get(@tagName(kind)).?.array.items.len);
+    try std.testing.expect(!question_body.get("insertion_fields").?.object.contains("exact_copy"));
+    inline for (.{ "passive", "source" }) |kind| try std.testing.expectEqual(@as(usize, 0), question_body.get("insertion_fields").?.object.get(kind).?.array.items.len);
     try std.testing.expectEqualStrings(policy.selectedGuidance(.clarification_question, .initEmpty()).instruction, question_body.get("field_rules").?.array.items[0].object.get("instruction").?.string);
     try std.testing.expectEqualStrings("Keep original source evidence.", question_body.get("evidence").?.string);
 
     const canonical = try compile(a, all_insertions);
     const binding: []const fields.Binding = &.{.{ .field = .functional_requirement, .path = &.{.{ .property = "value" }} }};
-    for ([_]bool{ false, true }) |exclude_exact| {
-        const selected = try schema.restrictFieldPolicies(a, canonical, if (exclude_exact) &.{.{ .kind = "exact_copy" }} else &.{}, &.{}, binding);
+    {
+        const selected = try schema.restrictFieldPolicies(a, canonical, &.{}, &.{}, binding);
         defer selected.release();
         try std.testing.expect(fields.validSchema(selected.selected().root(), binding));
         const active = try fields.activeBindings(a, selected.selected().root(), binding);
         try std.testing.expectEqual(@as(usize, 1), active.len);
-        try std.testing.expectEqual(!exclude_exact, active[0].insertions.contains(.exact_copy));
+        try std.testing.expect(!active[0].insertions.contains(.exact_copy));
         try std.testing.expect(active[0].insertions.contains(.passive));
         try std.testing.expect(!active[0].insertions.contains(.source));
         const projected = (try @import("domain/strict_json.zig").parse(a, try presentation.project(a, body, selected.selected().root(), binding, omissions), .{ .maximum_depth = schema.max_json_depth }, false, null)).value.object;
-        try std.testing.expectEqual(!exclude_exact, projected.contains("exact_catalogue"));
+        try std.testing.expect(projected.contains("exact_catalogue"));
         try std.testing.expect(projected.contains("passive_catalogue"));
         try std.testing.expect(!projected.contains("source_catalogue"));
-        const advertised = projected.get("insertion_fields").?.object.get("exact_copy").?.array.items;
-        try std.testing.expectEqual(@as(usize, if (exclude_exact) 0 else 1), advertised.len);
+        try std.testing.expect(!projected.get("insertion_fields").?.object.contains("exact_copy"));
         const instruction = projected.get("field_rules").?.array.items[0].object.get("instruction").?.string;
-        try std.testing.expectEqual(!exclude_exact, std.mem.indexOf(u8, instruction, "Exact copies may carry") != null);
+        try std.testing.expect(std.mem.indexOf(u8, instruction, "Type required exact values verbatim") != null);
         try std.testing.expectEqualStrings(policy.selectedGuidance(.functional_requirement, active[0].insertions).instruction, instruction);
     }
-    const identity = try schema.restrictFieldPolicies(a, canonical, &.{ .{ .kind = "exact_copy" }, .{ .kind = "passive" }, .{ .kind = "source" } }, &.{}, &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }});
+    const identity = try schema.restrictFieldPolicies(a, canonical, &.{ .{ .kind = "passive" }, .{ .kind = "source" } }, &.{}, &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }});
     defer identity.release();
     const active_identity = try fields.activeBindings(a, identity.selected().root(), &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }});
     try std.testing.expectEqual(@as(usize, 0), active_identity[0].insertions.count());
+    try std.testing.expect(fields.inspectSchema(identity.selected().root(), &.{.{ .field = .entity_name, .path = &.{.{ .property = "value" }} }}, &.{}).requires_exact_scope);
     try std.testing.expectEqualStrings("Write the identity label as plain text.", policy.selectedGuidance(.entity_name, active_identity[0].insertions).instruction);
     // Guidance emitted before schema selection cannot promise an insertion
     // that a later native exclusion removes.

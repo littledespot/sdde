@@ -88,25 +88,22 @@ pub fn guidance(field: Field) Guidance {
     return .{ .field = field, .prose_required = policy.prose == .required, .instruction = if (policy.prose == .optional)
         "Supply the identity label using only forms permitted by the selected response schema."
     else
-        "Write nonblank prose for this field's declared meaning or behavior. Any insertion must be permitted by the selected response schema.", .exact_copy = policy.exact_copy, .passive = policy.passive, .source = policy.source };
+        "Write nonblank prose for this field's declared meaning or behavior. Type required exact values verbatim in that prose. Any display reference must be permitted by the selected response schema.", .exact_copy = .prohibited, .passive = policy.passive, .source = policy.source };
 }
 /// Presentation may offer only alternatives in the exact selected wire leaf.
 /// Native admission and exact-copy coverage continue to use get(), unchanged.
 pub fn selectedGuidance(field: Field, offered: Insertions) Guidance {
     const policy = get(field);
     var result = guidance(field);
-    if (!offered.contains(.exact_copy)) result.exact_copy = .prohibited;
     if (!offered.contains(.passive)) result.passive = .prohibited;
     if (!offered.contains(.source)) result.source = .prohibited;
-    const insertions_available = result.exact_copy != .prohibited or result.passive != .prohibited or result.source != .prohibited;
+    const insertions_available = result.passive != .prohibited or result.source != .prohibited;
     result.instruction = if (!insertions_available)
-        (if (policy.prose == .optional) "Write the identity label as plain text." else "Write nonblank prose for this field's declared meaning or behavior as plain text.")
-    else if (result.exact_copy == .obligation_bearing)
-        "Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field."
+        (if (policy.prose == .optional) "Write the identity label as plain text." else "Write nonblank prose for this field's declared meaning or behavior as plain text. Type required exact values verbatim in that prose.")
     else if (policy.prose == .optional)
-        "Supply the identity label using only insertion alternatives listed for this field or plain text. Its occurrence does not satisfy a behavioral exact-copy obligation."
+        "Supply the identity label using only display references listed for this field or plain text. An identity label alone does not express required behavior."
     else
-        "Write nonblank prose for this field's declared meaning or behavior. Only insertion alternatives listed for this field may supplement that prose.";
+        "Write nonblank prose for this field's declared meaning or behavior. Type required exact values verbatim in that prose. Only supplied display references may supplement it.";
     return result;
 }
 pub fn permits(field: Field, kind: Insertion) bool {
@@ -116,6 +113,12 @@ pub fn permits(field: Field, kind: Insertion) bool {
         .passive => policy.passive,
         .source => policy.source,
     } != .prohibited;
+}
+
+/// Model schemas and guidance expose only selectable display references.
+/// Exact occurrences remain a canonical native representation and policy.
+pub fn permitsModel(field: Field, kind: Insertion) bool {
+    return kind != .exact_copy and permits(field, kind);
 }
 
 test "closed composition inventory has one justified identity exception and distinct coverage roles" {
@@ -130,6 +133,10 @@ test "closed composition inventory has one justified identity exception and dist
             try std.testing.expectEqual(Role.incidental, value.exact_copy);
         }
         if (value.exact_copy == .obligation_bearing) try std.testing.expectEqual(.required, value.prose);
+        try std.testing.expect(!permitsModel(field, .exact_copy));
+        try std.testing.expectEqual(.prohibited, guidance(field).exact_copy);
+        try std.testing.expectEqual(permits(field, .passive), permitsModel(field, .passive));
+        try std.testing.expectEqual(permits(field, .source), permitsModel(field, .source));
     }
     try std.testing.expectEqual(@as(usize, 1), exceptions);
     try std.testing.expectEqual(.prohibited, get(.extraction_business).exact_copy);

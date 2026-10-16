@@ -104,7 +104,7 @@ pub fn packet(allocator: std.mem.Allocator, inputs: a.Inputs, source_context: p.
         .subject = try @import("specification_review_subject.zig").projectBusiness(scratch, business, source_context, subject),
         .principles = try registry.guidance(scratch, context.registry, context.selection),
     };
-    const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
+    const body = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
     const state = source_context.inputs.corpus.state_id;
     const slot = switch (scope) {
         .finding, .correction => |id| try @import("specification_support.zig").reviewSlot(scratch, inputs, id),

@@ -299,6 +299,13 @@ validated deltas; declared data dependencies and barriers govern composition.
 Typed intermediate representations hold canonical data. Markdown presents validated state;
 identity, provenance, and immutable ownership are explicit contracts.
 
+The user-approved 17 October [native exact-value amendment](decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026)
+removes model-authored exact-copy selections. Current native request eligibility
+and contextual raw-byte recognition derive canonical occurrences and `E` beyond
+unchanged `S`; field roles, semantic review and repair bounds remain. The overall
+design remains Proposed, and [FIX05 B3](../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model)
+tracks implementation and validation separately from approval.
+
 [Complete §7 contract](contracts/07-domain-representations.md).
 
 - <a id="71-shared-types"></a>[7.1 Shared types](contracts/07-domain-representations.md#71-shared-types)
@@ -1087,7 +1094,7 @@ decision history:
 | [0017](decisions/0017-incomplete-specification-publication.md) | Clarification pauses publish a validated incomplete specification and pending state without completion authority. |
 | [0018](decisions/0018-debug-model-exchange-logging.md) | Debug/trace capture complete credential-redacted production model exchanges, including failed attempts, without silent truncation. |
 | [0019](decisions/0019-single-request-debugger.md) | The native browser debugger inspects captured calls and explicitly replays one selected prompt with immutable parent links and no workflow execution. |
-| [0020](decisions/0020-derived-exact-reference-lineage.md) | One preserved-token claim handle selects an exact occurrence; the shared reference owner derives its lineage and bounds repair. Provenance-free source bindings and complete authoring-role decisions retain separate wire candidates and native canonical authority. |
+| [0020](decisions/0020-derived-exact-reference-lineage.md) | Native raw-byte recognition within current request eligibility derives exact occurrence handles and lineage using contextual delimiters; model-authored exact selections are removed. Selected support remains fixed, canonical field roles and repair bounds remain, and lexical evidence proves no semantic use. |
 | [0021](decisions/0021-optional-source-preservation-review.md) | Optional source-preservation review before Spec generation, using shared authority/repair contracts and a dedicated configured candidate-repair model slot. |
 | [0022](decisions/0022-native-reference-phase-handoffs.md) | Validated native reconciliation phases, occurrence-bound role selections, semantic conflict groups, native exact-token projections and forced classifications. |
 

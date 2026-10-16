@@ -32,6 +32,7 @@ pub fn check(a: std.mem.Allocator, packet: *const @import("../domain/model_input
     try actual.validate();
     try std.testing.expect(fields.same(packet.fieldPolicies(), actual.field_policies));
     try std.testing.expectEqualDeep(packet.originalSources(), actual.original_sources);
+    try std.testing.expect(@import("../domain/model_exact_values.zig").same(packet.exactScope(), actual.exact_scope));
     try std.testing.expectEqualDeep(packet.proseFields(), actual.prose_fields);
     const selected = try strict.parse(a, selected_output, .{ .maximum_depth = schemas.max_json_depth }, false, null);
     try std.testing.expect(payload.validateValue(@import("../domain/model_envelope.zig").value(&selected.value), actual.response_schema.root()) == null);
@@ -106,6 +107,7 @@ fn checkCompositionCorrection(a: std.mem.Allocator, base: *@import("../provider_
     try std.testing.expectEqualDeep(actual.field_policies, correction.request.field_policies);
     try std.testing.expectEqualDeep(actual.prose_fields, correction.request.prose_fields);
     try std.testing.expectEqualDeep(actual.original_sources, correction.request.original_sources);
+    try std.testing.expect(@import("../domain/model_exact_values.zig").same(actual.exact_scope, correction.request.exact_scope));
     try std.testing.expectEqualDeep(actual.controls, correction.request.controls);
     try std.testing.expectEqualDeep(actual.content, correction.request.content[0..actual.content.len]);
     try std.testing.expect(corrected_request.packet() == packet);

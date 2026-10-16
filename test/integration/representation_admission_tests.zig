@@ -125,7 +125,7 @@ fn capturedConstruction(a: std.mem.Allocator, packet: std.json.Value, construct:
     return choices;
 }
 
-test "test.integration.representation_admission all retained F10 F11 and F12 values reject at native owners and controls admit" {
+test "test.integration.representation_admission retained F10 F11 and F12 observations stay frozen while current exact wire rejects" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -204,10 +204,17 @@ test "test.integration.representation_admission all retained F10 F11 and F12 val
                 try std.testing.expectEqualStrings(selection.value_sha256, &hash(bytes));
                 const constructed = try codec.constructBound(a, bytes, choices);
                 stage = .native_decode;
-                const value = try decodeSelectedText(a, constructed);
+                // Observe the pinned pre-B3 wire kinds without decoding them as
+                // current model values. Native scope was not retained here.
+                const captured = try strict.parse(a, constructed, .{ .maximum_depth = 64 }, false, null);
+                const nodes = (try wire.compositionNodes(a, captured.value)) orelse return error.InvalidReplayFixture;
+                for (nodes) |node| if (node == .exact_copy) {
+                    try std.testing.expectError(error.InvalidJsonDocument, decodeSelectedText(a, constructed));
+                    break;
+                };
                 stage = .field_validation;
-                const composition_issue = text.composition(text.BusinessSegment, selection.field, value.segments);
-                const issue: ?text.Issue = if (composition_issue) |failure| failure else try text.wireCompositionSources(text.BusinessSegment, a, sources, selection.field, value.segments);
+                const composition_issue = text.composition(text.CompositionNode, selection.field, nodes);
+                const issue: ?text.Issue = if (composition_issue) |failure| failure else try text.wireCompositionSources(text.CompositionNode, a, sources, selection.field, nodes);
                 const actual: Expected = if (issue) |failure| switch (failure.reason) {
                     .reference_only => .reference_only,
                     .prohibited_exact => .prohibited_exact,
@@ -230,7 +237,7 @@ test "test.integration.representation_admission all retained F10 F11 and F12 val
     try std.testing.expectEqualDeep(required, counts);
     const output = ".zig-cache/representation-admission";
     try std.Io.Dir.cwd().createDirPath(std.testing.io, output);
-    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/replay.json", .data = try std.json.Stringify.valueAlloc(a, .{ .schema = "representation-admission-replay/v3", .scope = "offline_mechanical_native_admission", .counts = counts, .whole_response_composition_replayed = false, .provider_calls = 0, .workflow_authority = false, .semantic_quality_assessed = false }, .{ .whitespace = .indent_2 }) });
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/replay.json", .data = try std.json.Stringify.valueAlloc(a, .{ .schema = "representation-admission-replay/v4", .scope = "historical_pre_b3_wire_observation", .counts = counts, .native_exact_scope_available = false, .current_model_admission_assessed = false, .whole_response_composition_replayed = false, .provider_calls = 0, .workflow_authority = false, .semantic_quality_assessed = false }, .{ .whitespace = .indent_2 }) });
 }
 
 test "test.integration.representation_admission unrelated domains retain real native references inside prose" {

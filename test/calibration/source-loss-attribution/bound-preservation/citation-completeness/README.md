@@ -1,5 +1,17 @@
 # Citation completeness comparison and actual reviewer handoff
 
+**B3 current-contract refresh — 17 October 2026:** current diagnostic candidates
+are rebuilt through native prose/occurrence admission; frozen historical payloads
+are not read as new canonical authority. The independent `dual-ready` input now
+records typed `ambiguous_exact` before review because its two eligible source
+occurrences have identical bytes. The frozen `captured-description` records
+`embedded_insertion_syntax` for invented encoded insertion syntax absent from the
+source. All 13 inputs remain counted as 11 prepared and two rejected cases, with
+no review packets for those negatives; frozen sources, expectations and historical
+results are unchanged. Current preparation writes separate admission reasons and denominators beneath
+`.zig-cache/source-loss-citation-completeness-current-contract/`. The dated live
+results below do not qualify the B3 cutover or authorize another send.
+
 **Citation comparison passed; actual source-review handoff failed.** All
 76 explicitly approved calls completed; complete/relevant citations improved from
 36/38 to 38/38 assessments, with 38/38 correct verdicts and 26/26 correct native

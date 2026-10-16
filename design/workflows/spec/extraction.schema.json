@@ -22,26 +22,6 @@
             "passive_literal_id"
           ],
           "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "exact_copy"
-            },
-            "token_id": {
-              "$ref": "#/$defs/ordinal"
-            },
-            "citation_id": {
-              "$ref": "#/$defs/ordinal"
-            }
-          },
-          "required": [
-            "kind",
-            "token_id",
-            "citation_id"
-          ],
-          "additionalProperties": false
         }
       ]
     },

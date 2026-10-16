@@ -9,6 +9,28 @@ const codec = @import("../../../src/adapters/provider/bedrock_request.zig");
 pub const run = "RUN-dea0536ccfa67b3b2f8db4048f28330c";
 pub const calibration = "test/calibration/insertion-presentation";
 pub const Source = enum { records, extraction };
+/// Closed observation of the two pinned pre-B3 descriptions. This type cannot
+/// become a current request or restore historical model dispatch authority.
+pub const CapturedDescription = struct {
+    version: enum { @"model-request-debug/v5" },
+    provider: []const u8,
+    model: []const u8,
+    provider_config: @import("../../../src/domain/llm_provider_contracts.zig").ValidatedProviderConfig,
+    model_slot: []const u8,
+    workflow_id: []const u8,
+    workflow_version: u32,
+    request_step: []const u8,
+    content: []const @import("../../../src/domain/llm_provider_operation.zig").ModelVisibleContent,
+    protocol_prompt: []const u8,
+    schema: []const u8,
+    response_mode: @import("../../../src/domain/model_controls.zig").ResponseGuidanceMode,
+    controls: @import("../../../src/domain/model_controls.zig").InferenceControls,
+    reasoning_effort: ?[]const u8,
+    operation_kind: @import("../../../src/domain/llm_provider_operation.zig").ProviderOperationKind,
+    original_sources: []const @import("../../../src/domain/model_text_wire.zig").SourceText,
+    prose_fields: []const @import("../../../src/domain/model_text_wire.zig").ProseField,
+    field_policies: []const @import("../../../src/domain/model_text_field.zig").Binding,
+};
 pub const Arm = enum { records_baseline, records_no_insertion_fields, records_grouped_rules, records_both, records_no_obligation_wording, extraction_baseline, extraction_no_presentation };
 pub const Pin = struct { file: []const u8, sha256: []const u8, original: []const u8 };
 pub const Provenance = struct { version: enum { @"insertion-presentation-sources/v1" }, run_path: []const u8, run_id: []const u8, captures: []const Pin };
@@ -95,10 +117,10 @@ pub fn hash(a: std.mem.Allocator, bytes: []const u8) ![]const u8 {
 pub fn json(a: std.mem.Allocator, value: anytype) ![]const u8 {
     return std.json.Stringify.valueAlloc(a, value, .{});
 }
-pub fn description(a: std.mem.Allocator, selected: Source) !debug.Description {
-    return debug.Description.decode(a, descriptionBytes(selected));
+pub fn description(a: std.mem.Allocator, selected: Source) !CapturedDescription {
+    return strict.decode(CapturedDescription, a, descriptionBytes(selected), .{ .maximum_depth = 64 });
 }
-pub fn request(a: std.mem.Allocator, value: debug.Description) ![]const u8 {
+pub fn request(a: std.mem.Allocator, value: CapturedDescription) ![]const u8 {
     // The frozen model registration owns this profile; never select another model.
     if (!std.mem.eql(u8, value.model, "openai.gpt-oss-20b-1:0") or value.response_mode != .native_schema) return error.CaptureDrift;
     const parsed = try strict.parse(a, value.schema, .{ .maximum_depth = schema.max_json_depth }, true, null);
@@ -116,7 +138,7 @@ pub fn request(a: std.mem.Allocator, value: debug.Description) ![]const u8 {
 
 /// Mutation is limited to presentation keys in the one original user packet.
 /// Grouping retains every original field association instead of deleting fields.
-pub fn edit(a: std.mem.Allocator, original: debug.Description, arm: Arm) !debug.Edit {
+pub fn edit(a: std.mem.Allocator, original: CapturedDescription, arm: Arm) !debug.Edit {
     const content = try a.dupe(@import("../../../src/domain/llm_provider_operation.zig").ModelVisibleContent, original.content);
     if (baseline(arm)) return .{ .content = content, .schema = original.schema };
     var selected: ?usize = null;
@@ -207,18 +229,13 @@ pub fn trial(bundle: Bundle, id: []const u8) !Trial {
     for (bundle.manifest.trials) |value| if (std.mem.eql(u8, value.id, id)) return value;
     return error.UnknownTrial;
 }
+/// Historical wire contracts are inspectable evidence, never dispatchable
+/// current requests. A current experiment requires newly captured v6 inputs.
 pub fn dispatchRequest(a: std.mem.Allocator, selected: Trial, calls: []const debug.Call) !debug.ReplayInput {
-    const original = try description(a, source(selected.arm));
-    var parent: ?u32 = null;
-    for (calls, 0..) |call, index| {
-        if (!std.mem.eql(u8, call.run, run) or !std.mem.eql(u8, call.id, parentId(source(selected.arm)))) continue;
-        if (parent != null) return error.AmbiguousParent;
-        if (call.replay != null or call.redacted or !call.request_complete or !std.mem.eql(u8, call.request orelse return error.IncompleteParent, requestBytes(source(selected.arm)))) return error.CaptureDrift;
-        const captured = call.description orelse return error.IncompleteParent;
-        if (!std.mem.eql(u8, try json(a, captured), try json(a, original))) return error.CaptureDrift;
-        parent = std.math.cast(u32, index) orelse return error.InvalidCallIndex;
-    }
-    return .{ .call = parent orelse return error.MissingParent, .mode = if (baseline(selected.arm)) .exact else .modified, .edit = if (baseline(selected.arm)) null else try edit(a, original, selected.arm) };
+    _ = a;
+    _ = selected;
+    _ = calls;
+    return error.HistoricalDispatchUnsupported;
 }
 /// Canonical closed decoding retains the explicit parsed-JSON evidence leaf
 /// while rejecting unknown metadata and wire-kind coercions around it.

@@ -60,22 +60,6 @@
             "passive_literal_id"
           ],
           "additionalProperties": false
-        },
-        {
-          "type": "object",
-          "properties": {
-            "kind": {
-              "const": "exact_copy"
-            },
-            "claim_id": {
-              "$ref": "#/$defs/ordinal"
-            }
-          },
-          "required": [
-            "kind",
-            "claim_id"
-          ],
-          "additionalProperties": false
         }
       ]
     },

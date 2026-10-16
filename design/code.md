@@ -743,7 +743,9 @@ Native [content contract](../src/domain/specification.zig) interpretation:
 - Tagged unions encode as single-key objects, e.g.
   `{"functional_requirement":{"text":...}}`; canonical values retain their
   native-admitted associations and provenance.
-- `BusinessValue` holds ordered prose, passive-ID and `exact_copy` token/citation segments.
+- Canonical `BusinessValue` holds ordered prose, passive-ID and engine-derived
+  `exact_copy` claim-occurrence segments. Under ADR 0020's 17 October amendment,
+  model prose contains verbatim exact values; native recognition owns those segments.
   Requirement wording carries modality; there is no separate modality field.
 - Parsing yields a candidate. H-008/H-010/H-012 must assemble and validate current
   reference, passive, clarification, identity and provenance state before it

@@ -95,6 +95,23 @@ pub const ImmutableUnitOwnerId = union(enum) {
     },
 };
 
+/// Reference-backed owners carry the snapshot used by their native evidence.
+/// Other owner kinds require their own producer's evidence binding.
+pub fn referenceStateForUnit(owner: ImmutableUnitOwnerId) ?ReferenceStateId {
+    return switch (owner) {
+        .reference_chunk => |unit| unit.reference_state_id,
+        .reference_global => |unit| unit.reference_state_id,
+        .specification_unit => |unit| unit.reference_state_id,
+        .semantic_review => |review| switch (review.parent_unit_owner_id) {
+            .reference_chunk => |unit| unit.reference_state_id,
+            .reference_global => |unit| unit.reference_state_id,
+            .specification_unit => |unit| unit.reference_state_id,
+            .plan_unit, .task_cluster, .implementation_operation => null,
+        },
+        .workflow_step, .plan_unit, .task_cluster, .implementation_operation => null,
+    };
+}
+
 pub const RequestPurposeKind = enum {
     initial_generation,
     atomic_repair,

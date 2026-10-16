@@ -65,6 +65,18 @@ Initial attributed authoring selects complete accepted group occurrences togethe
 with content under ADR 0020. Fixed repairs retain required canonical
 `source_group_ids`; their wire responses stay value/content-only. Value-only repair
 cannot change group IDs, explicit `S`, effective evidence bounds or siblings.
+
+The approved 17 October [B3 amendment](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026)
+removes model-authored exact-copy selections. Fixed replacements type exact values
+in prose. Their retained native request scope derives eligible occurrences from
+the authorization's current snapshot and effective-evidence bounds, never a sibling
+or broader authoring catalogue. Raw-byte contextual recognition precedes canonical
+normalization, old-value/revision merge checks and no-progress comparison. It may
+derive `E` while `S` stays fixed, but the replacement still preserves its authorized
+effective evidence and citations. Ambiguous recognition rejects the whole field;
+missing or stale native scope is an engine rejection, not permission for a model
+to choose a handle. Composition correction and retry limits remain unchanged.
+
 A lost obligation outside that association has an explicit unresolved-association
 outcome and blocks; this amendment adds no membership-changing rebuild permission.
 It cannot blame extraction, grouping or the removed presentation-role producer.
@@ -240,7 +252,15 @@ one contradictory entity with a source-grounded non-entity record, retaining its
 exact evidence selection, or insertion of one missing required entity. It may not
 change that decision, delete unique content, reclassify siblings or infer semantics.
 Bind the current session, old value/absence, source/policy dependencies and stable
-record occurrence. Subsequent invalid fields of that record retain the same
+record occurrence. A replacement fixes the old record's authored source selection
+`S`, source groups, effective evidence `L = S ∪ E`, and derived citations. Native
+occurrence recognition over all of the old record's permitted fields establishes
+`E` before the bound is captured, including unchanged sibling prose. Its packet,
+merge and full validation use the same fixed occurrence scope; replacement cannot
+add or remove effective evidence. Initial insertion has no old `L`: it uses the
+independently authorized current-group selection and current eligible occurrence
+scope, then fixes the inserted record's resulting `L` and citations for later
+replacements. Subsequent invalid fields of that record retain the same
 whole-record assignment and retry bound. Reuse the native repair owner, selected
 schema definitions, runner and accounting. Full unit validation, source/claim and
 exact-token coverage, semantic assessment and publication validation remain required.
@@ -383,8 +403,9 @@ retains its existing producer repair path. Malformed or corrupt stored evidence 
 model-response reconstruction. Unbound authority is an engine block, not a
 model repair or user clarification.
 
-Unavailable passive/exact-copy diagnostics identify the rejected selection and
-location. Existing native evidence choices drive both schema narrowing (§12.2)
+Unavailable passive diagnostics identify the rejected selection and location.
+Invalid canonical exact occurrences or native scope reject at their authority
+owner; they are not model-authored exact choices. Existing native evidence choices drive schema narrowing (§12.2)
 and concise corrective guidance: state validation failed, name unavailable
 alternatives, and identify source-backed text or permitted references as
 appropriate. A value-only repair preserves its bound explicit support and
@@ -403,10 +424,10 @@ still limit writable content. Recover original source meaning within that scope 
 preserving correct surrounding content. Mechanical repair acceptance does not prove
 semantic recovery; full coverage and the existing semantic review remain mandatory.
 
-The 25 September FIX_002 §36 coupled-evidence authorization applies to the
-currently deployed token/citation tuple. ADR 0020 retires that tuple-specific
-trigger at its coordinated format cutover and supplies the replacement
-value-only bounds, including an invalid-handle baseline. It grants no general
+The historical 25 September FIX_002 §36 coupled-evidence authorization applied to
+the superseded model token/citation tuple. ADR 0020 retired that tuple-specific
+trigger; the approved native-recognition amendment retains current value-only
+bounds and grants no general
 coupled evidence add/remove repair. Independently authorized membership,
 reviewed insertion and native exact reconstruction keep their own targets.
 Revalidate the full unit, affected dependencies, coverage, semantic/principle
@@ -785,5 +806,8 @@ adds no cross-batch mutation, association change or retry allowance.
 The declared text wire conversion in §7.1 governs initial content and fixed
 value/record repair together. Strings denote ordinary prose; a named fragments
 object denotes exact composition. Canonical old-value and dependency comparisons,
-reference admission, identity allocation and rendering remain native. There is no
-legacy array reader, automatic spacing or text-to-occurrence inference.
+reference admission, identity allocation and rendering remain native. Model-facing
+fragments contain only their permitted passive/source references; native exact
+occurrences follow the approved raw-byte scope and contextual-boundary policy.
+There is no legacy array reader, automatic spacing or unscoped text-to-occurrence
+inference.

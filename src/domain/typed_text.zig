@@ -14,6 +14,9 @@ pub const ExactCopy = struct { claim_id: @import("reference_identity.zig").Claim
 /// Capability-free composition facts; insertion identities are validated separately.
 pub const CompositionNode = union(enum) { literal: Literal, exact_copy, passive, source };
 pub const BusinessSegment = union(enum) {
+    /// Exact occurrence identity is constructed by native admission, never
+    /// authored in model wire data. Canonical JSON retains this variant.
+    pub const model_derived_nodes = .{ .exact_copy = {} };
     pub const model_inline = .{ .literal = "value" };
     literal: Literal,
     passive: PassiveReference,
@@ -134,7 +137,7 @@ pub fn dependencies(inputs: evidence.Inputs, registry: literals.Registry, curren
     return .{ .inputs = inputs, .grammar_contract = grammar.contract, .policy_contract = grammar.policy.contract, .policy_ids = grammar.policy.policy_ids, .rules = grammar.policy.rules, .reference_state_id = grammar.reference_state_id, .feature_id = grammar.feature_id, .reference_names = grammar.reference_names, .records = registry.records, .occurrences = registry.occurrences };
 }
 pub const Issue = struct {
-    reason: enum { empty, invalid_scalar, unknown_exact, unknown_passive, unknown_source, blank, reference_only, prohibited_exact, prohibited_passive, prohibited_source, embedded_insertion_syntax },
+    reason: enum { empty, invalid_scalar, unknown_exact, ambiguous_exact, unknown_passive, unknown_source, blank, reference_only, prohibited_exact, prohibited_passive, prohibited_source, embedded_insertion_syntax },
     first_node: usize,
     last_node: usize,
     rejected_passive: ?literals.Id = null,
@@ -142,7 +145,7 @@ pub const Issue = struct {
     field: ?field_policy.Field = null,
     pub fn isComposition(self: Issue) bool {
         return switch (self.reason) {
-            .blank, .reference_only, .prohibited_exact, .prohibited_passive, .prohibited_source, .embedded_insertion_syntax => true,
+            .blank, .reference_only, .prohibited_exact, .prohibited_passive, .prohibited_source, .embedded_insertion_syntax, .ambiguous_exact => true,
             .empty, .invalid_scalar, .unknown_exact, .unknown_passive, .unknown_source => false,
         };
     }
@@ -150,7 +153,8 @@ pub const Issue = struct {
         return switch (self.reason) {
             .empty, .blank => "Supply nonblank content using the supplied typed text choices.",
             .invalid_scalar => "Literal text must be nonempty valid Unicode without forbidden control characters.",
-            .unknown_exact => "Select an eligible preserved-token claim supplied for this evidence scope; do not invent or rewrite an exact value.",
+            .unknown_exact => "Preserve an eligible exact source value verbatim; native admission assigns its occurrence identity. Do not supply exact-copy handles.",
+            .ambiguous_exact => "Exact source values have overlapping or competing occurrence identities in this field; no occurrence can be selected from matching bytes alone.",
             .unknown_passive => "Use only passive reference IDs supplied for this source scope.",
             .unknown_source => "Use only source IDs supplied for this source scope.",
             .reference_only => field_policy.referenceOnlyExplanation(self.field.?),

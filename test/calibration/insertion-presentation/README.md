@@ -1,10 +1,20 @@
 # Insertion presentation attribution
 
+**B3 cutover — 17 October 2026:** the approved native exact-value representation
+supersedes this unexecuted 21-trial presentation panel. Its immutable v5 request
+descriptions and pinned counts remain historical diagnostic evidence. The offline
+reader accepts only that closed historical shape, cannot add native exact scope
+or convert it to v6, and labels scoring as historical rather than current model
+admission. `dispatch-request` fails `HistoricalDispatchUnsupported`; the execution
+instructions retained below are superseded. A new experiment requires current
+captures and separate approval. No model sends or workflow authority are added.
+
 **Prepared offline, 16 October 2026. Zero model sends. Dispatch is not authorized
 by this manifest.** Former FIX04 Phase 1A.3 step 2, now tracked in
 [FIX05 B3](../../../fixes/FIX05.md#b3-exact-value-bookkeeping-is-left-to-the-model),
 requires a committed build and separate approval before this panel runs. If the
-native exact-value representation is approved, it replaces this panel. The panel consists of **21 single-request sends**,
+native exact-value representation is approved, it replaces this panel, as accepted
+on 17 October above. The historical plan consists of **21 single-request sends**,
 without retries, corrections, repair, judges, workflow continuation or publication.
 
 The immutable [sources](sources/provenance.json) copy the 18:58 hello-world run
@@ -65,7 +75,7 @@ packet keys are the permitted presentation keys and keep baseline bodies,
 guidance and selected schema exact. Helper tests reject malformed rules, unsafe
 paths, unsupported CLI modes and malformed insertion shapes.
 
-## Approved execution handoff
+## Historical execution handoff — superseded 17 October 2026
 
 After a commit and separate explicit approval, use the existing authenticated
 [single-request debugger](../../../design/decisions/0019-single-request-debugger.md)
@@ -107,7 +117,7 @@ transport-failed/partial/cancelled result as its attempted row; do not drop it.
 
 ## Scoring limits and denominators
 
-The offline scorer verifies trial order, duplicate identities, request lineage,
+The historical offline scorer verifies trial order, duplicate identities, request lineage,
 mode, complete description and exact provider body before reading response
 measurements. It uses the production Converse decoder, envelope normalizer,
 selected-schema compiler, wire guard and response-composition checker. It reports
@@ -126,4 +136,7 @@ span. Those are structural observations; they do **not** decide whether claims
 were faithfully separated, applicability was correct or meaning was preserved.
 Review the immutable raw responses for that interpretation. No rubric or semantic
 model judge is invoked. Mechanical diagnostic admission is distinct from
-workflow admission and publication; neither is inferred here.
+workflow admission and publication; neither is inferred here. Reports explicitly
+state `captured_contract: historical_v5`, `native_exact_scope_available: false`
+and `current_model_admission_assessed: false`; a historical mechanically admitted
+count is not B3 admission evidence.

@@ -39,7 +39,7 @@ fn fixture(a: std.mem.Allocator) !Fixture {
         try std.testing.expectEqual(@as(usize, 64), sample.description_sha256.len);
         try std.testing.expect(sample.prompt_logs.len != 0);
         try std.testing.expect(field.valid(sample.field_policies));
-        if (std.mem.eql(u8, sample.description_version, "model-request-debug/v5")) {
+        if (std.mem.eql(u8, sample.description_version, "model-request-debug/v6")) {
             const description = try @import("../../src/domain/model_request_description.zig").Description.decode(a, sample.description);
             var packets: usize = 0;
             for (description.content) |content| if (content == .user) {
@@ -55,7 +55,7 @@ fn fixture(a: std.mem.Allocator) !Fixture {
     return value;
 }
 fn measure(a: std.mem.Allocator, sample: Sample) !corpus.Measurement {
-    const originals: ?[]const wire.SourceText = if (std.mem.eql(u8, sample.description_version, "model-request-debug/v5"))
+    const originals: ?[]const wire.SourceText = if (std.mem.eql(u8, sample.description_version, "model-request-debug/v6"))
         (try @import("../../src/domain/model_request_description.zig").Description.decode(a, sample.description)).original_sources
     else
         null;
@@ -66,6 +66,9 @@ fn measure(a: std.mem.Allocator, sample: Sample) !corpus.Measurement {
         .field_policies = sample.field_policies,
         .prose_fields = sample.prose_fields,
         .original_sources = originals,
+        // Frozen v3/v5 descriptions are opaque hash witnesses. Supplied schema
+        // selectors describe these captures; they are never current admission.
+        .metadata_contract = if (std.mem.eql(u8, sample.description_version, "model-request-debug/v5")) .historical_v5 else .historical_v3,
     }, .{ .boundary_fn = @import("exact_value_unicode").wholeWordBoundary });
 }
 test "test.integration.exact_value F13 identical bytes cannot bridge business and token requirement bindings" {
@@ -79,6 +82,9 @@ test "test.integration.exact_value F13 identical bytes cannot bridge business an
     try std.testing.expectEqualStrings("hello-world-token-binding", retained.samples[1].id);
     try std.testing.expectEqual(corpus.State.measured, business.state);
     try std.testing.expectEqual(corpus.State.measured, token.state);
+    try std.testing.expectEqual(corpus.MetadataContract.historical_v5, business.metadata_contract);
+    try std.testing.expectEqual(corpus.MetadataContract.historical_v5, token.metadata_contract);
+    try std.testing.expect(business.native_exact_scope == null and token.native_exact_scope == null);
     var unbound: usize = 0;
     var bound: usize = 0;
     var unbound_behavior_fields: usize = 0;
@@ -126,4 +132,53 @@ test "test.integration.exact_value loan embedded insertion syntax is never inter
         }
     }
     try std.testing.expect(!observed.semantic_quality_assessed and !observed.workflow_authority);
+}
+
+test "test.integration.exact_value.production_admission retained failure classes use current native owners without escape" {
+    const production = @import("../harness/exact_value/production_admission.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const report = try production.run(a);
+    try std.testing.expectEqual(@as(usize, 5), report.requested_runs);
+    try std.testing.expectEqual(@as(usize, 4), report.available_requested_runs);
+    try std.testing.expectEqual(@as(usize, 1), report.unavailable_requested_runs);
+    try std.testing.expectEqual(@as(usize, 4), report.replayed_capture_rows);
+    try std.testing.expectEqual(@as(usize, 1), report.scripted_control_rows);
+    try std.testing.expectEqual(@as(usize, 2), report.admitted_rows);
+    try std.testing.expectEqual(@as(usize, 3), report.typed_rejection_rows);
+    try std.testing.expectEqual(@as(usize, 0), report.admission_escape_rows);
+    try std.testing.expectEqual(@as(usize, 6), report.rows.len);
+    try std.testing.expect(!report.historical_metadata_promoted and !report.workflow_authority and !report.semantic_quality_assessed);
+    try std.testing.expectEqual(@as(usize, 0), report.model_calls);
+    for ([_]usize{ 0, 1 }) |index| {
+        const row = report.rows[index];
+        try std.testing.expectEqual(production.Origin.authentic_capture, row.origin);
+        try std.testing.expectEqual(.rejected_by_current_schema_and_codec, row.legacy_exact_wire);
+        try std.testing.expect(row.outcome == .rejected);
+        try std.testing.expect(row.outcome.rejected == .composition or row.outcome.rejected == .schema);
+    }
+    try std.testing.expectEqual(.prose_without_insertions, report.rows[2].failure_class);
+    try std.testing.expectEqual(.authentic_capture, report.rows[2].origin);
+    try std.testing.expectEqualStrings("2026-10-16T09-22-35Z-898e9afbc68759f3d31039bd6bfea0c4", report.rows[2].execution_id.?);
+    try std.testing.expectEqual(.unavailable_capture, report.rows[3].origin);
+    try std.testing.expectEqual(.retained_raw_capture_not_found, report.rows[3].outcome.unavailable);
+    try std.testing.expect(report.rows[3].output_sha256 == null);
+    try std.testing.expectEqual(.embedded_insertion_syntax, report.rows[4].failure_class);
+    const syntax = report.rows[4].outcome.rejected.composition;
+    try std.testing.expect(syntax.len != 0);
+    for (syntax) |issue| try std.testing.expectEqual(.embedded_insertion_syntax, issue.reason);
+    for ([_]usize{ 2, 5 }) |index| {
+        const row = report.rows[index];
+        const accepted = row.outcome.admitted;
+        try std.testing.expect(accepted.records >= 2);
+        try std.testing.expectEqual(@as(usize, 2), accepted.exact_nodes);
+        try std.testing.expect(accepted.explicit_support_unchanged);
+        try std.testing.expectEqual(@as(usize, 1), accepted.exact_claims_beyond_explicit_support);
+        try std.testing.expectEqual(@as(usize, 1), accepted.coverage_obligations);
+        try std.testing.expectEqual(@as(usize, 2), accepted.behavioral_exact_targets);
+    }
+    const directory = ".zig-cache/exact-value-production-admission";
+    try std.Io.Dir.cwd().createDirPath(std.testing.io, directory);
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = directory ++ "/report.json", .data = try std.json.Stringify.valueAlloc(a, report, .{ .whitespace = .indent_2 }) });
 }

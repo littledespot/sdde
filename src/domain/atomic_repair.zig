@@ -134,19 +134,21 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             if (!@import("model_text_field.zig").valid(bindings)) return error.InvalidAtomicRepair;
             const target = if (@hasDecl(Target, "guidance")) authorization.target.guidance() else authorization.target;
             const facts = .{ .operation = std.meta.activeTag(authorization.operation), .target = target, .rule = if (@hasDecl(Rule, "guidance")) authorization.rule.guidance() else authorization.rule };
-            var repair = try strict.decode(std.json.Value, scratch, try json.encode(@TypeOf(facts), scratch, facts), limits);
+            var repair = try strict.decode(std.json.Value, scratch, try json.encodeEvidence(@TypeOf(facts), scratch, facts), limits);
             // Only optional presentation fields are omitted. Evidence, old values
             // and the native authorization retain their complete contracts.
             packets.omitAbsent(repair.object.getPtr("target").?);
             packets.omitAbsent(repair.object.getPtr("rule").?);
             if (authorization.operation == .replace) {
-                const current_value = try strict.decode(std.json.Value, scratch, try json.encodeSelected(Replacement, scratch, authorization.operation.replace), limits);
+                const current_value = try strict.decode(std.json.Value, scratch, try json.encodeSelectedEvidence(Replacement, scratch, authorization.operation.replace), limits);
                 try repair.object.put(scratch, "current_value", current_value);
             }
             const body = try std.json.Stringify.valueAlloc(scratch, .{ .input = input, .repair = repair }, .{});
             const raw = try packets.createRepair(a, body, base.unit(), .{ .atomic_repair = authorization.id }, definition, authorization.retry orelse return error.InvalidAtomicRepair, origin);
             defer packets.release(raw);
-            const result = try packets.withOriginalSourceTexts(a, raw, base.originalSources());
+            const native = if (base.exactScope()) |scope| try packets.withExactScope(a, raw, scope) else try packets.retain(raw);
+            defer packets.release(native);
+            const result = try packets.withOriginalSourceTexts(a, native, base.originalSources());
             defer packets.release(result);
             const restricted = try packets.withRestrictions(a, result, base.excludedVariants(), base.integerChoices());
             defer packets.release(restricted);
@@ -181,7 +183,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
         }
         fn changed(a: std.mem.Allocator, canonical: CanonicalText, authorization: Authorization, replacement: ?Replacement) Error!bool {
             return switch (authorization.operation) {
-                .replace => |expected| !try canonicalEqual(Replacement, a, canonical, expected, replacement orelse return error.InvalidAtomicRepair),
+                .replace => |expected| !try progressEqual(Replacement, a, canonical, expected, replacement orelse return error.InvalidAtomicRepair),
                 .insert, .delete => true,
             };
         }
@@ -234,7 +236,7 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
 /// Progress compares the representation used by text admission. CAS and all
 /// dependency checks above retain exact native equality. Only declared text
 /// fields are normalized; ordinary strings and native insertion IDs stay exact.
-fn canonicalEqual(comptime T: type, a: std.mem.Allocator, context: CanonicalText, left: T, right: T) (@import("naming_policy.zig").Error || std.mem.Allocator.Error)!bool {
+pub fn progressEqual(comptime T: type, a: std.mem.Allocator, context: CanonicalText, left: T, right: T) (@import("naming_policy.zig").Error || std.mem.Allocator.Error)!bool {
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
     const scratch = arena.allocator();

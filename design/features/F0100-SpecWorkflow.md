@@ -1317,8 +1317,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   the model returns only the authorized value, provenance or record shape.
 - Provenance repairs receive the unchanged attributed value or entire shared-provenance
   record; value repairs receive that unchanged provenance.
-- Under ADR 0020, an exact-copy segment selects one eligible preserved-token
-  claim. Native lineage combines explicit claims with valid handles in the
+- Under ADR 0020's approved 17 October amendment, native raw-byte recognition
+  derives each exact-copy segment from a current request-eligible preserved-token
+  occurrence with contextual delimiters. Model text contains no exact-copy
+  selection. Native lineage combines unchanged explicit claims with valid handles in the
   owning field or shared record; the old tuple-specific coupled repair is retired.
 - Value repair fixes the explicit selection and effective claim/citation sets
   from its original authorized unit. It cannot gain evidence on retry.

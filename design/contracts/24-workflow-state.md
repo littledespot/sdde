@@ -33,7 +33,8 @@ amendment advanced it to `specification-state/v12`, removing model-returned memb
 subsets while retaining complete native collections. The approved FIX03 Phase 5
 authored-association cutover introduced `specification/v3` and
 `specification-state/v13`; the source-finding cutover below advances completed and
-clarification-pending state to `specification-state/v14`.
+clarification-pending state to `specification-state/v14`; the approved 17 October
+native-recognition amendment advances both variants to `specification-state/v15`.
 It removes persisted presentation roles and stores required `source_group_ids`
 inside attributed values and shared-provenance records, without changing general
 `Selection`/`Provenance` or adding a parallel association registry. Readback resolves
@@ -63,7 +64,7 @@ It contains no content hashes or fingerprints. Preset IDs/versions and artifact 
 
 The [Phase 6 review receipts](22-repair.md#224-repair-request-and-response) exist
 only in one execution's native owners. They are not part of
-`specification-state/v14` and are not restored by state readback. Loading ordinary
+`specification-state/v15` and are not restored by state readback. Loading ordinary
 published review evidence cannot manufacture an accepted call origin or a reusable
 receipt. Candidate-local re-admission does not resume an earlier execution;
 every fresh invocation starts at `start` with empty review history.
@@ -193,3 +194,22 @@ aliases or dual readers.
 Typed-text wire changes do not change canonical segment arrays or their meanings.
 Model-facing prose/composition conversion is never applied to persisted authority
 to guess a missing fragment, separator or source occurrence.
+
+### Native exact-value cutover — approved 17 October 2026
+
+The user-approved [B3 amendment](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026)
+advances the shared completed and clarification-pending state schema to
+`specification-state/v15`; stage discriminators and canonical `specification/v3`
+segment shapes remain unchanged. The changed authority is how raw model prose
+becomes canonical exact occurrences. Readback validates those handles against the
+current captured ledger, checks field roles, explicit `S`, derived `E` and `L`,
+citations, coverage and review projections. It rejects inconsistent stored
+authority instead of inferring or repairing it from matching display bytes.
+
+Current request-native exact scope binds its snapshot and eligible occurrence
+bytes. `model-request-debug/v6` retains it for diagnostics, not state recovery or
+continuation. Published-state validation requires no model request, historical
+capture or operation port; the shared contextual delimiter syntax is capability
+free. Earlier completed/pending versions reject without migration, aliases or a
+dual reader. This version decision does not change publication, clarification
+protection, upstream invalidation, fresh-run behavior or review/repair policy.

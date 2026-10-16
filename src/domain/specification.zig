@@ -100,6 +100,9 @@ pub const Provenance = struct {
     citation_ids: []const reference.CitationId,
     clarification_response_ids: []const ResponseId,
 };
+/// Canonical candidate storage includes native-derived exact segments. The
+/// shared model-response codec rejects nodes declared engine-derived by type;
+/// persisted JSON retains this complete canonical representation.
 pub const BusinessValue = struct {
     pub const model_scalar = "segments";
     pub const model_text = "segments";
@@ -129,7 +132,8 @@ pub fn Values(comptime boundary: Boundary) type {
 }
 pub const Model = Values(.model);
 /// Closed model response values. Evidence is bound before the request and is
-/// reconstructed in the native candidate; no wire value can carry provenance.
+/// reconstructed in the native candidate; model decoding admits neither
+/// provenance nor native-derived exact segments.
 pub const Wire = struct {
     pub const AttributedValue = struct { value: BusinessValue };
     pub const RecordProposal = struct { content: Content(BusinessValue) };

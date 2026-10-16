@@ -25,7 +25,9 @@ pub const Adapter = struct {
         const request_profile = try self.authorization.authorize_fn(self.authorization.context, description);
         if (description.provider_config != .aws_bedrock or description.operation_kind != .inference or !std.mem.eql(u8, description.protocol_prompt, @import("../../domain/model_controls.zig").response_format_guidance)) return error.InvalidReplay;
         const schema = self.compiler.compileSelected(a, description.schema) catch return error.InvalidReplay;
-        if (!@import("../../domain/model_text_field.zig").validSchema(schema.root(), description.field_policies)) return error.InvalidReplay;
+        const fields = @import("../../domain/model_text_field.zig").inspectSchema(schema.root(), description.field_policies, description.prose_fields);
+        if (!fields.valid or (fields.requires_exact_scope and description.exact_scope == null)) return error.InvalidReplay;
+        if (description.exact_scope) |scope| if (!@import("../../domain/model_exact_values.zig").valid(scope)) return error.InvalidReplay;
         const body = request.encodeText(a, .{
             .content = description.content,
             .schema = switch (description.response_mode) {
@@ -150,11 +152,12 @@ pub const Adapter = struct {
             result.reason = "Captured schema is invalid";
             return result;
         };
-        if (!@import("../../domain/model_text_field.zig").validSchema(schema.root(), description.field_policies)) {
+        const fields = @import("../../domain/model_text_field.zig").inspectSchema(schema.root(), description.field_policies, description.prose_fields);
+        if (!fields.valid or (fields.requires_exact_scope and description.exact_scope == null) or (description.exact_scope != null and !@import("../../domain/model_exact_values.zig").valid(description.exact_scope.?))) {
             result.reason = "Captured schema and native field policies disagree";
             return result;
         }
-        if (try @import("../../domain/model_text_composition.zig").check(a, document.parsed.value, description.field_policies, description.prose_fields, description.original_sources)) |diagnostic| {
+        if (try @import("../../domain/model_text_composition.zig").check(a, document.parsed.value, description.field_policies, description.prose_fields, description.original_sources, .{ .exact_scope = description.exact_scope })) |diagnostic| {
             defer diagnostic.deinit(a);
             result.json = .invalid;
             result.reason = "ModelTextComposition";

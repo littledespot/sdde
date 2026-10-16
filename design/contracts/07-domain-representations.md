@@ -18,14 +18,15 @@ not change operational path authorization or the overall Proposed design status.
 - Content separates ordinary prose, exact source values and explicit references.
   Prose is normalized inert text; punctuation alone establishes neither reference
   identity nor intent. Semantic grounding remains with existing review owners.
-- Business values are ordered segments: prose strings, `passive` registry IDs and
-  `exact_copy` selections. [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md)
-  replaces each post-ledger exact token/citation pair with one preserved-token
-  claim handle in model and canonical content at the coordinated format cutover.
-  Exact copies can appear within a sentence.
+- Canonical business values are ordered segments: prose strings, `passive`
+  registry IDs and engine-derived `exact_copy` occurrences.
+  [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md) binds each
+  post-ledger exact occurrence to one preserved-token claim handle. The approved
+  17 October amendment removes exact selections from model content; prose may
+  contain a verbatim value within a sentence and native code recognizes it.
   The former whole-value exact-copy union is removed, without a dual reader.
-- Exact selections resolve through the current source evidence and the field's
-  bound explicit support plus derived lineage. They carry no model-authored
+- Exact occurrences resolve through current native request eligibility and source
+  evidence; derived lineage may extend unchanged explicit support. They carry no model-authored
   replacement bytes. Passive references retain filename/path/URI kinds and
   source occurrences in their existing registry. Source references keep their
   separate source identity.
@@ -77,13 +78,14 @@ not change operational path authorization or the overall Proposed design status.
 Declared business and reference text fields use a string for ordinary prose or
 a closed `{"fragments":[...]}` object for explicit composition around typed
 insertions. Each fragment is an existing prose string or an allowed typed
-reference/exact-copy selection. A collection contains separate complete values;
+passive/source reference. The 17 October amendment below removes the superseded
+exact-copy alternative. A collection contains separate complete values;
 it is not an implicit fragment list. Superseded bare text arrays reject.
 
 The shared candidate codec converts these two declared wire shapes into the same
 native segment/node arrays. Encoding a single prose node emits a string; explicit
 composition preserves node order and reference identity. No separator is inserted,
-and matching display text never supplies an occurrence ID. Initial output,
+and the codec never infers an occurrence ID from display text. Initial output,
 correction and authorized repair share this conversion. Canonical persistence,
 text validation, provenance, renderer bytes and editable readback retain their
 existing contracts. Other arrays and undeclared fields are unaffected.
@@ -96,7 +98,26 @@ syntax inside prose, coverage eligibility and shared no-progress exhaustion.
 It supersedes acceptance of insertion-only values in prose-required fields and
 unrestricted exact-copy coverage. The same owners enforce initial output,
 correction, every repair and stored readback. It does not infer semantic quality,
-reference occurrences or operational authority from prose.
+operational authority from prose. Exact occurrences follow the later native
+recognition amendment below.
+
+#### Approved native exact-value amendment — 17 October 2026
+
+The user approved both [B3 policies](text-field-composition.md#native-exact-values--approved-17-october-2026):
+immutable current native request eligibility may add recognized exact dependencies
+`E` beyond selected support `S`, while `S` remains fixed, and recognition uses
+contextual complete-value delimiters. Raw decoded UTF-8 is matched before NFC;
+neither case folding nor punctuation/whitespace repair creates a match. Actual
+field edges, pinned Unicode whitespace and balanced wrapper/terminal context
+delimit values; reference-adjacent literal-run edges are opaque. Competing
+lineages or overlapping eligible spans reject the whole field.
+
+The model-response codec and schemas admit prose plus allowed passive/source
+references, never `exact_copy`. Canonical exact nodes and field roles remain;
+native recognition, lineage, repair bounds, coverage and readback share the
+existing owners. Eligibility proves current occurrence authority, not semantic
+support or correct use. Model prose, source-group selection and canonical exact
+lineage therefore remain distinct typed states. The overall design stays Proposed.
 
 ### 7.2 Stage IRs
 

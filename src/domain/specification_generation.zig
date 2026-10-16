@@ -63,25 +63,25 @@ pub const ModelResponse = union(enum) {
     },
     inconclusive: Inconclusive,
 
-    pub fn from(allocator: std.mem.Allocator, response: Response) std.mem.Allocator.Error!ModelResponse {
+    pub fn from(allocator: std.mem.Allocator, context: provenance.Context, response: Response) Error!ModelResponse {
         return switch (response) {
-            .clarification => |need| .{ .clarification = .{ .reason = need.reason, .question = wireValue(need.question), .record_kind = need.record_kind } },
+            .clarification => |need| .{ .clarification = .{ .reason = need.reason, .question = try wireValue(allocator, context, need.question), .record_kind = need.record_kind } },
             .inconclusive => |failure| .{ .inconclusive = failure },
             .content => |content| switch (content) {
-                .brief => |brief| .{ .brief = .{ .title = wireValue(brief.title), .description = wireValue(brief.description), .primary_goal = wireValue(brief.primary_goal) } },
-                .primary_user_story => |story| .{ .primary_user_story = wireValue(story) },
-                .entities => |entities| .{ .entities = .{ .disposition = entities.disposition, .basis = wireValue(entities.basis) } },
+                .brief => |brief| .{ .brief = .{ .title = try wireValue(allocator, context, brief.title), .description = try wireValue(allocator, context, brief.description), .primary_goal = try wireValue(allocator, context, brief.primary_goal) } },
+                .primary_user_story => |story| .{ .primary_user_story = try wireValue(allocator, context, story) },
+                .entities => |entities| .{ .entities = .{ .disposition = entities.disposition, .basis = try wireValue(allocator, context, entities.basis) } },
                 .records => |records| blk: {
                     const projected = try allocator.alloc(spec.Wire.RecordProposal, records.len);
-                    for (records, projected) |record, *wire| wire.* = .{ .content = record.content };
+                    for (records, projected) |record, *wire| wire.* = .{ .content = try provenance.modelRecord(allocator, @import("reference_support.zig").records(context.references), record.content) };
                     break :blk .{ .records = .{ .records = projected } };
                 },
             },
         };
     }
 };
-fn wireValue(value: spec.Values(.model).AttributedValue) AuthoringValue {
-    return .{ .value = value.value, .signal_ids = value.source_group_ids };
+fn wireValue(a: std.mem.Allocator, context: provenance.Context, value: spec.Values(.model).AttributedValue) Error!AuthoringValue {
+    return .{ .value = try provenance.modelValue(a, @import("reference_support.zig").records(context.references), value.value), .signal_ids = value.source_group_ids };
 }
 pub fn parse(allocator: std.mem.Allocator, bytes: []const u8, bound: @import("specification_source_binding.zig").Bound) Error!Response {
     const response = @import("model_candidate_json.zig").decode(ModelResponse, allocator, bytes) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
@@ -115,6 +115,51 @@ fn associated(a: std.mem.Allocator, available: @import("specification_source_bin
 
 pub fn validate(allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: Response) Error!Validation {
     return check(.model, allocator, validator, context, unit, proposed);
+}
+
+/// Full candidate validation retains the native value-repair evidence bound.
+/// Recognition during revalidation cannot widen a previously authorized S+E.
+pub fn validateCandidate(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, unit: Unit, proposed: candidate.Candidate) Error!Validation {
+    const result = try validate(a, validator, context, unit, proposed.response);
+    if (result != .valid) return result;
+    if (proposed.group_repair) |group| if (group.policy.membership.evidence_bound) |bound| {
+        var scratch_arena: std.heap.ArenaAllocator = .init(a);
+        defer scratch_arena.deinit();
+        const scratch_allocator = scratch_arena.allocator();
+        const count = if (proposed.response == .content and proposed.response.content == .records) proposed.response.content.records.len else 0;
+        const selected = (proposed.origins.currentTarget(group.target, count) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit) orelse return error.InvalidSpecificationUnit;
+        if (selected != .record or result.valid.response != .content or result.valid.response.content != .records) return error.InvalidSpecificationUnit;
+        const record = result.valid.response.content.records[selected.record];
+        if (group.policy.membership.fixed_provenance) |fixed| {
+            if (fixed.claim_ids.len != record.provenance.claim_ids.len) return error.InvalidSpecificationUnit;
+            for (fixed.claim_ids, record.provenance.claim_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationUnit;
+            if (fixed.clarification_response_ids.len != record.provenance.clarification_response_ids.len) return error.InvalidSpecificationUnit;
+            for (fixed.clarification_response_ids, record.provenance.clarification_response_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationUnit;
+        }
+        const groups = group.policy.membership.fixed_source_group_ids;
+        if (groups.len != record.source_group_ids.len) return error.InvalidSpecificationUnit;
+        for (groups, record.source_group_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationUnit;
+        const resolved = try provenance.lineageForRepair(scratch_allocator, context, .{ .claim_ids = record.provenance.claim_ids, .clarification_response_ids = record.provenance.clarification_response_ids }, try provenance.recordValues(scratch_allocator, record.content));
+        const r = @import("reference_reconciliation.zig");
+        r.sameSet(r.ClaimId, bound.effective, resolved.effective_claim_ids) catch return error.InvalidSpecificationUnit;
+        r.sameSet(r.CitationId, bound.citations, resolved.provenance.citation_ids) catch return error.InvalidSpecificationUnit;
+    };
+    const bound = proposed.value_bound orelse return result;
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    const length = if (proposed.response == .content and proposed.response.content == .records) proposed.response.content.records.len else 0;
+    const target = (proposed.origins.currentTarget(bound.target, length) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit) orelse return error.InvalidSpecificationUnit;
+    if (target != .value) return error.InvalidSpecificationUnit;
+    const value = candidate.attributedValue(.canonical, result.valid.response, target.value.subject, target.value.field) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
+    const values = if (target.value.subject == .record) try provenance.recordValues(scratch, result.valid.response.content.records[target.value.subject.record].content) else &.{value.value};
+    const resolved = try provenance.lineageForRepair(scratch, context, .{ .claim_ids = value.provenance.claim_ids, .clarification_response_ids = value.provenance.clarification_response_ids }, values);
+    if (resolved.provenance.claim_ids.len != bound.explicit.len) return error.InvalidSpecificationUnit;
+    for (resolved.provenance.claim_ids, bound.explicit) |actual, expected| if (actual.ordinal != expected.ordinal) return error.InvalidSpecificationUnit;
+    const r = @import("reference_reconciliation.zig");
+    r.sameSet(r.ClaimId, bound.effective, resolved.effective_claim_ids) catch return error.InvalidSpecificationUnit;
+    r.sameSet(r.CitationId, bound.citations, resolved.provenance.citation_ids) catch return error.InvalidSpecificationUnit;
+    return result;
 }
 
 /// Revalidate complete canonical evidence; never erase and regenerate a corrupt union.

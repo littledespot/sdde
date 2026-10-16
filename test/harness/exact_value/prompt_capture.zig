@@ -59,7 +59,13 @@ test "offline prompt inventory delegates accepted unsupported and invalid archiv
     try std.testing.expectEqual(.unsupported_description, unsupported.status);
     try std.testing.expectEqual(@as(usize, 0), unsupported.calls.len);
     try std.testing.expectEqualStrings("UnsupportedDebugDescriptionVersion", unsupported.reason.?);
-    const malformed_bytes = try fixtureLog(a, "request_description", "{\"version\":\"model-request-debug/v5\"}");
+    const historical_bytes = try fixtureLog(a, "request_description", "{\"version\":\"model-request-debug/v5\"}");
+    defer a.free(historical_bytes);
+    const historical = try capture(a, historical_bytes);
+    defer historical.deinit();
+    try std.testing.expectEqual(.unsupported_description, historical.status);
+    try std.testing.expectEqual(@as(usize, 0), historical.calls.len);
+    const malformed_bytes = try fixtureLog(a, "request_description", "{\"version\":\"model-request-debug/v6\"}");
     defer a.free(malformed_bytes);
     const malformed = try capture(a, malformed_bytes);
     defer malformed.deinit();

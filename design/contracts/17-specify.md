@@ -111,12 +111,13 @@ Typed content covers these concerns; each concern does not require a separate ca
 - Every initial brief/spec record has eligible effective reference claims from
   explicit selections or exact segments, one or more current resolved
   clarification-response IDs, or an allowed combination.
-- Meaningful exact-copy and source selections remain explicit. At the coordinated
-  [ADR 0020](../decisions/0020-derived-exact-reference-lineage.md) cutover, each
-  exact segment selects one eligible preserved-token claim occurrence; the
-  model does not repeat its citation or that claim in explicit support merely
-  to satisfy a join. Generation guidance embeds exact values in meaningful
-  business content; a reference alone does not describe behavior or a goal.
+- Source selections remain explicit under their own contract. Under
+  [ADR 0020's approved native-recognition amendment](../decisions/0020-derived-exact-reference-lineage.md#native-exact-value-recognition-amendment--approved-17-october-2026),
+  the model types exact values in meaningful prose and never returns `exact_copy`.
+  Native code recognizes unambiguous raw-byte occurrences within the current
+  request's eligible scope and contextual delimiters, retaining canonical handles.
+  Recognized `E` may extend unchanged selected support `S`; it neither chooses a
+  source group nor proves semantic use. A reference alone describes no behavior.
 - The engine assigns canonical IDs, validates current authority and selection
   joins, and derives effective claims and their citation union from explicit
   support plus exact segments through the shared reference owner.
@@ -282,8 +283,9 @@ For each feature-brief or specification unit, the declared model operation retur
   The primary story has its own concise prompt and uses the canonical story purpose.
   Generation, native unit repair and reviewed omission repair share static text
   guidance from `spec/generation.context.json`: ordered fragments form one field
-  value, prose expresses its meaning and exact-copy references insert eligible
-  literals. Schemas remain the sole response-shape authority. Initial and native
+  value, prose expresses its meaning and types required exact values verbatim.
+  Native recognition owns exact occurrence bookkeeping; supplied passive/source
+  references retain their allowed forms. Schemas remain the sole response-shape authority. Initial and native
   repair packets include earlier drafts only for dependent units: entities receive
   the brief, records receive the brief and entity decision. Brief and story requests
   receive neither sibling draft. Dependent drafts are resolved business text and
@@ -305,9 +307,11 @@ For each feature-brief or specification unit, the declared model operation retur
   prohibition is introduced; semantic support remains subject to original-source
   review. Original sources remain available; citation
   coordinates, extractor metadata and redundant token IDs remain native.
-  Exact choices expose their eligible claim occurrence, literal and source through
-  one reference-owned projection. ADR 0020 constructs a sole eligible exact-copy
-  handle natively; multiple eligible occurrences still require selection.
+  Exact-value guidance exposes authorized literal/source context through one
+  reference-owned projection; immutable native metadata retains occurrence identity
+  and current snapshot/request eligibility. Multiple same-span eligible identities
+  are ambiguity, never a model choice or catalogue-order tie breaker. Repair and
+  correction retain their original narrower scope.
   The canonical story purpose identifies an actor or system supported by the
   source, rather than requiring an invented user persona or prewritten story.
   Functional requirements express behavior and obligation; acceptance criteria

@@ -5,6 +5,7 @@ const r = @import("reference_reconciliation.zig");
 const evidence = @import("reference_evidence.zig");
 const text = @import("typed_text.zig");
 const refs = @import("reference_support.zig");
+const recognition = @import("exact_value_recognition.zig");
 pub const Error = r.Error || spec.Error;
 pub const Context = struct {
     inputs: evidence.Inputs,
@@ -67,9 +68,12 @@ pub fn lineageForRepair(allocator: std.mem.Allocator, context: Context, selectio
     return resolveUnitRecords(.model, allocator, context.inputs, @import("reference_support.zig").records(context.references), selection, values);
 }
 pub fn checkValueInUnit(allocator: std.mem.Allocator, validator: text.Validator, context: Context, selection: spec.Selection, values: []const spec.BusinessValue, value: spec.BusinessValue, field: text.field_policy.Field) Error!spec.BusinessValue {
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
     const resolved = try lineageForRepair(allocator, context, selection, values);
     var inspection: Inspection = .{};
-    return valueIn(allocator, validator, context, resolved, value, field, &inspection);
+    const recognized = try recognizeValue(arena.allocator(), refs.records(context.references), value, field, resolved.effective_claim_ids);
+    return valueIn(allocator, validator, context, resolved, recognized, field, &inspection);
 }
 
 fn dispositionFor(references: @import("reference_support.zig").Records, id: r.ClaimId) ?r.Disposition {
@@ -179,13 +183,13 @@ pub const ValueChoices = struct {
         defer a.free(rejected);
         const permitted = if (self.passive.len == 0)
             (if (self.exact_copy.len == 0)
-                "No passive references or exact-copy values are permitted; return source-backed text strings."
+                "Return source-backed prose without reference handles."
             else
-                "No passive references are permitted; use source-backed text strings or a listed exact-copy claim.")
+                "Write source-backed prose and preserve any required exact value with its original bytes. Do not supply exact-copy handles.")
         else if (self.exact_copy.len == 0)
-            "No exact-copy values are permitted; use source-backed text strings or listed passive IDs."
+            "Write source-backed prose or use a listed passive reference ID. Do not supply exact-copy handles."
         else
-            "Use source-backed text strings, listed passive IDs or a listed exact-copy claim.";
+            "Write source-backed prose, preserving exact values verbatim; only listed passive reference IDs may be selected.";
         return std.fmt.allocPrint(a, "Validation failed: {s} is unavailable for this field's authorized evidence. {s} Preserve the fixed evidence and source meaning.", .{ rejected, permitted });
     }
 };
@@ -193,6 +197,221 @@ pub const ValueChoices = struct {
 /// Code examples remain reference context under the business-specification contract.
 pub fn permitsExactKind(kind: r.extraction.tokens.Kind) bool {
     return kind != .code_sample;
+}
+
+/// The native current occurrence scope owns eligibility. A lexical match may
+/// contribute E, but never changes the authored groups or their explicit S.
+/// Atomic value repairs supply their fixed previous S+E as the optional bound.
+pub fn exactOccurrences(a: std.mem.Allocator, references: refs.Records, fixed: ?[]const r.ClaimId) Error![]const recognition.Occurrence {
+    var result: std.ArrayList(recognition.Occurrence) = .empty;
+    errdefer result.deinit(a);
+    for (references.dispositions) |disposition| {
+        if (!refs.eligibleClaim(disposition.disposition)) continue;
+        if (fixed) |ids| if (!r.contains(r.ClaimId, ids, disposition.claim_id)) continue;
+        const item = try r.item(references.items, disposition.claim_id);
+        if (item.claim.content != .preserved_token) continue;
+        const token = item.claim.content.preserved_token;
+        if (!permitsExactKind(token.value.kind)) continue;
+        try result.append(a, .{ .claim_id = item.claim.id, .bytes = token.value.raw_value.bytes });
+    }
+    return result.toOwnedSlice(a);
+}
+
+/// Recognize raw, adjacent prose before normalization. Canonical exact segments
+/// are flattened with the same captured bytes and recognized again; their old
+/// handle never disambiguates an otherwise ambiguous current occurrence scope.
+/// Passive display references remain distinct typed boundaries.
+pub fn recognizeValue(a: std.mem.Allocator, references: refs.Records, value: spec.BusinessValue, field: text.field_policy.Field, fixed: ?[]const r.ClaimId) Error!spec.BusinessValue {
+    return recognizeValueDetailed(a, references, value, field, fixed) catch |err| switch (err) {
+        error.AmbiguousExactValue => error.InvalidTypedText,
+        else => |failure| failure,
+    };
+}
+
+fn recognizeValueDetailed(a: std.mem.Allocator, references: refs.Records, value: spec.BusinessValue, field: text.field_policy.Field, fixed: ?[]const r.ClaimId) (Error || error{AmbiguousExactValue})!spec.BusinessValue {
+    if (text.field_policy.get(field).exact_copy == .prohibited) return value;
+    const occurrences = try exactOccurrences(a, references, fixed);
+    defer a.free(occurrences);
+    var segments: std.ArrayList(text.BusinessSegment) = .empty;
+    errdefer {
+        for (segments.items) |segment| if (segment == .literal) a.free(segment.literal.value);
+        segments.deinit(a);
+    }
+    var run: std.ArrayList(u8) = .empty;
+    defer run.deinit(a);
+    var index: usize = 0;
+    while (index < value.segments.len) {
+        if (value.segments[index] == .passive) {
+            try segments.append(a, value.segments[index]);
+            index += 1;
+            continue;
+        }
+        run.clearRetainingCapacity();
+        const run_start = index;
+        while (index < value.segments.len and value.segments[index] != .passive) : (index += 1) switch (value.segments[index]) {
+            .literal => |literal| try run.appendSlice(a, literal.value),
+            .exact_copy => |copy| {
+                for (occurrences) |occurrence| {
+                    if (occurrence.claim_id.ordinal == copy.claim_id.ordinal) break;
+                } else return error.InvalidTypedText;
+                const token = refs.exact(references.items, copy.claim_id) catch return error.InvalidTypedText;
+                try run.appendSlice(a, token.value.raw_value.bytes);
+            },
+            .passive => unreachable,
+        };
+        // Invalid prose remains a candidate for the canonical text validator;
+        // it creates no new occurrence or lineage during recognition. This also
+        // preserves the original failed value for bounded repair comparison.
+        if (!text.validScalar(run.items)) {
+            for (value.segments[run_start..index]) |segment| switch (segment) {
+                .literal => |literal| try appendLiteral(a, &segments, literal.value),
+                .exact_copy, .passive => try segments.append(a, segment),
+            };
+            continue;
+        }
+        var found = try recognition.recognize(a, run.items, occurrences, .{ .left = if (run_start == 0) .field_edge else .reference_boundary, .right = if (index == value.segments.len) .field_edge else .reference_boundary });
+        defer found.deinit(a);
+        switch (found) {
+            .rejected => return error.InvalidTypedText,
+            .ambiguous => return error.AmbiguousExactValue,
+            .no_match => if (run.items.len != 0) try appendLiteral(a, &segments, run.items),
+            .matched => |witnesses| {
+                var cursor: usize = 0;
+                for (witnesses) |witness| {
+                    if (witness.start_byte > cursor) try appendLiteral(a, &segments, run.items[cursor..witness.start_byte]);
+                    try segments.append(a, .{ .exact_copy = .{ .claim_id = witness.claim_id } });
+                    cursor = witness.end_byte;
+                }
+                if (cursor < run.items.len) try appendLiteral(a, &segments, run.items[cursor..]);
+            },
+        }
+    }
+    return .{ .segments = try segments.toOwnedSlice(a) };
+}
+
+fn appendLiteral(a: std.mem.Allocator, segments: *std.ArrayList(text.BusinessSegment), bytes: []const u8) std.mem.Allocator.Error!void {
+    const copy = try a.dupe(u8, bytes);
+    errdefer a.free(copy);
+    try segments.append(a, .{ .literal = .{ .value = copy } });
+}
+
+pub fn recognizeRecord(a: std.mem.Allocator, references: refs.Records, content: spec.Content(spec.BusinessValue), fixed: ?[]const r.ClaimId) Error!spec.Content(spec.BusinessValue) {
+    return switch (content) {
+        inline else => |fields, kind| result: {
+            var result = fields;
+            inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+                const value = @field(fields, field.name);
+                if (comptime field.type == spec.BusinessValue) {
+                    @field(result, field.name) = try recognizeValue(a, references, value, spec.textField(kind, field.name), fixed);
+                } else {
+                    const relationships = try a.alloc(spec.BusinessValue, value.len);
+                    for (value, relationships) |entry, *recognized| recognized.* = try recognizeValue(a, references, entry, spec.textField(kind, field.name), fixed);
+                    @field(result, field.name) = relationships;
+                }
+            }
+            break :result @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), result);
+        },
+    };
+}
+
+/// Model-facing projections contain literal exact bytes, never canonical
+/// engine-derived occurrence handles. Passive references retain their own wire
+/// contract and cannot be mistaken for authored exact-value prose.
+pub fn modelValue(a: std.mem.Allocator, references: refs.Records, value: spec.BusinessValue) Error!spec.BusinessValue {
+    var result: std.ArrayList(text.BusinessSegment) = .empty;
+    errdefer {
+        for (result.items) |segment| if (segment == .literal) a.free(segment.literal.value);
+        result.deinit(a);
+    }
+    var literal: std.ArrayList(u8) = .empty;
+    defer literal.deinit(a);
+    for (value.segments) |segment| switch (segment) {
+        .literal => |node| try literal.appendSlice(a, node.value),
+        .exact_copy => |node| {
+            const token = refs.exact(references.items, node.claim_id) catch return error.InvalidTypedText;
+            try literal.appendSlice(a, token.value.raw_value.bytes);
+        },
+        .passive => {
+            if (literal.items.len != 0) {
+                try appendLiteral(a, &result, literal.items);
+                literal.clearRetainingCapacity();
+            }
+            try result.append(a, segment);
+        },
+    };
+    if (literal.items.len != 0) try appendLiteral(a, &result, literal.items);
+    return .{ .segments = try result.toOwnedSlice(a) };
+}
+
+pub fn modelRecord(a: std.mem.Allocator, references: refs.Records, content: spec.Content(spec.BusinessValue)) Error!spec.Content(spec.BusinessValue) {
+    return switch (content) {
+        inline else => |fields, kind| result: {
+            var projected = fields;
+            inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+                const value = @field(fields, field.name);
+                if (comptime field.type == spec.BusinessValue) {
+                    @field(projected, field.name) = try modelValue(a, references, value);
+                } else {
+                    const relationships = try a.alloc(spec.BusinessValue, value.len);
+                    for (value, relationships) |entry, *next| next.* = try modelValue(a, references, entry);
+                    @field(projected, field.name) = relationships;
+                }
+            }
+            break :result @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), projected);
+        },
+    };
+}
+
+pub fn modelAttributed(comptime boundary: spec.Boundary, a: std.mem.Allocator, references: refs.Records, value: spec.Values(boundary).AttributedValue) Error!spec.Values(boundary).AttributedValue {
+    var projected = value;
+    projected.value = try modelValue(a, references, value.value);
+    return projected;
+}
+
+pub fn modelContent(a: std.mem.Allocator, references: refs.Records, content: spec.IdentifiedContent) Error!spec.IdentifiedContent {
+    var projected = content;
+    projected.display_name = try modelAttributed(.canonical, a, references, content.display_name);
+    projected.primary_user_story = try modelAttributed(.canonical, a, references, content.primary_user_story);
+    projected.entities.basis = try modelAttributed(.canonical, a, references, content.entities.basis);
+    const records = try a.dupe(spec.IdentifiedRecord, content.records);
+    for (records) |*record| record.proposal.content = try modelRecord(a, references, record.proposal.content);
+    projected.records = records;
+    return projected;
+}
+
+fn sameValue(a: std.mem.Allocator, left: spec.BusinessValue, right: spec.BusinessValue) std.mem.Allocator.Error!bool {
+    const l = try std.json.Stringify.valueAlloc(a, left, .{});
+    defer a.free(l);
+    const right_bytes = try std.json.Stringify.valueAlloc(a, right, .{});
+    defer a.free(right_bytes);
+    return std.mem.eql(u8, l, right_bytes);
+}
+
+fn recognizeInspected(comptime boundary: spec.Boundary, a: std.mem.Allocator, references: refs.Records, value: spec.BusinessValue, field: text.field_policy.Field, inspection: *Inspection) Error!spec.BusinessValue {
+    const recognized = recognizeValueDetailed(a, references, value, field, null) catch |err| switch (err) {
+        error.AmbiguousExactValue => {
+            inspection.text_issue = .{ .reason = .ambiguous_exact, .first_node = 0, .last_node = if (value.segments.len == 0) 0 else value.segments.len - 1, .field = field };
+            return error.InvalidTypedText;
+        },
+        error.InvalidTypedText => {
+            inspection.text_issue = .{ .reason = .unknown_exact, .first_node = 0, .last_node = if (value.segments.len == 0) 0 else value.segments.len - 1, .field = field };
+            for (value.segments, 0..) |segment, index| if (segment == .exact_copy) {
+                _ = refs.exact(references.items, segment.exact_copy.claim_id) catch {
+                    inspection.text_issue.?.first_node = index;
+                    inspection.text_issue.?.last_node = index;
+                    inspection.text_issue.?.rejected_exact = segment.exact_copy;
+                    break;
+                };
+            };
+            return error.InvalidTypedText;
+        },
+        else => |failure| return failure,
+    };
+    if (boundary == .canonical and !try sameValue(a, value, recognized)) {
+        inspection.text_issue = .{ .reason = .unknown_exact, .first_node = 0, .last_node = if (value.segments.len == 0) 0 else value.segments.len - 1, .field = field };
+        return error.InvalidTypedText;
+    }
+    return recognized;
 }
 fn valueChoices(a: std.mem.Allocator, all: r.Items, claim_ids: []const r.ClaimId) Error!ValueChoices {
     var choices: std.ArrayList(text.ExactCopy) = .empty;
@@ -224,7 +443,7 @@ fn resolvedChoices(a: std.mem.Allocator, context: Context, resolved: Resolved) E
 
 fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Context, resolved: Resolved, candidate: spec.BusinessValue, field: text.field_policy.Field, inspection: *Inspection) Error!spec.BusinessValue {
     inspection.value_choices = try resolvedChoices(allocator, context, resolved);
-    return .{ .segments = switch (try validator.checkBusinessIn(allocator, .{
+    const accepted: spec.BusinessValue = .{ .segments = switch (try validator.checkBusinessIn(allocator, .{
         .registry = context.registry,
         .current = context.current,
         .inputs = context.inputs,
@@ -238,6 +457,18 @@ fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Con
             return issue.failure();
         },
     } };
+    errdefer {
+        for (accepted.segments) |segment| if (segment == .literal) allocator.free(segment.literal.value);
+        allocator.free(accepted.segments);
+    }
+    var arena: std.heap.ArenaAllocator = .init(allocator);
+    defer arena.deinit();
+    const recognized = try recognizeValue(arena.allocator(), refs.records(context.references), accepted, field, null);
+    if (!try sameValue(arena.allocator(), accepted, recognized)) {
+        inspection.text_issue = .{ .reason = .unknown_exact, .first_node = 0, .last_node = if (accepted.segments.len == 0) 0 else accepted.segments.len - 1, .field = field };
+        return error.InvalidTypedText;
+    }
+    return accepted;
 }
 
 /// Intrinsic stored support joins. Current text/path policy is checked by the
@@ -254,7 +485,7 @@ pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @i
         const groups = try validateAssociation(.canonical, a, inputs, references, attributed.source_group_ids, attributed.provenance, .content);
         defer a.free(groups);
         const resolved = try resolveUnitRecords(.canonical, a, inputs, references, attributed.provenance, &.{attributed.value});
-        try storedValue(a, inputs, passive, references.items, resolved, attributed.value, entry.field);
+        try storedValue(a, inputs, passive, references, resolved, attributed.value, entry.field);
     }
     for (candidate.records) |record| {
         if (record.proposal.source_group_ids.len != 1) return error.InvalidSpecification;
@@ -266,15 +497,20 @@ pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @i
             inline else => |fields, kind| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
                 const value = @field(fields, field.name);
                 if (comptime field.type == spec.BusinessValue) {
-                    try storedValue(a, inputs, passive, references.items, resolved, value, spec.textField(kind, field.name));
-                } else for (value) |relationship| try storedValue(a, inputs, passive, references.items, resolved, relationship, spec.textField(kind, field.name));
+                    try storedValue(a, inputs, passive, references, resolved, value, spec.textField(kind, field.name));
+                } else for (value) |relationship| try storedValue(a, inputs, passive, references, resolved, relationship, spec.textField(kind, field.name));
             },
         }
     }
 }
 
-fn storedValue(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @import("passive_literals.zig").Captured, all: r.Items, resolved: Resolved, value: spec.BusinessValue, field: text.field_policy.Field) Error!void {
-    const choices = try valueChoices(a, all, resolved.effective_claim_ids);
+fn storedValue(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @import("passive_literals.zig").Captured, references: refs.Records, resolved: Resolved, value: spec.BusinessValue, field: text.field_policy.Field) Error!void {
+    for (value.segments) |segment| if (segment == .literal and !text.validScalar(segment.literal.value)) return error.InvalidTypedText;
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const recognized = try recognizeValue(arena.allocator(), references, value, field, null);
+    if (!try sameValue(arena.allocator(), value, recognized)) return error.InvalidTypedText;
+    const choices = try valueChoices(a, references.items, resolved.effective_claim_ids);
     defer a.free(choices.exact_copy);
     try text.stored(text.BusinessSegment, a, .{ .inputs = inputs, .passive = passive, .scopes = resolved.scopes, .field = field, .exact_copies = choices.exact_copy }, value.segments);
 }
@@ -299,22 +535,51 @@ pub fn inspectAttributed(comptime boundary: spec.Boundary, allocator: std.mem.Al
     return inspectAttributedFor(boundary, allocator, validator, context, candidate, field, .content, inspection);
 }
 pub fn inspectAttributedFor(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, field: text.field_policy.Field, mode: @import("specification_source_binding.zig").Mode, inspection: *Inspection) Error!spec.AttributedValue {
+    var scratch: std.heap.ArenaAllocator = .init(allocator);
+    defer scratch.deinit();
     inspection.* = .{};
     const groups = try validateAssociation(boundary, allocator, context.inputs, refs.records(context.references), candidate.source_group_ids, candidate.provenance, mode);
     errdefer allocator.free(groups);
-    const resolved = try resolveUnitRecords(boundary, allocator, context.inputs, refs.records(context.references), candidate.provenance, &.{candidate.value});
     inspection.part = .{ .value = .value };
-    return .{ .value = try valueIn(allocator, validator, context, resolved, candidate.value, field, inspection), .source_group_ids = groups, .provenance = resolved.provenance };
+    const recognized = try recognizeInspected(boundary, scratch.allocator(), refs.records(context.references), candidate.value, field, inspection);
+    inspection.part = .provenance;
+    const resolved = try resolveUnitRecords(boundary, allocator, context.inputs, refs.records(context.references), candidate.provenance, &.{recognized});
+    inspection.part = .{ .value = .value };
+    return .{ .value = try valueIn(allocator, validator, context, resolved, recognized, field, inspection), .source_group_ids = groups, .provenance = resolved.provenance };
 }
 
 pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).RecordProposal, inspection: *Inspection) Error!spec.RecordProposal {
+    var scratch: std.heap.ArenaAllocator = .init(allocator);
+    defer scratch.deinit();
     inspection.* = .{};
     if (candidate.source_group_ids.len != 1) return error.InvalidSpecification;
     const groups = try validateAssociation(boundary, allocator, context.inputs, refs.records(context.references), candidate.source_group_ids, candidate.provenance, .content);
     errdefer allocator.free(groups);
-    const resolved = try resolveUnitRecords(boundary, allocator, context.inputs, refs.records(context.references), candidate.provenance, try recordValues(allocator, candidate.content));
-    var result: spec.RecordProposal = .{ .content = candidate.content, .source_group_ids = groups, .provenance = resolved.provenance };
+    var recognized_content = candidate.content;
     switch (candidate.content) {
+        inline else => |fields, kind| {
+            var recognized_fields = fields;
+            inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+                const value = @field(fields, field.name);
+                if (comptime field.type == spec.BusinessValue) {
+                    inspection.part = .{ .value = @field(@import("specification_candidate.zig").ValueField, field.name) };
+                    @field(recognized_fields, field.name) = try recognizeInspected(boundary, scratch.allocator(), refs.records(context.references), value, spec.textField(kind, field.name), inspection);
+                } else {
+                    const relationships = try scratch.allocator().alloc(spec.BusinessValue, value.len);
+                    for (value, relationships, 0..) |entry, *recognized, index| {
+                        inspection.part = .{ .value = .{ .relationship = index } };
+                        recognized.* = try recognizeInspected(boundary, scratch.allocator(), refs.records(context.references), entry, spec.textField(kind, field.name), inspection);
+                    }
+                    @field(recognized_fields, field.name) = relationships;
+                }
+            }
+            recognized_content = @unionInit(spec.Content(spec.BusinessValue), @tagName(kind), recognized_fields);
+        },
+    }
+    inspection.part = .provenance;
+    const resolved = try resolveUnitRecords(boundary, allocator, context.inputs, refs.records(context.references), candidate.provenance, try recordValues(allocator, recognized_content));
+    var result: spec.RecordProposal = .{ .content = recognized_content, .source_group_ids = groups, .provenance = resolved.provenance };
+    switch (recognized_content) {
         inline else => |fields, kind| {
             var normalized = fields;
             inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {

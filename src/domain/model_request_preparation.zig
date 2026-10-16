@@ -30,6 +30,7 @@ pub fn build(allocator: std.mem.Allocator, source: Source, content: []const prov
         .original_sources = source.original_sources,
         .prose_fields = source.prose_fields,
         .field_policies = source.field_policies,
+        .exact_scope = source.exact_scope,
     };
     try validateRequest(source, &request);
     var arena = std.heap.ArenaAllocator.init(allocator);
@@ -47,6 +48,7 @@ pub fn build(allocator: std.mem.Allocator, source: Source, content: []const prov
     request.original_sources = sources;
     request.prose_fields = try @import("model_text_wire.zig").cloneProseFields(owned, source.prose_fields);
     request.field_policies = try @import("model_text_field.zig").clone(owned, source.field_policies);
+    if (source.exact_scope) |scope| request.exact_scope = try @import("model_exact_values.zig").clone(owned, scope);
     request.request_schema_id.bytes = try owned.dupe(u8, request.request_schema_id.bytes);
     request.model_visible_input_id.bytes = try owned.dupe(u8, request.model_visible_input_id.bytes);
     const result = try owned.create(provider.IdentifiedProviderNeutralModelRequest);
@@ -69,6 +71,7 @@ pub const Source = struct {
     original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
     prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
     field_policies: []const @import("model_text_field.zig").Binding = &.{},
+    exact_scope: ?@import("model_exact_values.zig").Scope = null,
 
     pub fn resultSchema(self: Source) ValidationError!*const @import("model_result_schema.zig").Schema {
         const canonical = try self.canonicalSchema();
@@ -114,6 +117,7 @@ pub const Owned = struct {
 /// This grants no send authority and produces no separate preflight evidence.
 pub fn validateRequest(source: Source, request: *const provider.IdentifiedProviderNeutralModelRequest) ValidationError!void {
     try request.validate();
+    if (!@import("model_exact_values.zig").same(source.exact_scope, request.exact_scope)) return error.ModelRequestAssociationInvalid;
     if (source.original_sources.len != request.original_sources.len) return error.ModelRequestAssociationInvalid;
     for (source.original_sources, request.original_sources) |expected, actual| {
         if (expected.source_id.ordinal != actual.source_id.ordinal or !std.mem.eql(u8, expected.bytes, actual.bytes)) return error.ModelRequestAssociationInvalid;

@@ -63,7 +63,7 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
         } else if (target.record >= records.len or decision != .not_applicable or records[target.record].content != .entity) return error.InvalidSpecificationRepair;
         const assigned = try session.currentBinding(allocator, current, context);
         if (assigned != .records) return error.InvalidSpecificationRepair;
-        return authorizeGroup(allocator, owner, candidate, facts, target, .{ .membership = .{ .disposition = decision, .fixed_provenance = if (missing) assigned.records.selection else records[target.record].provenance, .fixed_source_group_ids = if (missing) try allocator.dupe(@import("reference_reconciliation.zig").SignalId, &.{assigned.records.signal}) else records[target.record].source_group_ids } }, rejection, missing);
+        return authorizeGroup(allocator, owner, candidate, facts, target, .{ .membership = .{ .disposition = decision, .fixed_provenance = if (missing) assigned.records.selection else records[target.record].provenance, .fixed_source_group_ids = if (missing) try allocator.dupe(@import("reference_reconciliation.zig").SignalId, &.{assigned.records.signal}) else records[target.record].source_group_ids, .evidence_bound = if (missing) null else try recordEvidenceBound(allocator, context, records[target.record]) } }, rejection, missing);
     }
     if (rejection.issue.field != .target) return error.InvalidSpecificationRepair;
     if (rejection.issue.blocked != null) return error.UnsafeSpecificationRepair;
@@ -92,11 +92,35 @@ pub fn authorize(allocator: std.mem.Allocator, current: session.Session, context
 
 fn valueEvidence(a: std.mem.Allocator, context: p.Context, response: g.Response, field: @FieldType(Target, "value")) Error!p.Resolved {
     const selected = try candidates.attributedValue(.model, response, field.subject, field.field);
-    const values = if (field.subject == .record)
-        try p.recordValues(a, response.content.records[field.subject.record].content)
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    const references = @import("reference_support.zig").records(context.references);
+    const values: []const g.spec.BusinessValue = if (field.subject == .record)
+        try p.recordValues(scratch, try p.recognizeRecord(scratch, references, response.content.records[field.subject.record].content, null))
     else
-        &.{selected.value};
+        &.{try p.recognizeValue(scratch, references, selected.value, try candidates.singletonTextField(field.subject), null)};
     return p.lineageForRepair(a, context, selected.provenance, values);
+}
+
+fn recordEvidenceBound(a: std.mem.Allocator, context: p.Context, record: g.spec.Model.RecordProposal) Error!candidates.EvidenceBound {
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    const recognized = try p.recognizeRecord(scratch, @import("reference_support.zig").records(context.references), record.content, null);
+    const resolved = try p.lineageForRepair(a, context, record.provenance, try p.recordValues(scratch, recognized));
+    return .{ .effective = resolved.effective_claim_ids, .citations = resolved.provenance.citation_ids };
+}
+fn groupEvidenceBound(authorization: Authorization) ?candidates.EvidenceBound {
+    const group = authorization.rule.group orelse return null;
+    return switch (group) {
+        .membership => |membership| membership.evidence_bound,
+    };
+}
+fn checkEvidenceBound(expected: candidates.EvidenceBound, actual: candidates.EvidenceBound) Error!void {
+    const r = @import("reference_reconciliation.zig");
+    r.sameSet(r.ClaimId, expected.effective, actual.effective) catch return error.InvalidSpecificationRepair;
+    r.sameSet(r.CitationId, expected.citations, actual.citations) catch return error.InvalidSpecificationRepair;
 }
 
 fn authorizeGroup(a: std.mem.Allocator, owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, candidate: Candidate, facts: dependencies.Facts, target: Target, policy: candidates.GroupPolicy, rejection: candidates.Rejection, insert: bool) Error!Authorization {
@@ -190,22 +214,26 @@ pub fn retryValidation(a: std.mem.Allocator, validator: @import("typed_text.zig"
     return .{ .validated = .{ .permit = pending.permit, .revision = candidate.revision, .result = if (accepted) .resolved else .recurring } };
 }
 fn targetValid(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, current: session.Session, candidate: Candidate, target: Target) Error!bool {
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
     const response = candidate.response;
     const selected = try candidates.select(response, target);
     switch (target) {
         .provenance => return error.InvalidSpecificationRepair,
         .value => |field| {
             const evidence = try candidates.attributedValue(.model, response, field.subject, field.field);
-            const values = if (field.subject == .record) try p.recordValues(a, response.content.records[field.subject.record].content) else &.{evidence.value};
+            const references = @import("reference_support.zig").records(context.references);
+            const values: []const g.spec.BusinessValue = if (field.subject == .record) try p.recordValues(scratch, try p.recognizeRecord(scratch, references, response.content.records[field.subject.record].content, null)) else &.{try p.recognizeValue(scratch, references, evidence.value, try candidates.singletonTextField(field.subject), null)};
             const policy_field = if (field.subject == .record) try candidates.recordTextField(response.content.records[field.subject.record].content, field.field) else try candidates.singletonTextField(field.subject);
-            _ = p.checkValueInUnit(a, validator, context, evidence.provenance, values, evidence.value, policy_field) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+            _ = p.checkValueInUnit(scratch, validator, context, evidence.provenance, values, evidence.value, policy_field) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         },
-        .attributed => |subject| _ = p.checkAttributed(.model, a, validator, context, selected.attributed, try candidates.singletonTextField(subject)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false,
+        .attributed => |subject| _ = p.checkAttributed(.model, scratch, validator, context, selected.attributed, try candidates.singletonTextField(subject)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false,
         .record => {
             if (candidate.group_repair) |group| if (group.policy == .membership) {
                 if (!g.spec.entityMembershipSatisfied(current.units[2].?.response.content.entities.disposition, @intFromBool(selected.record.content == .entity))) return false;
             };
-            _ = p.checkRecord(.model, a, validator, context, selected.record) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+            _ = p.checkRecord(.model, scratch, validator, context, selected.record) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         },
     }
     return true;
@@ -227,7 +255,7 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         else => |other| other,
     };
     const base = try session.packetForOptions(allocator, current, context, current.completed, .{
-        .exact_claims = if (kind == .value) (authorization.rule.value_bound orelse return error.InvalidSpecificationRepair).effective else null,
+        .exact_claims = if (kind == .value) (authorization.rule.value_bound orelse return error.InvalidSpecificationRepair).effective else if (groupEvidenceBound(authorization)) |bound| bound.effective else null,
         .task = task,
     });
     defer packets.release(base);
@@ -245,7 +273,7 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
     if (kind == .record or kind == .attributed) {
         const fixed = if (authorization.rule.group) |group| (if (group == .membership) group.membership.fixed_provenance else null) else null;
         const narrowed = if (fixed) |selection|
-            try session.withSelectionChoices(allocator, base, context, selection)
+            try session.withSelectionChoices(allocator, base, context, .{ .claim_ids = if (groupEvidenceBound(authorization)) |bound| bound.effective else selection.claim_ids, .clarification_response_ids = selection.clarification_response_ids })
         else
             try packets.withExcludedVariants(allocator, base, base.excludedVariants());
         defer packets.release(narrowed);
@@ -256,7 +284,7 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         // The rejected value is already in current_value; only its pinned
         // provenance is needed as containing-field context.
         const contextual = if (authorization.target.value.subject == .record)
-            try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try candidates.readContext(authorization.dependencies.candidate.response, authorization.target))
+            try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try modelReadContext(guidance_arena.allocator(), context, try candidates.readContext(authorization.dependencies.candidate.response, authorization.target)))
         else
             try packets.withContext(g.spec.Selection, allocator, base, "provenance", value.provenance);
         defer packets.release(contextual);
@@ -265,9 +293,21 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         defer packets.release(narrowed);
         return atomic.packet(allocator, authorization, narrowed, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
     }
-    const contextual = try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try candidates.readContext(authorization.dependencies.candidate.response, authorization.target));
+    const contextual = try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try modelReadContext(guidance_arena.allocator(), context, try candidates.readContext(authorization.dependencies.candidate.response, authorization.target)));
     defer packets.release(contextual);
     return atomic.packet(allocator, authorization, contextual, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
+}
+
+fn modelReadContext(a: std.mem.Allocator, context: p.Context, value: candidates.ReadContext) Error!candidates.ReadContext {
+    const references = @import("reference_support.zig").records(context.references);
+    return switch (value) {
+        .attributed => |attributed| .{ .attributed = try p.modelAttributed(.model, a, references, attributed) },
+        .record => |record| result: {
+            var projected = record;
+            projected.content = try p.modelRecord(a, references, record.content);
+            break :result .{ .record = projected };
+        },
+    };
 }
 
 fn packetOptions(authorization: Authorization) Error!shared.PacketOptions {
@@ -352,6 +392,31 @@ pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_
     };
 }
 
+fn recognizeReplacement(a: std.mem.Allocator, context: p.Context, candidate: Candidate, authorization: Authorization, proposed: Replacement) Error!Replacement {
+    const references = @import("reference_support.zig").records(context.references);
+    const fixed: ?[]const @import("reference_reconciliation.zig").ClaimId = if (authorization.rule.value_bound) |bound| bound.effective else if (groupEvidenceBound(authorization)) |bound| bound.effective else null;
+    return switch (proposed) {
+        .provenance => error.InvalidSpecificationRepair,
+        .value => |value| result: {
+            if (authorization.target != .value) return error.InvalidSpecificationRepair;
+            const target = authorization.target.value;
+            const field = if (target.subject == .record) try candidates.recordTextField(candidate.response.content.records[target.subject.record].content, target.field) else try candidates.singletonTextField(target.subject);
+            break :result .{ .value = p.recognizeValue(a, references, value, field, fixed) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationRepair };
+        },
+        .attributed => |value| result: {
+            if (authorization.target != .attributed) return error.InvalidSpecificationRepair;
+            var recognized = value;
+            recognized.value = p.recognizeValue(a, references, value.value, try candidates.singletonTextField(authorization.target.attributed), fixed) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationRepair;
+            break :result .{ .attributed = recognized };
+        },
+        .record => |value| result: {
+            var recognized = value;
+            recognized.content = p.recognizeRecord(a, references, value.content, fixed) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationRepair;
+            break :result .{ .record = recognized };
+        },
+    };
+}
+
 pub fn merge(allocator: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, current: session.Session, context: p.Context, candidate: Candidate, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!Candidate {
     if (!canonical.matchesInputs(context.inputs)) return error.InvalidAtomicRepair;
     if (authorization.target == .provenance or (proposed_replacement != null and proposed_replacement.? == .provenance)) return error.InvalidSpecificationRepair;
@@ -359,10 +424,17 @@ pub fn merge(allocator: std.mem.Allocator, canonical: @import("typed_text.zig").
     defer allocator.free(facts.references.lineage.history);
     var result = candidate;
     const prior_value = if (authorization.operation == .insert) null else try candidates.select(candidate.response, authorization.target);
-    const merged = try atomic.checkMerge(allocator, canonical, try session.owner(allocator, current), candidate.revision, prior_value, facts, authorization, proposed_replacement, origin);
+    var recognition_arena: std.heap.ArenaAllocator = .init(allocator);
+    defer recognition_arena.deinit();
+    const proposed = if (proposed_replacement) |value| try recognizeReplacement(recognition_arena.allocator(), context, candidate, authorization, value) else null;
+    var merged = try atomic.checkMerge(allocator, canonical, try session.owner(allocator, current), candidate.revision, prior_value, facts, authorization, proposed, origin);
+    if (authorization.operation == .replace) {
+        const previous = try recognizeReplacement(recognition_arena.allocator(), context, candidate, authorization, authorization.operation.replace);
+        merged.changed = !try shared.progressEqual(Replacement, allocator, canonical, previous, proposed orelse return error.InvalidSpecificationRepair);
+    }
     if (authorization.rule.value_bound) |bound| {
-        if (authorization.target != .value or proposed_replacement == null or proposed_replacement.? != .value) return error.InvalidSpecificationRepair;
-        const updated = try candidates.replace(allocator, candidate.response, authorization.target, proposed_replacement.?);
+        if (authorization.target != .value or proposed == null or proposed.? != .value) return error.InvalidSpecificationRepair;
+        const updated = try candidates.replace(allocator, candidate.response, authorization.target, proposed.?);
         const resolved = valueEvidence(allocator, context, updated, authorization.target.value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationRepair;
         if (resolved.provenance.claim_ids.len != bound.explicit.len) return error.InvalidSpecificationRepair;
         for (resolved.provenance.claim_ids, bound.explicit) |actual, expected_id| if (actual.ordinal != expected_id.ordinal) return error.InvalidSpecificationRepair;
@@ -370,13 +442,14 @@ pub fn merge(allocator: std.mem.Allocator, canonical: @import("typed_text.zig").
         @import("reference_reconciliation.zig").sameSet(@import("reference_reconciliation.zig").CitationId, bound.citations, resolved.provenance.citation_ids) catch return error.InvalidSpecificationRepair;
     }
     if (authorization.rule.group) |group| {
-        const proposed = proposed_replacement orelse return error.InvalidSpecificationRepair;
+        const replacement = proposed orelse return error.InvalidSpecificationRepair;
         switch (group) {
             .membership => |membership| {
-                if (proposed != .record or !g.spec.entityMembershipSatisfied(membership.disposition, @intFromBool(proposed.record.content == .entity))) return error.InvalidSpecificationRepair;
-                if (membership.fixed_source_group_ids.len != proposed.record.source_group_ids.len) return error.InvalidSpecificationRepair;
-                for (membership.fixed_source_group_ids, proposed.record.source_group_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationRepair;
-                if (membership.fixed_provenance) |fixed| if (!try atomic.equal(allocator, .{ .provenance = fixed }, .{ .provenance = proposed.record.provenance })) return error.InvalidSpecificationRepair;
+                if (replacement != .record or !g.spec.entityMembershipSatisfied(membership.disposition, @intFromBool(replacement.record.content == .entity))) return error.InvalidSpecificationRepair;
+                if (membership.fixed_source_group_ids.len != replacement.record.source_group_ids.len) return error.InvalidSpecificationRepair;
+                for (membership.fixed_source_group_ids, replacement.record.source_group_ids) |expected, actual| if (expected.ordinal != actual.ordinal) return error.InvalidSpecificationRepair;
+                if (membership.fixed_provenance) |fixed| if (!try atomic.equal(allocator, .{ .provenance = fixed }, .{ .provenance = replacement.record.provenance })) return error.InvalidSpecificationRepair;
+                if (membership.evidence_bound) |bound| try checkEvidenceBound(bound, try recordEvidenceBound(allocator, context, replacement.record));
             },
         }
     }
@@ -387,7 +460,7 @@ pub fn merge(allocator: std.mem.Allocator, canonical: @import("typed_text.zig").
     result.value_bound = authorization.rule.value_bound;
     switch (authorization.operation) {
         .replace => {
-            const replacement = try atomic.copyReplacement(allocator, proposed_replacement.?);
+            const replacement = try atomic.copyReplacement(allocator, proposed.?);
             result.response = try candidates.replace(allocator, candidate.response, authorization.target, replacement);
             result.origins = try candidate.origins.replacing(allocator, authorization.target, origin);
         },
@@ -406,13 +479,17 @@ pub fn merge(allocator: std.mem.Allocator, canonical: @import("typed_text.zig").
             const old_records = candidate.response.content.records;
             const records = try allocator.alloc(g.spec.Model.RecordProposal, old_records.len + 1);
             @memcpy(records[0..old_records.len], old_records);
-            records[old_records.len] = (try atomic.copyReplacement(allocator, proposed_replacement.?)).record;
+            records[old_records.len] = (try atomic.copyReplacement(allocator, proposed.?)).record;
             result.response.content.records = records;
             result.origins = try candidate.origins.replacing(allocator, authorization.target, origin);
             result.origins.record_occurrences = try candidate.origins.record_occurrences.inserting(allocator, old_records.len, old_records.len);
         },
     }
-    if (authorization.rule.group) |group| result.group_repair = .{ .target = result.pending_repair.?.target, .policy = group };
+    if (authorization.rule.group) |group| {
+        var retained = group;
+        if (retained.membership.evidence_bound == null) retained.membership.evidence_bound = try recordEvidenceBound(allocator, context, (proposed orelse return error.InvalidSpecificationRepair).record);
+        result.group_repair = .{ .target = result.pending_repair.?.target, .policy = retained };
+    }
     result.origins.repair_target_bound = permit.maximum_targets;
     return result;
 }
