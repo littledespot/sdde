@@ -61,7 +61,13 @@ storage does not change retry eligibility or the execution-wide token ledger.
 - JSON still malformed after that exception returns `invalid`, including through the inference profile's permitted
   `end.invalid`; non-complete observations keep their failure/cancellation outcome without
   parsing.
-- This proves syntax only and performs no provider call, accounting or payload-schema check.
+- The approved [Phase 1A.3 composition amendment](text-field-composition.md#phase-1a3-amendment--composition-defects-are-corrected-as-a-unit)
+  also checks each native-bound text field at this shared admission boundary.
+  A rejection retains every violating field's concrete pointer and typed reason
+  for the existing bounded protocol correction. Pure syntax parsing stays separate
+  for diagnostic inspection. These checks prove syntax and mechanical field
+  composition; they perform no semantic assessment, provider call, accounting or
+  payload-schema check.
 
 Native `validate-model-payload-schema` checks only decoded candidates against
 their retained compiled schema and retains the original tree/evidence owner.

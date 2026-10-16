@@ -11,6 +11,8 @@ pub const Literal = struct { value: []const u8 };
 pub const PassiveReference = struct { passive_literal_id: literals.Id };
 pub const SourceReference = struct { source_id: evidence.identity.SourceId };
 pub const ExactCopy = struct { claim_id: @import("reference_identity.zig").ClaimId };
+/// Capability-free composition facts; insertion identities are validated separately.
+pub const CompositionNode = union(enum) { literal: Literal, exact_copy, passive, source };
 pub const BusinessSegment = union(enum) {
     pub const model_inline = .{ .literal = "value" };
     literal: Literal,
@@ -138,6 +140,12 @@ pub const Issue = struct {
     rejected_passive: ?literals.Id = null,
     rejected_exact: ?ExactCopy = null,
     field: ?field_policy.Field = null,
+    pub fn isComposition(self: Issue) bool {
+        return switch (self.reason) {
+            .blank, .reference_only, .prohibited_exact, .prohibited_passive, .prohibited_source, .embedded_insertion_syntax => true,
+            .empty, .invalid_scalar, .unknown_exact, .unknown_passive, .unknown_source => false,
+        };
+    }
     pub fn description(self: Issue) []const u8 {
         return switch (self.reason) {
             .empty, .blank => "Supply nonblank content using the supplied typed text choices.",
@@ -272,7 +280,7 @@ pub const Validator = struct {
 /// Capability-free structural check shared by admission, stored readback,
 /// collection coverage and diagnostic observation. No rendering or inference.
 pub fn composition(comptime Node: type, field: field_policy.Field, nodes: []const Node) ?Issue {
-    comptime std.debug.assert(Node == BusinessSegment or Node == ReferenceNode);
+    comptime std.debug.assert(Node == BusinessSegment or Node == ReferenceNode or Node == CompositionNode);
     const policy = field_policy.get(field);
     if (nodes.len == 0) return .{ .reason = .empty, .first_node = 0, .last_node = 0, .field = field };
     var prose = false;
@@ -301,7 +309,7 @@ pub fn composition(comptime Node: type, field: field_policy.Field, nodes: []cons
 /// The same canonical wire grammar checks native admission and stored readback.
 /// Adjacent literal fragments form one prose run; typed insertions end a run.
 pub fn wireComposition(comptime Node: type, a: std.mem.Allocator, inputs: evidence.Inputs, field: field_policy.Field, nodes: []const Node) std.mem.Allocator.Error!?Issue {
-    comptime std.debug.assert(Node == BusinessSegment or Node == ReferenceNode);
+    comptime std.debug.assert(Node == BusinessSegment or Node == ReferenceNode or Node == CompositionNode);
     const wire = @import("model_text_wire.zig");
     const sources = try a.alloc(wire.SourceText, inputs.corpus.sources.len);
     defer a.free(sources);
@@ -309,7 +317,7 @@ pub fn wireComposition(comptime Node: type, a: std.mem.Allocator, inputs: eviden
     return wireCompositionSources(Node, a, sources, field, nodes);
 }
 pub fn wireCompositionSources(comptime Node: type, a: std.mem.Allocator, sources: []const @import("model_text_wire.zig").SourceText, field: field_policy.Field, nodes: []const Node) std.mem.Allocator.Error!?Issue {
-    comptime std.debug.assert(Node == BusinessSegment or Node == ReferenceNode);
+    comptime std.debug.assert(Node == BusinessSegment or Node == ReferenceNode or Node == CompositionNode);
     const wire = @import("model_text_wire.zig");
     var joined: std.ArrayList(u8) = .empty;
     defer joined.deinit(a);

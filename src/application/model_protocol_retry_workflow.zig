@@ -24,7 +24,10 @@ pub const Build = struct {
         const diagnostic: @import("../domain/model_protocol_retry.zig").Diagnostic = switch (payload.outcome()) {
             .schema_rejected => |reason| .{ .schema = reason },
             .not_validated => |source| switch (source.outcome()) {
-                .protocol_rejected => |reason| .{ .decoder = reason.diagnostic },
+                .protocol_rejected => |reason| switch (reason.diagnostic) {
+                    .decoder => |failure| .{ .decoder = failure },
+                    .composition => |failure| .{ .composition = failure },
+                },
                 .not_decoded => if (rejected.missingFinalText()) .missing_final_text else return error.OperationExecutionFailed,
                 .decoded => return error.OperationExecutionFailed,
             },

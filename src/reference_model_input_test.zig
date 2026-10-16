@@ -851,7 +851,7 @@ test "reconciliation phase recreation retains native source exceptions through r
                 try std.testing.expect(@import("domain/model_payload_schema.zig").validateValue(envelope.value(decoded.candidate.json()), invoked.prepared.request.response_schema.root()) == null);
             } else {
                 try std.testing.expectError(error.InvalidModelEnvelope, (@import("actions/model/decode_model_envelope.zig").Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic));
-                try std.testing.expectEqual(.EmbeddedInsertionSyntax, diagnostic.?.reason);
+                try std.testing.expectEqual(.embedded_insertion_syntax, diagnostic.?.composition.fields[0].issue.reason);
             }
         }
     }

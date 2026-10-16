@@ -125,7 +125,7 @@ fn reviewHandoff(a: std.mem.Allocator, schema: *const @import("../domain/model_r
     prior.review.entries = prior.review.entries[0 .. ordinal - 1];
     prior.origins = prior.origins[0 .. ordinal - 1];
     const envelope = @import("../domain/model_envelope.zig");
-    var syntax_diagnostic: ?envelope.Diagnostic = null;
+    var syntax_diagnostic: ?envelope.SyntaxDiagnostic = null;
     defer if (syntax_diagnostic) |diagnostic| diagnostic.deinit(a);
     var document: ?envelope.Document = envelope.parseContent(a, bytes, &syntax_diagnostic) catch |err| if (err == error.OutOfMemory) return err else null;
     defer if (document) |*value| value.deinit();

@@ -18,7 +18,7 @@ pub const Outcome = union(enum) {
     not_decoded: *const observation.Result,
 };
 
-/// Syntax only. The original observation remains the sole association authority.
+/// Syntax and mechanical text composition only; the original observation owns association.
 pub const Result = opaque {
     pub fn source(self: *const Result) *const observation.Result {
         return storage(self).source;

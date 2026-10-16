@@ -9,4 +9,5 @@ test {
     _ = @import("src/workflow_repair_retry_test.zig");
     _ = @import("src/test_fixtures/scenario_timing.zig");
     _ = @import("src/adapters/provider/native_model_http.zig");
+    _ = @import("test/harness/attribution/tests.zig");
 }

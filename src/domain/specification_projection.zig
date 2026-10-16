@@ -67,13 +67,6 @@ pub fn modelValue(allocator: std.mem.Allocator, context: provenance.Context, val
     return scalarInScopes(allocator, context, value.value, resolved.scopes);
 }
 
-pub fn modelRecordScalar(allocator: std.mem.Allocator, context: provenance.Context, record: spec.Model.RecordProposal, value: spec.BusinessValue) Error!spec.Scalar {
-    const resolved = try provenance.lineageForRepair(allocator, context, record.provenance, try provenance.recordValues(allocator, record.content));
-    return scalarInScopes(allocator, context, value, resolved.scopes);
-}
-
-/// Whole-record repair context uses rendered fields rather than response-wire
-/// fragments. Exact rejected record bytes remain solely in native repair facts.
 pub fn modelRecord(allocator: std.mem.Allocator, context: provenance.Context, record: spec.Model.RecordProposal) Error!spec.Content(spec.Scalar) {
     const resolved = try provenance.lineageForRepair(allocator, context, record.provenance, try provenance.recordValues(allocator, record.content));
     return switch (record.content) {

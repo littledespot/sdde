@@ -161,6 +161,7 @@ fn withRetry(a: std.mem.Allocator, authorization: Authorization) Error!Authoriza
 }
 
 pub fn authorize(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, rejection: d.Rejection) Error!Decision {
+    if (rejection.issue.expected == .text_issue and rejection.issue.expected.text_issue.isComposition()) return error.InvalidAtomicRepair;
     try v.input(a, parsed.input);
     const facts = try context.capture(a, parsed, if (needsText(rejection.unit)) ctx else null);
     defer a.free(facts.lineage.history);
@@ -312,33 +313,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
         .insert => |kind| kind,
         .delete => return error.InvalidAtomicRepair,
     };
-    var options: shared.PacketOptions = .{ .presentation = .structured, .fields = .{ .replacement = .{ .reference_phase = .reconciliation, .inherited = if (kind == .summary or kind == .conflict_detail) .reconciliation_conflict else null } } };
-    var selected_claims: []const r.ClaimId = &.{};
-    if (authorization.rule.rejection.issue.expected == .text_issue) {
-        const issue = authorization.rule.rejection.issue.expected.text_issue;
-        if (shared.isCompositionIssue(issue)) {
-            if (authorization.operation != .replace) return error.InvalidAtomicRepair;
-            selected_claims = switch (authorization.target) {
-                .statement_content => |index| parsed.proposal.summary.statements[index].claim_ids,
-                .signal_content => |index| parsed.proposal.global.signals[index].claim_ids,
-                .conflict_summary => |index| parsed.proposal.global.conflicts[index].claim_ids,
-                else => return error.InvalidAtomicRepair,
-            };
-            const value: @import("model_evidence.zig").Text = switch (authorization.operation.replace) {
-                .content => |content| switch (content) {
-                    .model => |model| switch (model) {
-                        .business, .scope_guard => |text| .{ .business = text },
-                        inline else => |text| .{ .reference = text },
-                    },
-                    .preserved_token => return error.InvalidAtomicRepair,
-                },
-                .summary => |text| .{ .reference = text },
-                else => return error.InvalidAtomicRepair,
-            };
-            const scoped = try v.scopes(scratch, parsed.input.progress.plan.layout.items, selected_claims, ctx);
-            options.presentation = .{ .composition = .{ .rendered_text = try @import("model_evidence.zig").resolveText(scratch, ctx.inputs, ctx.registry, scoped.scopes, value), .issue = issue } };
-        }
-    }
+    var options: shared.PacketOptions = .{ .fields = .{ .replacement = .{ .reference_phase = .reconciliation, .inherited = if (kind == .summary or kind == .conflict_detail) .reconciliation_conflict else null } } };
     const scope: d.Constraint.Scope = switch (kind) {
         .selection => .{ .selection = switch (authorization.target) {
             .statement_selection => .statement,
@@ -355,10 +330,7 @@ pub fn packet(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, author
     if (scope == .content) options.fields = .{ .selected = try contentFieldBindings(scratch, scope.content) };
     const base = try @import("reference_model_input.zig").reconciliationPacket(a, parsed.input, ctx.inputs, ctx.registry, scope);
     defer packets.release(base);
-    const identity = .{ .claim_ids = selected_claims };
-    const contextual = if (options.presentation == .composition)
-        try packets.withContext(@TypeOf(identity), a, base, "candidate", identity)
-    else if (authorization.target == .conflict_selection)
+    const contextual = if (authorization.target == .conflict_selection)
         try packets.withContext([]const @import("reference_conflict_groups.zig").CatalogueEntry, a, base, "accepted_conflict_groups", try @import("reference_conflict_groups.zig").catalogue(scratch, parsed.proposal.global.conflict_groups))
     else
         try packets.withContext(@FieldType(r.Parsed, "proposal"), a, base, "candidate", parsed.proposal);
@@ -795,7 +767,7 @@ pub const Omission = struct {
                 .business, .scope_guard => "business_text",
                 else => "reference_text",
             },
-        } else if (auth.target == .conflict_group) "repair_conflict_group" else "repair_disposition" }, if (auth.target == .unit) parsed.source.at(targetOrigin(auth.target.unit).unit, targetOrigin(auth.target.unit).field) else parsed.source.at(.conflicts, .record), .{ .presentation = .structured, .fields = if (kind) |value| .{ .selected = try contentFieldBindings(arena.allocator(), value) } else .{ .replacement = .{ .reference_phase = .reconciliation } } });
+        } else if (auth.target == .conflict_group) "repair_conflict_group" else "repair_disposition" }, if (auth.target == .unit) parsed.source.at(targetOrigin(auth.target.unit).unit, targetOrigin(auth.target.unit).field) else parsed.source.at(.conflicts, .record), .{ .fields = if (kind) |value| .{ .selected = try contentFieldBindings(arena.allocator(), value) } else .{ .replacement = .{ .reference_phase = .reconciliation } } });
         if (kind != null) return prepared_input;
         defer packets.release(prepared_input);
         return @import("reference_model_input.zig").withDispositionChoices(a, prepared_input, if (auth.target == .conflict_group) auth.target.conflict_group else parsed.input.partition.group.claim_ids, auth.rule.disposition_choices, auth.target == .conflict_group);

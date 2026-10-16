@@ -738,20 +738,8 @@ fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/
     if (request.model_request_id.immutable_unit_owner_id == .specification_unit) try assertGenerationContext(a, request);
     try std.testing.expect(!repair.contains("expected"));
     const rule = repair.get("rule").?.object;
-    const composition = rule.contains("rendered_text");
-    if (composition) {
-        try std.testing.expectEqualStrings("replace", repair.get("operation").?.string);
-        try std.testing.expect(!repair.contains("current_value"));
-        try std.testing.expectEqual(@as(usize, 3), rule.count());
-        try std.testing.expect(rule.get("rendered_text").? == .string);
-        try std.testing.expectEqual(@as(usize, 3), rule.get("issue").?.object.count());
-        try std.testing.expectEqual(@as(usize, 2), rule.get("field_rule").?.object.count());
-        const field = rule.get("field_rule").?.object.get("field").?.string;
-        for (packet.fieldPolicies()) |binding| {
-            if (std.mem.eql(u8, field, @tagName(binding.field))) break;
-        } else return error.MissingRepairCompositionField;
-    } else try std.testing.expectEqual(std.mem.eql(u8, repair.get("operation").?.string, "replace"), repair.contains("current_value"));
-    if (!composition and request.model_request_id.immutable_unit_owner_id == .semantic_review) {
+    try std.testing.expectEqual(std.mem.eql(u8, repair.get("operation").?.string, "replace"), repair.contains("current_value"));
+    if (request.model_request_id.immutable_unit_owner_id == .semantic_review) {
         if (std.mem.eql(u8, rule.get("issue").?.string, "invalid_evidence") and rule.get("evidence_rule").?.object.contains("minimum")) {
             const decision = rule.get("finding").?.object.get("kind").?.string;
             const minimum = rule.get("evidence_rule").?.object.get("minimum").?.string;

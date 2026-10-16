@@ -1,16 +1,18 @@
-//! Response-level content/syntax/schema correction. No semantic reconsideration or ID change.
+//! Response-level syntax, schema and mechanical text-composition correction.
+//! No semantic reconsideration, new allowance or request identity.
 const std = @import("std");
 const projection = @import("model_schema_projection.zig");
 const preparation = @import("model_request_preparation.zig");
 const provider = @import("llm_provider_operation.zig");
 pub const Diagnostic = union(enum) {
     decoder: @import("strict_json.zig").Diagnostic,
+    composition: @import("model_text_composition.zig").Diagnostic,
     schema: @import("model_payload_schema.zig").Diagnostic,
     missing_final_text,
 
     pub fn copy(self: Diagnostic, allocator: std.mem.Allocator) std.mem.Allocator.Error!Diagnostic {
         return switch (self) {
-            inline .decoder, .schema => |value, tag| @unionInit(Diagnostic, @tagName(tag), try value.copy(allocator)),
+            inline .decoder, .schema, .composition => |value, tag| @unionInit(Diagnostic, @tagName(tag), try value.copy(allocator)),
             .missing_final_text => .missing_final_text,
         };
     }
@@ -19,6 +21,7 @@ pub const Diagnostic = union(enum) {
         switch (self) {
             .decoder => |value| value.deinit(allocator),
             .schema => |value| value.deinit(allocator),
+            .composition => |value| value.deinit(allocator),
             .missing_final_text => {},
         }
     }
@@ -26,7 +29,7 @@ pub const Diagnostic = union(enum) {
     pub fn eql(self: Diagnostic, other: Diagnostic) bool {
         if (std.meta.activeTag(self) != std.meta.activeTag(other)) return false;
         return switch (self) {
-            inline .decoder, .schema => |value, tag| value.eql(@field(other, @tagName(tag))),
+            inline .decoder, .schema, .composition => |value, tag| value.eql(@field(other, @tagName(tag))),
             .missing_final_text => true,
         };
     }
@@ -40,7 +43,7 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
     if (original.model_request_id != source.request_binding.modelRequestId() or original.response_schema != try source.resultSchema()) return error.ModelRequestAssociationInvalid;
     const content: ?[]const u8 = switch (diagnostic) {
         .missing_final_text => if (rejected.missingFinalText()) null else return error.ModelRequestAssociationInvalid,
-        .decoder, .schema => switch (rejected.result()) {
+        .decoder, .schema, .composition => switch (rejected.result()) {
             .complete => |candidate| candidate.content(),
             .failed, .stopped => return error.ModelRequestAssociationInvalid,
         },
@@ -51,6 +54,7 @@ pub fn build(allocator: std.mem.Allocator, source: preparation.Source, base_cont
     const guidance = switch (diagnostic) {
         .missing_final_text => try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .provider_content = provider.ProviderContentDiagnostic.missing_final_text }, .explanation = "Final-answer admission failed: no final answer was received." }, .{}),
         .decoder => |reason| try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .decoder = reason }, .explanation = reason.explanation() }, .{}),
+        .composition => |reason| try std.json.Stringify.valueAlloc(scratch, .{ .diagnostic = .{ .composition = try reason.describe(scratch) }, .explanation = "Model-text composition failed. Correct every listed field within this same response and retain the original assignment." }, .{}),
         .schema => |reason| try std.json.Stringify.valueAlloc(scratch, .{
             .diagnostic = .{ .schema = try reason.describe(scratch) },
             .explanation = reason.explanation(),

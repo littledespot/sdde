@@ -100,6 +100,7 @@ pub const ProtocolRejection = struct {
     origin: @import("../../../src/domain/model_candidate_origin.zig").Origin,
     reason: []const u8,
     json_error: ?@import("../../../src/domain/strict_json.zig").Diagnostic,
+    composition_error: ?@import("../../../src/domain/model_text_composition.zig").Diagnostic = null,
     schema_error: ?@import("../../../src/domain/model_schema_diagnostic.zig").Description,
 };
 pub const ProviderRejection = struct {
@@ -191,6 +192,7 @@ pub const Report = struct {
     schema_error: ?@import("../../../src/domain/model_schema_diagnostic.zig").Description = null,
     retry_error: ?@import("../../../src/domain/workflow_retry.zig").Exhaustion.Description = null,
     json_error: ?@import("../../../src/domain/strict_json.zig").Diagnostic = null,
+    composition_error: ?@import("../../../src/domain/model_text_composition.zig").Diagnostic = null,
     events_file: ?[]const u8 = null,
     evidence_root: ?[]const u8 = null,
     evidence_error: ?[]const u8 = null,

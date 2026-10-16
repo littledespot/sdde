@@ -128,6 +128,21 @@ pub fn build(b: *std.Build) void {
     const call_tests = b.addRunArtifact(b.addTest(.{ .root_module = call_module }));
     call_tests.setCwd(b.path("."));
     b.step("test-e2e-call", "Test captured-call selection, binding and reporting offline").dependOn(&call_tests.step);
+    const attribution_module = b.createModule(.{
+        .root_source_file = b.path("attribution_replay.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    });
+    const attribution_executable = b.addExecutable(.{ .name = "sdde-attribution-replay", .root_module = attribution_module });
+    const run_attribution = b.addRunArtifact(attribution_executable);
+    run_attribution.setCwd(b.path("."));
+    run_attribution.has_side_effects = true;
+    if (b.args) |args| run_attribution.addArgs(args);
+    b.step("attribution-replay", "Prepare and score retained presentation replays offline; never send model requests").dependOn(&run_attribution.step);
+    const attribution_tests = b.addRunArtifact(b.addTest(.{ .root_module = attribution_module }));
+    attribution_tests.setCwd(b.path("."));
+    b.step("test-attribution-replay", "Test offline attribution preparation and scoring contracts").dependOn(&attribution_tests.step);
     const e2e_module = b.createModule(.{
         .root_source_file = b.path("e2e.zig"),
         .target = target,
@@ -769,6 +784,7 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("harness.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));
     lint_command.addFileArg(b.path("e2e_call.zig"));
+    lint_command.addFileArg(b.path("attribution_replay.zig"));
     lint_command.addFileArg(b.path("provider_compatibility.zig"));
     lint_command.addFileArg(b.path("baseline.zig"));
     lint_command.addFileArg(b.path("tests.zig"));

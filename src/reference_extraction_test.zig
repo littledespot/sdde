@@ -11,11 +11,10 @@ const account = @import("actions/reference/validate_reference_extraction_account
 const text_fixture = @import("test_fixtures/reference_text.zig");
 const token_fixture = @import("test_fixtures/reference_tokens.zig");
 
-test "native extraction composition repair renders the defect without echoing response nodes and preserves CAS" {
+test "native extraction composition defects cannot authorize unit repair or change candidates" {
     const repair = @import("domain/reference_extraction_text_repair.zig");
     const contexts = @import("domain/reference_extraction_context.zig");
     const atomic = @import("domain/atomic_repair.zig");
-    const packets = @import("domain/model_input_packet.zig");
     for ([_][]const u8{ "Display the current UTC time. Consult requirements.md.\n", "Renew eligible loans. Consult requirements.md.\n" }) |source| inline for (.{ extraction.Kind.business, extraction.Kind.technical }) |kind| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
@@ -24,7 +23,6 @@ test "native extraction composition repair renders the defect without echoing re
         const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", source));
         const context = try text_fixture.prepare(a, inputs);
         defer context.deinit();
-        const available = try token_fixture.candidates(a, inputs);
         const passive: extraction.text.PassiveReference = .{ .passive_literal_id = context.registry.records[0].id };
         const bad: extraction.ProposalContent = @unionInit(extraction.ProposalContent, @tagName(kind), if (kind == .business)
             extraction.text.BusinessText{ .segments = &.{.{ .passive = passive }} }
@@ -35,26 +33,11 @@ test "native extraction composition repair renders the defect without echoing re
         const rejection = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
         try std.testing.expectEqual(.reference_only, rejection.issue.reason);
         const facts = try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), candidate);
-        const authorization = try repair.authorize(a, facts, rejection);
-        const before = try atomic.snapshot(repair.Authorization, a, authorization);
-        const packet = try repair.packet(std.testing.allocator, facts, context.registry, text_fixture.safety.value(context.owner), available, authorization);
-        defer packets.release(packet);
-        const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
-        const diagnostic = body.get("repair").?.object;
-        try std.testing.expect(!diagnostic.contains("current_value"));
-        const rule = diagnostic.get("rule").?.object;
-        try std.testing.expectEqualStrings(context.registry.records[0].value, rule.get("rendered_text").?.string);
-        try std.testing.expectEqual(@as(usize, 2), rule.get("field_rule").?.object.count());
-        try std.testing.expectEqual(rejection.issue.field.?, packet.fieldPolicies()[0].field);
-        try std.testing.expectEqualStrings(@tagName(rejection.issue.field.?), rule.get("field_rule").?.object.get("field").?.string);
-        try std.testing.expect(std.mem.indexOf(u8, packet.body(), "\"kind\":\"passive\"") == null);
-        try std.testing.expectEqualDeep(before, try atomic.snapshot(repair.Authorization, a, authorization));
-        const replacement: repair.Replacement = if (kind == .business) .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Preserve the source-backed obligation." } }} } } else .{ .reference = .{ .nodes = &.{.{ .literal = .{ .value = "Preserve the source-backed technical constraint." } }} } };
-        const merged = try repair.merge(a, try extraction.text.CanonicalText.fromInputs(a, text_fixture.normalizer, inputs), facts, authorization, replacement, null);
-        _ = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, merged)).valid;
-        try std.testing.expectEqualDeep(candidate.entries[0].outcome.claims[0].citations, merged.entries[0].outcome.claims[0].citations);
-        const changed_facts = try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), merged);
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try extraction.text.CanonicalText.fromInputs(a, text_fixture.normalizer, inputs), changed_facts, authorization, replacement, null));
+        const before = try atomic.snapshot(extraction.Parsed, a, candidate);
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, facts, rejection));
+        try std.testing.expectEqualDeep(before, try atomic.snapshot(extraction.Parsed, a, candidate));
+        const repeated = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
+        try std.testing.expectEqualDeep(rejection, repeated);
     };
 }
 
@@ -550,6 +533,9 @@ test "text repair preserves siblings and exposes remaining classification defect
         const projected = try @import("domain/model_candidate_json.zig").decode(extraction.text.Issue, a, try std.json.Stringify.valueAlloc(a, rule.get("issue").?, .{}));
         try std.testing.expectEqualDeep(rejection.issue, projected);
         const wire = try @import("domain/model_candidate_json.zig").encodeSelected(repair.Replacement, a, replacement);
+        var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+        const schema = try compiler.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/extraction.schema.json", a, .limited(1_048_576)));
+        try @import("test_fixtures/prepared_model_repair.zig").check(a, packet, schema, wire, null);
         const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (facts).text.inputs), facts, authorization, try repair.parse(a, authorization, packet, wire), correction);
         try std.testing.expectEqualDeep(candidate.entries[0].outcome.claims[0], merged.entries[0].outcome.claims[0]);
         try std.testing.expectEqualDeep(candidate.entries[0].outcome.claims[1].citations, merged.entries[0].outcome.claims[1].citations);

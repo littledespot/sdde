@@ -1641,7 +1641,7 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expect(!view.contains(.published_workflow_output));
             } else if (driver.failed_repair) {
                 const rejected = (try @import("../../src/application/candidate_validation_diagnostics.zig").read(&view)).?.specification;
-                // Membership was corrected, but the replacement's blank text
+                // Membership was corrected, but the replacement's invalid scalar
                 // still fails within the original bounded record assignment.
                 try std.testing.expect(rejected.issue.membership == null);
                 try std.testing.expectEqual(.typed_text, rejected.issue.rule);
@@ -2619,7 +2619,9 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                         const inputs = try support_workflow.inputs(&view, try support_workflow.progress(&view));
                         try std.testing.expectEqual(@as(u64, @intCast(try sourceReviewAssignments(allocator, inputs, retained) + merges)), issues[0].revision);
                         if (unchanged) {
-                            try std.testing.expectEqualStrings(" ", retained.review.entries[0].value.question.?);
+                            // Preserve the exact native scalar fault and its retained
+                            // no-progress authority; composition defects use protocol correction.
+                            try std.testing.expectEqualStrings("Invalid scalar\x01", retained.review.entries[0].value.question.?);
                             try std.testing.expect(runner.repair_retry.currentPermit() != null);
                         }
                         for (retained.origins[1..]) |origin| try std.testing.expect(origin != null);
@@ -2679,13 +2681,25 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 try std.testing.expectError(error.FileNotFound, project.dir.access(io, "requirements/current/chosen/spec.md", .{}));
                 try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
                 if (driver.story_omission == .invalid_repair) {
-                    // Protocol-valid whitespace drops the authorized exact
-                    // reference: merge rejects without granting another repair.
-                    try std.testing.expect(result == .execution_rejected and result.execution_rejected == .operation_failed);
-                    try std.testing.expectEqual(error.InvalidReferenceReconciliation, result.execution_rejected.operation_failed);
-                    try std.testing.expectEqualStrings("merge-specification-omission-repair", driver.rejected_operation.?);
+                    // Blank repair text is rejected at response admission. The
+                    // existing correction allowance exhausts before any merge.
+                    try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);
+                    const exhausted = result.execution_rejected.retry_limit;
+                    try std.testing.expectEqual(@as(u64, exhausted.limit.value) + 1, exhausted.completed_executions);
                     try std.testing.expectEqual(@as(usize, 0), driver.omission_merges);
-                    try std.testing.expectEqual(@as(usize, 1), driver.omission_repair_calls);
+                    try std.testing.expectEqual(exhausted.completed_executions, driver.omission_repair_calls);
+                    const requests = @import("../../src/application/model_request_workflow.zig");
+                    const request = try requests.readCurrent(&view, requests.prepared_schema);
+                    try std.testing.expect(request.protocolCorrection() != null);
+                    try std.testing.expect(request.id().purpose == .atomic_repair);
+                    const parts = request.prepared().?.content;
+                    var reason = try std.json.parseFromSlice(std.json.Value, allocator, parts[parts.len - 2].guidance, .{});
+                    defer reason.deinit();
+                    const fields = reason.value.object.get("diagnostic").?.object.get("composition").?.array.items;
+                    try std.testing.expectEqual(@as(usize, 1), fields.len);
+                    try std.testing.expectEqualStrings("/value", fields[0].object.get("path").?.string);
+                    try std.testing.expectEqualStrings("spec_story", fields[0].object.get("field").?.string);
+                    try std.testing.expectEqualStrings("blank", fields[0].object.get("reason").?.string);
                     try std.testing.expect(session.units[1].?.last_repair == null);
                 } else {
                     try std.testing.expect(result == .execution_rejected and result.execution_rejected == .retry_limit);

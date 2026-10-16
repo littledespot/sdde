@@ -1871,19 +1871,26 @@ change which candidates are admitted, so the baseline must be frozen after them.
    fields only where that changes the answer, remove duplicate rules, and describe
    permission without obligation wording. The selected schema stays the authority for
    what is permitted. No field-, case- or model-specific text.
-4. **Decide the repair granularity for composition failures (decision required).**
-   - **(a) Unit-level correction (recommended).** Route `reference_only` through the
+4. **Decide the repair granularity for composition failures. Decided: option (a),
+   approved by the user, 16 October 2026.**
+   - **(a) Unit-level correction (approved).** Route `reference_only` through the
      unit's existing bounded protocol correction, with the complete original
      assignment, as embedded insertion syntax already is. Composition is a property of
      the whole response, its defective fields share one cause, and that route succeeded
      live for the brief.
-   - **(b) Richer field repair.** Keep unit repair, but give record-field composition
-     repairs the record's sibling values and its source group, and repair all
-     composition defects of one record in one request.
+   - **(b) Richer field repair (not selected).** Keep unit repair, but give
+     record-field composition repairs the record's sibling values and its source
+     group, and repair all composition defects of one record in one request.
 
-   Either option amends the routing sentence in the
-   [composition contract](../design/contracts/text-field-composition.md#wire-syntax-and-the-source-occurrence-exception).
-   No-progress exhaustion stays, applied to whichever owner handles the failure.
+   The amendment is recorded in the
+   [composition contract](../design/contracts/text-field-composition.md#phase-1a3-amendment--composition-defects-are-corrected-as-a-unit)
+   and [§22.4](../design/contracts/22-repair.md#224-repair-request-and-response):
+   composition rules are checked at response admission for every response type, one
+   rejection reports every violating field, correction uses the existing bounded
+   protocol correction with the complete request, and unit repair no longer receives
+   composition defects. Offline implementation and attribution preparation are
+   recorded in [the Phase 1A.3 record](FIX04-phase1a3-implementation.md). Live
+   attribution and the presentation change remain pending.
 5. **Measure entity applicability as its own failure class.** No native rule can judge
    it. Record false-required applicability and its downstream cost in Phase 2
    attribution, and do not narrow the entity-name exception on this evidence.
@@ -1896,8 +1903,8 @@ correction and every repair route; the retained replay extended with the 18:58
 captures, still rejecting every captured defect; offline integration; then
 `zig build verify --summary all`.
 
-**Exit gate:** offline checks pass and decision 4 is recorded; the change is
-committed; then one separately approved diagnostic each for hello-world and
+**Exit gate:** offline checks pass; decision 4 is recorded (16 October 2026); the
+change is committed; then one separately approved diagnostic each for hello-world and
 loan-renewal on that committed build. Each must either admit records with prose, or
 end in a typed composition failure after one correction or repair that had complete
 unit context, with admission escape measured zero. This also closes Phase 1A.2's live

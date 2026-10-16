@@ -77,6 +77,25 @@ implemented changes, finished experiments and their verification. A failed
 experiment is completed execution, not completed semantic acceptance. Outstanding
 work remains below.
 
+**16 October 2026 — FIX04 Phase 1A.2 live diagnostic and Phase 1A.3 decision:**
+Phase 1A.2 (model-facing presentation from the field registry) is committed as
+`2e64a31`; its offline evidence is in [the Phase 1A.2 record](FIX04-phase1a2-implementation.md).
+The separately approved [18:58 hello-world run](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/report.json)
+ran on that code before it was committed, so it is diagnostic evidence only. The
+brief and story were admitted with prose, admission escape was measured zero, and
+the run failed at record generation with `RepairNoProgress` after 14 calls and
+20,374 tokens: record fields collapsed into insertions and the field-level repair
+repeated the value ([FIX04 F12](FIX04.md#f12--high-descriptive-fields-recover-but-record-fields-collapse-to-insertions)).
+The user approved Phase 1A.3 decision 4, option (a): composition defects are rejected
+at response admission and corrected through the existing bounded protocol
+correction, recorded in the
+[composition contract](../design/contracts/text-field-composition.md#phase-1a3-amendment--composition-defects-are-corrected-as-a-unit)
+and §22.4. Decision 4 routing and attribution preparation are now implemented
+offline ([implementation record](FIX04-phase1a3-implementation.md)). The separately
+approved attribution sends and resulting presentation correction in
+[Phase 1A.3](FIX04.md#phase-1a3--attribute-insertion-presentation-and-repair-collapsed-units-as-units)
+remain pending before the Phase 2 baseline freeze.
+
 **16 October 2026 — FIX04 Phase 1A live result and Phase 1A.2 decision:** Phase 1A
 (text-field composition admission) is committed as `bfec3d7`; its implementation
 and offline evidence are in [the Phase 1A record](FIX04-phase1a-implementation.md).

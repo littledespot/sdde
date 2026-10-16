@@ -357,3 +357,12 @@ test "source-aware prose normalization propagates Unicode owner and allocation e
     try std.testing.expectError(error.InvalidNamingPolicy, wire.normalizeProse(std.testing.allocator, "Ordinary prose", &.{}, .{ .normalize_fn = fake.failed }));
     try std.testing.expectError(error.OutOfMemory, wire.normalizeProse(std.testing.allocator, "Ordinary prose", &.{}, .{ .normalize_fn = fake.exhausted }));
 }
+
+test "composition routing includes blank native values without field metadata and preserves scalar identity repairs" {
+    for ([_]@FieldType(text.Issue, "reason"){ .blank, .reference_only, .prohibited_exact, .prohibited_passive, .prohibited_source, .embedded_insertion_syntax }) |reason| {
+        try std.testing.expect((text.Issue{ .reason = reason, .first_node = 0, .last_node = 0 }).isComposition());
+    }
+    for ([_]@FieldType(text.Issue, "reason"){ .empty, .invalid_scalar, .unknown_exact, .unknown_passive, .unknown_source }) |reason| {
+        try std.testing.expect(!(text.Issue{ .reason = reason, .field = .spec_story, .first_node = 0, .last_node = 0 }).isComposition());
+    }
+}

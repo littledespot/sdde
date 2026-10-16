@@ -1,0 +1,67 @@
+{
+  "version": "insertion-presentation-sources/v1",
+  "run_path": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31",
+  "run_id": "RUN-dea0536ccfa67b3b2f8db4048f28330c",
+  "captures": [
+    {
+      "file": "extraction.context.json",
+      "sha256": "816213cd189f10ee433437d13d5bf812c9e3fd40f517b050233ebc1792fe7351",
+      "original": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000001/context.json"
+    },
+    {
+      "file": "extraction.request.json",
+      "sha256": "84487d88c9a2fd54226e5a04ba95923573d8b41e549081ef5d101c1359ca7f38",
+      "original": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000001/request.json"
+    },
+    {
+      "file": "extraction.response.json",
+      "sha256": "42faa3495e4ee4424f4dea5b0332f191988ac1c61a307ed906a9357e1bb30bbd",
+      "original": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000001/response.json"
+    },
+    {
+      "file": "extraction.model_output.txt",
+      "sha256": "6ac14aa1ea3717f60606f638467bdd102029fc5b3a7581441dd0cd1f3d38b831",
+      "original": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000001/model_output.txt"
+    },
+    {
+      "file": "extraction.outcome.json",
+      "sha256": "5d12ad07bc5d88628ab13d61e5b4504bd9e672604a6ec09646da883dfc293e3c",
+      "original": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000001/outcome.json"
+    },
+    {
+      "file": "extraction.description.json",
+      "sha256": "8f79b49dd216028f0cef66b8e8cad81797096328ae1423116a7f0148718ce384",
+      "original": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/project/specs/hello-world/logs/prompts/RUN-dea0536ccfa67b3b2f8db4048f28330c/LOGBIND-1/0001.log#request-1-inference-1/request_description"
+    },
+    {
+      "file": "records.context.json",
+      "sha256": "d6f9a0e340f648713d31d2ff12392b996f1afa100d19847d1deb7127a336ad38",
+      "original": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000013/context.json"
+    },
+    {
+      "file": "records.request.json",
+      "sha256": "ee4da43b977ab514f0e9ad708885d5a69d168cece4f21b09583ff4fde84a5706",
+      "original": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000013/request.json"
+    },
+    {
+      "file": "records.response.json",
+      "sha256": "25b4f973751bb423236bf9d77e658eacce8a917fc11e241107158ff1967daefc",
+      "original": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000013/response.json"
+    },
+    {
+      "file": "records.model_output.txt",
+      "sha256": "7fd0540294ae13e5d67188659a4a80a3a822857920f54f28e1e4d02b610835c3",
+      "original": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000013/model_output.txt"
+    },
+    {
+      "file": "records.outcome.json",
+      "sha256": "9483d81eae844366800a0adb35e34d7f0e77c12b963d61c168de7d4e7ddde717",
+      "original": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000013/outcome.json"
+    },
+    {
+      "file": "records.description.json",
+      "sha256": "fe7aed9146e289c2b07e7c526d66d2917a0d7974e0c528028d5e77b7194a43c6",
+      "original": "zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/project/specs/hello-world/logs/prompts/RUN-dea0536ccfa67b3b2f8db4048f28330c/LOGBIND-1/0001.log#request-11-inference-1/request_description"
+    }
+  ]
+}

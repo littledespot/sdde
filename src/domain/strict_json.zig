@@ -41,7 +41,6 @@ pub const Diagnostic = struct {
             .MissingField => "JSON decoding failed: a required field is missing.",
             .LengthMismatch => "JSON decoding failed: the value has an invalid length.",
             .ValueTooLong => "JSON decoding failed: the value exceeds the decoder's declared limit.",
-            .EmbeddedInsertionSyntax => "Model text decoding failed: insertion wire syntax cannot be written inside prose unless the exact bytes occur in the original sources. Return prose and typed insertions in their declared wire shapes.",
         };
     }
 
@@ -76,7 +75,6 @@ pub const Diagnostic = struct {
         LengthMismatch,
         BufferUnderrun,
         ValueTooLong,
-        EmbeddedInsertionSyntax,
     };
 };
 
@@ -85,7 +83,7 @@ pub const Diagnostic = struct {
 pub fn decode(comptime T: type, allocator: std.mem.Allocator, bytes: []const u8, limits: Limits) Error!T {
     var parsed = try parse(allocator, bytes, limits, false, null);
     defer parsed.deinit();
-    if (T != std.json.Value) try wireTypes(T, parsed.value);
+    try wireTypes(T, parsed.value);
     return std.json.parseFromSliceLeaky(T, allocator, bytes, .{
         .allocate = .alloc_always,
         .duplicate_field_behavior = .@"error",
@@ -97,6 +95,9 @@ pub fn decode(comptime T: type, allocator: std.mem.Allocator, bytes: []const u8,
 // Zig also accepts quoted numbers, numeric enum tags and byte arrays as
 // strings. Closed wire contracts must reject those conversions consistently.
 fn wireTypes(comptime T: type, value: std.json.Value) Error!void {
+    // An explicit diagnostic JSON leaf is inert evidence at any nesting depth.
+    // Its enclosing native metadata still follows the closed wire contract.
+    if (T == std.json.Value) return;
     switch (@typeInfo(T)) {
         .@"struct" => |s| {
             if (value != .object or value.object.count() != s.fields.len) return error.InvalidJsonDocument;
@@ -244,6 +245,30 @@ test "closed fixed arrays and empty tagged variants reject length wire-kind and 
         "{\"counters\":[1,2],\"unit\":{\"feature\":null}}",
         "{\"counters\":[1,2],\"unit\":{\"feature\":{\"approved\":true}}}",
     }) |bytes| try std.testing.expectError(error.InvalidJsonDocument, decode(Value, a, bytes, .{ .maximum_depth = 8 }));
+}
+
+test "explicit nested JSON evidence preserves closed metadata without wire coercion" {
+    const Record = struct { id: u32, label: []const u8, kind: enum { diagnostic }, enabled: bool, evidence: []const ?std.json.Value };
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const bytes = "{\"id\":1,\"label\":\"capture\",\"kind\":\"diagnostic\",\"enabled\":true,\"evidence\":[null,{\"arbitrary\":[1,true,\"text\"]}]}";
+    const record = try decode(Record, a, bytes, .{ .maximum_depth = 8 });
+    try std.testing.expect(record.evidence[0] == null);
+    try std.testing.expectEqual(@as(usize, 3), record.evidence[1].?.object.get("arbitrary").?.array.items.len);
+    const raw = try decode(std.json.Value, a, "{\"arbitrary\":[1,true,null]}", .{ .maximum_depth = 8 });
+    try std.testing.expectEqual(@as(usize, 3), raw.object.get("arbitrary").?.array.items.len);
+    for ([_][2][]const u8{
+        .{ "\"id\":1", "\"id\":\"1\"" },
+        .{ "\"label\":\"capture\"", "\"label\":[99,97,112,116,117,114,101]" },
+        .{ "\"kind\":\"diagnostic\"", "\"kind\":0" },
+        .{ "\"enabled\":true", "\"enabled\":\"true\"" },
+        .{ "\"id\":1", "\"extra\":{},\"id\":1" },
+        .{ "\"arbitrary\":[1,true,\"text\"]", "\"arbitrary\":1,\"arbitrary\":2" },
+    }) |change| {
+        const rejected = try std.mem.replaceOwned(u8, a, bytes, change[0], change[1]);
+        try std.testing.expectError(error.InvalidJsonDocument, decode(Record, a, rejected, .{ .maximum_depth = 8 }));
+    }
 }
 
 test "strict JSON retains native reasons and byte locations with owned context" {

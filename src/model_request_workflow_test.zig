@@ -4142,11 +4142,11 @@ test "protocol retries retain only latest repeated or alternating decoder reject
                 try rejectProtocolResponse(&runner, consolidated);
                 const diagnostic = (try envelopeResult(&runner)).outcome().protocol_rejected.diagnostic;
                 if (body.len > 1) {
-                    try std.testing.expectEqual(.DuplicateField, diagnostic.reason);
-                    try std.testing.expectEqualStrings(if (std.mem.eql(u8, body, malformed_protocol_items)) "/items/1" else "/result/settings", diagnostic.context.?.path);
-                    try std.testing.expect(diagnostic.context.?.first_occurrence.?.byte_offset < diagnostic.context.?.repeated_occurrence.?.byte_offset);
+                    try std.testing.expectEqual(.DuplicateField, diagnostic.decoder.reason);
+                    try std.testing.expectEqualStrings(if (std.mem.eql(u8, body, malformed_protocol_items)) "/items/1" else "/result/settings", diagnostic.decoder.context.?.path);
+                    try std.testing.expect(diagnostic.decoder.context.?.first_occurrence.?.byte_offset < diagnostic.decoder.context.?.repeated_occurrence.?.byte_offset);
                 }
-                const retained_diagnostic = try std.json.Stringify.valueAlloc(fixture.arena.allocator(), diagnostic, .{});
+                const retained_diagnostic = try std.json.Stringify.valueAlloc(fixture.arena.allocator(), diagnostic.decoder, .{});
                 try std.testing.expectEqualStrings(body, (try observationResult(&runner)).outcome().validated.result().complete.content());
                 try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
                 const correction = (try currentRequest(&runner)).prepared().?;
@@ -8509,4 +8509,94 @@ test "protocol correction retains summary and signal guidance selection bounds c
             try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
         try std.testing.expectEqual(@as(usize, 2), fake.effect_count);
     }
+}
+
+test "composition protocol corrections keep complete assignment and grouped defects through recovery or exhaustion" {
+    const packets = @import("domain/model_input_packet.zig");
+    const text_schema = "{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"fragments\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":4294967295,\"items\":{\"oneOf\":[{\"type\":\"string\",\"minLength\":1,\"maxLength\":4294967295},{\"type\":\"object\",\"properties\":{\"kind\":{\"const\":\"exact_copy\"}},\"required\":[\"kind\"],\"additionalProperties\":false}]}}},\"required\":[\"fragments\"],\"additionalProperties\":false}]}";
+    const result_schema = "{\"$defs\":{\"text\":" ++ text_schema ++ "},\"type\":\"object\",\"properties\":{\"first\":{\"$ref\":\"#/$defs/text\"},\"second\":{\"$ref\":\"#/$defs/text\"}},\"required\":[\"first\",\"second\"],\"additionalProperties\":false}";
+    const invalid = "{\"first\":{\"fragments\":[{\"kind\":\"exact_copy\"}]},\"second\":{\"fragments\":[{\"kind\":\"exact_copy\"}]}}";
+    const corrected = "{\"first\":{\"fragments\":[\"Display \",{\"kind\":\"exact_copy\"},\" on request.\"]},\"second\":\"The user requests the current value.\"}";
+    const assignment = "{\"task\":\"Describe both supported conditions.\",\"siblings\":[\"The complete original context.\"],\"eligible_catalogue\":[7]}";
+    const field_bindings: []const @import("domain/model_text_field.zig").Binding = &.{
+        .{ .field = .spec_story, .path = &.{.{ .property = "first" }} },
+        .{ .field = .ac_given, .path = &.{.{ .property = "second" }} },
+    };
+    for ([_]bool{ false, true }) |consolidated| for ([_]bool{ false, true }) |recover| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const a = fixture.arena.allocator();
+        var definition = try protocolRetryYaml(&fixture);
+        definition = try std.mem.replaceOwned(u8, a, definition, ", input: input.txt", "");
+        definition = try std.mem.replaceOwned(u8, a, definition, ", input: input }", " }");
+        const graph = try fixture.compileWithAssets(try responseAdmissionYaml(&fixture, definition, consolidated), result_schema, false);
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        const raw = try packets.create(std.testing.allocator, assignment, .workflow_step, .initial_generation, null);
+        defer packets.release(raw);
+        const bound = try packets.withFieldPolicies(std.testing.allocator, raw, field_bindings);
+        defer packets.release(bound);
+        const original_sources: []const @import("domain/model_text_wire.zig").SourceText = &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = "Display the exact supplied value on request." }};
+        const witnessed = try packets.withOriginalSourceTexts(std.testing.allocator, bound, original_sources);
+        runner.envelope.slots[@intFromEnum(requests.packet_schema.key)] = try requests.adoptPacket(std.testing.allocator, witnessed);
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        try prepareProtocolAttempt(&runner, false);
+        const original = (try currentRequest(&runner)).prepared().?;
+        const schema_owner = original.response_schema;
+        const controls = original.controls;
+        const original_id = original.model_request_id;
+        const original_input = try a.dupe(u8, original.content[original.content.len - 1].user);
+        const original_prompt = original.content[0];
+        const attempts: usize = if (recover) 2 else 3;
+        for (0..attempts) |index| {
+            fake.invocation_plan.complete.content = if (recover and index == 1) corrected else invalid;
+            if (index != 0) try prepareProtocolAttempt(&runner, true);
+            const active = (try currentRequest(&runner)).prepared().?;
+            try std.testing.expect(active.model_request_id == original_id);
+            try std.testing.expect(active.response_schema == schema_owner);
+            try std.testing.expectEqualDeep(controls, active.controls);
+            try std.testing.expectEqualDeep(field_bindings, active.field_policies);
+            try std.testing.expectEqualDeep(original_sources, active.original_sources);
+            if (recover and index == 1) {
+                for ([_][]const u8{ "call", "validate-response", "complete-operation" }) |step| try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+                if (!consolidated) try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "decode" }).outcome);
+                try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "validate-payload" }).outcome);
+                for ([_][]const u8{ "close-request", "observe" }) |step| try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = step }).outcome);
+            } else {
+                try rejectProtocolResponse(&runner, consolidated);
+                const diagnostic = (try envelopeResult(&runner)).outcome().protocol_rejected.diagnostic.composition;
+                try std.testing.expectEqual(@as(usize, 2), diagnostic.fields.len);
+                for (diagnostic.fields, [_][]const u8{ "/first", "/second" }) |field, path| {
+                    try std.testing.expectEqual(.reference_only, field.issue.reason);
+                    try std.testing.expectEqualStrings(path, field.path);
+                }
+                try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
+                const correction = (try currentRequest(&runner)).prepared().?;
+                try std.testing.expectEqualDeep(original_prompt, correction.content[0]);
+                try std.testing.expectEqualStrings(original_input, correction.content[1].user);
+                var guidance = try std.json.parseFromSlice(std.json.Value, a, correction.content[3].guidance, .{});
+                defer guidance.deinit();
+                const rejected_fields = guidance.value.object.get("diagnostic").?.object.get("composition").?.array.items;
+                try std.testing.expectEqual(@as(usize, 2), rejected_fields.len);
+                for (rejected_fields, [_][]const u8{ "/first", "/second" }) |field, path| {
+                    try std.testing.expectEqualStrings(path, field.object.get("path").?.string);
+                    try std.testing.expectEqualStrings("reference_only", field.object.get("reason").?.string);
+                }
+                const repeated = std.mem.indexOf(u8, correction.content[2].guidance, "previous correction still failed") != null;
+                try std.testing.expectEqual(index != 0, repeated);
+                try std.testing.expectEqualStrings(assignment, witnessed.body());
+            }
+        }
+        if (!recover) {
+            const exhausted = runner.bindings().invokeStep(.{ .bytes = "account" });
+            try std.testing.expectEqualStrings("account", exhausted.rejected.retry_limit.operation().bytes);
+            try std.testing.expectEqual(@as(u32, 2), exhausted.rejected.retry_limit.limit.value);
+            try std.testing.expectEqual(@as(u64, 3), exhausted.rejected.retry_limit.completed_executions);
+        }
+        try std.testing.expectEqual(attempts, fake.effect_count);
+        try std.testing.expectEqual(@as(usize, @intFromBool(recover)), fixture.observer.calls);
+        try std.testing.expectEqual(@as(u128, attempts * 7), runner.tokenLedger().committed());
+    };
 }

@@ -5,26 +5,13 @@ const identity = @import("model_request_identity.zig");
 const Origin = @import("model_candidate_origin.zig").Origin;
 const retry = @import("workflow_retry.zig");
 pub const CanonicalText = @import("typed_text.zig").CanonicalText;
-pub const Presentation = union(enum) {
-    structured,
-    composition: struct { rendered_text: []const u8, issue: @import("typed_text.zig").Issue },
-};
 pub const FieldSelection = union(enum) {
     replacement: json.FieldOptions,
     /// A native decoder selects a smaller declared wire type than the CAS
     /// replacement. Its owner supplies that same codec-derived field contract.
     selected: []const @import("model_text_field.zig").Binding,
 };
-pub const PacketOptions = struct { presentation: Presentation, fields: FieldSelection };
-
-/// Only native composition diagnostics select the rendered-defect projection.
-/// Scalar/identity defects keep their existing structured repair presentation.
-pub fn isCompositionIssue(issue: @import("typed_text.zig").Issue) bool {
-    return switch (issue.reason) {
-        .reference_only, .prohibited_exact, .prohibited_passive, .prohibited_source, .embedded_insertion_syntax => issue.field != null,
-        .empty, .blank, .invalid_scalar, .unknown_exact, .unknown_passive, .unknown_source => false,
-    };
-}
+pub const PacketOptions = struct { fields: FieldSelection };
 
 /// Selected native target retained until its owning validator observes the merge.
 pub fn Pending(comptime Target: type) type {
@@ -146,31 +133,13 @@ pub fn Contract(comptime Target: type, comptime Replacement: type, comptime Depe
             };
             if (!@import("model_text_field.zig").valid(bindings)) return error.InvalidAtomicRepair;
             const target = if (@hasDecl(Target, "guidance")) authorization.target.guidance() else authorization.target;
-            var repair = switch (options.presentation) {
-                .structured => blk: {
-                    const facts = .{ .operation = std.meta.activeTag(authorization.operation), .target = target, .rule = if (@hasDecl(Rule, "guidance")) authorization.rule.guidance() else authorization.rule };
-                    break :blk try strict.decode(std.json.Value, scratch, try json.encode(@TypeOf(facts), scratch, facts), limits);
-                },
-                .composition => |defect| blk: {
-                    if (!isCompositionIssue(defect.issue) or authorization.operation != .replace) return error.InvalidAtomicRepair;
-                    const field = defect.issue.field.?;
-                    for (bindings) |binding| {
-                        if (binding.field == field) break;
-                    } else return error.InvalidAtomicRepair;
-                    const guidance = @import("text_field_policy.zig").guidance(field);
-                    const facts = .{ .operation = std.meta.activeTag(authorization.operation), .target = target, .rule = .{
-                        .issue = .{ .reason = defect.issue.reason, .field = field, .instruction = defect.issue.description() },
-                        .field_rule = .{ .field = guidance.field, .instruction = guidance.instruction },
-                        .rendered_text = defect.rendered_text,
-                    } };
-                    break :blk try strict.decode(std.json.Value, scratch, try json.encode(@TypeOf(facts), scratch, facts), limits);
-                },
-            };
+            const facts = .{ .operation = std.meta.activeTag(authorization.operation), .target = target, .rule = if (@hasDecl(Rule, "guidance")) authorization.rule.guidance() else authorization.rule };
+            var repair = try strict.decode(std.json.Value, scratch, try json.encode(@TypeOf(facts), scratch, facts), limits);
             // Only optional presentation fields are omitted. Evidence, old values
             // and the native authorization retain their complete contracts.
             packets.omitAbsent(repair.object.getPtr("target").?);
             packets.omitAbsent(repair.object.getPtr("rule").?);
-            if (authorization.operation == .replace and options.presentation == .structured) {
+            if (authorization.operation == .replace) {
                 const current_value = try strict.decode(std.json.Value, scratch, try json.encodeSelected(Replacement, scratch, authorization.operation.replace), limits);
                 try repair.object.put(scratch, "current_value", current_value);
             }

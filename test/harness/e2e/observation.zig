@@ -14,12 +14,14 @@ pub const LastModelRejection = struct {
     origin: ?@import("../../../src/domain/model_candidate_origin.zig").Origin = null,
     reason: ?[]const u8 = null,
     json_error: @FieldType(c.Report, "json_error") = null,
+    composition_error: @FieldType(c.Report, "composition_error") = null,
     schema_error: @FieldType(c.Report, "schema_error") = null,
 
     pub fn deinit(self: *LastModelRejection, allocator: std.mem.Allocator) void {
         if (self.provider) |provider| allocator.free(provider.reason);
         if (self.reason) |reason| allocator.free(reason);
         if (self.json_error) |diagnostic| diagnostic.deinit(allocator);
+        if (self.composition_error) |diagnostic| diagnostic.deinit(allocator);
         if (self.schema_error) |diagnostic| allocator.free(diagnostic.path);
         self.* = .{};
     }
@@ -38,10 +40,12 @@ pub const LastModelRejection = struct {
         if (shape) |*value| value.path = try allocator.dupe(u8, value.path);
         errdefer if (shape) |value| allocator.free(value.path);
         const json_error = if (report.json_error) |value| try value.copy(allocator) else null;
+        errdefer if (json_error) |value| value.deinit(allocator);
+        const composition_error = if (report.composition_error) |value| try value.copy(allocator) else null;
         const provider = self.provider;
         self.provider = null;
         self.deinit(allocator);
-        self.* = .{ .provider = provider, .call = call, .origin = origin, .reason = reason, .json_error = json_error, .schema_error = shape };
+        self.* = .{ .provider = provider, .call = call, .origin = origin, .reason = reason, .json_error = json_error, .composition_error = composition_error, .schema_error = shape };
     }
 
     pub fn project(self: *const LastModelRejection, allocator: std.mem.Allocator, call: usize, report: *c.Report) !void {
@@ -57,10 +61,14 @@ pub const LastModelRejection = struct {
         if (shape) |*diagnostic| diagnostic.path = try allocator.dupe(u8, diagnostic.path);
         errdefer if (shape) |value| allocator.free(value.path);
         const json_error = if (self.json_error) |value| try value.copy(allocator) else null;
-        report.last_protocol_rejection = .{ .call = self.call, .origin = self.origin orelse return error.MissingRequestEvidence, .reason = retained, .json_error = json_error, .schema_error = shape };
+        errdefer if (json_error) |value| value.deinit(allocator);
+        const composition_error = if (self.composition_error) |value| try value.copy(allocator) else null;
+        errdefer if (composition_error) |value| value.deinit(allocator);
+        report.last_protocol_rejection = .{ .call = self.call, .origin = self.origin orelse return error.MissingRequestEvidence, .reason = retained, .json_error = json_error, .composition_error = composition_error, .schema_error = shape };
         if (self.call == call and report.workflow_outcome != .ok and report.model_diagnostic == null) {
             report.model_diagnostic = retained;
             report.json_error = json_error;
+            report.composition_error = composition_error;
             report.schema_error = shape;
         }
     }
@@ -183,7 +191,10 @@ pub fn capture(allocator: std.mem.Allocator, runner: *const @import("../../../sr
                 if (latest(ledger, result.source().operationId())) switch (result.outcome()) {
                     .protocol_rejected => |rejection| {
                         report.model_diagnostic = @errorName(rejection.reason);
-                        report.json_error = try rejection.diagnostic.copy(allocator);
+                        switch (rejection.diagnostic) {
+                            .decoder => |diagnostic| report.json_error = try diagnostic.copy(allocator),
+                            .composition => |diagnostic| report.composition_error = try diagnostic.copy(allocator),
+                        }
                     },
                     .decoded, .not_decoded => {},
                 };

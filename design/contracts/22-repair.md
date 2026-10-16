@@ -270,6 +270,16 @@ or resolve the defect. Changed repairs retain existing dependent/full validation
 This supersedes allowing an unchanged rejected replacement to merge and trigger
 re-review; it adds no route-specific rule or retry allowance.
 
+**Approved Phase 1A.3 amendment, implemented offline 16 October 2026:**
+composition defects (required prose, prohibited insertions and embedded insertion
+syntax) are no longer repair targets. They are rejected at response admission and
+corrected through the existing bounded protocol correction with the complete
+original request, as defined in the
+[composition contract](text-field-composition.md#phase-1a3-amendment--composition-defects-are-corrected-as-a-unit).
+Repair responses apply the same admission rule within their own request's
+correction bound. Other repair kinds and `unchanged_repair` exhaustion are
+unchanged.
+
 The repair guidance contains:
 
 - the exact diagnostic code and rule;

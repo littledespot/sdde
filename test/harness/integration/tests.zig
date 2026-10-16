@@ -759,6 +759,58 @@ test "retired protocol rejection stays associated with its call across later fai
     try std.testing.expectEqualStrings("/items/0/kind", later.schema_error.?.path);
 }
 
+test "composition reports retain every field across retirement rendering and later failures" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var snapshot: @import("../e2e/observation.zig").LastModelRejection = .{};
+    defer snapshot.deinit(std.testing.allocator);
+    const empty: c.Report = .{ .schema = .@"spec-e2e-report/v3", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed };
+    var rejected = empty;
+    rejected.model_diagnostic = "InvalidModelEnvelope";
+    rejected.last_model_call = 13;
+    rejected.last_model_origin = .{ .request = .{ .value = 11 }, .attempt = .{ .value = 1 } };
+    var path = "/records/0/given".*;
+    const fields = [_]@import("../../../src/domain/model_text_composition.zig").FieldIssue{
+        .{ .field = .ac_given, .path = &path, .issue = .{ .reason = .reference_only, .first_node = 0, .last_node = 0, .field = .ac_given } },
+        .{ .field = .ac_when, .path = "/records/0/when", .issue = .{ .reason = .embedded_insertion_syntax, .first_node = 1, .last_node = 2, .field = .ac_when } },
+    };
+    rejected.composition_error = .{ .fields = &fields };
+    try snapshot.observe(std.testing.allocator, 13, rejected);
+    @memset(&path, 'x');
+    try snapshot.observe(std.testing.allocator, 13, empty);
+    var exhausted = empty;
+    exhausted.diagnostic = "RetryLimitExhausted";
+    try snapshot.project(a, 13, &exhausted);
+    try std.testing.expect(exhausted.json_error == null);
+    try std.testing.expectEqual(@as(usize, 2), exhausted.composition_error.?.fields.len);
+    try std.testing.expectEqualStrings("/records/0/given", exhausted.composition_error.?.fields[0].path);
+    try std.testing.expectEqual(.embedded_insertion_syntax, exhausted.composition_error.?.fields[1].issue.reason);
+    try std.testing.expectEqualDeep(rejected.last_model_origin.?, exhausted.last_protocol_rejection.?.origin);
+    const bytes = try std.json.Stringify.valueAlloc(a, exhausted, .{});
+    const retained = try @import("../../../src/domain/strict_json.zig").decode(c.Report, a, bytes, .{ .maximum_depth = 64 });
+    try std.testing.expect(exhausted.composition_error.?.eql(retained.composition_error.?));
+    const markdown = try @import("../e2e/report.zig").renderMarkdown(a, exhausted);
+    const terminal = try @import("../e2e/report.zig").terminal(a, exhausted, "output", "run");
+    for ([_][]const u8{ "ac_given", "ac_when", "reference_only", "embedded_insertion_syntax" }) |needle| {
+        try std.testing.expect(std.mem.indexOf(u8, markdown, needle) != null);
+        try std.testing.expect(std.mem.indexOf(u8, terminal, needle) != null);
+    }
+    var progress: @import("../e2e/progress.zig").Progress = .init(std.testing.allocator);
+    defer progress.deinit();
+    exhausted.last_model_call = 13;
+    exhausted.last_model_origin = rejected.last_model_origin;
+    try progress.observe(1, "admit", exhausted, null);
+    try std.testing.expect(exhausted.composition_error.?.eql(progress.first.?.evidence.protocol.composition_error.?));
+    var later = empty;
+    try snapshot.project(a, 14, &later);
+    try std.testing.expect(later.composition_error == null);
+    try std.testing.expectEqual(@as(usize, 13), later.last_protocol_rejection.?.call);
+    try std.testing.expectEqual(@as(usize, 2), later.last_protocol_rejection.?.composition_error.?.fields.len);
+    snapshot.deinit(std.testing.allocator);
+    try std.testing.expectEqualStrings("/records/0/given", later.last_protocol_rejection.?.composition_error.?.fields[0].path);
+}
+
 test "source selection reports retain the producing call separately from the last call" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();

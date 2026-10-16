@@ -419,7 +419,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         const membership = auth.rule.group.?.membership;
                         const decision = membership.disposition;
                         var content_value = value.value;
-                        if (options.failed_repair) content_value = .{ .segments = &.{.{ .literal = .{ .value = " " } }} };
+                        if (options.failed_repair) content_value = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
                         const record: g.spec.Model.RecordProposal = .{ .content = if (decision == .required)
                             .{ .entity = .{ .name = content_value, .business_meaning = value.value, .relationships = &.{} } }
                         else
@@ -501,7 +501,9 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 }
             };
             if (options.repair and options.attempt == 1) {
-                const invalid: g.spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = " " } }} };
+                // Generic native unit-repair scenarios use a scalar defect;
+                // missing prose belongs to response protocol correction.
+                const invalid: g.spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "Invalid scalar\x01" } }} };
                 switch (unit) {
                     .brief => proposed.content.brief.title.value = invalid,
                     .primary_user_story => if (options.repair_across_units) {
@@ -732,9 +734,9 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                             .question_native_exhaust => if (options.support_merges == 0) {
                                 replacement.detail.detail = " ";
                             } else {
-                                replacement.detail.question = " ";
+                                replacement.detail.question = "Invalid scalar\x01";
                             },
-                            .question_mixed_exhaust => replacement.detail.question = if (options.attempt == 1) null else " ",
+                            .question_mixed_exhaust => replacement.detail.question = if (options.attempt == 1) null else "Invalid scalar\x01",
                             else => unreachable,
                         }
                         return sourceRepairWire(allocator, inputs, context, authorized, replacement);
@@ -779,7 +781,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         for (findings[0..4]) |*finding| {
                             finding.value.kind = .unsupported;
                             finding.value.detail = "The source establishes the action; its duration is unspecified.";
-                            finding.value.question = " ";
+                            finding.value.question = "Invalid scalar\x01";
                         }
                         for (ledger.requirements, findings) |requirement, *finding| if (requirement.seed.id.kind == .entity_applicability) {
                             if (inputs.specification == null) finding.value.kind = .not_applicable;
@@ -790,7 +792,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                         for (findings[0..2]) |*finding| {
                             finding.value.kind = .unsupported;
                             finding.value.detail = "The source establishes the action; its duration is unspecified.";
-                            finding.value.question = " ";
+                            finding.value.question = "Invalid scalar\x01";
                         }
                     },
                     .missing_detail => {
@@ -828,7 +830,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                     .missing_decision, .missing_text => {
                         finding.value.kind = .ambiguous;
                         finding.value.detail = applicability_detail;
-                        finding.value.question = if (mode == .missing_text) " " else applicability_question;
+                        finding.value.question = if (mode == .missing_text) "Invalid scalar\x01" else applicability_question;
                     },
                     .inconclusive => {
                         finding.value.kind = .inconclusive;

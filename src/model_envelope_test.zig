@@ -52,8 +52,8 @@ test "native prose selectors reject raw question wire syntax and retain independ
             }
         } else {
             try std.testing.expectError(error.InvalidModelEnvelope, (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic));
-            try std.testing.expectEqual(.EmbeddedInsertionSyntax, diagnostic.?.reason);
-            var correction = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, validated.evidence, .{ .decoder = diagnostic.? }, .unconfirmed, "Correct the rejected prose encoding.");
+            try std.testing.expectEqual(.embedded_insertion_syntax, diagnostic.?.composition.fields[0].issue.reason);
+            var correction = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, validated.evidence, .{ .composition = diagnostic.?.composition }, .unconfirmed, "Correct the rejected prose encoding.");
             defer correction.deinit();
             try std.testing.expectEqualDeep(fixture.prepared.request.prose_fields, correction.request.prose_fields);
             try std.testing.expect(correction.request.model_request_id == fixture.prepared.request.model_request_id);
@@ -93,13 +93,13 @@ test "model text wire grammar rejects encoded insertions before schema admission
             try std.testing.expect(diagnostic == null);
         } else {
             try std.testing.expectError(error.InvalidModelEnvelope, (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic));
-            try std.testing.expectEqual(.EmbeddedInsertionSyntax, diagnostic.?.reason);
-            try std.testing.expect(diagnostic.?.explanation().len != 0);
-            var correction = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, validated.evidence, .{ .decoder = diagnostic.? }, .unconfirmed, "Correct the rejected wire text only.");
+            try std.testing.expectEqual(.embedded_insertion_syntax, diagnostic.?.composition.fields[0].issue.reason);
+            try std.testing.expect(diagnostic.?.composition.fields[0].issue.description().len != 0);
+            var correction = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, validated.evidence, .{ .composition = diagnostic.?.composition }, .unconfirmed, "Correct the rejected wire text only.");
             defer correction.deinit();
             try std.testing.expect(correction.request.model_request_id == fixture.prepared.request.model_request_id);
             try std.testing.expect(correction.request.response_schema == fixture.prepared.request.response_schema);
-            try std.testing.expect(std.mem.indexOf(u8, correction.request.content[correction.request.content.len - 2].bytes(), "EmbeddedInsertionSyntax") != null);
+            try std.testing.expect(std.mem.indexOf(u8, correction.request.content[correction.request.content.len - 2].bytes(), "embedded_insertion_syntax") != null);
         }
         try std.testing.expectEqual(@as(usize, 1), fixture.fake.invocation_call_count);
         try std.testing.expectEqual(@as(u64, 10), validated.evidence.usage().?.total_tokens);
@@ -350,13 +350,13 @@ test "prefix normalization preserves valid keys and rejects every other malforme
         "{\"decision\":",
         "{\"decision\"",
     }) |bytes| {
-        var diagnostic: ?envelope.Diagnostic = null;
-        defer if (diagnostic) |failure| failure.deinit(std.testing.allocator);
-        try std.testing.expectError(error.InvalidModelEnvelope, envelope.parseContent(std.testing.allocator, bytes, &diagnostic));
-        var original: ?envelope.Diagnostic = null;
+        var syntax_diagnostic: ?envelope.SyntaxDiagnostic = null;
+        defer if (syntax_diagnostic) |failure| failure.deinit(std.testing.allocator);
+        try std.testing.expectError(error.InvalidModelEnvelope, envelope.parseContent(std.testing.allocator, bytes, &syntax_diagnostic));
+        var original: ?envelope.SyntaxDiagnostic = null;
         defer if (original) |failure| failure.deinit(std.testing.allocator);
         try std.testing.expectError(error.InvalidJsonDocument, @import("domain/strict_json.zig").parse(std.testing.allocator, bytes, .{ .maximum_depth = schema.max_json_depth }, false, &original));
-        try std.testing.expect(diagnostic.?.eql(original.?));
+        try std.testing.expect(syntax_diagnostic.?.eql(original.?));
     }
 }
 
@@ -498,7 +498,7 @@ test "every decoding allocation failure and syntax rejection frees partial trees
 }
 
 fn allocationCase(allocator: std.mem.Allocator, complete: *const invocation.CompleteCandidate, accepted: bool) !void {
-    var diagnostic: ?@import("domain/strict_json.zig").Diagnostic = null;
+    var diagnostic: ?@import("domain/model_envelope.zig").Diagnostic = null;
     defer if (diagnostic) |value| value.deinit(allocator);
     var decoded = (action.Action{}).execute(allocator, complete, &diagnostic) catch |err| switch (err) {
         error.OutOfMemory => {
@@ -527,5 +527,105 @@ fn checkDocument(bytes: []const u8, accepted: bool) !void {
     defer validated.deinit();
     try allocationCase(std.testing.allocator, validated.evidence.result().complete, accepted);
     try std.testing.expectEqualStrings(bytes, response.completed.raw_result.complete.content.bytes);
+    try std.testing.expectEqual(@as(usize, 1), fixture.fake.invocation_call_count);
+}
+
+const aggregate_bindings: []const @import("domain/model_text_field.zig").Binding = &.{
+    .{ .field = .ac_given, .path = &.{ .{ .property = "records" }, .items, .{ .variant = "acceptance_criterion" }, .{ .property = "given" } } },
+    .{ .field = .ac_when, .path = &.{ .{ .property = "records" }, .items, .{ .variant = "acceptance_criterion" }, .{ .property = "when" } } },
+    .{ .field = .extraction_business, .path = &.{.{ .property = "business" }} },
+    .{ .field = .reconciliation_technical, .path = &.{.{ .property = "technical" }} },
+    .{ .field = .entity_name, .path = &.{.{ .property = "identity" }} },
+    .{ .field = .spec_title, .path = &.{.{ .property = "a/b~c" }} },
+    // An absent selected union branch is not a returned leaf.
+    .{ .field = .entity_meaning, .path = &.{ .{ .property = "records" }, .items, .{ .variant = "entity" }, .{ .property = "meaning" } } },
+};
+const aggregate_questions: []const @import("domain/model_text_wire.zig").ProseField = &.{
+    .{ .field = .clarification_question, .path = &.{ .{ .property = "questions" }, .items } },
+};
+const aggregate_body =
+    \\{"records":[{"kind":"acceptance_criterion","given":{"fragments":[{"kind":"exact_copy"}]},"when":{"fragments":[{"kind":"passive","passive_literal_id":3}]}},{"kind":"acceptance_criterion","given":{"fragments":[{"kind":"exact_copy","claim_id":7}]},"when":"A valid condition."}],"business":{"fragments":["Describe ",{"kind":"source","source_id":1}]},"technical":{"fragments":[{"kind":"source","source_id":1}]},"identity":{"fragments":[{"kind":"exact_copy"},{"kind":"exact_copy","claim_id":7}]},"a/b~c":{"fragments":["Label ",{"kind":"exact_copy"}]},"questions":["Which {\"kind\":\"exact_copy\"} applies?","Which channel?"]}
+;
+
+test "response composition aggregates concrete sibling fields typed reasons and escaped pointers" {
+    const composition = @import("domain/model_text_composition.zig");
+    var document = try @import("domain/strict_json.zig").parse(std.testing.allocator, aggregate_body, .{ .maximum_depth = schema.max_json_depth }, false, null);
+    defer document.deinit();
+    const diagnostic = (try composition.check(std.testing.allocator, document.value, aggregate_bindings, aggregate_questions, &.{})).?;
+    defer diagnostic.deinit(std.testing.allocator);
+    const expected = [_]struct { path: []const u8, field: @import("domain/text_field_policy.zig").Field, reason: @FieldType(@import("domain/typed_text.zig").Issue, "reason") }{
+        .{ .path = "/records/0/given", .field = .ac_given, .reason = .reference_only },
+        .{ .path = "/records/1/given", .field = .ac_given, .reason = .reference_only },
+        .{ .path = "/records/0/when", .field = .ac_when, .reason = .reference_only },
+        .{ .path = "/business", .field = .extraction_business, .reason = .prohibited_source },
+        .{ .path = "/technical", .field = .reconciliation_technical, .reason = .reference_only },
+        .{ .path = "/a~1b~0c", .field = .spec_title, .reason = .prohibited_exact },
+        .{ .path = "/questions/0", .field = .clarification_question, .reason = .embedded_insertion_syntax },
+    };
+    try std.testing.expectEqual(expected.len, diagnostic.fields.len);
+    for (expected, diagnostic.fields) |want, actual| {
+        try std.testing.expectEqualStrings(want.path, actual.path);
+        try std.testing.expectEqual(want.field, actual.field);
+        try std.testing.expectEqual(want.reason, actual.issue.reason);
+    }
+    const copied = try diagnostic.copy(std.testing.allocator);
+    defer copied.deinit(std.testing.allocator);
+    try std.testing.expect(diagnostic.eql(copied));
+    try std.testing.expect(diagnostic.fields.ptr != copied.fields.ptr);
+    try std.testing.expect(diagnostic.fields[0].path.ptr != copied.fields[0].path.ptr);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, aggregateAllocation, .{document.value});
+}
+fn aggregateAllocation(a: std.mem.Allocator, value: std.json.Value) !void {
+    const diagnostic = (try @import("domain/model_text_composition.zig").check(a, value, aggregate_bindings, aggregate_questions, &.{})).?;
+    defer diagnostic.deinit(a);
+    const copied = try diagnostic.copy(a);
+    defer copied.deinit(a);
+    try std.testing.expect(diagnostic.eql(copied));
+}
+
+test "selected root leaves source witnesses malformed shapes and unrelated prose preserve their contracts" {
+    const composition = @import("domain/model_text_composition.zig");
+    const bindings: []const @import("domain/model_text_field.zig").Binding = &.{.{ .field = .spec_story, .path = &.{} }};
+    for ([_]struct { body: []const u8, source: ?[]const u8 = null, reason: ?@FieldType(@import("domain/typed_text.zig").Issue, "reason") = null }{
+        .{ .body = "{\"fragments\":[{\"kind\":\"exact_copy\"}]}", .reason = .reference_only },
+        .{ .body = "{\"fragments\":[\"Display \",{\"kind\":\"exact_copy\"},\" now.\"]}" },
+        .{ .body = "\" \\t\\n\"", .reason = .blank },
+        .{ .body = "\"Use {\\\"kind\\\":\\\"exact_copy\\\"}.\"", .reason = .embedded_insertion_syntax },
+        .{ .body = "\"Use {\\\"kind\\\":\\\"exact_copy\\\"}.\"", .source = "Original {\"kind\":\"exact_copy\"}." },
+        .{ .body = "\"Use { \\\"kind\\\":\\\"exact_copy\\\"}.\"", .source = "Original {\"kind\":\"exact_copy\"}.", .reason = .embedded_insertion_syntax },
+        .{ .body = "{\"fragments\":[{\"kind\":\"invented\"}]}" },
+        .{ .body = "{\"kind\":\"exact_copy\"}" },
+        .{ .body = "{\"fragments\":17}" },
+        // Scalar validity and malformed empty wire contracts retain their
+        // ordinary schema/native handling; no composition repair is added.
+        .{ .body = "\"Invalid scalar\\u0001\"" },
+        .{ .body = "{\"fragments\":[]}" },
+    }) |case| {
+        var parsed = try @import("domain/strict_json.zig").parse(std.testing.allocator, case.body, .{ .maximum_depth = schema.max_json_depth }, false, null);
+        defer parsed.deinit();
+        const sources: []const @import("domain/model_text_wire.zig").SourceText = if (case.source) |bytes| &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = bytes }} else &.{};
+        const diagnostic = try composition.check(std.testing.allocator, parsed.value, bindings, &.{}, sources);
+        defer if (diagnostic) |failure| failure.deinit(std.testing.allocator);
+        if (case.reason) |reason| {
+            try std.testing.expectEqual(@as(usize, 1), diagnostic.?.fields.len);
+            try std.testing.expectEqual(reason, diagnostic.?.fields[0].issue.reason);
+            try std.testing.expectEqualStrings("", diagnostic.?.fields[0].path);
+        } else try std.testing.expect(diagnostic == null);
+        // The same bytes in a schema's unrelated string have no field policy.
+        const unrelated = try composition.check(std.testing.allocator, parsed.value, &.{}, &.{}, sources);
+        try std.testing.expect(unrelated == null);
+    }
+}
+
+test "aggregate admission and protocol diagnostic copying clean every failed allocation" {
+    var fixture: Fixture = undefined;
+    try fixture.initWithFieldPolicies(model_text_schema, &.{}, &.{}, &.{.{ .field = .functional_requirement, .path = &.{.{ .property = "text" }} }});
+    defer fixture.deinit();
+    fixture.fake.invocation_plan.complete.content = "{\"text\":{\"fragments\":[{\"kind\":\"exact_copy\"}]}}";
+    var response = try fixture.response();
+    defer response.deinit();
+    var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
+    defer validated.deinit();
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, allocationCase, .{ validated.evidence.result().complete, false });
     try std.testing.expectEqual(@as(usize, 1), fixture.fake.invocation_call_count);
 }

@@ -515,7 +515,7 @@ pub const Runner = struct {
             var reason: ?[]const u8 = null;
             var event: @import("../domain/telemetry.zig").EventType = .model_protocol_failed;
             if (produces_decode) switch (evidence.outcome()) {
-                .protocol_rejected => |rejected| reason = @tagName(rejected.diagnostic.reason),
+                .protocol_rejected => |rejected| reason = rejected.diagnostic.label(),
                 .not_decoded => if (candidate.outcome == .invalid) {
                     reason = "MISSING_FINAL_TEXT";
                 } else return null,

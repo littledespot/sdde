@@ -104,6 +104,15 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
             } else return error.InvalidAtomicRepair;
             var target: Target = .{ .requirement = id, .ordinal = ordinal, .index = first };
             const value = candidate.review.entries[first].value;
+            if (purpose == .source) {
+                const questions = [_]?[]const u8{ value.question, if (value.authority_gap) |gap| gap.question else null };
+                for (questions) |question| if (question) |bytes| {
+                    const text = @import("typed_text.zig");
+                    const nodes: []const text.BusinessSegment = &.{.{ .literal = .{ .value = bytes } }};
+                    if (text.composition(text.BusinessSegment, .clarification_question, nodes)) |issue| if (issue.isComposition()) return error.UnsafeSupportRepair;
+                    if (try text.wireComposition(text.BusinessSegment, a, context.inputs, .clarification_question, nodes) != null) return error.UnsafeSupportRepair;
+                };
+            }
             if (rejection.issue == .duplicate_requirement) {
                 for (candidate.review.entries[first + 1 ..], first + 1..) |finding, index| {
                     if (finding.requirement_ordinal != ordinal) continue;
@@ -134,24 +143,7 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 .detail => if (purpose == .source and review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) "invalid_detail" else if (purpose == .source and review.decisionOf(authorization.rule.finding.?) == .candidate_omission) "omission_detail" else if (purpose == .source and @import("specification_support_evidence.zig").questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
                 .selection => if (purpose == .principles) "principle_selection" else if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) "invalid_selection" else "selection",
             };
-            var options: shared.PacketOptions = .{ .presentation = .structured, .fields = .{ .replacement = .{} } };
-            if (purpose == .source and kind == .detail and authorization.rule.rejection.issue == .invalid_question) {
-                const old = authorization.operation.replace.detail;
-                const question = if (old.authority_gap) |gap| gap.question else old.question;
-                if (question) |value| if (try @import("model_text_wire.zig").checkProse(a, value, base.originalSources()) != null) {
-                    options.presentation = .{ .composition = .{ .rendered_text = value, .issue = .{ .reason = .embedded_insertion_syntax, .first_node = 0, .last_node = 0, .field = .clarification_question } } };
-                };
-            }
-            const FixedGap = struct { kind: authority.AuthorityGap.GapKind, source_ids: []const @import("reference_identity.zig").SourceId };
-            const FixedFinding = struct { decision: review.Decision, source_ids: []const @import("reference_identity.zig").SourceId, authority_gap: ?FixedGap };
-            const contextual = if (purpose == .source and options.presentation == .composition) visible: {
-                const retained = authorization.rule.finding orelse return error.InvalidAtomicRepair;
-                // The detail decoder pins gap identity to the rejected native
-                // finding. Present those exact facts without its rejected prose.
-                break :visible try packets.withContext(FixedFinding, a, base, "retained_finding", .{ .decision = review.decisionOf(retained), .source_ids = retained.source_ids, .authority_gap = if (retained.authority_gap) |gap| .{ .kind = gap.kind, .source_ids = gap.source_ids } else null });
-            } else null;
-            defer if (contextual) |value| packets.release(value);
-            const raw_input = try atomic.packet(a, authorization, contextual orelse base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index], options);
+            const raw_input = try atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index], .{ .fields = .{ .replacement = .{} } });
             defer packets.release(raw_input);
             // A narrowed result schema owns its prose paths. It cannot inherit
             // question paths from the complete finding when they are absent.

@@ -107,7 +107,10 @@ Rejection uses the existing bounded protocol-correction path and never converts
 prose into an insertion or changes its bytes. Native and stored-value validation
 enforce the same rule if a canonical value bypasses wire decoding. A
 prose-required value containing only insertions is a typed `reference_only`
-composition issue, routed through existing authorized unit repair before review.
+composition issue. Under the implemented
+[Phase 1A.3 amendment](#phase-1a3-amendment--composition-defects-are-corrected-as-a-unit),
+it is rejected at response admission and corrected through the same bounded
+protocol correction before review.
 
 Stored clarification state can undergo structural loading before reference
 ingestion supplies the current original sources. Its engine-owned questions must
@@ -116,13 +119,45 @@ including retained records. This does not grant applicability from structural
 loading, add persisted source witnesses or permit rewriting protected forms.
 User answers retain their separate input contract.
 
+## Phase 1A.3 amendment — composition defects are corrected as a unit
+
+**Approved and implemented offline, 16 October 2026.** Authority: the user's explicit
+approval of [FIX04 Phase 1A.3](../../fixes/FIX04.md#phase-1a3--attribute-insertion-presentation-and-repair-collapsed-units-as-units)
+decision 4, option (a), following the live evidence in
+[FIX04 F12](../../fixes/FIX04.md#f12--high-descriptive-fields-recover-but-record-fields-collapse-to-insertions).
+Implementation and verification are recorded in
+[the Phase 1A.3 record](../../fixes/FIX04-phase1a3-implementation.md).
+Live attribution and the separately approved workflow diagnostics remain open.
+
+- **Detection moves to response admission.** The composition rules of this contract
+  (required prose, prohibited insertion kinds and wire syntax) are checked when a
+  model response is admitted, using the native wire-field bindings that already map
+  each returned text leaf to its registry field. One rejection reports every
+  violating field of that response, each with its typed reason (`reference_only`,
+  prohibited insertion or embedded insertion syntax).
+- **Correction uses the existing protocol-correction owner.** The rejected response
+  goes through the same bounded protocol correction as other admission failures. It
+  retains the active assignment, schema, eligible catalogue and retry allowance, and
+  presents the complete original request with the typed reasons. No new correction
+  allowance, route or model call is added; exhausting the existing bound ends in its
+  existing typed outcome.
+- **Every response type is covered.** Generation units, extraction, reconciliation,
+  clarification questions and repair responses all apply the rule at their own
+  admission and correct through their own request's protocol-correction bound.
+- **Unit repair no longer receives composition defects.** The composition-specific
+  repair presentation introduced in Phase 1A.2 is removed with this routing unless
+  another consumer still needs it; there is no parallel path. Repairs for other
+  defect kinds, and their `unchanged_repair` exhaustion, are unchanged.
+- **Unchanged elsewhere.** Native and stored-value validation still enforce the same
+  rules for values that bypass wire decoding, with no compatibility reader. Coverage,
+  the source-occurrence exception and the field inventory are unchanged.
+
 ## Unchanged repair and reporting
 
-Composition repairs present the canonical rendered defect and its registry rule.
-They omit the rejected wire value and raw containing candidate from model-visible
-context. Exact old-value, revision and dependency witnesses remain native for
-compare-and-swap. Repairs with other diagnostic kinds keep their structured
-presentation; every replacement uses the same per-field schema projection.
+Composition defects use response-level protocol correction. Other diagnostic
+kinds keep their structured unit-repair presentation and exact native old-value,
+revision and dependency witnesses for compare-and-swap; every replacement uses
+the same per-field schema projection and response admission.
 
 After exact active-permit, old-value, revision and dependency checks, canonical
 replacement equality identifies no progress for that same defect key. The shared

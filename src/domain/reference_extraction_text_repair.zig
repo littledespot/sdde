@@ -42,6 +42,7 @@ pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!@im
 }
 
 pub fn authorize(a: std.mem.Allocator, facts: Facts, rejection: e.TextRejection) Error!Authorization {
+    if (rejection.issue.isComposition()) return error.InvalidAtomicRepair;
     const parsed = facts.candidate;
     if (parsed.revision != rejection.revision or !facts.text.inputs.corpus.state_id.eql(rejection.scope.state_id) or
         !std.meta.eql(rejection.dependencies, try shared.snapshot(Facts, a, facts))) return error.InvalidAtomicRepair;
@@ -74,17 +75,7 @@ pub fn packet(a: std.mem.Allocator, facts: Facts, registry: @import("passive_lit
             inline else => |_, tag| e.text.field_policy.referenceField(.extraction, @tagName(tag)),
         },
     };
-    var options: shared.PacketOptions = .{ .presentation = .structured, .fields = .{ .replacement = .{ .inherited = field, .reference_phase = .extraction } } };
-    var rendered: ?[]const u8 = null;
-    defer if (rendered) |bytes| a.free(bytes);
-    if (shared.isCompositionIssue(authorization.rule.issue)) {
-        const value: @import("model_evidence.zig").Text = switch (authorization.operation.replace) {
-            .business => |text| .{ .business = text },
-            .reference => |text| .{ .reference = text },
-        };
-        rendered = @import("model_evidence.zig").resolveText(a, facts.text.inputs, registry, &.{scope}, value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAtomicRepair;
-        options.presentation = .{ .composition = .{ .rendered_text = rendered.?, .issue = authorization.rule.issue } };
-    }
+    const options: shared.PacketOptions = .{ .fields = .{ .replacement = .{ .inherited = field, .reference_phase = .extraction } } };
     return atomic.packet(a, authorization, base, .{ .bytes = switch (authorization.operation.replace) {
         .business => "business_text_replacement",
         .reference => "reference_text_replacement",

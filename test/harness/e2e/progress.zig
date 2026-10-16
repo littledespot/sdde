@@ -23,7 +23,7 @@ pub const Progress = struct {
             const evidence: ?@FieldType(c.NativeRejection, "evidence") = if (report.candidate_error) |value|
                 .{ .candidate = value }
             else if (report.model_diagnostic) |reason|
-                .{ .protocol = .{ .call = report.last_model_call orelse return error.MissingRequestEvidence, .origin = report.last_model_origin orelse return error.MissingRequestEvidence, .reason = reason, .json_error = report.json_error, .schema_error = report.schema_error } }
+                .{ .protocol = .{ .call = report.last_model_call orelse return error.MissingRequestEvidence, .origin = report.last_model_origin orelse return error.MissingRequestEvidence, .reason = reason, .json_error = report.json_error, .composition_error = report.composition_error, .schema_error = report.schema_error } }
             else if (report.provider_diagnostic) |reason|
                 .{ .provider = .{ .call = if (report.provider_origin != null) report.last_model_call else null, .origin = report.provider_origin, .reason = reason, .content = report.provider_content_diagnostic } }
             else if (report.last_operation_rejection) |value|

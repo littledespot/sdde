@@ -278,7 +278,7 @@ pub fn omissionPacket(a: std.mem.Allocator, current: sessions.Session, context: 
     return atomic.packet(a, authorization, narrowed, .{ .bytes = definition }, current.units[authorization.target.unit].?.origins.at(switch (authorization.target.part) {
         .record => .unit,
         .value => |field| .{ .target = .{ .value = .{ .subject = field.subject, .field = field.field } } },
-    }), .{ .presentation = .structured, .fields = .{ .replacement = .{ .inherited = text_field } } });
+    }), .{ .fields = .{ .replacement = .{ .inherited = text_field } } });
 }
 pub fn parseOmission(a: std.mem.Allocator, authorization: Authorization, input: *const @import("model_input_packet.zig").Packet, bytes: []const u8) Error!Replacement {
     if (authorization.rule != .omission) return error.InvalidSpecificationCoverageRepair;

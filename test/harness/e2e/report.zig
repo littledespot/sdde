@@ -88,6 +88,10 @@ pub fn terminal(allocator: std.mem.Allocator, report: c.Report, root: []const u8
         try writeJsonError(writer, diagnostic);
         try writer.writeByte('\n');
     }
+    if (report.composition_error) |diagnostic| {
+        try writeCompositionError(writer, diagnostic);
+        try writer.writeByte('\n');
+    }
     if (report.last_model_output) |path| try writer.print("Model output: {s}/{s}/{s}\n", .{ root, run, path }) else if (report.last_model_call != null) try writer.writeAll("Model output text: unavailable; see exchange evidence.\n");
     if (report.candidate_model_output) |path| try writer.print("Candidate source output: {s}/{s}/{s}\n", .{ root, run, path });
     if (report.events_file) |path| try writer.print("Events: {s}/{s}/{s}\n", .{ root, run, path });
@@ -105,6 +109,11 @@ fn writeCandidateError(writer: *std.Io.Writer, diagnostic: @import("../../../src
 
 fn writeRetryError(writer: *std.Io.Writer, diagnostic: @import("../../../src/domain/workflow_retry.zig").Exhaustion.Description) !void {
     try writer.writeAll("Retry exhaustion: ");
+    try std.json.Stringify.value(diagnostic, .{}, writer);
+}
+
+fn writeCompositionError(writer: *std.Io.Writer, diagnostic: @import("../../../src/domain/model_text_composition.zig").Diagnostic) !void {
+    try writer.writeAll("Composition validation: ");
     try std.json.Stringify.value(diagnostic, .{}, writer);
 }
 
@@ -182,6 +191,10 @@ pub fn renderMarkdown(allocator: std.mem.Allocator, report: c.Report) ![]const u
     }
     if (report.json_error) |diagnostic| {
         try writeJsonError(writer, diagnostic);
+        try writer.writeAll("\n\n");
+    }
+    if (report.composition_error) |diagnostic| {
+        try writeCompositionError(writer, diagnostic);
         try writer.writeAll("\n\n");
     }
     if (report.last_model_output) |path| {

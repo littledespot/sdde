@@ -25,7 +25,7 @@ const Capture = struct {
     context: []const u8,
     context_sha256: []const u8,
     construct_exact_copy: bool,
-    expected_protocol_rejection: bool,
+    expected_wire_syntax_rejection: bool,
     values: []const Selection,
     request: []const u8,
     request_sha256: []const u8,
@@ -36,9 +36,9 @@ const Capture = struct {
 };
 const Source = struct { project_path: []const u8, bytes: []const u8, sha256: []const u8 };
 const Run = struct { run_id: []const u8, case_id: []const u8, sources: []const Source, captures: []const Capture };
-const Counts = struct { runs: u32 = 0, captures: u32 = 0, values: u32 = 0, reference_only: u32 = 0, prohibited_exact: u32 = 0, embedded_insertion_syntax: u32 = 0, admitted: u32 = 0 };
+const Counts = struct { runs: u32 = 0, captures: u32 = 0, wire_syntax_rejected_responses: u32 = 0, values: u32 = 0, reference_only: u32 = 0, prohibited_exact: u32 = 0, embedded_insertion_syntax: u32 = 0, admitted: u32 = 0 };
 const Fixture = struct {
-    schema: enum { @"representation-admission-capture/v2" },
+    schema: enum { @"representation-admission-capture/v3" },
     scope: enum { offline_native_admission_replay },
     authority: enum { none },
     runs: []const Run,
@@ -125,7 +125,7 @@ fn capturedConstruction(a: std.mem.Allocator, packet: std.json.Value, construct:
     return choices;
 }
 
-test "test.integration.representation_admission all retained F10 and F11 values reject at native owners and prose controls admit" {
+test "test.integration.representation_admission all retained F10 F11 and F12 values reject at native owners and controls admit" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -137,8 +137,9 @@ test "test.integration.representation_admission all retained F10 and F11 values 
         "2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d",
         "2026-10-15T22-18-35Z-a8740d575019326cb5b63f994c3dc426",
         "2026-10-16T05-20-15Z-44b2ac5e19cbf8d2ade89b149aed73c8",
+        "2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31",
     };
-    const required_calls = [_][]const u32{ &.{ 7, 8, 11, 13, 40 }, &.{ 8, 10, 11 }, &.{ 9, 10, 12, 13 }, &.{ 7, 8, 10, 11, 12 }, &.{ 7, 8, 9, 10, 11, 36 }, &.{ 7, 8 } };
+    const required_calls = [_][]const u32{ &.{ 7, 8, 11, 13, 40 }, &.{ 8, 10, 11 }, &.{ 9, 10, 12, 13 }, &.{ 7, 8, 10, 11, 12 }, &.{ 7, 8, 9, 10, 11, 36 }, &.{ 7, 8 }, &.{ 8, 9, 10, 11, 12, 13, 14 } };
     try std.testing.expectEqual(required_runs.len, fixture.runs.len);
     var counts: Counts = .{};
     for (fixture.runs, required_runs, required_calls) |run, required_run, calls| {
@@ -160,7 +161,8 @@ test "test.integration.representation_admission all retained F10 and F11 values 
             try std.testing.expectEqualStrings(capture.response_sha256, &hash(capture.response));
             try std.testing.expectEqualStrings(capture.outcome_sha256, &hash(capture.outcome));
             // CallContext has no historical Description-version reader. These
-            // are the original, unchanged transport context bytes only.
+            // are the original, unchanged transport context bytes only, without
+            // native field bindings for whole-response composition admission.
             stage = .context;
             const context = try @import("../harness/e2e/call_context.zig").CallContext.decode(a, capture.context);
             try std.testing.expectEqual(capture.call, context.call);
@@ -186,8 +188,12 @@ test "test.integration.representation_admission all retained F10 and F11 values 
             };
             try std.testing.expectEqual(capture.construct_exact_copy, constructedCopy(schema.root()));
             stage = .protocol;
-            const protocol_issue = try wire.checkValue(a, raw.parsed.value, schema.root(), sources);
-            try std.testing.expectEqual(capture.expected_protocol_rejection, protocol_issue != null);
+            // This schema-only historical check detects encoded insertion
+            // syntax, not the new native-bound response-composition admission.
+            // Per-field policy results below are counted separately.
+            const wire_issue = try wire.checkValue(a, raw.parsed.value, schema.root(), sources);
+            try std.testing.expectEqual(capture.expected_wire_syntax_rejection, wire_issue != null);
+            if (wire_issue != null) counts.wire_syntax_rejected_responses += 1;
             const choices = try capturedConstruction(a, packet, capture.construct_exact_copy);
             for (capture.values) |selection| {
                 stage = .field_selection;
@@ -219,12 +225,12 @@ test "test.integration.representation_admission all retained F10 and F11 values 
             }
         }
     }
-    const required: Counts = .{ .runs = 6, .captures = 25, .values = 83, .reference_only = 7, .prohibited_exact = 5, .embedded_insertion_syntax = 19, .admitted = 52 };
+    const required: Counts = .{ .runs = 7, .captures = 32, .wire_syntax_rejected_responses = 11, .values = 100, .reference_only = 13, .prohibited_exact = 5, .embedded_insertion_syntax = 20, .admitted = 62 };
     try std.testing.expectEqualDeep(required, fixture.expected);
     try std.testing.expectEqualDeep(required, counts);
     const output = ".zig-cache/representation-admission";
     try std.Io.Dir.cwd().createDirPath(std.testing.io, output);
-    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/replay.json", .data = try std.json.Stringify.valueAlloc(a, .{ .schema = "representation-admission-replay/v2", .scope = "offline_mechanical_native_admission", .counts = counts, .provider_calls = 0, .workflow_authority = false, .semantic_quality_assessed = false }, .{ .whitespace = .indent_2 }) });
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/replay.json", .data = try std.json.Stringify.valueAlloc(a, .{ .schema = "representation-admission-replay/v3", .scope = "offline_mechanical_native_admission", .counts = counts, .whole_response_composition_replayed = false, .provider_calls = 0, .workflow_authority = false, .semantic_quality_assessed = false }, .{ .whitespace = .indent_2 }) });
 }
 
 test "test.integration.representation_admission unrelated domains retain real native references inside prose" {

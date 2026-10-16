@@ -30,10 +30,9 @@ const text = @import("test_fixtures/reference_text.zig");
 const tokens = @import("test_fixtures/reference_tokens.zig");
 const extraction = @import("reference_extraction_test.zig");
 
-test "native reconciliation composition repair renders selected text without rejected candidate fragments and preserves CAS" {
+test "native reconciliation composition defects cannot authorize unit repair or change candidates" {
     const repair = @import("domain/reference_reconciliation_repair.zig");
     const atomic = @import("domain/atomic_repair.zig");
-    const packets = @import("domain/model_input_packet.zig");
     for ([_][]const u8{ "Display the current UTC time. Consult source-0.md.\n", "Renew eligible loans. Consult source-0.md.\n" }) |source| for ([_]bool{ false, true }) |global| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
@@ -57,38 +56,11 @@ test "native reconciliation composition repair renders selected text without rej
         const rejection = if (global) (try f.finish(a, input, parsed.proposal.global, prepared.context())).invalid else (try f.validate_summary.execute(a, parsed, prepared.context())).invalid;
         try std.testing.expectEqual(.typed_text, rejection.issue.rule);
         try std.testing.expectEqual(.reference_only, rejection.issue.expected.text_issue.reason);
-        const authorization = (try repair.authorize(a, parsed, prepared.context(), rejection)).model;
-        const before = try atomic.snapshot(repair.Authorization, a, authorization);
-        const packet = try repair.packet(std.testing.allocator, parsed, prepared.context(), authorization);
-        defer packets.release(packet);
-        const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
-        const diagnostic = body.get("repair").?.object;
-        try std.testing.expect(!diagnostic.contains("current_value"));
-        const rule = diagnostic.get("rule").?.object;
-        try std.testing.expectEqualStrings(prepared.text.registry.records[0].value, rule.get("rendered_text").?.string);
-        try std.testing.expectEqual(@as(usize, 2), rule.get("field_rule").?.object.count());
-        const field = rejection.issue.expected.text_issue.field.?;
-        try std.testing.expectEqualStrings(@tagName(field), rule.get("field_rule").?.object.get("field").?.string);
-        for (packet.fieldPolicies()) |binding| {
-            if (binding.field == field) break;
-        } else return error.MissingNativeCompositionField;
-        const contextual = body.get("input").?.object.get("candidate").?.object;
-        try std.testing.expectEqual(@as(usize, 1), contextual.count());
-        try std.testing.expect(contextual.contains("claim_ids"));
-        try std.testing.expect(std.mem.indexOf(u8, packet.body(), "\"kind\":\"passive\"") == null);
-        try std.testing.expectEqualDeep(before, try atomic.snapshot(repair.Authorization, a, authorization));
-        const replacement: repair.Replacement = .{ .content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Preserve the source-backed business obligation." } }} } } } };
-        const merged = try repair.merge(a, try r.text.CanonicalText.fromInputs(a, text.normalizer, prepared.inputs), parsed, prepared.context(), authorization, replacement, null);
-        if (global) {
-            _ = (try f.finish(a, input, merged.proposal.global, prepared.context())).valid;
-            try std.testing.expectEqualDeep(parsed.proposal.global.signals[0].claim_ids, merged.proposal.global.signals[0].claim_ids);
-            try std.testing.expectEqualDeep(parsed.proposal.global.signals[1..], merged.proposal.global.signals[1..]);
-        } else {
-            _ = (try f.validate_summary.execute(a, merged, prepared.context())).valid;
-            try std.testing.expectEqualDeep(parsed.proposal.summary.statements[0].claim_ids, merged.proposal.summary.statements[0].claim_ids);
-            try std.testing.expectEqualDeep(parsed.proposal.summary.statements[1..], merged.proposal.summary.statements[1..]);
-        }
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try r.text.CanonicalText.fromInputs(a, text.normalizer, prepared.inputs), merged, prepared.context(), authorization, replacement, null));
+        const before = try atomic.snapshot(r.Parsed, a, parsed);
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, parsed, prepared.context(), rejection));
+        try std.testing.expectEqualDeep(before, try atomic.snapshot(r.Parsed, a, parsed));
+        const repeated = if (global) (try f.finish(a, input, parsed.proposal.global, prepared.context())).invalid else (try f.validate_summary.execute(a, parsed, prepared.context())).invalid;
+        try std.testing.expectEqualDeep(rejection, repeated);
     };
 }
 
@@ -520,6 +492,14 @@ test "summary signal and conflict repair packets retain precise shared text issu
                 try std.testing.expectEqual(.typed_text, rejected.issue.rule);
                 const issue = rejected.issue.expected.text_issue;
                 try std.testing.expectEqual(([_]@FieldType(r.text.Issue, "reason"){ .invalid_scalar, .blank, .unknown_passive, .unknown_source })[fault], issue.reason);
+                if (fault == 1) {
+                    const atomic = @import("domain/atomic_repair.zig");
+                    const before = try atomic.snapshot(r.Parsed, a, parsed);
+                    try std.testing.expectError(error.InvalidAtomicRepair, repair.authorize(a, parsed, fixture.context(), rejected));
+                    try std.testing.expectEqualDeep(before, try atomic.snapshot(r.Parsed, a, parsed));
+                    try std.testing.expectEqualDeep(rejected, (try textRejection(a, parsed, fixture.context())).?);
+                    continue;
+                }
                 const authorization = (try repair.authorize(a, parsed, fixture.context(), rejected)).model;
                 const packet = try repair.packet(std.testing.allocator, parsed, fixture.context(), authorization);
                 defer packets.release(packet);

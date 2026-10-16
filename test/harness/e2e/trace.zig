@@ -29,6 +29,8 @@ pub const MechanicalRejection = union(enum) {
                 errdefer a.free(result.reason);
                 result.json_error = if (value.json_error) |diagnostic| try diagnostic.copy(a) else null;
                 errdefer if (result.json_error) |diagnostic| diagnostic.deinit(a);
+                result.composition_error = if (value.composition_error) |diagnostic| try diagnostic.copy(a) else null;
+                errdefer if (result.composition_error) |diagnostic| diagnostic.deinit(a);
                 if (value.schema_error) |diagnostic| result.schema_error.?.path = try a.dupe(u8, diagnostic.path);
                 break :blk .{ .protocol = result };
             },
@@ -45,6 +47,7 @@ pub const MechanicalRejection = union(enum) {
             .protocol => |value| {
                 a.free(value.reason);
                 if (value.json_error) |diagnostic| diagnostic.deinit(a);
+                if (value.composition_error) |diagnostic| diagnostic.deinit(a);
                 if (value.schema_error) |diagnostic| a.free(diagnostic.path);
             },
             .provider => |value| a.free(value.reason),
@@ -628,6 +631,7 @@ pub const Trace = struct {
             .provider_content_diagnostic = report.provider_content_diagnostic,
             .model_error = report.model_diagnostic,
             .json_error = report.json_error,
+            .composition_error = report.composition_error,
             .schema_error = report.schema_error,
             .last_protocol_rejection = report.last_protocol_rejection,
             .last_provider_rejection = report.last_provider_rejection,
@@ -1019,6 +1023,10 @@ fn rejectionAllocationScenario(a: std.mem.Allocator) !void {
         .origin = log.records.items[0].origin,
         .reason = "MOCK malformed JSON",
         .json_error = .{ .reason = .DuplicateField, .context = .{ .path = "/claims", .key = "kind", .first_occurrence = null, .repeated_occurrence = null } },
+        .composition_error = .{ .fields = &.{
+            .{ .field = .ac_given, .path = "/records/0/given", .issue = .{ .reason = .reference_only, .first_node = 0, .last_node = 0, .field = .ac_given } },
+            .{ .field = .spec_goal, .path = "/goal", .issue = .{ .reason = .prohibited_exact, .first_node = 1, .last_node = 1, .field = .spec_goal } },
+        } },
         .schema_error = .{ .reason = .unknown_property, .path = "/unknown" },
     } };
     try log.observeRejections(report);

@@ -234,6 +234,31 @@ fn insertion(value: std.json.Value) bool {
     const field: []const u8 = if (std.mem.eql(u8, kind.string, "passive")) "passive_literal_id" else if (std.mem.eql(u8, kind.string, "source")) "source_id" else return false;
     return value.object.count() == 2 and positive(value.object.get(field) orelse return false);
 }
+/// Borrow literal bytes and retain insertion kinds only. Malformed wire shapes
+/// remain the payload schema's responsibility; no identity or evidence is invented.
+pub fn compositionNodes(a: std.mem.Allocator, value: std.json.Value) std.mem.Allocator.Error!?[]const @import("typed_text.zig").CompositionNode {
+    const Node = @import("typed_text.zig").CompositionNode;
+    if (value == .string) return try a.dupe(Node, &.{.{ .literal = .{ .value = value.string } }});
+    if (value != .object or value.object.count() != 1) return null;
+    const fragments = value.object.get("fragments") orelse return null;
+    if (fragments != .array) return null;
+    var nodes: std.ArrayList(Node) = .empty;
+    errdefer nodes.deinit(a);
+    for (fragments.array.items) |fragment| {
+        if (fragment == .string) {
+            try nodes.append(a, .{ .literal = .{ .value = fragment.string } });
+        } else {
+            if (!insertion(fragment)) {
+                nodes.deinit(a);
+                return null;
+            }
+            const kind = fragment.object.get("kind").?.string;
+            try nodes.append(a, if (std.mem.eql(u8, kind, "exact_copy")) .exact_copy else if (std.mem.eql(u8, kind, "passive")) .passive else .source);
+        }
+    }
+    return try nodes.toOwnedSlice(a);
+}
+
 fn wireObject(value: std.json.Value) bool {
     if (insertion(value)) return true;
     if (value != .object or value.object.count() != 1) return false;

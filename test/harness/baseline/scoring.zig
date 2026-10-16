@@ -564,7 +564,7 @@ fn nativeStatus(facts: acquisition.Facts) comparison.Status {
         }
         return .provider_failed;
     }
-    if (workflow.last_protocol_rejection != null or workflow.json_error != null or workflow.schema_error != null) return .malformed;
+    if (workflow.last_protocol_rejection != null or workflow.json_error != null or workflow.composition_error != null or workflow.schema_error != null) return .malformed;
     return .blocked;
 }
 
@@ -1135,6 +1135,13 @@ test "native purposes count failed first repair sends and preserve unknown per-s
     var stopped = facts;
     stopped.workflow.?.provider_diagnostic = "output_limit";
     try std.testing.expectEqual(comparison.Status.truncated, nativeStatus(stopped));
+    var composition_rejected = facts;
+    composition_rejected.workflow.?.composition_error = .{ .fields = &.{.{
+        .field = .ac_given,
+        .path = "/records/0/given",
+        .issue = .{ .reason = .reference_only, .first_node = 0, .last_node = 0, .field = .ac_given },
+    }} };
+    try std.testing.expectEqual(comparison.Status.malformed, nativeStatus(composition_rejected));
 }
 
 test "upstream projection binds original and corrected raw sends and retains native rejection proof" {

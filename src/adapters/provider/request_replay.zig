@@ -154,14 +154,11 @@ pub const Adapter = struct {
             result.reason = "Captured schema and native field policies disagree";
             return result;
         }
-        if (try @import("../../domain/model_text_wire.zig").checkValue(a, document.parsed.value, schema.root(), description.original_sources)) |_| {
+        if (try @import("../../domain/model_text_composition.zig").check(a, document.parsed.value, description.field_policies, description.prose_fields, description.original_sources)) |diagnostic| {
+            defer diagnostic.deinit(a);
             result.json = .invalid;
-            result.reason = "EmbeddedInsertionSyntax";
-            return result;
-        }
-        if (try @import("../../domain/model_text_wire.zig").checkProseFields(a, document.parsed.value, description.prose_fields, description.original_sources)) |_| {
-            result.json = .invalid;
-            result.reason = "EmbeddedInsertionSyntax";
+            result.reason = "ModelTextComposition";
+            result.path = try a.dupe(u8, diagnostic.fields[0].path);
             return result;
         }
         if (@import("../../domain/model_payload_schema.zig").validateValue(envelope.value(&document.parsed.value), schema.root())) |diagnostic| {
