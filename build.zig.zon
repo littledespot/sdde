@@ -18,6 +18,7 @@
         "build.zig",
         "build.zig.zon",
         "build_provenance.zig",
+        "code_heuristics.zig",
         "tests.zig",
         "integration.zig",
         "attribution_replay.zig",

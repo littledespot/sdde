@@ -6,6 +6,7 @@ test {
     _ = @import("harness.zig");
     _ = @import("build/zig_version.zig");
     _ = @import("build/provenance.zig");
+    _ = @import("code_heuristics.zig");
     _ = @import("src/workflow_repair_retry_test.zig");
     _ = @import("src/test_fixtures/scenario_timing.zig");
     _ = @import("src/adapters/provider/native_model_http.zig");

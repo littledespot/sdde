@@ -109,6 +109,28 @@ time is included in the phase that failed. Capture a full run for comparison wit
 zig build verify --summary all > .zig-cache/verify-costs.log 2>&1
 ```
 
+Generate a repository-wide code heuristics report with:
+
+```sh
+zig build code-heuristics
+```
+
+Read [the Markdown report](zig-out/code-heuristics/report.md) or use
+[the complete JSON measurements](zig-out/code-heuristics/report.json). The command
+refreshes both files on every run (`--prefix` changes the output root).
+It inventories tracked and unignored untracked Zig source in the repository root,
+`src/`, `test/` and `build/`, excluding deleted files, generated output and
+dependencies. Production, tests and development tooling are reported separately.
+Git and the pinned Zig compiler are required; no model calls or credentials are used.
+
+The report highlights file/function size, decision-token counts, brace depth and
+identical function bodies after removing whitespace/comments. Thresholds are
+advisory review signals, with their definitions and limits included in the report;
+they do not assess semantic correctness or impose a CI gate. JSON contains all
+measurements and candidates, including those omitted from the Markdown's ranked
+function and duplicate lists. Test the reporter with `zig build test-code-heuristics`;
+its tests also run in the canonical unit suite.
+
 ## Configure and run a workflow
 
 Run the executable from the target project's root. Bootstrap reads only that

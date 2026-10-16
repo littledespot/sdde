@@ -103,6 +103,22 @@ pub fn build(b: *std.Build) void {
     b.step("test-architecture", "Test repository dependency and authority boundaries").dependOn(&run_architecture_tests.step);
 
     const test_step = b.step("test", "Run all unit tests");
+    const heuristics_module = b.createModule(.{
+        .root_source_file = b.path("code_heuristics.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
+    });
+    const heuristics_tool = b.addExecutable(.{ .name = "sdde-code-heuristics", .root_module = heuristics_module });
+    const heuristics_report = b.addRunArtifact(heuristics_tool);
+    heuristics_report.setCwd(b.path("."));
+    heuristics_report.addArg(b.getInstallPath(.prefix, "code-heuristics"));
+    // Source inventory is read at runtime; always refresh after local edits.
+    heuristics_report.has_side_effects = true;
+    b.step("code-heuristics", "Write advisory code metrics to zig-out/code-heuristics/report.{md,json}").dependOn(&heuristics_report.step);
+    const heuristics_tests = b.addRunArtifact(b.addTest(.{ .root_module = heuristics_module }));
+    heuristics_tests.setCwd(b.path("."));
+    b.step("test-code-heuristics", "Test code metrics, source inventory and deterministic report rendering").dependOn(&heuristics_tests.step);
     const evaluator_tests = b.addTest(.{ .root_module = b.createModule(.{
         .root_source_file = b.path("harness.zig"),
         .target = target,
@@ -835,6 +851,7 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("build.zig"));
     lint_command.addFileArg(b.path("build.zig.zon"));
     lint_command.addFileArg(b.path("build_provenance.zig"));
+    lint_command.addFileArg(b.path("code_heuristics.zig"));
     lint_command.addFileArg(b.path("harness.zig"));
     lint_command.addFileArg(b.path("e2e.zig"));
     lint_command.addFileArg(b.path("e2e_call.zig"));
