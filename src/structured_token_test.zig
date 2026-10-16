@@ -386,19 +386,19 @@ test "atomic classification repair preserves claims and other chunks and revalid
         const replacement: repair.Replacement = .{ .classifications = .{ .token_classifications = try fixture.classifications(a, available, first) } };
         const wire = try wire_json.encodeSelected(repair.Replacement, a, replacement);
         const parsed = try repair.parse(a, authorization, packet, wire);
-        const merged = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, parsed, null);
+        const merged = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = candidate }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, parsed, null);
         try std.testing.expectEqual(@as(u64, 2), merged.revision);
         try std.testing.expectEqualDeep(candidate.entries[0].outcome, merged.entries[0].outcome);
         try std.testing.expectEqualDeep(candidate.entries[1], merged.entries[1]);
         try std.testing.expectEqual(@as(usize, 0), candidate.entries[0].token_classifications.len);
         try std.testing.expect((try validation.validate(a, inputs, available, merged)) == .valid);
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = merged }, authorization, parsed, null));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = merged }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = merged }, authorization, parsed, null));
         var changed = candidate;
         changed.entries = merged.entries;
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = changed }, authorization, parsed, null));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = changed }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = changed }, authorization, parsed, null));
         var foreign = authorization;
         foreign.owner.reference_chunk.reference_state_id.bytes = "other-state";
-        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, foreign, parsed, null));
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = candidate }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = candidate }, foreign, parsed, null));
         try std.testing.expectError(error.InvalidAtomicRepair, repair.parse(a, foreign, packet, wire));
         var wrong_id = authorization;
         wrong_id.id.bytes = "unrelated-authorization";
@@ -406,7 +406,7 @@ test "atomic classification repair preserves claims and other chunks and revalid
         for ([_][]const u8{ "\"target\":\"claims\",", "\"claims\":[],", "\"revision\":2," }) |extra| {
             try std.testing.expectError(error.InvalidJsonDocument, repair.parse(a, authorization, packet, try std.fmt.allocPrint(a, "{{{s}{s}", .{ extra, wire[1..] })));
         }
-        const still_invalid = try repair.merge(a, .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .classifications = .{ .token_classifications = &.{} } }, null);
+        const still_invalid = try repair.merge(a, try @import("domain/typed_text.zig").CanonicalText.fromInputs(a, @import("test_fixtures/reference_text.zig").normalizer, (.{ .inputs = inputs, .candidates = available, .candidate = candidate }).inputs), .{ .inputs = inputs, .candidates = available, .candidate = candidate }, authorization, .{ .classifications = .{ .token_classifications = &.{} } }, null);
         const still_rejected = (try validation.validate(a, inputs, available, still_invalid)).invalid;
         const retry = try repair.authorize(a, .{ .inputs = inputs, .candidates = available, .candidate = still_invalid }, .{ .token_classifications = still_rejected });
         try std.testing.expect(!std.mem.eql(u8, retry.id.bytes, authorization.id.bytes));

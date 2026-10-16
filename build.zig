@@ -173,6 +173,51 @@ pub fn build(b: *std.Build) void {
     }) }));
     compatibility_tests.setCwd(b.path("."));
     b.step("test-provider-compatibility", "Test one-exchange limits and diagnostic reports offline").dependOn(&compatibility_tests.step);
+    const baseline_module = b.createModule(.{
+        .root_source_file = b.path("baseline.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
+            .{ .name = "unicode_normalization", .module = unicode_module },
+        },
+    });
+    baseline_module.addAnonymousImport("build_provenance", .{ .root_source_file = provenance_file });
+    const baseline_executable = b.addExecutable(.{ .name = "sdde-baseline", .root_module = baseline_module });
+    const run_baseline = b.addRunArtifact(baseline_executable);
+    run_baseline.has_side_effects = true;
+    if (b.args) |args| run_baseline.addArgs(args);
+    b.step("baseline", "Prepare, acquire or score one explicit frozen development baseline").dependOn(&run_baseline.step);
+    b.step("build-baseline", "Build the baseline harness without model calls").dependOn(&baseline_executable.step);
+    const baseline_tests = b.addRunArtifact(b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("baseline.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "bounded_yaml_syntax", .module = bounded_yaml_syntax_module },
+            .{ .name = "unicode_normalization", .module = unicode_module },
+        },
+    }) }));
+    baseline_tests.setCwd(b.path("."));
+    b.step("test-baseline", "Test baseline planning, capture and supplied assessments offline").dependOn(&baseline_tests.step);
+    const baseline_directory = b.addTempFiles();
+    const baseline_binary = baseline_directory.addCopyFile(offlineExecutable(b, baseline_executable).getEmittedBin(), baseline_executable.out_filename);
+    const baseline_help = std.Build.Step.Run.create(b, "run baseline help without source assets or credentials");
+    baseline_help.addFileArg(baseline_binary);
+    baseline_help.addArg("--help");
+    baseline_help.setCwd(baseline_directory.getDirectory());
+    baseline_help.clearEnvironment();
+    baseline_help.expectExitCode(0);
+    const baseline_denied = std.Build.Step.Run.create(b, "reject baseline dispatch without explicit freeze and live opt-in");
+    baseline_denied.addFileArg(baseline_binary);
+    baseline_denied.setCwd(baseline_directory.getDirectory());
+    baseline_denied.clearEnvironment();
+    baseline_denied.expectExitCode(1);
+    baseline_denied.expectStdErrEqual("Select explicit baseline prepare, acquire --live, or score inputs; use --help. No API call made.\n");
+    const baseline_smoke = b.step("smoke-baseline", "Test isolated native baseline startup without model calls");
+    baseline_smoke.dependOn(&baseline_help.step);
+    baseline_smoke.dependOn(&baseline_denied.step);
+    baseline_smoke.dependOn(&baseline_executable.step);
     const all_tests_module = b.createModule(.{
         .root_source_file = b.path("tests.zig"),
         .target = target,
@@ -213,6 +258,11 @@ pub fn build(b: *std.Build) void {
     compatibility_launcher_tests.addFileArg(b.path("scripts/provider-compatibility.sh"));
     integration_step.dependOn(&compatibility_launcher_tests.step);
     b.step("test-provider-compatibility-launcher", "Test compatibility launcher arguments and credentials offline").dependOn(&compatibility_launcher_tests.step);
+    const baseline_launcher_tests = b.addSystemCommand(&.{"sh"});
+    baseline_launcher_tests.addFileArg(b.path("test/harness/integration/baseline_launcher_test.sh"));
+    baseline_launcher_tests.addFileArg(b.path("scripts/baseline.sh"));
+    integration_step.dependOn(&baseline_launcher_tests.step);
+    b.step("test-baseline-launcher", "Test baseline offline modes and live credential forwarding").dependOn(&baseline_launcher_tests.step);
     const call_launcher_tests = b.addSystemCommand(&.{"sh"});
     call_launcher_tests.addFileArg(b.path("test/harness/integration/call_launcher_test.sh"));
     call_launcher_tests.addFileArg(b.path("scripts/e2e-call.sh"));
@@ -686,6 +736,7 @@ pub fn build(b: *std.Build) void {
 
     const smoke_command = packaging_smoke.add(b, offlineExecutable(b, executable));
     const smoke_step = b.step("smoke", "Test the packaged executable in a clean directory");
+    smoke_step.dependOn(baseline_smoke);
     smoke_step.dependOn(&smoke_command.step);
     smoke_step.dependOn(&executable.step);
     const network_probe = b.addExecutable(.{ .name = "model-network-probe", .root_module = b.createModule(.{
@@ -718,6 +769,7 @@ pub fn build(b: *std.Build) void {
     lint_command.addFileArg(b.path("e2e.zig"));
     lint_command.addFileArg(b.path("e2e_call.zig"));
     lint_command.addFileArg(b.path("provider_compatibility.zig"));
+    lint_command.addFileArg(b.path("baseline.zig"));
     lint_command.addFileArg(b.path("tests.zig"));
     lint_command.addFileArg(b.path("integration.zig"));
     lint_command.addDirectoryArg(b.path("build"));
@@ -743,7 +795,7 @@ pub fn build(b: *std.Build) void {
             std.mem.eql(u8, name, "smoke") or std.mem.startsWith(u8, name, "test-") or
             std.mem.startsWith(u8, name, "smoke-"))
         {
-            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step, &run_call.step, &run_compatibility.step }) catch |err|
+            @import("build/live_step_isolation.zig").check(b.allocator, &entry.step, &.{ &run_e2e.step, &run_evaluator.step, &run_call.step, &run_compatibility.step, &run_baseline.step }) catch |err|
                 std.debug.panic("automated step {s} violates manual-only model execution: {s}", .{ name, @errorName(err) });
         }
     }

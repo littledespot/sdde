@@ -132,7 +132,7 @@ pub fn admit(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence
     if (authority_gap) |gap| {
         if (finding != .candidate_invalid or id.unit == .source) return reject(.invalid_finding, rule);
         if (!validDetail(gap.kind.finding(), gap.detail)) return reject(.invalid_gap_detail, rule);
-        if (questionIssue(gap.kind.finding(), gap.question) != null) return reject(.invalid_gap_question, rule);
+        if (try questionIssueIn(allocator, sources, gap.kind.finding(), gap.question) != null) return reject(.invalid_gap_question, rule);
         r.unique(SourceId, gap.source_ids) catch return reject(.invalid_sources, rule);
         for (gap.source_ids) |selected| if (!r.contains(SourceId, rule.eligible_source_ids, selected)) return reject(.invalid_sources, rule);
     }
@@ -228,11 +228,22 @@ pub fn questionIssue(finding: a.Finding, question: ?[]const u8) ?QuestionIssue {
     return if (@import("clarification_inputs.zig").validText(value, @import("clarification_inputs.zig").max_text_bytes)) null else .invalid_question;
 }
 
+/// Actionable model questions are prose fields, unlike review diagnostics.
+/// The original corpus alone supplies the exact wire-literal source exception.
+pub fn questionIssueIn(allocator: std.mem.Allocator, sources: r.evidence.Inputs, finding: a.Finding, question: ?[]const u8) std.mem.Allocator.Error!?QuestionIssue {
+    if (questionIssue(finding, question)) |issue| return issue;
+    const value = question orelse return null;
+    const text = @import("typed_text.zig");
+    const nodes: []const text.BusinessSegment = &.{.{ .literal = .{ .value = value } }};
+    if (text.composition(text.BusinessSegment, .clarification_question, nodes) != null or try text.wireComposition(text.BusinessSegment, allocator, sources, .clarification_question, nodes) != null) return .invalid_question;
+    return null;
+}
+
 pub fn validate(allocator: std.mem.Allocator, inputs: a.Inputs, sources: r.evidence.Inputs, evidence: a.Evidence) Error!void {
     const review = evidence.review orelse return error.InvalidRequiredAuthority;
     if (review.principle_citations.len != 0 or review.principle_registry != null) return error.InvalidRequiredAuthority;
     if (!validDetail(evidence.finding, review.detail)) return error.InvalidRequiredAuthority;
-    if (questionIssue(evidence.finding, review.question) != null) return error.InvalidRequiredAuthority;
+    if (try questionIssueIn(allocator, sources, evidence.finding, review.question) != null) return error.InvalidRequiredAuthority;
     const result = try admit(allocator, inputs, sources, evidence.requirement, evidence.finding, .{ .claim_ids = review.provenance.claim_ids, .clarification_response_ids = review.provenance.clarification_response_ids }, review.source_ids, review.detail, review.missing_obligation, review.loss orelse return error.InvalidRequiredAuthority, review.preservation, review.authority_gap);
     if (result != .accepted) return error.InvalidRequiredAuthority;
     try sameProvenance(result.accepted.provenance, review.provenance);

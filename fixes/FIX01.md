@@ -77,6 +77,38 @@ implemented changes, finished experiments and their verification. A failed
 experiment is completed execution, not completed semantic acceptance. Outstanding
 work remains below.
 
+**16 October 2026 — FIX04 baseline measurement harness:** unchanged arm A now has
+independent planning and scoring, a committed-build/budget-feasibility admission
+gate, authentic production exchange/candidate capture, experiment-wide physical
+send and actual-token accounting, and offline source-backed assessment intake.
+The user selected complete first-pass fidelity for qualification sizing.
+Original, corrected, failed, unknown-usage and unattempted evidence remain
+distinct. Evaluator expectations and qualification sources are excluded from
+generation inputs. [FIX04 Phase 2](FIX04.md#phase-2--establish-baseline-quality-and-failure-sensitivity)
+retains the budget-decision prerequisite and open live/semantic exit gate;
+implementation and offline checks do not establish baseline quality.
+Verification: `zig build test-baseline test-rubric-evaluator build-baseline lint
+test-architecture test-integration --summary all` passed 23/23 steps and 714/714
+tests; `zig build verify --summary all` passed 156/156 steps and 1,625/1,625 tests,
+including native clean-directory smoke checks. Offline preparation with the
+unresolved example plan correctly emitted an insufficient-feasibility report
+with the compiled 100,000-token workflow budget and no freeze or API call.
+
+**16 October 2026 — Phase 2 completeness audit:** the
+[item-by-item audit](FIX04-phase2-audit.md) records additional corrections to
+one-shot experiment admission, receipt retention, evaluator rubric isolation,
+native useful-completion assessment, upstream original judgments, variability
+denominators, finding lineage, cost forecasts and evidence-gated decisions.
+The separately approved Hello World diagnostic exhausted the unchanged workflow
+budget: 41 calls, 101,134/100,000 tokens, no published specification or rubric
+result. This is retained failure evidence; the baseline panel and budget decision
+remain open.
+Final audit verification passed `zig build test-baseline test-rubric-evaluator
+--summary all` (535/535 tests) and `zig build verify --summary all` (156/156 steps,
+1,659/1,659 tests). The offline feasibility import accounts all 41 live exchanges
+with exact per-slot controls and correctly blocks freezing under the unresolved
+budget decision; see the audit for exact commands and retained report links.
+
 **16 October 2026 — native reference review subjects:** source, signal, exact-token
 and conflict reviews now resolve the same native subject used by omission
 comparison and localization. Initial and correction packets keep the assigned

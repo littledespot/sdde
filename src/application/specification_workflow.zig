@@ -187,15 +187,7 @@ pub const ValidateCoverage = struct {
             .valid => |value| .{ .coverage = value },
             .invalid => |value| .{ .coverage_rejected = value },
         };
-        const transition = transition: {
-            const pending = current.pending_coverage_repair orelse break :transition null;
-            const active = input.step.repair_permit orelse break :transition null;
-            if (!std.meta.eql(active, pending.permit)) break :transition null;
-            break :transition @import("../domain/specification_coverage_repair.zig").coverageValidation(owner.arena.allocator(), current, try readContext(&input.step.data), content) catch |operation_error| return operation_error;
-        };
-        var output = try publish(self.allocator, coverage_schema, owner, if (result == .valid) .ok else .invalid);
-        output.delta.repair_transition = transition;
-        return output;
+        return publish(self.allocator, coverage_schema, owner, if (result == .valid) .ok else .invalid);
     }
 };
 

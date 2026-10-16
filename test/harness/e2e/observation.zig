@@ -211,6 +211,7 @@ pub const Call = struct {
     usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage = null,
     output: enum { not_projected, available, capture_failed } = .not_projected,
     raw_response_available: bool = false,
+    uncertain_delivery: bool = false,
     status: ?u16 = null,
     exception: ?[]const u8 = null,
     request_id: ?[]const u8 = null,
@@ -219,6 +220,19 @@ pub const Call = struct {
     provider_diagnostic: ?[]const u8 = null,
     provider_content_diagnostic: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderContentDiagnostic = null,
 };
+
+/// The experiment joins only the native accounting record for this physical
+/// exchange. An absent record means unknown usage, never the latest prior usage.
+pub fn usageFor(attempts: []const c.Attempt, origin: @import("../../../src/domain/model_candidate_origin.zig").Origin) !?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage {
+    var found = false;
+    var usage: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderUsage = null;
+    for (attempts) |attempt| if (std.meta.eql(attempt.origin, origin)) {
+        if (found) return error.MissingRequestEvidence;
+        found = true;
+        usage = attempt.usage;
+    };
+    return usage;
+}
 
 /// Join only exact native associations. A prepared request or a retained older
 /// candidate never supplies the latest exchange's identity or token usage.

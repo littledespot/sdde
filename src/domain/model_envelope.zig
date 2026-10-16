@@ -177,6 +177,12 @@ pub fn decode(allocator: std.mem.Allocator, complete: *const invocation.Complete
     const association = complete.association();
     var document = try parseContent(allocator, complete.content(), diagnostic);
     errdefer document.deinit();
+    const request = association.request();
+    const wire = @import("model_text_wire.zig");
+    if (try wire.checkValue(allocator, document.parsed.value, request.response_schema.root(), request.original_sources) != null or try wire.checkProseFields(allocator, document.parsed.value, request.prose_fields, request.original_sources) != null) {
+        if (diagnostic) |out| out.* = .{ .reason = .EmbeddedInsertionSyntax };
+        return error.InvalidModelEnvelope;
+    }
     const state = try allocator.create(Storage);
     state.* = .{ .association = association, .parsed = document.parsed, .normalization = document.normalization, .content = document.content };
     return .{ .allocator = allocator, .candidate = @ptrCast(state) };

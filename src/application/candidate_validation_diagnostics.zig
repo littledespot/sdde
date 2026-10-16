@@ -48,7 +48,6 @@ pub fn read(view: *const data.View) values.Error!?Diagnostic {
     if (view.contains(repair_schema.key)) {
         const value = storage.payload(try values.read(view, repair_schema, storage.Value));
         if (value.* == .coverage_repair) return .{ .coverage = switch (value.coverage_repair) {
-            .authorized => |authorized| authorized.rule.coverage,
             .blocked => |blocked| blocked,
         } };
     }

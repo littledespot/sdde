@@ -288,9 +288,14 @@ fn writeExecutionEvidence(writer: *std.Io.Writer, report: c.Report) !void {
         try std.json.Stringify.value(rejection, .{}, writer);
         try writer.writeAll("\n\n");
     }
-    if (report.first_observed_defect) |defect| {
-        try writer.writeAll("First observed defect (chronology, not proven root cause): ");
+    if (report.first_native_rejection) |defect| {
+        try writer.writeAll("First native rejection (chronology, not proven root cause): ");
         try std.json.Stringify.value(defect, .{}, writer);
+        try writer.writeAll("\n\n");
+    }
+    if (report.admission_escape) |metric| {
+        try writer.writeAll("Admission escapes (shared native composition/wire rules; downstream consumption is chronological exposure, not causal cost): ");
+        try std.json.Stringify.value(metric, .{}, writer);
         try writer.writeAll("\n\n");
     }
     if (report.last_provider_rejection) |rejection| {

@@ -18,7 +18,7 @@ pub fn capture(a: std.mem.Allocator, view: *const @import("../domain/pipeline_da
         {
             const current = try values.read(view, refresh.state_schema, @import("../domain/clarification_refresh.zig").Result);
             break :state switch (current.*) {
-                .ready => |ready| ready,
+                .ready => |ready| try ready.validate(a),
                 .blocked => return error.InvalidClarificationInput,
             };
         }

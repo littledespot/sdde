@@ -14,6 +14,8 @@ pub const Probe = struct {
 };
 pub const Options = struct {
     purpose: union(enum) { whole_workflow, single_exchange: *Probe },
+    experiment: ?*@import("../baseline/dispatch.zig").Gate = null,
+    capture: ?*trace_module.CaptureLog = null,
     /// Only offline tests may replace the transport; the live CLI never supplies it.
     transport: ?@import("../../../src/adapters/provider/bedrock_transport.zig").Port = null,
 };
@@ -47,11 +49,16 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
     const snapshot = try @import("../../../src/adapters/provider/bedrock_api_key.zig").Snapshot.capture(allocator, key);
     var invocation = runtime.invocation(&.{ selected.workflow_id, "--feature", selected.feature, "--reference", selected.reference }, .{ .snapshot = snapshot });
     defer invocation.deinit();
+    var expected_config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(allocator, captured.config);
+    defer expected_config.deinit();
 
     var trace = try trace_module.Trace.init(store, &invocation, switch (options.purpose) {
         .whole_workflow => .whole_workflow,
         .single_exchange => .single_exchange,
     });
+    trace.experiment = options.experiment;
+    trace.capture = options.capture;
+    trace.expected_models = &expected_config.value().models;
     trace.transport_override = options.transport;
     defer trace.close();
     defer switch (options.purpose) {
@@ -107,6 +114,7 @@ pub fn run(io: std.Io, allocator: std.mem.Allocator, project: std.Io.Dir, select
         try trace.last_rejection.project(allocator, trace.calls, report);
         try trace.correlate(allocator, report);
         try trace.progress.project(allocator, report);
+        try trace.projectAdmission(allocator, report);
         if (options.purpose == .whole_workflow and runner.envelope.slots[@intFromEnum(@import("../../../src/domain/pipeline.zig").DataKey.published_workflow_output)] != null) {
             const published = try values.read(&.{ .slots = runner.envelope.slots }, @import("../../../src/application/workflow_output_binding.zig").published_schema, bool);
             if (published.*) publication = .{ .confirmed = try values.read(&.{ .slots = runner.envelope.slots }, @import("../../../src/application/workflow_output_binding.zig").prepared_schema, @import("../../../src/domain/workflow_output.zig").Prepared) };

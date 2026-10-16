@@ -66,7 +66,10 @@ pub const Rejection = union(enum) {
         return switch (self) {
             .token_budget => |failure| @errorName(failure),
             .operation_failed => |failure| @errorName(failure),
-            .retry_limit => "RetryLimitExhausted",
+            .retry_limit => |failure| switch (failure.reason) {
+                .retry_limit => "RetryLimitExhausted",
+                .unchanged_repair => "RepairNoProgress",
+            },
             .model_capture => |failure| failure.diagnostic(),
             .gate, .authority, .logging, .cancelled, .deadline_exhausted => @tagName(self.status()),
         };

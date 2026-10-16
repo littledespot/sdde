@@ -362,6 +362,16 @@ test "debugger reconstructs full raw request description response and rejects mi
     try std.testing.expectEqual(@as(usize, 1), calls[0].events.len);
     try std.testing.expectEqualStrings("check-evidence", calls[0].events[0].node.?);
     try std.testing.expectEqualStrings("SOURCE_SELECTIONS", calls[0].events[0].diagnostic.?);
+    const obsolete = try std.mem.replaceOwned(u8, a, sink.rows.items, "model-request-debug/v4", "model-request-debug/v3");
+    try std.testing.expect(!std.mem.eql(u8, obsolete, sink.rows.items));
+    var unsupported: archive.Archive = .{ .allocator = a };
+    try unsupported.ingest(obsolete);
+    try std.testing.expectError(error.UnsupportedDebugDescriptionVersion, unsupported.calls());
+    const malformed = try std.mem.replaceOwned(u8, a, sink.rows.items, "\"original_sources\":[]", "\"original_sources\":{}");
+    try std.testing.expect(!std.mem.eql(u8, malformed, sink.rows.items));
+    var invalid_current: archive.Archive = .{ .allocator = a };
+    try invalid_current.ingest(malformed);
+    try std.testing.expectError(error.InvalidDebugArchive, invalid_current.calls());
     var partial: archive.Archive = .{ .allocator = a };
     const last_line = std.mem.lastIndexOfScalar(u8, sink.rows.items[0 .. request_end - 1], '\n').? + 1;
     try partial.ingest(sink.rows.items[0..last_line]);
@@ -789,7 +799,7 @@ test "replay dispatch order survives shuffled filenames reopening and separate s
     const duplicate_bytes = try std.json.Stringify.valueAlloc(a, record, .{});
     try directory.dir.writeFile(io, .{ .sub_path = "logs/debugger/" ++ "d" ** 32 ++ ".request.json", .data = duplicate_bytes });
     try std.testing.expectError(error.InvalidDebugArchive, store.load(a));
-    const legacy_bytes = try std.mem.replaceOwned(u8, a, duplicate_bytes, "request-replay/v4", "request-replay/v3");
+    const legacy_bytes = try std.mem.replaceOwned(u8, a, duplicate_bytes, "request-replay/v5", "request-replay/v3");
     try std.testing.expectError(error.InvalidJsonDocument, @import("domain/strict_json.zig").decode(debug.RequestRecord, a, legacy_bytes, .{ .maximum_depth = 64 }));
 }
 
@@ -922,7 +932,7 @@ test "selected request schemas survive capture and graph release without whole-s
         try std.testing.expectEqualStrings(parent.id, replayed.request.parent_call);
         _ = try fixture.replay().replay(a, replayIdentity("b" ** 32, 2), parent, .{ .call = 0, .mode = .modified, .edit = .{ .content = &.{ .{ .guidance = "Recheck the selected response." }, .{ .user = "Generate the selected data." } }, .schema = selected.schema } });
         try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
-        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v3", "model-request-debug/v2");
+        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v4", "model-request-debug/v2");
         try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, obsolete));
     };
 }

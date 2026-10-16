@@ -6,6 +6,99 @@ const compilation = @import("domain/workflow_compilation.zig");
 const fake_provider = @import("adapters/provider/fake_llm_provider.zig");
 const Fixture = @import("provider_authorization_test_fixture.zig").Fixture;
 
+test "native raw prose selectors are deep owned schema bound and absent from provider content" {
+    const wire = @import("domain/model_text_wire.zig");
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const compiled = try compiler.compiler().compile(fixture.schema_arena.allocator(), "{\"type\":\"object\",\"properties\":{\"question\":{\"type\":\"string\",\"maxLength\":256}},\"required\":[\"question\"],\"additionalProperties\":false}");
+    const resource: compilation.CompiledResource = .{ .id = .{ .bytes = "question-result" }, .content = .{ .result_schema = compiled } };
+    var selected_source = try source(&fixture, &resource);
+    var name = "question".*;
+    var path = [_]@import("domain/model_result_schema.zig").ChoiceStep{.{ .property = &name }};
+    var fields = [_]wire.ProseField{.{ .field = .clarification_question, .path = &path }};
+    selected_source.prose_fields = &fields;
+    const content = [_]provider.ModelVisibleContent{.{ .user = "Ask the unresolved question." }};
+    var owned = try preparation.build(std.testing.allocator, selected_source, &content);
+    defer owned.deinit();
+    try preparation.validateRequest(selected_source, owned.request);
+    try std.testing.expect(owned.request.prose_fields.ptr != fields[0..].ptr);
+    try std.testing.expect(owned.request.prose_fields[0].path.ptr != path[0..].ptr);
+    try std.testing.expect(owned.request.prose_fields[0].path[0].property.ptr != name[0..].ptr);
+    try std.testing.expectEqualDeep(@as([]const provider.ModelVisibleContent, &content), owned.request.content);
+    name[0] = 'X';
+    try std.testing.expectEqualStrings("question", owned.request.prose_fields[0].path[0].property);
+    try std.testing.expectError(error.InvalidModelRequestSource, preparation.validateRequest(selected_source, owned.request));
+    name[0] = 'q';
+    fields[0].field = .spec_goal;
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.validateRequest(selected_source, owned.request));
+    fields[0].field = .clarification_question;
+    const described = @import("domain/model_request_description.zig").Description.from(owned.request, &fixture.provider_binding, .inference);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const encoded = try std.json.Stringify.valueAlloc(a, described, .{});
+    const restored = try @import("domain/model_request_description.zig").Description.decode(a, encoded);
+    try std.testing.expectEqualDeep(owned.request.prose_fields, restored.prose_fields);
+    const malformed = try std.mem.replaceOwned(u8, a, encoded, "clarification_question", "unknown_prose_policy");
+    try std.testing.expectError(error.InvalidJsonDocument, @import("domain/model_request_description.zig").Description.decode(a, malformed));
+    path[0] = .items;
+    try std.testing.expectError(error.InvalidModelRequestSource, preparation.build(std.testing.allocator, selected_source, &content));
+}
+
+test "native packet prose selectors survive clones and release all failed allocations" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, prosePacketAllocation, .{});
+}
+
+fn prosePacketAllocation(a: std.mem.Allocator) !void {
+    const packets = @import("domain/model_input_packet.zig");
+    const wire = @import("domain/model_text_wire.zig");
+    const packet = try packets.create(a, "{\"input\":\"original\"}", .workflow_step, .initial_generation, null);
+    defer packets.release(packet);
+    var name = "question".*;
+    const fields = [_]wire.ProseField{.{ .field = .clarification_question, .path = &.{.{ .property = &name }} }};
+    const declared = try packets.withProseFields(a, packet, &fields);
+    defer packets.release(declared);
+    const witnessed = try packets.withOriginalSourceTexts(a, declared, &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = "Original question." }});
+    defer packets.release(witnessed);
+    const cloned = try packets.withRestrictions(a, witnessed, &.{}, &.{});
+    defer packets.release(cloned);
+    name[0] = 'X';
+    try std.testing.expectEqualStrings("question", cloned.proseFields()[0].path[0].property);
+    try std.testing.expectEqualStrings("Original question.", cloned.originalSources()[0].bytes);
+    try std.testing.expectEqualStrings(packet.body(), cloned.body());
+    try std.testing.expectEqual(@as(usize, 0), packet.proseFields().len);
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withProseFields(a, packet, &.{ .{ .field = .clarification_question, .path = &.{.{ .property = "question" }} }, .{ .field = .spec_goal, .path = &.{.{ .property = "question" }} } }));
+}
+
+test "native original-source witness is owned bound and absent from provider content" {
+    var fixture: Fixture = undefined;
+    try fixture.init(std.testing.allocator);
+    defer fixture.deinit();
+    const resource = resultResource(&fixture);
+    var selected = try source(&fixture, &resource);
+    var bytes = "Original {\"kind\":\"exact_copy\"} source".*;
+    var sources = [_]@import("domain/model_text_wire.zig").SourceText{.{ .source_id = .{ .ordinal = 1 }, .bytes = &bytes }};
+    selected.original_sources = &sources;
+    const content = [_]provider.ModelVisibleContent{.{ .user = "One assigned business value." }};
+    var owned = try (build.Action{}).execute(std.testing.allocator, selected, &content);
+    defer owned.deinit();
+    try preparation.validateRequest(selected, owned.request);
+    try std.testing.expectEqualDeep(@as([]const provider.ModelVisibleContent, &content), owned.request.content);
+    try std.testing.expect(owned.request.original_sources.ptr != sources[0..].ptr);
+    try std.testing.expect(owned.request.original_sources[0].bytes.ptr != bytes[0..].ptr);
+    const original = owned.request.original_sources[0].bytes;
+    bytes[0] = 'X';
+    try std.testing.expectEqual(@as(u8, 'O'), original[0]);
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.validateRequest(selected, owned.request));
+    sources[0].bytes = original;
+    sources[0].source_id.ordinal = 2;
+    try std.testing.expectError(error.ModelRequestAssociationInvalid, preparation.validateRequest(selected, owned.request));
+    sources[0].source_id.ordinal = 0;
+    try std.testing.expectError(error.InvalidProviderNeutralModelRequest, (build.Action{}).execute(std.testing.allocator, selected, &content));
+}
+
 test "request construction is deterministic minimal and preserves immutable authorities" {
     var fixture: Fixture = undefined;
     try fixture.init(std.testing.allocator);

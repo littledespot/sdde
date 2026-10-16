@@ -259,6 +259,17 @@ The repair algebra is closed:
 
 ### 22.4 Repair request and response
 
+**Accepted Phase 1A amendment, 16 October 2026:** every repaired text value
+passes the same [composition policy](text-field-composition.md) as initial
+authoring and readback. Canonical equality with the rejected old value, under
+the exact active permit and defect key, produces shared typed exhaustion
+`unchanged_repair`. The runner discards the tentative delta before application,
+retains actual consumption and prevents later work on the exhausted key. It does
+not advance candidate revision, invalidate dependents, request semantic review
+or resolve the defect. Changed repairs retain existing dependent/full validation.
+This supersedes allowing an unchanged rejected replacement to merge and trigger
+re-review; it adds no route-specific rule or retry allowance.
+
 The repair guidance contains:
 
 - the exact diagnostic code and rule;

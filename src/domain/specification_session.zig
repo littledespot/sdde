@@ -19,7 +19,6 @@ pub const Session = struct {
     units: [unit_count]?g.Checked = @splat(null),
     starting_ledger: @import("specification_identity.zig").Ledger = .{},
     omission_target_bound: ?u32 = null,
-    pending_coverage_repair: ?@import("atomic_repair.zig").Pending(@import("specification_coverage.zig").TokenSubject) = null,
 };
 pub const Error = @import("strict_json.zig").Error || g.Error || packets.Error || binding.Error;
 
@@ -233,6 +232,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         scopes.items;
     const source_groups = if (assigned != null and selected != .records) try binding.groupGuidance(a, @import("reference_support.zig").records(context.references), requirements.items) else &.{};
     const payload = .{
+        .text_fields = try fieldPolicies(a, selected, record_kinds.items),
         .source_assignment = assigned,
         .source_groups = source_groups,
         .context_requirements = contextual_requirements.items,
@@ -248,6 +248,9 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         .records => "records",
     } });
     defer packets.release(result);
+    const witnessed = try packets.withOriginalSources(allocator, result, context.inputs);
+    packets.release(result);
+    result = witnessed;
     if (options.task) |task| {
         const contextual = try packets.withContext([]const u8, allocator, result, "task", task);
         packets.release(result);
@@ -289,6 +292,22 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     defer packets.release(choices);
     if (options.task != null or index < current.completed) return packets.withRestrictions(allocator, choices, choices.excludedVariants(), choices.integerChoices());
     return withGroupChoices(allocator, choices, context, selected, current.record_cursor);
+}
+
+fn fieldPolicies(a: std.mem.Allocator, selected: g.Unit, record_kinds: []const g.spec.Kind) std.mem.Allocator.Error![]const @import("text_field_policy.zig").Policy {
+    const policy = @import("text_field_policy.zig");
+    var result: std.ArrayList(policy.Policy) = .empty;
+    errdefer result.deinit(a);
+    try result.append(a, policy.get(.clarification_question));
+    switch (selected) {
+        .brief => inline for (.{ policy.Field.spec_title, .spec_description, .spec_goal }) |field| try result.append(a, policy.get(field)),
+        .primary_user_story => try result.append(a, policy.get(.spec_story)),
+        .entities => try result.append(a, policy.get(.spec_entity_basis)),
+        .records => inline for (comptime std.meta.tags(g.spec.Kind)) |kind| {
+            if (std.mem.indexOfScalar(g.spec.Kind, record_kinds, kind) != null) inline for (std.meta.fields(@FieldType(g.spec.Content(g.spec.BusinessValue), @tagName(kind)))) |field| try result.append(a, policy.get(g.spec.textField(kind, field.name)));
+        },
+    }
+    return result.toOwnedSlice(a);
 }
 
 fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, context: p.Context, selected: g.Unit, cursor: usize) Error!*packets.Packet {
@@ -377,7 +396,11 @@ fn narrowDisplayCatalogues(a: std.mem.Allocator, base: *const packets.Packet, pa
         packets.create(a, body, base.unit(), base.purpose(), base.resultDefinition());
     const unbound = try projected;
     defer packets.release(unbound);
-    return packets.withRestrictions(a, unbound, base.excludedVariants(), base.integerChoices());
+    const witnessed = try packets.withOriginalSourceTexts(a, unbound, base.originalSources());
+    defer packets.release(witnessed);
+    const prose = try packets.withProseFields(a, witnessed, base.proseFields());
+    defer packets.release(prose);
+    return packets.withRestrictions(a, prose, base.excludedVariants(), base.integerChoices());
 }
 
 pub fn append(current: Session, checked: g.Checked) Error!Session {
@@ -413,19 +436,29 @@ pub fn appendBound(a: std.mem.Allocator, current: Session, checked: g.Checked) E
     var total: usize = 0;
     for (batches) |batch| total = std.math.add(usize, total, batch.response.content.records.len) catch return error.InvalidSpecificationUnit;
     const records = try a.alloc(g.spec.RecordProposal, total);
-    const origins = try a.alloc(@import("specification_candidate.zig").FieldOrigin, total);
+    errdefer a.free(records);
+    var origins: @import("specification_candidate.zig").Origins = .{};
+    errdefer {
+        a.free(origins.fields);
+        a.free(origins.record_occurrences.values);
+    }
     var offset: usize = 0;
     for (batches) |batch| {
-        for (batch.response.content.records, 0..) |record, index| {
-            records[offset] = record;
-            origins[offset] = .{ .target = .{ .record = offset }, .origin = batch.origins.at(.{ .target = .{ .record = index } }) };
-            offset += 1;
-        }
+        const count = batch.response.content.records.len;
+        @memcpy(records[offset..][0..count], batch.response.content.records);
+        const projected = origins.appendingRecords(a, offset, batch.origins, count) catch |err| return switch (err) {
+            error.OutOfMemory => error.OutOfMemory,
+            error.InvalidRepairOccurrence, error.InvalidSpecificationRepair => error.InvalidSpecificationUnit,
+        };
+        a.free(origins.fields);
+        a.free(origins.record_occurrences.values);
+        origins = projected;
+        offset += count;
     }
     var combined = checked;
     combined.record_assignment = null;
     combined.response.content.records = records;
-    combined.origins = .{ .fields = origins };
+    combined.origins = origins;
     return append(next, combined);
 }
 

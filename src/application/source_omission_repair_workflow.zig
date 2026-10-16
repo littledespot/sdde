@@ -117,9 +117,8 @@ pub fn Merge(comptime kind: enum { extraction, reconciliation }, comptime scope:
             errdefer reference.destroy(owner);
             owner.payload = if (kind == .extraction) .{ .text_validated = self.action.execute(owner.arena.allocator(), try facts(&input.step.data), try rec.textContext(&input.step.data), state) catch |operation_error| return operation_error } else .{ .reconciliation_parsed = self.action.execute(owner.arena.allocator(), try parsed(&input.step.data), try rec.textContext(&input.step.data), try support(&input.step.data), state) catch |operation_error| return operation_error };
             var delta: pipeline.NodeDelta = .{};
-            const permit = (if (kind == .extraction) state.authorization.extraction.retry else state.authorization.reconciliation.retry) orelse return error.OperationExecutionFailed;
-            const revision = if (kind == .extraction) owner.payload.text_validated.revision else owner.payload.reconciliation_parsed.source.revision;
-            delta.repair_transition = .{ .merged = .{ .permit = permit, .revision_after = revision, .validation = .dependent_review } };
+            const merged = (if (kind == .extraction) owner.payload.text_validated.last_repair else owner.payload.reconciliation_parsed.source.last_repair) orelse return error.OperationExecutionFailed;
+            delta.repair_transition = merged.transition(.dependent_review) catch return error.OperationExecutionFailed;
             delta.data_replacements[@intFromEnum(target.key)] = values.adopt(self.allocator, target, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch |operation_error| return operation_error;
             for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
             return .{ .outcome = if (kind == .reconciliation and scope == .specification) .more else .ok, .delta = delta };

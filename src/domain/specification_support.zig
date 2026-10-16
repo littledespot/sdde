@@ -186,11 +186,13 @@ pub fn Contract(comptime purpose: Purpose) type {
             const definition: @import("model_result_schema.zig").DefinitionId = .{ .bytes = "record_findings" };
             const base = try reviewPacket(allocator, inputs, state, try std.json.Stringify.valueAlloc(scratch, payload, .{}), slot, definition);
             defer packets.release(base);
-            return packets.withIntegerChoices(allocator, base, &.{
+            const selected_packet = try packets.withIntegerChoices(allocator, base, &.{
                 .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "requirement_ordinal" } } }, .definition = definition, .allowed = ordinals },
                 .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = sources.items },
                 .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "authority_gap" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = sources.items },
             });
+            defer packets.release(selected_packet);
+            return withQuestionText(allocator, selected_packet, context.inputs, true);
         }
 
         fn packetForContext(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, scope: Scope) Error!*packets.Packet {
@@ -219,7 +221,8 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .reference => |reference| reference != .signal,
                 .source_preservation, .collection, .entity_applicability => true,
             };
-            const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(subject), .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
+            const policy = @import("text_field_policy.zig");
+            const payload = .{ .text_fields = if (inputs.projection == .source_preservation) null else @as(?[]const policy.Policy, &.{policy.get(.clarification_question)}), .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(subject), .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
             const encoded = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
             var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
             packets.omitAbsent(&projected_input);
@@ -247,8 +250,27 @@ pub fn Contract(comptime purpose: Purpose) type {
             const ids = try scratch.alloc(i64, evidence_rule.eligible_source_ids.len);
             for (ids, evidence_rule.eligible_source_ids) |*id, source| id.* = source.ordinal;
             const selected_sources: @import("model_result_schema.zig").IntegerChoice = .{ .target = .{ .path = &.{.{ .property = "source_ids" }} }, .definition = definition, .allowed = ids };
-            if (inputs.projection == .source_preservation) return packets.withIntegerChoices(allocator, packet, &.{selected_sources});
-            return packets.withIntegerChoices(allocator, packet, &.{ selected_sources, .{ .target = .{ .path = &.{ .{ .property = "authority_gap" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = ids } });
+            const selected_packet = if (inputs.projection == .source_preservation)
+                try packets.withIntegerChoices(allocator, packet, &.{selected_sources})
+            else
+                try packets.withIntegerChoices(allocator, packet, &.{ selected_sources, .{ .target = .{ .path = &.{ .{ .property = "authority_gap" }, .{ .property = "source_ids" } } }, .definition = definition, .allowed = ids } });
+            defer packets.release(selected_packet);
+            if (inputs.projection == .source_preservation) return packets.withOriginalSources(allocator, selected_packet, context.inputs);
+            return withQuestionText(allocator, selected_packet, context.inputs, false);
+        }
+
+        fn withQuestionText(allocator: std.mem.Allocator, base: *const packets.Packet, sources: r.evidence.Inputs, batch: bool) Error!*packets.Packet {
+            const witnessed = try packets.withOriginalSources(allocator, base, sources);
+            defer packets.release(witnessed);
+            const Field = @import("model_text_wire.zig").ProseField;
+            const fields: []const Field = if (batch) &.{
+                .{ .field = .clarification_question, .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "question" } } },
+                .{ .field = .clarification_question, .path = &.{ .{ .property = "findings" }, .items, .{ .property = "value" }, .{ .property = "authority_gap" }, .{ .property = "question" } } },
+            } else &.{
+                .{ .field = .clarification_question, .path = &.{.{ .property = "question" }} },
+                .{ .field = .clarification_question, .path = &.{ .{ .property = "authority_gap" }, .{ .property = "question" } } },
+            };
+            return packets.withProseFields(allocator, witnessed, fields);
         }
 
         fn lossFinding(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate) Error!struct { finding: Finding, target: a.Id } {
@@ -583,7 +605,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                         continue;
                     };
                     if (!admission.validDetail(semantic, finding.value.detail)) try diagnostics.append(allocator, diagnostic(proposed, .invalid_detail, requirement.seed.id, ordinal, position));
-                    if (purpose == .source) if (admission.questionIssue(semantic, finding.value.question)) |issue| {
+                    if (purpose == .source) if (try admission.questionIssueIn(allocator, sources, semantic, finding.value.question)) |issue| {
                         const text_issue: Issue = switch (issue) {
                             inline else => |value| @field(Issue, @tagName(value)),
                         };

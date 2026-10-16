@@ -77,6 +77,13 @@ append, activation registry, transaction directory or recovery scan precedes it.
 
 ### 17.3 LLM work
 
+**Accepted Phase 1A amendment, 16 October 2026:** the
+[field-composition contract](text-field-composition.md) owns the complete native
+text-field inventory, prose requirements and insertion roles. The same policy
+drives presentation, admission, repair, exact coverage and stored readback.
+Structurally invalid values stop before semantic review; legitimate exact
+insertions retain lineage. Prose presence never certifies business meaning.
+
 The LLM performs these semantic activities:
 
 1. reference claim extraction and bounded hierarchical reconciliation;

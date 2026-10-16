@@ -39,6 +39,12 @@ pub const Packet = opaque {
     pub fn integerChoices(self: *const Packet) []const schema.IntegerChoice {
         return storage(self).integer_choices;
     }
+    pub fn proseFields(self: *const Packet) []const @import("model_text_wire.zig").ProseField {
+        return storage(self).prose_fields;
+    }
+    pub fn originalSources(self: *const Packet) []const @import("model_text_wire.zig").SourceText {
+        return storage(self).original_sources;
+    }
     pub fn assignmentContext(self: *const Packet, id: AssignmentContextId) ?[]const u8 {
         for (storage(self).assignment_contexts) |context| {
             if (std.mem.eql(u8, context.id.bytes, id.bytes)) return context.body;
@@ -58,6 +64,8 @@ const Storage = struct {
     repair_origin: ?Origin = null,
     excluded_variants: []const schema.ExcludedVariant = &.{},
     integer_choices: []const schema.IntegerChoice = &.{},
+    original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
+    prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
     assignment_contexts: []const AssignmentContext = &.{},
     handle: Handle,
 };
@@ -168,7 +176,46 @@ fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8
         .body = try a.dupe(u8, context.body),
     };
     storage(result).assignment_contexts = copied_contexts;
+    try copyOriginalSources(storage(result), base.originalSources());
+    storage(result).prose_fields = try @import("model_text_wire.zig").cloneProseFields(a, base.proseFields());
     return result;
+}
+
+/// Native response metadata does not alter model-visible input or its grammar.
+/// Owners select exact raw prose locations in their own closed result contract.
+pub fn withProseFields(a: std.mem.Allocator, base: *const Packet, fields: []const @import("model_text_wire.zig").ProseField) Error!*Packet {
+    const wire = @import("model_text_wire.zig");
+    if (!wire.validProseFields(fields)) return error.InvalidModelInputPacket;
+    const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+    errdefer release(result);
+    storage(result).prose_fields = try wire.cloneProseFields(storage(result).arena.allocator(), fields);
+    return result;
+}
+
+/// Original captured corpus evidence stays native. Guidance, derived claims,
+/// candidate text and provider output cannot create the wire-literal exception.
+pub fn withOriginalSources(a: std.mem.Allocator, base: *const Packet, inputs: @import("reference_evidence.zig").Inputs) Error!*Packet {
+    if (!inputs.corpus.state_id.eql(inputs.chunks.state_id)) return error.InvalidModelInputPacket;
+    const sources = try a.alloc(@import("model_text_wire.zig").SourceText, inputs.corpus.sources.len);
+    defer a.free(sources);
+    for (inputs.corpus.sources, sources) |source, *destination| destination.* = .{ .source_id = source.id, .bytes = source.bytes };
+    return withOriginalSourceTexts(a, base, sources);
+}
+
+/// Preserve the already captured source witness across native repair packets.
+pub fn withOriginalSourceTexts(a: std.mem.Allocator, base: *const Packet, sources: []const @import("model_text_wire.zig").SourceText) Error!*Packet {
+    if (!@import("model_text_wire.zig").validSources(sources)) return error.InvalidModelInputPacket;
+    const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+    errdefer release(result);
+    try copyOriginalSources(storage(result), sources);
+    return result;
+}
+
+fn copyOriginalSources(owner: *Storage, sources: []const @import("model_text_wire.zig").SourceText) Error!void {
+    const a = owner.arena.allocator();
+    const copy = try a.alloc(@import("model_text_wire.zig").SourceText, sources.len);
+    for (sources, copy) |source, *destination| destination.* = .{ .source_id = source.source_id, .bytes = try a.dupe(u8, source.bytes) };
+    owner.original_sources = copy;
 }
 
 /// Native presentation facts only. The catalogue stays outside model content;

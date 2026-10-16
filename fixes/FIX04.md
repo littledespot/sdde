@@ -23,45 +23,85 @@ rejection diagnostics for unsupported shapes. The existing approved `{"{` prefix
 normalizer is unchanged. Captured-response offline regression is mechanical
 evidence; no new live call or semantic-quality qualification follows from this fix.
 
-**Current live evidence — 16 October 2026:** the separately authorized
+**Current live evidence — 16 October 2026:** run details and exact commands
+are recorded in [FIX01](FIX01.md#2-implementation-history); this summary records
+their evaluation scope. Twenty bounded compatibility probes ran between 15 October
+16:25 and 16 October 07:46 Melbourne. Fifteen Luna and three GPT-OSS attempts
+received HTTP 403 `AccessDeniedException` from account access or IAM policy; they
+are inconclusive and reported no usage. One GPT-OSS HTTP-200 exchange exposed the
+decoding defect above. The separately authorized
 [07:46 Melbourne probe](../zig-out/provider-compatibility/2026-10-15T20-46-55Z-cb4fdfbfe3b6aff88bc99e68fa980506/report.json)
 was compatible for its first production request: HTTP 200, accepted JSON/schema,
 2,254 accounted tokens and the existing prefix normalization. The one-send stop
 intentionally cancelled the workflow; it published no specification and ran no
-rubric evaluation. The subsequently authorized
-[07:54 full loan-renewal baseline](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/report.json)
-blocked on competing duplicate records at `UnsafeSpecificationRepair`, before
-source review, after 13 calls and 25,508 tokens. Native reference review subjects
-are now aligned with omission localization under existing authority; this does
-not change per-group record authoring or authorize competing-record repair.
-The [08:09 post-fix full run](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/report.json)
-subsequently failed with `WorkflowTokenBudgetExceeded`: 37 calls and 101,002
-tokens against a 100,000-token workflow budget. It stopped during entity source
-review, before the corrected native reference reviews, with no candidate repair,
-specification publication or rubric evaluation. Live validation of that correction
-and full-workflow acceptance remain open. Offline verification passed all
-149 build steps and 1,555 tests, including native packaging smoke; exact check
-commands are recorded in [FIX01](FIX01.md#2-implementation-history).
+rubric evaluation.
 
-**Repository revision:** `5816d9bed631acabcb256025e911bb565b8f9771`.
+Two separately authorized loan-renewal full-workflow runs followed. They are
+**development diagnostics, not Phase 2 baseline evidence**: loan-renewal is outside
+the Phase 0 case panel, and both ran on uncommitted builds of `4f25a06` with
+different source identities. The
+[07:54 run](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/report.json)
+(source `abf965…`) blocked on competing duplicate records at
+`UnsafeSpecificationRepair`, before source review, after 13 calls and 25,508 tokens.
+Native reference review subjects were then aligned with omission localization under
+existing authority; this does not change per-group record authoring or authorize
+competing-record repair. The
+[08:09 post-fix run](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/report.json)
+(source `fbb975…`) failed with `WorkflowTokenBudgetExceeded`: 37 calls and 101,002
+tokens against the compiled 100,000-token workflow budget. It stopped during entity
+source review, before the corrected native reference reviews, with no candidate
+repair, specification publication or rubric evaluation. Live validation of that
+correction and full-workflow acceptance remain open. [F9](#f9--high-selected-binding-full-workflow-diagnostics-expose-generation-review-and-budget-failures)
+records what these runs show.
+
+A third separately approved full-workflow diagnostic, the
+[09:18 hello-world run](../zig-out/e2e-spec/2026-10-15T22-18-35Z-a8740d575019326cb5b63f994c3dc426/report.json)
+on an uncommitted build of `94e2838…` (source `2a30ee8d…`), failed with
+`WorkflowTokenBudgetExceeded` after 41 calls and 101,134 tokens; review used 77%
+([Phase 2 audit](FIX04-phase2-audit.md),
+[cost investigation](FIX04-phase2-cost-investigation.md)). Its first defect was not
+the malformed JSON at call 22 that the report labels `first_observed_defect`, but
+call 8's story, made only of two exact-copy insertions and admitted by native
+validation. [F10](#f10--high-model-text-composition-is-not-admitted-against-its-field-purpose)
+traces that failure class through every run that reached generation and sets out
+the architecture-level change. After the correction, `zig build verify --summary all`
+passed 149/149 steps and 1,555/1,555 tests, including native packaging smoke. The
+155/1,786 count in §5.6 comes from the wider Phase 1 command
+`test-provider-compatibility test-rubric-evaluator verify`, so the two counts are
+not comparable.
+
+**Repository revision:** findings were first reviewed at
+`5816d9bed631acabcb256025e911bb565b8f9771`. The 16 October evidence ran on uncommitted
+builds of `4f25a0603d14b1d7413f3e992e53c931c97c40eb` and, for the 09:18 diagnostic,
+`94e2838999a889d4b9ea01eeab23bf758f39a1a9`; each report records its exact source
+identity.
 
 **Status:** **Phase 0 complete (offline), 15 October 2026**; its
 concrete protocol and evidence are linked in §5.6. The user-directed Converse
 cutover and small-model test cost policy are included. **Phase 1's offline
 implementation is complete and mechanically verified**: a fresh production-request
 compatibility harness has a one-send boundary. Its authentic separately authorized
-current-model exchange passed the bounded compatibility gate on 16 October.
-Semantic benefit and reduced brittleness remain unmeasured.
+GPT-OSS-20B exchange passed the bounded compatibility gate on 16 October. No full
+workflow has completed on the selected binding. **Phase 1A's implementation and
+offline exit gate are complete, 16 October 2026**: its accepted composition
+contract, retained replay and 1,699 passing verification tests are recorded in
+[the implementation evidence](FIX04-phase1a-implementation.md). Phase 2's harness
+is implemented, but its baseline remains unfrozen pending a committed build and
+renewed budget feasibility with the recorded user decision. Semantic benefit and
+reduced brittleness remain unmeasured.
 
 This review evaluates the supplied recommendations: retain single responsibility
 for software, make model assignments semantically simpler, keep related meaning
 together, and leave bookkeeping and authority with deterministic code. At review
 time the test constraint was **current-generation Luna only on Bedrock**, with **Sonnet,
-Sol and Haiku excluded**. This supersedes the earlier mid-tier/Haiku test
-baseline; the retained Phase 0 evidence froze `global.openai.gpt-6-luna`. Historical repository
-results supply regression-case context only; they do not establish the target's
-capability or support architecture selection. Generation quality remains the
-primary outcome; an improved reviewer alone does not satisfy it.
+Sol and Haiku excluded**, and the retained Phase 0 evidence froze
+`global.openai.gpt-6-luna`. Luna was never available to the test account, and the
+16 October selection above replaces it with GPT-OSS-20B. Historical GPT-OSS panels
+are therefore same-model evidence, but they ran under superseded engine contracts
+and codecs. They supply regression cases and plausible failure classes; they do not
+establish the current contract's defect rate or select an architecture (F7).
+Generation quality remains the primary outcome; an improved reviewer alone does not
+satisfy it, and a broken reviewer can prevent good generation from completing (F9).
 
 The user has authorized a larger change if necessary and requested its steps and
 supporting research. Section 5 therefore describes the complete change surface;
@@ -71,7 +111,8 @@ separately requested Bedrock Converse transport, including typed reasoning
 retention, registration and live-test cost enforcement. The subsequent Phase 1
 implementation prepares a fresh production request and retains bounded provider
 compatibility evidence without publication authority. Generation prompts,
-assignment topology and semantic admission rules are unchanged. The explicit
+assignment topology and semantic admission rules are unchanged; F10 proposes an
+admission contract change that is not implemented. The explicit
 transport amendment does not accept the overall **Proposed design**.
 [FIX01](FIX01.md) remains the active implementation
 backlog under the [fix-record convention](README.md). This report supplies findings
@@ -80,16 +121,32 @@ and decision criteria, not a parallel progress checklist.
 ## 1. Assessment
 
 **Retain semantic simplicity as a design criterion, but do not implement the
-original AC-decomposition proposal as a production change yet.** Integrate a
-current model before collecting the new baseline. Current small-model support is
-now registered; its request/response compatibility still requires the Phase 1
-live check.
-The existing debugger can then support a bounded comparison without first
-redesigning generation. A production replacement requires unresolved
+original AC-decomposition proposal as a production change yet.** The selected
+GPT-OSS-20B binding passed its first-request compatibility check (Phase 1), so the
+existing debugger can support a bounded comparison without first redesigning
+generation. A production replacement requires unresolved
 assignment, applicability, assembly and repair contracts, and its benefit for the
-intended current-generation small model remains unproven. Start by comparing
+selected model remains unproven. Start by comparing
 complete current output with whole-collection authoring; use a narrower purpose
 diagnostic if mixed-purpose errors remain. Do not default to one call per family.
+
+The 16 October full-workflow diagnostics add a second constraint (F9). Even when
+generation succeeds, source review consumed three-quarters of the workflow's tokens,
+misclassified every omission it reported, and exhausted the compiled budget before
+finishing on a five-requirement feature. A generation-only improvement therefore
+cannot produce useful completions until review cost and diagnosis quality are
+measured. The full-workflow budget must also be reconciled with the protocol's
+experiment limits before Phase 2 can be approved.
+
+A third constraint comes before both (F10). In every run that reached generation,
+native admission accepted model text whose composition cannot express its field's
+purpose: values made only of exact-copy insertions, and insertion syntax typed
+inside prose. Review then became the first detector of a structurally detectable
+defect, misdiagnosed it, and drove a no-progress repair. This is a shared
+representation and admission gap, not a record-authoring boundary, so the A/C
+comparison cannot address it and would inherit it. Close it through the shared
+owners before the Phase 2 baseline is frozen, so that every arm runs under the same
+admission contract.
 
 A small JSON result, one action responsibility and a simple semantic assignment
 are different properties. A concrete design concern is record generation: one
@@ -100,19 +157,27 @@ deciding whether uncertainty prevents drafting.
 The evidence supports investigating that combined assignment. It does **not** yet
 establish that decomposition caused better SDDE output, that smaller calls are
 always better, or that further splitting will overcome the selected model's
-semantic limitations. The inspected current-generation evidence does not resolve
-which decomposition, if any, improves this workload. Section 4 replaces the initial
+semantic limitations. Neither the inspected research nor the 16 October
+diagnostics resolve which decomposition, if any, improves this workload. Section 4 replaces the initial
 experiment recommendation with a feasibility assessment; §5 selects a staged
 comparison, outlines the larger change and defines testable phase gates for
 meaningful improvement and reduced brittleness.
 
 The material corrections to the initial review are:
 
-- A current v14 baseline has not yet established that the historical failure
-  persists; historical counts cannot justify immediate redesign.
-- The requested current-generation cohort is not available through a configuration
-  switch alone. Trusted model registration, compatible provider support and a fresh
-  capture are prerequisites; old replay parents cannot be retargeted.
+- No frozen v14 baseline exists yet. The 16 October diagnostics show that the
+  per-group record failure class recurs on the selected binding (F9), but one case
+  and two runs supply no defect rate; historical counts cannot justify immediate
+  redesign.
+- Not every observed generation failure is a semantic assignment problem. The
+  insertion-only and wire-syntax values in F10 are structurally detectable, and the
+  design's own intent already says that a reference alone does not describe behavior.
+  The gap is in enforcement ownership, and closing it is a prerequisite to the
+  comparison rather than one of its candidates.
+- At review time, the requested Luna cohort was not available through a
+  configuration switch alone; it later proved unavailable to the test account. Any
+  model change still needs trusted registration, compatible provider support and a
+  fresh capture; old replay parents cannot be retargeted.
 - Modified diagnostic replay already permits changing a request's task/schema.
   Production assignment authority is needed for adoption, not for forming every
   experimental question.
@@ -130,7 +195,7 @@ The material corrections to the initial review are:
 | Separate support, completeness and coverage | Supported. Current contracts already distinguish these duties; qualify the model's compliance instead of assuming the separation is absent. |
 | Keep conditions, exceptions and outcomes together | Supported. Complete AC context and batched field review already exist. Neither implies reliable field-role judgment. |
 | Reuse actions through the generic runner | Supported within registered typed contracts. Generic request transport does not supply new semantic assignment, repair or coverage authority. |
-| Expect gains from reducing mixed decisions | A credible hypothesis, especially for generation. Require a fresh baseline on current-generation targets; historical model results cannot select this design. |
+| Expect gains from reducing mixed decisions | A credible hypothesis, especially for generation. Require a fresh baseline on the selected binding and current contract; historical results under superseded contracts cannot select this design. |
 | Begin with one failing assignment | Supported. Prioritize one generation failure class, use unrelated controls, and distinguish a component capability result from a replacement for the complete workflow. |
 
 The practical objective should be **more source-faithful, usable generated content
@@ -213,11 +278,13 @@ behavior into a retention assignment; renewal records lost eligibility or invent
 prerequisites; startup records assumed the tested result in Given or substituted
 a literal for behavior. [Primary results and scorecard](../test/calibration/authoring-associations/results.md).
 
-**Implication:** establish which generation responsibility fails on the current
-target before selecting a change. Do not use a reviewer-only improvement as
+**Implication:** establish which generation responsibility fails on the selected
+binding before selecting a change. Do not use a reviewer-only improvement as
 evidence that generation has become reliable. The archived cases do not isolate
 task breadth from source grouping, representation, output format or model
-competence, and supply no current-target capability measurement.
+competence, and supply no capability measurement under the current contract. The
+16 October diagnostics show per-group batches re-authoring the whole feature on
+the selected binding (F9); that is one case, not a rate.
 
 ### F2 — High: the recommendations must account for work already present and later failures
 
@@ -233,10 +300,14 @@ explicit composition object for mixed text/reference insertions. Recommending
 that the model stop assembling prose from bare arrays would repeat an already
 accepted change. Native `required`, `present` and `unmet` family facts likewise
 already reduce structural bookkeeping. Neither change proves meaning preservation.
-[14 October delivery record](FIX03.md#L1904).
+[14 October delivery record](FIX03.md#L1904). The representation is accepted, but
+the 16 October diagnostics show that its admission is incomplete: the selected model
+routinely produces composition the codec and validator accept but that cannot
+express the field's purpose (F10). That is an enforcement gap in the accepted
+contract, not a reason to reintroduce an earlier representation.
 
 The initial report relies on these past panels. Their scope must be retained
-without treating them as current-model evidence:
+without treating them as baseline evidence for the current contract:
 
 | Experiment | Archived result | Limit of the historical claim |
 | --- | --- | --- |
@@ -251,7 +322,7 @@ Sources: [authoring results](../test/calibration/authoring-associations/results.
 
 In particular, the withdrawn assembly-context arm copied prior records and
 seeded unsupported content. This documents why that experiment was withdrawn;
-it does not establish what current models would do. The rollback and subsequent
+it does not establish what the current contract would produce. The rollback and subsequent
 v14 amendment also mean these panels did not measure the current restored/amended
 packet. Reintroducing earlier prose would be a separately controlled intervention.
 
@@ -292,8 +363,9 @@ benchmark expectations establish a missing duty in the particular field assigned
 
 **Implication:** freeze the duty being assessed before scoring. Keep original
 scores intact and record disputed scope separately. Current tests prove that the
-packet presents the distinction; they do not prove that the selected current model
-follows it.
+packet presents the distinction; they do not prove that the selected model
+follows it. The 16 October diagnostics suggest it often does not: every omission
+reported there described invalid or unsupported content instead (F9).
 [Scope and sibling tests](../src/specification_generation_test.zig#L5455).
 
 ### F4 — High: an explicit “R7 judgment” can conceal an unqualified upstream decision
@@ -317,6 +389,9 @@ premise and deficient-subject endpoints as established by the admitted finding.
 Correct downstream processing can therefore preserve a false upstream diagnosis.
 [Comparison contract](../design/contracts/22-repair.md#L81),
 [native endpoints](../src/domain/source_omission_comparison.zig#L73).
+This is no longer only a contract risk: in the 08:09 diagnostic, all five
+comparison assessments returned `lost` for omission premises that actually
+described invalid or unsupported content (F9).
 
 The 76-call citation comparison supplied the correct obligation. The 30-call
 reviewer panel required discovering it. Their scores cannot be compared as a
@@ -391,32 +466,36 @@ granularity must thread through evidence admission, correction, reconciliation,
 repair preconditions, retry identity, currentness and stored readback. Do not add
 caller-specific continuation or interpret one successful subjudgment as completion.
 
-### F7 — High: historical small-model evidence does not qualify the current target
+### F7 — High: historical same-model evidence does not establish the current contract's baseline
 
 The historical local panels used Bedrock GPT-OSS-20B with low reasoning and native
-schema; the later authoring panels used temperature 0.1. These are useful concrete
-observations, not the baseline for the current-generation small target. Parameter count,
-reasoning setting, instruction following and competence on this assignment are
-different variables.
+schema; the later authoring panels used temperature 0.1. The 16 October selection
+uses the same model and settings, so those panels are same-model observations
+rather than evidence about a different target. They still ran under superseded
+packets, schemas, codecs and review contracts: before the v14 amendment, the
+Converse cutover and the 16 October review-subject correction. Prompt, schema and
+contract changes alter the assignment the model receives. The panels therefore
+identify plausible failure classes and regression cases, not today's defect rate.
 
 “Small” is a planning category, not a model identifier or measured ability.
-Do not assume either that the old failures persist or that a newer model resolves
-them. Re-establish the baseline using the intended current model and current
-engine contract. The old small-model panels can inform difficult cases; they
-cannot justify nine specialized calls, a stronger-model fallback or a claimed
-capability ceiling for the new target.
+Do not assume either that the old failures persist or that contract changes have
+resolved them. Re-establish the baseline using the selected model and current
+engine contract on a frozen revision. The old panels can inform difficult cases;
+they cannot justify nine specialized calls, a stronger-model fallback or a claimed
+capability ceiling.
 
 The initial review found only GPT-OSS-20B and Claude 3.5 Haiku registered and a
-GPT-OSS-style wire codec. The subsequent user-directed cutover adds Bedrock Luna
+GPT-OSS-style wire codec. The subsequent user-directed cutover added Bedrock Luna
 to the [compiled model registry](../src/composition/provider_model_contracts.zig)
-and replaces that codec with shared
+and replaced that codec with shared
 [Converse encoding](../src/adapters/provider/bedrock_request.zig) and
-[decoding](../src/adapters/provider/bedrock_response.zig). The
+[decoding](../src/adapters/provider/bedrock_response.zig). Luna remains registered
+but is not a live-test selection. The
 [registry validator](../src/domain/llm_provider_registry.zig) still rejects unknown
 tuples and mismatched capabilities. Production dispatch remains
 [Bedrock-only](../src/adapters/provider/provider_dispatch.zig).
-Registration and offline fixtures do not prove live compatibility. Phase 1
-requires a fresh authentic exchange, separate from changing semantic assignments.
+Registration and offline fixtures did not prove live compatibility. The 16 October
+first-request exchange did so for one request shape only (§5.6 Phase 1).
 
 Qualification should pin the exact intended generation slot, provider/model,
 reasoning, schema mode and provider output allowance. The review's Luna binding
@@ -438,20 +517,20 @@ Repeated review or decomposition by the same model is not independent evidence.
 An earlier semantic mistake can be shared by later steps. Record error propagation
 and useful completion at the complete-duty level, not merely per-call correctness.
 More calls can increase latency, actual-token use and exposure to inconsistent
-judgments. Measure those effects on each current target; do not estimate their
+judgments. Measure those effects on the selected binding; do not estimate their
 size from the archived model runs.
 
-### F8 — High: current-generation capability evidence is still insufficient
+### F8 — High: published research does not select a decomposition for the selected model
 
 At the 15 October review, current-generation Bedrock Luna was selected for the
-implemented test protocol. The 16 October selection above now governs live
-tests. The older-model decomposition and verifier
-studies considered in the initial review are excluded from that evidence base.
-A recent publication date or fresh benchmark rerun does not make an older tested
-model current. Model generation must be checked against primary release sources
-when the experiment is frozen.
+implemented test protocol, and the research below was gathered for that target.
+The 16 October GPT-OSS-20B selection now governs live tests, so the Luna row
+describes a superseded target rather than the selected model. The older-model
+decomposition and verifier studies considered in the initial review remain
+excluded from the capability evidence base. No inspected source qualifies
+GPT-OSS-20B on this workload either; Phase 2 must measure it directly.
 
-The additional research verified the following current evidence as of this review:
+The additional research verified the following evidence for the 15 October target:
 
 | Primary source | What was verified | What it cannot establish |
 | --- | --- | --- |
@@ -459,7 +538,7 @@ The additional research verified the following current evidence as of this revie
 | [StructEval's live result metadata](https://tiger-ai-lab.github.io/StructEval/static/data/leaderboard.json), checked against [Google's current Flash page](https://deepmind.google/models/gemini/flash/) | The published current-generation Gemini 3.8 Flash run covers 2,035 examples, evaluated on 10 October 2026. | The overall benchmark mixes rendered and text structures; a high aggregate result does not establish requirement preservation, uncertainty handling or complete specification quality. |
 | [StructEval methodology](https://tiger-ai-lab.github.io/StructEval/) and [primary text evaluator](https://raw.githubusercontent.com/TIGER-AI-Lab/StructEval/main/structeval/eval_engine/eval_nonrenderable.py) | Its text metric combines load success with expected structural-path checks; the published weighting is 20% and 80%. | Structural validity is not a semantic decomposition comparison. The linked detailed live-run artifact could not be retrieved; these are published results, not independently reproduced or fully audited live-protocol evidence. |
 
-No directly applicable current-model study inspected in this review establishes
+No directly applicable study inspected in this review establishes
 that per-family decomposition improves source-grounded specification generation.
 Consequently, research does not select the winning assignment size, justify a
 nine-call schedule, or establish a small-model capability ceiling. The proposed
@@ -469,7 +548,177 @@ For the larger design, retain closed native contracts and original evidence.
 Move established bookkeeping into native code where possible; do not replace
 schema checks with trust in prose or add an unqualified semantic planner to make
 the generator's input appear simpler. These are contract-based design conclusions,
-not measured current-model effects.
+not measured effects on the selected model.
+
+### F9 — High: selected-binding full-workflow diagnostics expose generation, review and budget failures
+
+The two 16 October loan-renewal runs are the only full-workflow evidence on the
+selected binding. They are development diagnostics on one five-requirement case
+([source](../test/e2e/wf-002-loan-renewal/stories.md)), not a baseline or a rate.
+Model outputs are untrusted candidates. The classifications below are this
+review's source-based reading, not human adjudication.
+
+**Generation: per-group authoring re-drafts the whole feature.** In both runs, each
+record batch re-authored the same renewal acceptance criterion and functional
+requirement instead of its assigned group's duties. At 07:54 the group-2 batch
+([call 13](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/evidence/generation/call-000013/model_output.txt))
+nearly reproduced group 1's records
+([call 12](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/evidence/generation/call-000012/model_output.txt));
+native admission rejected them as `competing_records` and blocked the run. At 08:09
+all three batches emitted overlapping renewal AC/FR records whose wording differed
+enough to be admitted as distinct, so each near-duplicate then needed its own
+source review. The same run's brief titled the feature `Loan renewed!Renewal refused.`,
+two exact-copy literals in place of a name. The entity pass created a `Loan` entity
+with a "has a renewal status" relationship that the source does not state. This is
+selected-binding evidence for the source-group ownership risk in F1 and §4.3. It
+supports running the A/C comparison first, because C removes the per-group
+authoring boundary; it does not show that C will succeed.
+
+**Review: wrong finding types, confirmed downstream.** Before the budget stop,
+review returned 27 findings: 20 `supported`, 3 `candidate_omission`,
+1 `candidate_invalid` and 3 `unsupported`. None of the three omissions described
+source meaning missing from the candidate:
+
+- [call 13](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000013/model_output.txt)
+  reported the invalid title, which is a `candidate_invalid` defect;
+- [call 28](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000028/model_output.txt)
+  reported a renewal-status attribute that the source does not establish;
+- [call 33](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000033/model_output.txt)
+  gave as its `missing_obligation`: "No source requirement for the business
+  meaning of Loan is present in the original source."
+
+The bound-preservation comparisons
+([14](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000014/model_output.txt),
+[29](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000029/model_output.txt),
+[34](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000034/model_output.txt))
+returned `lost` for all five assessments, which is F4's risk observed on the
+selected binding. The three `unsupported` findings ask the user to define entity
+content the generator invented; admitted as clarifications, they would be false
+gaps. Had the budget allowed, these findings would have driven repair or
+clarification from false premises. F6 applies directly: finding type selects the
+repair or clarification route, so a real defect reported with the wrong type is a
+harmful diagnosis.
+
+**Cost and budget: review dominates, and the workflow cannot finish.** In the 08:09
+run, extraction through validation used 6 calls and 8.8k tokens (9%), generation
+6 calls and 16.8k tokens (17%), and source review 25 calls and 75.4k tokens (75%).
+Review then stopped before the signal, token and conflict assessments. The
+13 October hello-world diagnostic, under an earlier contract, also exhausted the
+budget, with review using about 78k of its 100k tokens. The 100,000-token budget is
+a compiled engine constant
+([core operations](../src/composition/core_workflow_operations.zig#L35),
+[native operations](../src/composition/native_workflow_operations.zig#L641)), not
+case configuration. At current review cost every full workflow on the development
+cases would end `failed` on budget, so Phase 5 useful completion would measure the
+budget rather than quality. The protocol's experiment-wide stop of 2,000,000 actual
+tokens and 1,000 sends includes review and repair, and covers fewer than 20 full
+workflows at 100k tokens or more each. Phase 5 alone needs 144–288 paired full
+workflows (8–16 features × 3 variants × 3 repetitions × 2 builds), and Phase 2
+also requires complete production runs.
+
+**Implication:** generation decomposition alone cannot produce useful completions
+while review cost and diagnosis quality are unmeasured. Phase 2 must attribute
+failures and cost to review and repair as well as generation, measure finding-type
+accuracy (§5.5) and settle budget feasibility before dispatch. Raising the compiled
+budget is an engine contract change, not a test-configuration adjustment. It needs
+an explicit decision and must be frozen before the baseline, so that baseline and
+candidate share it. Do not raise it automatically to obtain a completion, and do not
+weaken review gates to save tokens. Part of this review cost begins earlier, with
+defects native admission should have rejected (F10).
+
+### F10 — High: model text composition is not admitted against its field purpose
+
+This finding describes the retained diagnostics before the Phase 1A amendment.
+The [completed implementation and offline evidence](FIX04-phase1a-implementation.md)
+record the current enforcement; historical report field names and captures below
+remain unchanged.
+
+**Observed chain (09:18 hello-world diagnostic).** Call 8 asked for the primary user
+story, whose purpose is "one narrative describing the actor or system identified by
+the source, its action and intended result". The model returned
+[`{"fragments":[{"kind":"exact_copy"},{"kind":"exact_copy"}]}`](../zig-out/e2e-spec/2026-10-15T22-18-35Z-a8740d575019326cb5b63f994c3dc426/evidence/generation/call-000008/model_output.txt):
+no prose, and the sole eligible token inserted twice, rendering
+`Hello, World!Hello, World!`. Native admission accepted it. Source review
+(call 15) correctly saw a defect but reported an omission whose "obligation" was the
+engine's own narrative instruction; loss localization (call 16) confirmed it; the
+omission repair (call 36) returned the same two insertions, merged with
+`changed: false`; and re-review (calls 37–41) ran until the 100,000-token budget was
+exhausted. Together these cost about 23,000 tokens: 4,682 for the misdiagnosis
+(calls 15–16) and 18,316 for the unchanged repair and the five reviews it triggered,
+as the cost investigation measured. That is observed cost, not evidence that the run
+would otherwise have completed.
+
+**This is a recurring failure class, not a story defect.** Every full-workflow run
+that reached generation under the 14 October model-text representation shows one or
+both of two inverse composition failures on the selected binding:
+
+| Run | Values made only of insertions | Insertion syntax typed inside prose and admitted as text |
+| --- | --- | --- |
+| [13 Oct 22:02 UTC, hello-world](../zig-out/e2e-spec/2026-10-13T22-02-37Z-b20ce81708023ac1030af300c845affa/report.json) | brief title, story, omission repair (calls 7, 8, 40) | calls 7, 11, 13 |
+| [13 Oct 22:03 UTC, loan-renewal](../zig-out/e2e-spec/2026-10-13T22-03-58Z-facbd733ec967b7453a85ef64d4bb571/report.json) | story (8) | calls 10, 11 |
+| [15 Oct 20:54 UTC, loan-renewal](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/report.json) | story (10) | calls 9, 12, 13 |
+| [15 Oct 21:09 UTC, loan-renewal](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/report.json) | title `Loan renewed!Renewal refused.` and story (7, 8) | calls 10–12 |
+| [15 Oct 22:18 UTC, hello-world](../zig-out/e2e-spec/2026-10-15T22-18-35Z-a8740d575019326cb5b63f994c3dc426/report.json) | story, entity-applicability basis, omission repair (8, 9, 36) | — |
+
+The second column means wire syntax became business text. For example, the 21:09
+run admitted the acceptance criterion "…displays the message
+`{"fragments":[{"kind":"exact_copy","claim_id":2}] }` along with the new due date",
+and source review judged most such fields `supported`. Counts come from a scan of
+retained model outputs; they describe five development diagnostics on two cases,
+not a population rate.
+
+**General invariant.** A declared text field's admitted value must be able to
+express that field's declared purpose. Typed insertions are exact-value and
+reference evidence placed inside meaning, not a substitute for it, and the model's
+wire syntax never becomes business text. One owner must declare this per field and
+apply it identically to initial authoring, protocol correction, every repair route,
+collection coverage and stored readback. [Design §7.1](../design/contracts/07-domain-representations.md#71-shared-types)
+already states the intent ("Exact copies can appear within a sentence"), and
+[§17.3](../design/contracts/17-specify.md#173-llm-work) says "a reference alone does
+not describe behavior or a goal" and "literal values alone do not replace the
+behavior involving them". It also says that guidance "is not a deterministic
+semantic validator". The structural part of it, whether any prose exists at all, is
+deterministic and is currently unowned.
+
+**Where the architecture lets the failure through:**
+
+| Layer | Current behavior | Gap | Required change at the owning boundary |
+| --- | --- | --- | --- |
+| Field-purpose contract | Purposes are prose strings in [required_authority_description.zig](../src/domain/required_authority_description.zig), which declares "no requiredness or routing policy"; generation guidance restates them | No typed property says whether a field needs prose or what role exact copies play in it | Add one closed, typed composition policy per declared text field, owned by the field registry: whether nonblank prose is required, and whether exact-copy and passive insertions are prohibited, incidental or obligation-bearing in that field. Every consumer reads it from that owner. |
+| Wire codec ([§7.1, 14 October amendment](../design/contracts/07-domain-representations.md#approved-model-facing-text-amendment--14-october-2026)) | Any prose string is accepted, including the codec's own insertion-object syntax | Unexecuted insertions become prose in four of the five runs | Reject a prose fragment containing the closed insertion grammar as a protocol error, routed to the existing protocol correction, unless those exact bytes occur in the original source. Never convert such text into an insertion; §7.1 forbids inferring an occurrence from equal text. |
+| Typed-text validator ([typed_text.zig:130-182](../src/domain/typed_text.zig#L130-L182)) | Every insertion sets `visible = true`; only an empty or blank value rejects | Insertion-only values pass for every field | Apply the field policy: a prose-required field without nonblank prose fails with a typed `reference_only` issue whose explanation comes from the policy owner. Callers ([specification_provenance.zig:225-240](../src/domain/specification_provenance.zig#L225-L240), extraction and reconciliation text validation) pass the field's policy instead of applying a local rule. |
+| Collection coverage ([specification_coverage.zig:73-98](../src/domain/specification_coverage.zig#L73-L98), ADR 0020) | A `business_exact_string` token's obligation is satisfied by an `exact_copy` occurrence in any singleton or record field | A literal-only title or story satisfies the exact-copy obligation, so the native gate rewards the degenerate output | Count only occurrences in fields whose policy declares the token's role obligation-bearing and that passed composition. Whether the token is used correctly remains a semantic review judgment. |
+| Admission routing | Native typed issues already route to unit repair (`generate-unit` → `authorize-repair`) | The composition defect never became a native issue, so it fell through to model review | No new route. The new issue uses the existing unit repair with the old value, issue and field purpose; wire-syntax rejections use protocol correction. |
+| Repair ([atomic_repair.zig](../src/domain/atomic_repair.zig), shared retry owner) | Repair outputs pass `valueIn`, but nothing rejected them; an unchanged result merges with `changed: false`, and the merge allowances are 64 executions per defect key | A no-progress repair consumes budget and triggers re-review | Repair outputs automatically meet the same composition rule. Separately, the shared retry owner treats a repair whose canonical result equals the rejected value for the same defect key as no progress, ending in a typed exhausted outcome. This needs an explicit shared contract, not a repair-route branch. |
+| Source review ([specification_support.zig](../src/domain/specification_support.zig)) | Review was the first detector and misdiagnosed the defect | Model review was acting as a mechanical validator, and its wrong finding type selected the wrong repair route | Invariant: a value that fails a declared native rule never reaches model review. Review remains for semantics; qualifying omission statements against original sources stays a separate item (cost investigation step 1). |
+| Model-facing presentation | Shared guidance is mostly insertion syntax; the story prompt is two lines; the story packet offers a token-only group and the preserved token; the schema allows insertion-only arrays | The model is not told the rule, and the schema cannot express it | Present each field's composition policy from its owner in the packet, and offer exact-copy choices only where the policy permits them. Schemas stay guidance: neither the closed schema profile nor provider grammars (Bedrock or Anthropic) can express "contains a prose string". Do not add a new prompt sentence as the fix (F2). |
+| Readback and rendering | Stored state and renderers trust admitted values | A value admitted before the change could persist | Stored readback validates with the same policy, with no compatibility reader; the renderer never emits wire syntax. |
+| Evaluation and reporting | `first_observed_defect` is the first *native* rejection; Phase 2 attribution has no representation category | Structurally detectable defects are attributed to generation or review, and the report label misleads | Rename the label to "first native rejection". Add an admission-escape measure and a representation/admission category to Phase 2 attribution (§5.5, Phase 2). |
+
+**What must not be done.** No branch for stories, titles, Hello World, repeated
+literals or GPT-OSS. No prompt-only fix. No normalizer that turns strings into
+insertions, strips duplicates or merges fragments. No extra model call or reviewer
+instruction acting as the validator. No removal of exact-copy support to hide the
+failure, which would lose ADR 0020 lineage. No weakening of review or coverage gates,
+and no budget increase justified by this finding. The policy applies to every
+model and provider, including the proposed [Claude connector](claude_connector.md).
+
+**Expected effect and its limit.** In the 09:18 run, call 8 would have been rejected
+at admission and sent to one native unit repair with an explicit issue, instead of
+reaching review. The model may repeat the failure; the no-progress rule then ends it
+early as a typed failure. This removes an entry point for the review and repair
+chain in F9 and the cost investigation. It does not establish completion within the
+budget, semantic quality or any comparison result.
+
+**Relation to the other proposals.** The A/B/C/D comparisons all change record
+authoring and share this representation, so none of them addresses F10, and C would
+inherit it. The cost investigation's next steps (qualify review omissions, shrink the
+repair projection, consider review batching) reduce the cost of failures that F10
+would stop at admission; they remain needed for failures F10 cannot detect.
+
+**Implication:** close F10 in Phase 1A (§5.6) before the Phase 2 baseline is frozen.
+It changes accepted contracts in §7.1, §17.3 and ADR 0020, so it needs the
+decisions listed there before implementation.
 
 ## 4. Critical feasibility assessment and revised proposal
 
@@ -480,9 +729,9 @@ and understated the work needed after it. These are separate scopes:
 
 | Scope | Feasibility at this revision | Necessary work and limit |
 | --- | --- | --- |
-| Inspect and prepare current workflow packets | Available through existing authoring fixtures and capture owners | Inspect packets and controls; preserve historical freezes. Offline preparation does not establish current-model dispatch support. |
-| Capture the current-model baseline | Requires integration first | Register a selected current target and verify/implement compatible provider request, response, controls and usage contracts. A configuration-only switch is insufficient. |
-| Test an AC-focused request | Feasible after compatible current-model support and an eligible fresh capture | Prepare/freeze the candidate, validate its serialized request and score actual responses. Fresh bounded live approval is required. No production family scheduler is a prerequisite. |
+| Inspect and prepare current workflow packets | Available through existing authoring fixtures and capture owners | Inspect packets and controls; preserve historical freezes. Offline preparation does not establish dispatch support. |
+| Capture the selected-binding baseline | First-request compatibility established (Phase 1); no frozen baseline yet | Freeze a committed revision, approve the panel and settle budget feasibility (F9). Compatibility covers only the observed first request shape. |
+| Test an AC-focused request | Feasible after an eligible fresh capture on the frozen revision | Prepare/freeze the candidate, validate its serialized request and score actual responses. Fresh bounded live approval is required. No production family scheduler is a prerequisite. |
 | Reuse native parsing/projection | Partly reusable in diagnostic tooling | Apply applicable schema, typed-text, occurrence and binding checks; record their scope. Do not force incomplete AC output through whole-specification completion. |
 | Execute separate family assignments in production | Not implementation-ready | Establish assignment identity, applicability, finite scheduling, exact completion/assembly and repair dependencies. Reusing the generic runner does not supply those contracts. |
 | Establish improved product reliability | Unproven | Actual production-origin generation, review and authorized repair, followed by complete publication and rubric qualification. |
@@ -496,14 +745,14 @@ uses that path. A candidate must still compile under the closed schema contract
 and retain a valid captured parent; a missing archive cannot be replaced by a
 fabricated receipt. Replay retains provider/model/settings; its
 [authorization check](../src/composition/request_debugger.zig#L53) rejects a changed
-target. Capture an authentic parent on the selected current model rather than
-retargeting an old GPT-OSS request.
+target. Capture an authentic parent under the current contract on the frozen
+revision. Do not reuse a historical GPT-OSS parent captured under a superseded
+packet, schema or codec, even though the model is the same.
 
 This is a qualitative feasibility assessment, not an implementation estimate or
-runnable dispatch manifest. It needs preparation/scoring and current-model
-integration work. Whether a new provider client is needed depends on the selected
-target; do not assume one is already available. No generation-runtime redesign is
-needed merely to compare diagnostic requests.
+runnable dispatch manifest. It needs preparation and scoring work. The selected
+binding uses the existing Bedrock client; no new provider client is needed. No
+generation-runtime redesign is needed merely to compare diagnostic requests.
 
 ### 4.2 High: current-baseline evidence is missing
 
@@ -514,6 +763,11 @@ required entity family and present/unmet family facts, as well as the newer
 model-text representation. It is not the request used by the historical panel.
 The generated preparation location and owning build entry are documented in the
 [authoring harness](../test/calibration/authoring-associations/README.md#L60).
+
+The 16 October full-workflow diagnostics (F9) are the first selected-binding
+observations under the current contract. They are not this baseline: loan-renewal
+is outside the panel, the builds were uncommitted and differed between runs, and
+neither run reached publication.
 
 Historical errors justify selecting development cases; they do not establish
 today's defect rate or an expected improvement. Capture a fresh current baseline
@@ -668,8 +922,8 @@ calls the alternatives **unselected experiments**.
 [Recommendation](FIX03.md#L1919), [qualification boundary](FIX03.md#L1963).
 That experiment tests the source boundary; this pilot tests output purpose.
 Whole-collection authoring may reduce group fragmentation while increasing mixed
-semantic work. Neither option has established superiority. With the revised
-current small-model planning assumption, compare complete output first and retain this
+semantic work. Neither option has established superiority. With the selected
+small-model binding, compare complete output first and retain this
 purpose-only diagnostic for remaining failures. This does not promote either
 option to accepted architecture. Preparing the alternative does
 not need a separate policy exception merely because the earlier analysis proposed
@@ -783,15 +1037,21 @@ The larger-change authorization permits a complete redesign where justified.
 It does not require changing every abstraction. Preserve the generic runner,
 registered action boundaries, closed native validation, source authority and
 atomic whole-workflow publication. Generation decomposition needs no new model
-tool capability, alternate runtime or semantic planning gate. Any provider-client
-work is determined separately by current-model integration; no new production
-dependency is selected in this report.
+tool capability, alternate runtime or semantic planning gate. The selected binding
+needs no new provider client, and no new production dependency is selected in this
+report.
+
+Generation is not the only owner of the complete outcome. On the selected binding,
+source review consumed most of the workflow's tokens and produced wrongly typed
+omission findings (F9). The comparison below therefore measures generation, while
+Phase 2 must also attribute failures and cost to review and repair before any
+generation redesign is credited with, or blamed for, workflow completion.
 
 ### 5.2 Compare distinct source and output boundaries
 
 | Candidate | What it changes | Remaining difficulty and decision use |
 | --- | --- | --- |
-| A: current mixed records per group | Nothing; current complete pass is the control | Establish capability on the actual current model. Every group and complementary family remains in the workload denominator. |
+| A: current mixed records per group | Nothing; current complete pass is the control | Establish capability on the selected model under the current contract. Every group and complementary family remains in the workload denominator. |
 | C: one complete mixed record collection | Removes the fixed per-group authoring boundary; permits each record to select actual supporting groups | Retains family selection and full-feature coverage in one request. This is the first full-output comparator for the current small-model baseline. |
 | Purpose split retaining current source scope | Separates an evidenced difficult purpose, such as AC authoring, from complementary record work | Can help family/role confusion, but preserves source fragmentation and adds calls. An AC/non-AC split still leaves mixed complementary work; it is not equivalent to simplifying every family. |
 | D: complete collection per record family | Combines a whole-source scope with a fixed output purpose and explicit per-record support selection | Removes family selection and fixed single-group inheritance, but repeats source context and leaves coverage/support selection to the model. Test the complete workload before choosing it. |
@@ -815,6 +1075,8 @@ Use this decision rule after the frozen comparison:
 | A required behavior needs joint groups that fixed inheritance cannot represent | Resolve the source-association contract regardless of easy-case scores; prompt wording cannot remove the representational limit. |
 | Neither change improves quality, or unsupported additions/cost materially worsen | Reject the candidates and revisit the measured failure or supported scope. Do not add stages or retries speculatively. |
 | Quality looks promising but association or scoring is unresolved | Resolve that specific boundary; do not claim production qualification. |
+| Baseline failures or cost concentrate in review or repair rather than generation | Generation decomposition is not the next intervention. Resolve the measured review or repair boundary first, through its owning contract and with its own qualification; do not compensate with generation changes. |
+| Failures are structurally detectable but escape native admission (F10) | Not a decomposition question. Close the shared representation and admission contract first, then re-establish the baseline; a gain from adding such a rule to one arm is not a decomposition benefit. |
 
 ### 5.3 Concrete contract for collection-level authoring
 
@@ -882,7 +1144,7 @@ Compared with current `3 + G` initial generation calls, C uses `3 + 1`, while D
 uses `3 + P`, with P equal to eight or nine under this proposal. These are call
 counts, not token or quality estimates. D can be expensive for small G; C can
 produce a large output and fail the provider's output allowance. Even one complete
-family may be semantically difficult for a current small model. Measure actual
+family may be semantically difficult for the selected small model. Measure actual
 tokens, latency, truncation and useful completion across feature sizes. Do not
 add local size ceilings, reservations or silent truncation to make the redesign fit.
 
@@ -943,8 +1205,11 @@ cannot contribute a full-collection or workflow-completion success.
 | Robust-case success | Proportion of attempted feature/repetition bundles whose original and predeclared variants all meet their respective semantic and terminal expectations | Correctness survives harmless changes and responds correctly to real requirement changes |
 | Representation sensitivity | Material failures introduced by meaning-preserving variants whose original succeeds; show numerator, eligible-pair denominator and coverage in each arm, plus the common-original-success subset | A valid representation change causes fewer new failures; keep this separate from general fidelity |
 | Repeat inconsistency | Proportion of independent features showing both semantic success and material failure across the same frozen number of identical-request repetitions | Less observed instability; consistently wrong responses still fail fidelity and robust-case measures |
+| Finding-type accuracy | Proportion of review findings whose type (`supported`, `candidate_omission`, `candidate_invalid`, `unsupported`, inconclusive) matches the frozen source-based label for the assessed field; report each predicted type's precision and each labelled type's recall, at original and final assessment | Diagnoses route to the correct repair or clarification; a real defect reported with the wrong type counts as a harmful diagnosis |
 | Mechanical enforcement | Accepted/rejected contract cases, provider/schema failures, correction recovery/exhaustion, state/origin/repair/publication invariants | Compatibility and enforcement only; passing tests does not establish semantic quality |
 | Complete resource use | All physical sends, actual input/output tokens and elapsed time per attempted workload and per useful completion; show median and observed worst case | Benefit survives the cost of corrections, review, repair and failures; no cheap-looking partial workload |
+| Stage resource share | Sends and actual tokens per stage (extraction/reconciliation, generation, review, repair) per attempted workload, including budget-stopped workloads | Identifies where cost and budget exhaustion arise; a generation saving cannot hide a review or repair increase |
+| Admission escape | Proportion of attempted workloads in which a value violating a declared native composition or wire rule reached model review or publication, with the sends and tokens spent downstream of it; native rejections at admission are counted separately | Structural defects are stopped by their deterministic owner rather than discovered, misdiagnosed and repaired by model calls; a reduction here is mechanical evidence, not semantic quality |
 
 A **material error** changes a required behavior, condition, exception, negation,
 strength, actor, outcome, source association or necessary user decision. Harmless
@@ -1023,6 +1288,14 @@ For progress decisions, use these proposed rules:
   weight. Publish paired feature results and uncertainty, not just a pooled score.
   If the evidence cannot distinguish the required benefit from variability, the
   decision is inconclusive; do not add calls until a preferred answer appears.
+- **Budget feasibility:** before Phase 2 dispatch, state which phases the
+  experiment-wide send and token stops cover and project their demand from actual
+  selected-binding usage, including full-workflow review and repair. Freeze the
+  per-workflow token budget used by baseline and candidate builds. If the compiled
+  workflow budget cannot complete the panel's full workflows, record that as a
+  required decision (raise it through an explicit engine contract change, reduce
+  measured review or repair cost through its owner, or narrow the qualified scope),
+  not as permission to shrink the panel or treat budget-stopped runs as completions.
 
 All dispatched failures, malformed/truncated outputs and exhausted repairs remain
 in the attempted-workload denominator. Genuine-gap cases use their separate
@@ -1072,9 +1345,13 @@ never permission to shrink the panel after seeing results. Prospective experimen
 limits are 1,000 sends and 2,000,000 actual tokens; `live_authorized` remains false.
 These are proposed experimental gates, not production size limits or dispatch
 approval. Only the selected Bedrock GPT-OSS-20B tuple is permitted for live tests.
+The limits were frozen before any full-workflow cost was observed on the selected
+binding. They have not been reconciled with the 16 October diagnostics, which
+exhausted a 100,000-token workflow budget on one small feature (F9). Phase 2's
+budget-feasibility step (§5.5) must resolve this before dispatch.
 
 **Deliverable:** a frozen comparison protocol, case inventory and scorecard using
-existing calibration/harness owners. Include exact current model identity/settings,
+existing calibration/harness owners. Include exact selected model identity/settings,
 source bytes, expected duties and terminal outcomes, development/untouched
 qualification partitions, variants, development counts, qualification-sizing rule,
 numeric thresholds, maximum sends, actual-token stops and the feature-level
@@ -1085,7 +1362,7 @@ Use unrelated domains and more than one feature size; record the intended scope
 rather than implying coverage of every input.
 
 **Test:** dry-run case loading, provider-neutral packet/fixture preparation, result
-accounting and scoring aggregation without inference. Current-target provider
+accounting and scoring aggregation without inference. The selected provider
 binding is verified in Phase 1. Check prelabelled faithful/paraphrased, omitted,
 invented, falsely clarified and harmfully repaired specimens. Verify that the
 scorecard distinguishes structural success, semantic fidelity and publication;
@@ -1097,7 +1374,7 @@ answer leakage or variant leakage into the holdout. Retain the protocol and dry-
 report. If labels or scoring remain disputed, revise the evaluator before changing
 generation. This phase makes progress measurable; it establishes no model benefit.
 
-#### Phase 1 — Establish compatible current-model execution
+#### Phase 1 — Establish compatible selected-model execution
 
 **Offline implementation complete; mechanical checks passed, 15 October 2026.**
 Final verification passed **155/155 build steps and 1,786/1,786 tests**; the
@@ -1173,11 +1450,14 @@ production request/settings, not every workflow request shape or semantic qualit
 The [Phase 1 offline evidence record](../test/calibration/semantic-simplicity/phase1-offline-results.md)
 records the mechanical checks separately from this live evidence.
 
-**Deliverable:** the current target's trusted registration and any required codec/
+**Deliverable:** the selected binding's trusted registration and any required codec/
 adapter support behind existing ports, with the generation assignment unchanged.
 Verify official request, response, region, schema, reasoning, temperature, output
 allowance, stop and usage contracts. Configure the validated catalogue and slot.
-A current small-model cohort requires its own verified binding.
+Any other model requires its own verified binding. Account access and IAM
+permissions are preconditions to confirm outside the probe; 18 of the 20 probes
+were spent on access rejections (fifteen Luna, three GPT-OSS) that the probe cannot
+diagnose.
 
 **Test:** positive and negative provider/control cases, malformed and missing usage,
 noncandidate stops, unknown model/region, cancellation, exact request association,
@@ -1201,19 +1481,105 @@ capture. Advance with a provider-compatible baseline revision, not a semantic
 quality claim. On incompatibility, repair the provider boundary; do not compensate
 with generation prompts or a silent fallback model.
 
+#### Phase 1A — Close the representation admission gap before the baseline
+
+**Why it precedes Phase 2.** F10's composition failures are detectable by
+deterministic code, recur in every run that reached generation, and change which
+candidates are admitted. Freezing a baseline before closing them would measure a
+known enforcement gap, and closing them later would leave baseline and candidate
+under different admission contracts. This phase is independent of the A/B/C/D
+choice and adds no assignment, model call or semantic planner.
+
+**Decisions settled for the authorized implementation — 16 October 2026:**
+
+The explicit Phase 1A implementation instruction authorizes the amendments.
+The accepted [composition contract](../design/contracts/text-field-composition.md)
+records the exact inventory and rules; the items below retain the decision scope.
+
+1. **Field inventory.** For every declared text field in Spec generation, repair,
+   clarification, extraction and reconciliation, whether nonblank prose is required.
+   Nonblank prose is required for every narrative or behavioral field, including
+   title, description, goal, story, Given/When/Then, expected outcomes, requirement
+   and rule text, entity basis and meaning, relationships and clarification
+   questions. Entity names are the explicit optional-prose identity-label
+   exception; their insertions remain incidental and do not satisfy behavioral
+   coverage. There is no fragment-count or repeated-literal special case.
+2. **Exact-copy role per field.** Which fields may carry insertions at all, and in
+   which fields an occurrence satisfies an exact-copy obligation for collection
+   coverage. Only composition-valid behavior/constraint fields are obligation-bearing;
+   the accepted inventory distinguishes incidental descriptive fields and
+   reference fields without exact-copy insertions. This amends ADR 0020.
+3. **Wire-syntax rule.** Rejecting prose that contains the closed insertion grammar,
+   with the exact-original-source-byte exception, as a protocol error through
+   existing bounded correction. Native and stored checks use the same grammar.
+4. **No-progress repair.** The shared definition of a repair that returns the
+   rejected value unchanged for the same defect key, and how it exhausts the existing
+   allowances. Canonically unchanged replacements under the exact current key
+   produce shared `unchanged_repair` exhaustion before the tentative delta applies;
+   actual calls/usage remain charged and no re-review or successful repair follows.
+
+**Deliverable:** the accepted amendments to [§7.1](../design/contracts/07-domain-representations.md#71-shared-types),
+[§17.3](../design/contracts/17-specify.md#173-llm-work), ADR 0020 and the repair
+contract in §22, and one coherent implementation at the owners in F10's table: field
+policy registry, codec, typed-text validator and its callers, coverage, retry owner,
+packet presentation, stored readback and harness reporting. Remove guidance text the
+policy owner now supplies, so that rule and presentation cannot drift.
+
+**Test:** accepted and rejected cases for every consumer that validates typed text:
+initial generation, protocol correction, unit repair, omission repair, coverage
+repair, extraction and reconciliation where the inventory declares a policy, and
+stored readback. Cover fields in unrelated domains, legitimate in-sentence insertions,
+declared lone-insertion fields, wire syntax with and without a source occurrence,
+coverage satisfied only in obligation-bearing fields, and no-progress repair
+exhaustion. Replay the retained captured model outputs from the five runs in F10
+through native admission offline: each listed value must now reject with the
+expected typed issue, and the runs' prose-bearing values must still admit. This
+uses retained evidence and makes no model call. Then run architecture checks and
+`zig build verify --summary all`.
+
+**Exit gate:** all checks pass, the offline replay shows every F10 value rejected at
+its owner and no legitimate value rejected, and the amendments are accepted. One
+separately approved full-workflow diagnostic per development case may then measure
+admission rejections, unit-repair outcomes and downstream review calls. It is
+mechanical evidence about where defects stop, not a quality or completion claim.
+The Phase 2 baseline is frozen afterwards, on a committed revision that includes
+this contract.
+
+**Implementation and offline gate complete — 16 October 2026.**
+[The implementation record](FIX04-phase1a-implementation.md) maps every deliverable
+to its owner and records the settled amendments and validation. The retained
+offline replay rejects all 29 captured defects (10 insertion-only and 19 encoded
+insertions) and admits all 50 prose-bearing controls from five runs and 23
+exchanges. `zig build verify --summary all` passed all 156 steps and 1,699 tests,
+including offline integration, architecture and clean-directory packaging checks.
+No new provider request or live workflow was run; renewed feasibility and live
+quality evidence remain Phase 2 work.
+
 #### Phase 2 — Establish baseline quality and failure sensitivity
 
-**Deliverable:** an unchanged-generation baseline report for the current model on
+**Deliverable:** an unchanged-generation baseline report for the selected model on
 the development panel, including original, repeated and transformed inputs.
-Freeze the provider-integrated baseline revision for later comparison. Distinguish
-controlled-predecessor diagnostics from complete production runs using actual
-predecessors; obtain the required live approvals for each scope.
+Freeze a committed provider-integrated baseline revision for later comparison;
+runs on differing uncommitted builds, such as the 16 October diagnostics, cannot
+form the baseline. Distinguish controlled-predecessor diagnostics from complete
+production runs using actual predecessors; obtain the required live approvals for
+each scope.
+
+**Prerequisite:** close Phase 1A, then complete the budget-feasibility step in
+§5.5. With the compiled 100,000-token workflow budget, complete production runs
+currently end in budget exhaustion during review (F9), and part of that review cost
+follows defects that native admission should reject (F10). Re-measure feasibility
+after Phase 1A; the required budget decision belongs to the user and must be
+recorded before the baseline is frozen.
 
 **Test:** measure every §5.5 outcome, audit material disagreements between evaluation
 and source expectations, and identify reproducible failure classes. Record whether
-loss begins in extraction/grouping, generation, review or repair. An oracle-corrected
-requirement list cannot conceal an upstream failure. Keep qualification cases and
-results unavailable for prompt/design tuning.
+loss begins in extraction/grouping, generation, representation/admission, review or
+repair, and report stage resource share, admission escape and finding-type accuracy
+for complete production runs. Attribute a defect to the first stage that could have
+stopped it deterministically, not to the first model call that noticed it. An
+oracle-corrected requirement list cannot conceal an upstream failure. Keep
+qualification cases and results unavailable for prompt/design tuning.
 
 **Exit gate:** the predeclared evidence is sufficient to identify current headroom,
 variability and resource use. Retain per-feature scores, source-backed error examples
@@ -1226,11 +1592,28 @@ and there is no meaningful improvement to test, retain it and stop the redesign.
 If the source of failure or scoring is unresolved, investigate that boundary;
 do not start a family scheduler merely because the original panel failed.
 
+**Implementation record — 16 October 2026:** the development-only
+[baseline harness](../test/harness/baseline/cli.zig) now separates offline budget
+preparation, explicitly approved serial production acquisition and offline
+source-backed assessment. Arm A can be planned/scored without C. Freezing
+requires a committed build, explicit recorded budget decision and sufficient
+native full-workflow cost evidence; the current budget-stopped diagnostics do
+not satisfy that prerequisite. Every physical send, native usage observation,
+original/corrected candidate and unattempted trial remains distinct. Evaluator
+expectations remain outside materialized generation inputs. Qualification uses
+the user's selected complete first-pass fidelity metric. The
+[operator guide](../test/calibration/semantic-simplicity/README.md#prepare-acquire-and-assess-phase-2)
+describes the commands and retained evidence. These mechanics do not close this
+phase's live evidence or semantic exit gate.
+The subsequent [implementation completeness audit](FIX04-phase2-audit.md) maps
+each measure to its owner and records the separately approved live diagnostic;
+its failed execution does not close this phase.
+
 #### Phase 3 — Select an assignment boundary through diagnostics
 
 **Deliverable:** one bounded A/C complete-record comparison, with B considered only
 for reproduced mixed-purpose errors and D only when combining changes is justified.
-Keep the current model, evidence, settings and scoring fixed; counterbalance request
+Keep the selected model, evidence, settings and scoring fixed; counterbalance request
 order. Disclose C's support selector and output-scope changes as one intervention
 package, as required by §5.2. Do not attribute its gain to one hidden reasoning step.
 
@@ -1273,8 +1656,9 @@ never to a weaker validator or broader repair permission.
 #### Phase 5 — Qualify the complete production workflow
 
 **Deliverable:** a paired baseline/candidate qualification report on untouched
-features, including the frozen variants and repetitions. Use the same current model
-and settings for both builds, actual generated predecessors, fresh workflow-origin
+features, including the frozen variants and repetitions. Use the same selected model,
+settings and frozen workflow token budget for both builds, actual generated
+predecessors, fresh workflow-origin
 candidates, normal review/repair, publication and the actual-output rubric. The
 retained baseline runs in an isolated checkout/target; it is not a production
 compatibility branch, and no persisted state is transferred between contracts.
@@ -1282,6 +1666,7 @@ compatibility branch, and no persisted state is transferred between contracts.
 **Test:** separately approve each live E2E run with its explicit case and target.
 Score first-pass fidelity and published useful completion separately; include
 harmful diagnoses/repairs, false gaps, blocked/failed runs and all resource use.
+Budget-stopped runs remain failed attempts in the denominator.
 Check that improvements seen with controlled predecessors survive the real upstream
 pipeline. Grade only output attributable to the current execution, never stale
 files left by a failed run. Apply the appropriate expected outcome to genuine gaps.
@@ -1299,16 +1684,16 @@ at the diagnosed owner; do not change thresholds, retries or models after the fa
 #### Phase 6 — Adopt the qualified scope and expand one dimension at a time
 
 **Deliverable:** a bounded adoption decision identifying the qualified workflow,
-current model/version, source shapes, feature sizes, evidence and known limitations.
+selected model/version, source shapes, feature sizes, evidence and known limitations.
 Use the single validated implementation. This is a scope-of-evidence statement,
 not a fixture-specific runtime branch or a claim that every workflow is qualified.
 External release/publication remains a separately authorized action.
 
 **Test:** retain source cases and valid transformations as regression evidence.
 For each expansion, change one declared dimension—such as a larger feature range,
-another domain or a current-generation small model—and repeat the applicable
-baseline and complete qualification gates. Each current small-model result stands
-alone; another model's gain cannot qualify it. The GPT-OSS-20B-only live-test constraint
+another domain or another model—and repeat the applicable baseline and complete
+qualification gates. Each model's result stands alone; another model's gain cannot
+qualify it. The GPT-OSS-20B-only live-test constraint
 remains in force; another model needs explicit changed scope. Recheck model
 generations at execution time.
 
@@ -1339,6 +1724,7 @@ Use the repository's registered build steps. This table maps future phase checks
 | Fresh one-send compatibility scenario, offline | `zig build test-provider-compatibility` (guards/CLI/report), `zig build test-integration` (fresh production runtime/fake exchange), `zig build test-provider-compatibility-launcher`, `zig build smoke-provider-compatibility` |
 | Provider and request compatibility | `zig build test-provider-conformance`, `zig build test-provider-invocation-validation`, `zig build test-model-request-preparation`, `zig build test-model-request-workflow` |
 | Source packets, generation and response contracts | `zig build test-reference-model-input`, `zig build test-specification-generation`, `zig build test-specification-contract` |
+| Representation admission contract (Phase 1A) | `zig build test-typed-text`, `zig build test-model-envelope`, the source-packet and repair entries in this table, and `zig build test-integration` for the [retained F10 admission replay](../test/calibration/representation-admission/README.md); no model call is made |
 | Repair, runner, identity and lifecycle | `zig build test-workflow-repair-retry`, `zig build test-workflow-graph`, `zig build test-pipeline-envelope`, `zig build test-atomic-execution`, `zig build test-architecture` |
 | Completed coordinated implementation | `zig build verify`, including offline integration and clean-directory native packaging checks |
 | Separately approved authentic Phase 1 exchange | `zig build provider-compatibility -- --case <explicit-approved-case-path> --live`; at most one physical inference send, no judge or publication authority |
@@ -1362,8 +1748,9 @@ calls or higher schema admission alone cannot close the semantic rollout.
 The delivery now includes Phase 0's closed evaluation contracts, fixed offline
 integration scenario and retained fixture/result evidence. The separately
 requested production change replaces provider-specific Bedrock chat serialization with
-shared Converse invocation/count/replay/harness codecs, adds the registered Luna
-binding and retains optional provider reasoning in typed debugger diagnostics.
+shared Converse invocation/count/replay/harness codecs, adds the Luna registration
+(still registered, no longer a live-test selection) and retains optional provider
+reasoning in typed debugger diagnostics.
 The current development live-test policy permits only the selected Bedrock GPT-OSS-20B tuple
 before credentials/network. Canonical live fixtures and the explicit judge
 selection use that same model; judging remains a separately labelled role with
@@ -1392,7 +1779,7 @@ The analysis inspected current assignment, evidence, review, generation and prov
 owners; relevant accepted amendments; historical report/fixture provenance; and
 current primary release/benchmark sources. Older model research is excluded from
 capability conclusions. No inspected study directly qualifies the proposed
-assignment granularity for the current targets. Detailed live benchmark artifacts
+assignment granularity for the selected model. Detailed live benchmark artifacts
 were not fully retrievable, and no public experiment was independently reproduced.
 Historical model-quality numbers retain their original assessment limitations
 and are not used to select the new architecture.
@@ -1415,10 +1802,17 @@ inference API endpoint, codec, alias, fallback or obsolete API reference. Generi
 workflow `invoke-model` action names and immutable historical evidence retain
 their separate meanings.
 
-No model/provider calls, live debugger replay or E2E execution were performed.
-Phase 1's authentic compatibility gate and Phases 2–6 semantic qualification
-remain open. Source labels and review are model-assisted, not human-approved or
-deterministic proof;
-no semantic benefit, reduced brittleness or useful publication is claimed.
-Historical results remain immutable and the existing staged FIX04 version is
-preserved; current changes are in the working copy.
+The Phase 0 and Phase 1 offline verification runs made no model/provider calls.
+Separately authorized live work then ran on 16 October: twenty one-send
+compatibility probes, of which one passed the Phase 1 gate, and three full-workflow
+development diagnostics (two loan-renewal, one hello-world), none of which published
+a specification or ran rubric evaluation (header, F9 and F10). No live debugger
+replay was performed. Phase 1's bounded exchange gate is closed for the observed
+first request only. Phase 1A's accepted contract, implementation and offline gate
+are complete; Phases 2–6 remain open. Phase 2 requires fresh budget-feasibility
+evidence, the recorded user decision and a committed baseline build. Source
+labels, review and the F9 and F10 semantic interpretations remain model-assisted
+or reviewer readings of retained outputs. Phase 1A adds the separate mechanical
+evidence linked above; no semantic
+benefit, reduced brittleness or useful publication is claimed. Historical results
+remain immutable.

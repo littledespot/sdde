@@ -105,6 +105,9 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     response_schema: *const @import("model_result_schema.zig").Schema,
     response_guidance_mode: model_controls.ResponseGuidanceMode,
     controls: model_controls.InferenceControls,
+    /// Native source witness for text admission; never serialized to providers.
+    original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
+    prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
 
     pub fn init(value: IdentifiedProviderNeutralModelRequest) RequestError!IdentifiedProviderNeutralModelRequest {
         try value.validate();
@@ -112,6 +115,7 @@ pub const IdentifiedProviderNeutralModelRequest = struct {
     }
 
     pub fn validate(self: IdentifiedProviderNeutralModelRequest) RequestError!void {
+        if (!@import("model_text_wire.zig").validSources(self.original_sources) or !@import("model_text_wire.zig").compatibleProseSchema(self.prose_fields, self.response_schema.root())) return error.InvalidProviderNeutralModelRequest;
         if (!self.model_request_id.model_operation_id.eql(self.model_operation_id) or
             !self.binding_id.operation_id.eql(self.model_operation_id) or
             !self.binding_id.isValid() or

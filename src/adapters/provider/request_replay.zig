@@ -149,6 +149,16 @@ pub const Adapter = struct {
             result.reason = "Captured schema is invalid";
             return result;
         };
+        if (try @import("../../domain/model_text_wire.zig").checkValue(a, document.parsed.value, schema.root(), description.original_sources)) |_| {
+            result.json = .invalid;
+            result.reason = "EmbeddedInsertionSyntax";
+            return result;
+        }
+        if (try @import("../../domain/model_text_wire.zig").checkProseFields(a, document.parsed.value, description.prose_fields, description.original_sources)) |_| {
+            result.json = .invalid;
+            result.reason = "EmbeddedInsertionSyntax";
+            return result;
+        }
         if (@import("../../domain/model_payload_schema.zig").validateValue(envelope.value(&document.parsed.value), schema.root())) |diagnostic| {
             result.schema = .invalid;
             const detail = try diagnostic.describe(a);

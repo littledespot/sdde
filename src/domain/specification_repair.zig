@@ -196,9 +196,10 @@ fn targetValid(a: std.mem.Allocator, validator: @import("typed_text.zig").Valida
         .value => |field| {
             const evidence = try candidates.attributedValue(.model, response, field.subject, field.field);
             const values = if (field.subject == .record) try p.recordValues(a, response.content.records[field.subject.record].content) else &.{evidence.value};
-            _ = p.checkValueInUnit(a, validator, context, evidence.provenance, values, evidence.value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+            const policy_field = if (field.subject == .record) try candidates.recordTextField(response.content.records[field.subject.record].content, field.field) else try candidates.singletonTextField(field.subject);
+            _ = p.checkValueInUnit(a, validator, context, evidence.provenance, values, evidence.value, policy_field) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         },
-        .attributed => _ = p.checkAttributed(.model, a, validator, context, selected.attributed) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false,
+        .attributed => |subject| _ = p.checkAttributed(.model, a, validator, context, selected.attributed, try candidates.singletonTextField(subject)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false,
         .record => {
             if (candidate.group_repair) |group| if (group.policy == .membership) {
                 if (!g.spec.entityMembershipSatisfied(current.units[2].?.response.content.entities.disposition, @intFromBool(selected.record.content == .entity))) return false;
@@ -339,13 +340,14 @@ pub fn parse(allocator: std.mem.Allocator, authorization: Authorization, packet_
     };
 }
 
-pub fn merge(allocator: std.mem.Allocator, current: session.Session, context: p.Context, candidate: Candidate, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!Candidate {
+pub fn merge(allocator: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, current: session.Session, context: p.Context, candidate: Candidate, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!Candidate {
+    if (!canonical.matchesInputs(context.inputs)) return error.InvalidAtomicRepair;
     if (authorization.target == .provenance or (proposed_replacement != null and proposed_replacement.? == .provenance)) return error.InvalidSpecificationRepair;
     const facts = try dependencies.capture(allocator, current, context, candidate);
     defer allocator.free(facts.references.lineage.history);
     var result = candidate;
     const prior_value = if (authorization.operation == .insert) null else try candidates.select(candidate.response, authorization.target);
-    const merged = try atomic.checkMerge(allocator, try session.owner(allocator, current), candidate.revision, prior_value, facts, authorization, proposed_replacement, origin);
+    const merged = try atomic.checkMerge(allocator, canonical, try session.owner(allocator, current), candidate.revision, prior_value, facts, authorization, proposed_replacement, origin);
     if (authorization.rule.value_bound) |bound| {
         if (authorization.target != .value or proposed_replacement == null or proposed_replacement.? != .value) return error.InvalidSpecificationRepair;
         const updated = try candidates.replace(allocator, candidate.response, authorization.target, proposed_replacement.?);

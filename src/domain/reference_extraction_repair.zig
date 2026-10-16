@@ -86,11 +86,12 @@ pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const p
     return atomic.parse(a, authorization, input, bytes);
 }
 
-pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, proposed_replacement: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!extraction.TextValidated {
+pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, facts: Facts, authorization: Authorization, proposed_replacement: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!extraction.TextValidated {
+    if (!canonical.matchesInputs(facts.inputs)) return error.InvalidAtomicRepair;
     const replacement = try atomic.copyReplacement(a, proposed_replacement);
     const current = facts.candidate;
     const scope = try scopeOf(authorization);
-    const merged = try atomic.checkMerge(a, unit(scope), current.revision, try select(current, scope, authorization.target), facts, authorization, replacement, origin);
+    const merged = try atomic.checkMerge(a, canonical, unit(scope), current.revision, try select(current, scope, authorization.target), facts, authorization, replacement, origin);
     const entries = try a.dupe(extraction.TextValidatedResult, current.entries);
     for (entries) |*entry| if (entry.scope.chunk_id.eql(scope.chunk_id)) {
         switch (authorization.target) {
@@ -264,11 +265,12 @@ pub const Omission = struct {
             .outcome => .{ .outcome = .{ .claim = try json.decode(extraction.Proposal, a, bytes) } },
         };
     }
-    pub fn merge(a: std.mem.Allocator, validator: extraction.text.Validator, literals: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, facts: OmissionFacts, auth: OmissionAuthorization, proposed: OmissionReplacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!extraction.TextValidated {
+    pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, validator: extraction.text.Validator, literals: @import("passive_literals.zig").Registry, current: *const @import("toolchain_safety.zig").ValidToolchain, facts: OmissionFacts, auth: OmissionAuthorization, proposed: OmissionReplacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!extraction.TextValidated {
+        if (!canonical.matchesInputs(facts.extraction.inputs)) return error.InvalidAtomicRepair;
         const replacement = try Atomic.copyReplacement(a, proposed);
         const scope = try Omission.scopeOf(auth);
         const entry = try entryAt(facts.extraction.candidate, scope);
-        const merged = try Atomic.checkMerge(a, unit(scope), facts.extraction.candidate.revision, try valueAt(entry, auth.target), facts, auth, replacement, origin);
+        const merged = try Atomic.checkMerge(a, canonical, unit(scope), facts.extraction.candidate.revision, try valueAt(entry, auth.target), facts, auth, replacement, origin);
         const entries = try a.dupe(extraction.TextValidatedResult, facts.extraction.candidate.entries);
         for (entries) |*changed| if (changed.scope.chunk_id.eql(scope.chunk_id)) {
             if (auth.target == .classification) {

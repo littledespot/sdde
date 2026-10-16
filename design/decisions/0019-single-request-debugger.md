@@ -44,10 +44,14 @@ unattributed evidence remains explicitly uncorrelated.
 The prompt column schema becomes `prompt-columns/v3`, with 37 columns; no legacy
 reader is added. A separate `request_description` body records the provider/model,
 region/config, selected slot, workflow/request entry, typed content, fixed protocol
-prompt, exact validation schema and inference settings. `model-request-debug/v3`
+prompt, exact validation schema and inference settings. `model-request-debug/v4`
 captures the selected schema's complete expanded projection, including named
 selections, composition parts and narrowed repair shapes, plus the optional output
-allowance under the 2026-10-10 amendment to ADR 0011. Older descriptions remain
+allowance under the 2026-10-10 amendment to ADR 0011. The user-authorized
+2026-10-16 Phase 1A amendment additionally retains the native original-source
+witness and explicit plain-prose selectors used by the source-aware model-text
+wire validator. This metadata is
+diagnostic input, not provider-visible authority. Older descriptions remain
 unchanged and reject readback; replay requires a new capture, with no compatibility
 reader. The shared schema
 compiler reconstructs selected object/tagged-union roots for diagnostic use;
@@ -85,7 +89,7 @@ requires no browser-supplied filesystem path. Missing snapshots are explicitly
 unavailable; current source files cannot substitute for historical evidence.
 Replay retains the original source snapshot. Modified input is marked as an
 override, including an exact replay of an already modified request. Immutable
-`request-replay/v4` records persist both fields; no older replay reader is added.
+`request-replay/v5` records persist both fields; no older replay reader is added.
 
 ## Replay
 

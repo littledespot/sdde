@@ -538,13 +538,34 @@ accompany success. Omission-authorization rejection additionally retains the rev
 revision, outstanding candidate-defect requirements and review origin. A review
 origin is not attributed as the producer of the generation defect.
 
-`first_observed_defect` identifies the earliest captured diagnostic and event sequence,
+`first_native_rejection` identifies the earliest captured native rejection and event sequence,
 not a proven initial semantic cause. `corrections` project accepted native repair
 permits, target keys, revisions and actual invalidation/rebuild links. `outstanding_work`
 lists invalidated data keys not rebuilt, with the event that invalidated each; it may
 include intentionally retired transport data and does not independently determine
 workflow completion. Rejected deltas create no applied-effect evidence. Each fresh
 invocation starts a new projection; earlier recovered errors remain historical.
+
+`admission_audit` records native admitted extraction, reconciliation, specification,
+source-review questions and source-validated clarification projections with their
+field policy, producer origin where available, canonical value and original
+source bytes. Clarification projections retain native clarification IDs and do
+not manufacture current producer origins for stored questions. It reruns the shared composition and source-aware wire-syntax checks;
+it supplies no semantic judgment or workflow authority. The baseline's primary
+`admission_escape` rate uses `invoked_native_workloads`: workloads with a retained
+native report or physical receipt, including native failures before the first send.
+Never-invoked setup failures and budget-stopped trials are excluded and counted
+separately. Missing audits on invoked workloads count as unknown; measured and
+unknown coverage stay explicit; missing producer attribution remains unavailable.
+This diagnostic denominator is separate from the
+comparison scorecard's dispatched-arm convention. Distinct admitted producer origins
+provide a separate secondary diagnostic; repeated retained or assembled views do not
+inflate it. An absent or incomplete audit remains unavailable, separately from a
+measured zero. Its downstream sends and native
+actual usage cover exchanges after the first observed escaped admission in the
+workflow: chronological exposure, not causal cost. Unknown usage stays unknown.
+The baseline scorer verifies these facts independently of assessor labels and keeps
+`representation_admission` failure attribution separate from native paid-resource stages.
 
 ### Reliability assessment
 

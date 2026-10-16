@@ -66,10 +66,10 @@ pub fn resolveRecords(comptime boundary: spec.Boundary, allocator: std.mem.Alloc
 pub fn lineageForRepair(allocator: std.mem.Allocator, context: Context, selection: spec.Selection, values: []const spec.BusinessValue) Error!Resolved {
     return resolveUnitRecords(.model, allocator, context.inputs, @import("reference_support.zig").records(context.references), selection, values);
 }
-pub fn checkValueInUnit(allocator: std.mem.Allocator, validator: text.Validator, context: Context, selection: spec.Selection, values: []const spec.BusinessValue, value: spec.BusinessValue) Error!spec.BusinessValue {
+pub fn checkValueInUnit(allocator: std.mem.Allocator, validator: text.Validator, context: Context, selection: spec.Selection, values: []const spec.BusinessValue, value: spec.BusinessValue, field: text.field_policy.Field) Error!spec.BusinessValue {
     const resolved = try lineageForRepair(allocator, context, selection, values);
     var inspection: Inspection = .{};
-    return valueIn(allocator, validator, context, resolved, value, &inspection);
+    return valueIn(allocator, validator, context, resolved, value, field, &inspection);
 }
 
 fn dispositionFor(references: @import("reference_support.zig").Records, id: r.ClaimId) ?r.Disposition {
@@ -222,7 +222,7 @@ fn resolvedChoices(a: std.mem.Allocator, context: Context, resolved: Resolved) E
     return choices;
 }
 
-fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Context, resolved: Resolved, candidate: spec.BusinessValue, inspection: *Inspection) Error!spec.BusinessValue {
+fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Context, resolved: Resolved, candidate: spec.BusinessValue, field: text.field_policy.Field, inspection: *Inspection) Error!spec.BusinessValue {
     inspection.value_choices = try resolvedChoices(allocator, context, resolved);
     return .{ .segments = switch (try validator.checkBusinessIn(allocator, .{
         .registry = context.registry,
@@ -230,6 +230,7 @@ fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Con
         .inputs = context.inputs,
         .scopes = resolved.scopes,
         .exact_copies = inspection.value_choices.?.exact_copy,
+        .field = field,
     }, .{ .segments = candidate.segments })) {
         .valid => |checked| checked.value.segments,
         .invalid => |issue| {
@@ -242,12 +243,18 @@ fn valueIn(allocator: std.mem.Allocator, validator: text.Validator, context: Con
 /// Intrinsic stored support joins. Current text/path policy is checked by the
 /// live validators with its real toolchain, never reconstructed by a reader.
 pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @import("passive_literals.zig").Captured, references: @import("reference_support.zig").Records, brief: spec.Brief, candidate: spec.IdentifiedContent) Error!void {
-    for ([_]spec.AttributedValue{ brief.title, brief.description, brief.primary_goal, candidate.display_name, candidate.primary_user_story, candidate.entities.basis }) |attributed| {
+    const Singleton = struct { value: spec.AttributedValue, field: text.field_policy.Field };
+    for ([_]Singleton{
+        .{ .value = brief.title, .field = .spec_title },                  .{ .value = brief.description, .field = .spec_description },
+        .{ .value = brief.primary_goal, .field = .spec_goal },            .{ .value = candidate.display_name, .field = .spec_title },
+        .{ .value = candidate.primary_user_story, .field = .spec_story }, .{ .value = candidate.entities.basis, .field = .spec_entity_basis },
+    }) |entry| {
+        const attributed = entry.value;
         if (attributed.source_group_ids.len == 0) return error.InvalidSpecification;
         const groups = try validateAssociation(.canonical, a, inputs, references, attributed.source_group_ids, attributed.provenance, .content);
         defer a.free(groups);
         const resolved = try resolveUnitRecords(.canonical, a, inputs, references, attributed.provenance, &.{attributed.value});
-        try storedValue(inputs, passive, resolved, attributed.value);
+        try storedValue(a, inputs, passive, references.items, resolved, attributed.value, entry.field);
     }
     for (candidate.records) |record| {
         if (record.proposal.source_group_ids.len != 1) return error.InvalidSpecification;
@@ -256,23 +263,20 @@ pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @i
         const values = try recordValues(a, record.proposal.content);
         const resolved = try resolveUnitRecords(.canonical, a, inputs, references, record.proposal.provenance, values);
         switch (record.proposal.content) {
-            inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+            inline else => |fields, kind| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
                 const value = @field(fields, field.name);
                 if (comptime field.type == spec.BusinessValue) {
-                    try storedValue(inputs, passive, resolved, value);
-                } else for (value) |relationship| try storedValue(inputs, passive, resolved, relationship);
+                    try storedValue(a, inputs, passive, references.items, resolved, value, spec.textField(kind, field.name));
+                } else for (value) |relationship| try storedValue(a, inputs, passive, references.items, resolved, relationship, spec.textField(kind, field.name));
             },
         }
     }
 }
 
-fn storedValue(inputs: evidence.Inputs, passive: @import("passive_literals.zig").Captured, resolved: Resolved, value: spec.BusinessValue) Error!void {
-    for (value.segments) |segment| switch (segment) {
-        .passive => |reference| {
-            _ = try @import("passive_literals.zig").resolveCaptured(passive, inputs, resolved.scopes, reference.passive_literal_id);
-        },
-        .literal, .exact_copy => {},
-    };
+fn storedValue(a: std.mem.Allocator, inputs: evidence.Inputs, passive: @import("passive_literals.zig").Captured, all: r.Items, resolved: Resolved, value: spec.BusinessValue, field: text.field_policy.Field) Error!void {
+    const choices = try valueChoices(a, all, resolved.effective_claim_ids);
+    defer a.free(choices.exact_copy);
+    try text.stored(text.BusinessSegment, a, .{ .inputs = inputs, .passive = passive, .scopes = resolved.scopes, .field = field, .exact_copies = choices.exact_copy }, value.segments);
 }
 
 /// Associations are occurrences, never reconstructed from matching claim sets.
@@ -291,16 +295,16 @@ pub fn validateAssociation(comptime boundary: spec.Boundary, a: std.mem.Allocato
     }
     return selected.source_group_ids;
 }
-pub fn inspectAttributed(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, inspection: *Inspection) Error!spec.AttributedValue {
-    return inspectAttributedFor(boundary, allocator, validator, context, candidate, .content, inspection);
+pub fn inspectAttributed(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, field: text.field_policy.Field, inspection: *Inspection) Error!spec.AttributedValue {
+    return inspectAttributedFor(boundary, allocator, validator, context, candidate, field, .content, inspection);
 }
-pub fn inspectAttributedFor(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, mode: @import("specification_source_binding.zig").Mode, inspection: *Inspection) Error!spec.AttributedValue {
+pub fn inspectAttributedFor(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, field: text.field_policy.Field, mode: @import("specification_source_binding.zig").Mode, inspection: *Inspection) Error!spec.AttributedValue {
     inspection.* = .{};
     const groups = try validateAssociation(boundary, allocator, context.inputs, refs.records(context.references), candidate.source_group_ids, candidate.provenance, mode);
     errdefer allocator.free(groups);
     const resolved = try resolveUnitRecords(boundary, allocator, context.inputs, refs.records(context.references), candidate.provenance, &.{candidate.value});
     inspection.part = .{ .value = .value };
-    return .{ .value = try valueIn(allocator, validator, context, resolved, candidate.value, inspection), .source_group_ids = groups, .provenance = resolved.provenance };
+    return .{ .value = try valueIn(allocator, validator, context, resolved, candidate.value, field, inspection), .source_group_ids = groups, .provenance = resolved.provenance };
 }
 
 pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).RecordProposal, inspection: *Inspection) Error!spec.RecordProposal {
@@ -317,12 +321,12 @@ pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Alloca
                 const proposed = @field(fields, field.name);
                 if (comptime field.type == spec.BusinessValue) {
                     inspection.part = .{ .value = @field(@import("specification_candidate.zig").ValueField, field.name) };
-                    @field(normalized, field.name) = try valueIn(allocator, validator, context, resolved, proposed, inspection);
+                    @field(normalized, field.name) = try valueIn(allocator, validator, context, resolved, proposed, spec.textField(kind, field.name), inspection);
                 } else {
                     const relationships = try allocator.alloc(spec.BusinessValue, proposed.len);
                     for (proposed, relationships, 0..) |entry, *checked, index| {
                         inspection.part = .{ .value = .{ .relationship = index } };
-                        checked.* = try valueIn(allocator, validator, context, resolved, entry, inspection);
+                        checked.* = try valueIn(allocator, validator, context, resolved, entry, spec.textField(kind, field.name), inspection);
                     }
                     @field(normalized, field.name) = relationships;
                 }
@@ -333,9 +337,9 @@ pub fn inspectRecord(comptime boundary: spec.Boundary, allocator: std.mem.Alloca
     return result;
 }
 
-pub fn checkAttributed(comptime boundary: spec.Boundary, a: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue) Error!spec.AttributedValue {
+pub fn checkAttributed(comptime boundary: spec.Boundary, a: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).AttributedValue, field: text.field_policy.Field) Error!spec.AttributedValue {
     var inspection: Inspection = .{};
-    return inspectAttributed(boundary, a, validator, context, candidate, &inspection);
+    return inspectAttributed(boundary, a, validator, context, candidate, field, &inspection);
 }
 pub fn checkRecord(comptime boundary: spec.Boundary, a: std.mem.Allocator, validator: text.Validator, context: Context, candidate: spec.Values(boundary).RecordProposal) Error!spec.RecordProposal {
     var inspection: Inspection = .{};

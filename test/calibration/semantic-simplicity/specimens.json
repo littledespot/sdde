@@ -77,7 +77,9 @@
         },
         "elapsed_ns": 1000000000,
         "uncertain_delivery": false,
-        "scoring_disputed": false
+        "scoring_disputed": false,
+        "initial_scoring_disputed": false,
+        "failure_stage": null
       },
       "expected": {
         "first_pass": true,
@@ -162,7 +164,9 @@
         },
         "elapsed_ns": 1000000000,
         "uncertain_delivery": false,
-        "scoring_disputed": false
+        "scoring_disputed": false,
+        "initial_scoring_disputed": false,
+        "failure_stage": null
       },
       "expected": {
         "first_pass": true,
@@ -247,7 +251,9 @@
         },
         "elapsed_ns": 1000000000,
         "uncertain_delivery": false,
-        "scoring_disputed": false
+        "scoring_disputed": false,
+        "initial_scoring_disputed": false,
+        "failure_stage": null
       },
       "expected": {
         "first_pass": false,
@@ -332,7 +338,9 @@
         },
         "elapsed_ns": 1000000000,
         "uncertain_delivery": false,
-        "scoring_disputed": false
+        "scoring_disputed": false,
+        "initial_scoring_disputed": false,
+        "failure_stage": null
       },
       "expected": {
         "first_pass": false,
@@ -417,7 +425,9 @@
         },
         "elapsed_ns": 1000000000,
         "uncertain_delivery": false,
-        "scoring_disputed": false
+        "scoring_disputed": false,
+        "initial_scoring_disputed": false,
+        "failure_stage": null
       },
       "expected": {
         "first_pass": false,
@@ -502,7 +512,9 @@
         },
         "elapsed_ns": 1000000000,
         "uncertain_delivery": false,
-        "scoring_disputed": false
+        "scoring_disputed": false,
+        "initial_scoring_disputed": false,
+        "failure_stage": null
       },
       "expected": {
         "first_pass": true,

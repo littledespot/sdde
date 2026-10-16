@@ -11,7 +11,7 @@ const shared = @import("atomic_repair.zig");
 const authority = @import("required_authority.zig");
 const descriptions = @import("required_authority_description.zig");
 const retry = @import("workflow_retry.zig");
-const RepairSubject = union(enum) { token: coverage.TokenSubject, requirement: authority.Id };
+const RepairSubject = union(enum) { requirement: authority.Id };
 pub const Support = struct { inputs: authority.Inputs, observations: authority.Observations, result: authority.Result };
 pub const Facts = struct {
     support: ?Support = null,
@@ -19,7 +19,6 @@ pub const Facts = struct {
     candidate: g.spec.IdentifiedContent,
     references: p.Dependencies,
 };
-const ValueTarget = struct { unit: usize, subject: candidates.Subject, field: candidates.ValueField };
 pub const Target = struct {
     unit: usize,
     part: union(enum) { value: struct { subject: candidates.Subject, field: candidates.ValueField }, record: usize },
@@ -32,11 +31,9 @@ pub const Target = struct {
 };
 pub const Replacement = union(enum) { value: g.spec.BusinessValue, record: g.spec.Model.RecordProposal };
 const Rule = union(enum) {
-    coverage: coverage.Rejection,
     omission: authority.Evidence,
-    pub fn guidance(self: @This()) union(enum) { coverage: coverage.Rejection, omission: authority.ReviewEvidence } {
+    pub fn guidance(self: @This()) union(enum) { omission: authority.ReviewEvidence } {
         return switch (self) {
-            .coverage => |value| .{ .coverage = value },
             .omission => |value| .{ .omission = value.review.? },
         };
     }
@@ -44,7 +41,7 @@ const Rule = union(enum) {
 const atomic = shared.Contract(Target, Replacement, Facts, Rule);
 pub const Authorization = atomic.Authorization;
 pub const ModelRepair = struct { authorization: Authorization, response: ?struct { value: Replacement, origin: @import("model_candidate_origin.zig").Origin } = null };
-pub const Decision = union(enum) { authorized: Authorization, blocked: coverage.Rejection };
+pub const Decision = union(enum) { blocked: coverage.Rejection };
 pub const Error = sessions.Error || atomic.Error || candidates.Error || authority.Error || coverage.Error || @import("specification_support.zig").Source.Error || error{ InvalidSpecificationCoverageRepair, UnsafeSpecificationOmissionRepair };
 
 pub fn capture(a: std.mem.Allocator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent) Error!Facts {
@@ -60,57 +57,12 @@ pub fn authorize(a: std.mem.Allocator, current: sessions.Session, context: p.Con
     const facts = try capture(a, current, context, candidate);
     defer a.free(facts.references.lineage.history);
     if (rejection.revision != current.revision or !std.meta.eql(rejection.dependencies orelse return error.InvalidSpecificationCoverageRepair, try shared.snapshot(Facts, a, facts))) return error.InvalidSpecificationCoverageRepair;
-    if (rejection.issue == .missing_exact_copy) {
-        for (current.units, 0..) |entry, index| {
-            const checked = entry orelse return error.InvalidSpecificationCoverageRepair;
-            switch (checked.response.content) {
-                .brief => inline for (.{ candidates.Subject.title, candidates.Subject.description, candidates.Subject.primary_goal }) |subject| {
-                    if (try matching(a, context, checked, .{ .unit = index, .subject = subject, .field = .value }, rejection)) |target| return authorizeTarget(a, facts, target, rejection);
-                },
-                .primary_user_story, .entities => {
-                    const subject: candidates.Subject = if (checked.response.content == .entities) .entity_basis else .story;
-                    if (try matching(a, context, checked, .{ .unit = index, .subject = subject, .field = .value }, rejection)) |target| return authorizeTarget(a, facts, target, rejection);
-                },
-                .records => |records| for (records, 0..) |record, ordinal| switch (record.content) {
-                    inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
-                        if (comptime field.type == g.spec.BusinessValue) {
-                            if (try matching(a, context, checked, .{ .unit = index, .subject = .{ .record = ordinal }, .field = @field(candidates.ValueField, field.name) }, rejection)) |target| return authorizeTarget(a, facts, target, rejection);
-                        } else for (@field(fields, field.name), 0..) |_, relationship| {
-                            if (try matching(a, context, checked, .{ .unit = index, .subject = .{ .record = ordinal }, .field = .{ .relationship = relationship } }, rejection)) |target| return authorizeTarget(a, facts, target, rejection);
-                        }
-                    },
-                },
-            }
-        }
-    }
+    // A whole-field literal-to-insertion replacement would discard the prose
+    // required by every behavioral obligation field. Native code cannot invent
+    // that missing meaning or treat an incidental identity label as coverage.
     var blocked = rejection;
     blocked.blocked = .no_independent_supported_target;
     return .{ .blocked = blocked };
-}
-fn matching(a: std.mem.Allocator, context: p.Context, checked: g.Checked, target: ValueTarget, rejection: coverage.Rejection) Error!?ValueTarget {
-    const value = try candidates.attributedValue(.canonical, checked.response, target.subject, target.field);
-    if (!r.contains(r.ClaimId, value.provenance.claim_ids, rejection.claim_id)) return null;
-    // Reuse the canonical text projector, including passive references and any
-    // literal segmentation. Equality proves no business bytes are discarded.
-    const scalar = if (target.subject == .record)
-        try @import("specification_projection.zig").recordScalar(a, context, checked.response.content.records[target.subject.record], value.value)
-    else
-        try @import("specification_projection.zig").scalar(a, context, value);
-    return if (std.mem.eql(u8, scalar.bytes, rejection.issue.missing_exact_copy.value.raw_value.bytes)) target else null;
-}
-fn authorizeTarget(a: std.mem.Allocator, facts: Facts, target: ValueTarget, rejection: coverage.Rejection) Error!Decision {
-    const checked = facts.session.units[target.unit].?;
-    var native = rejection;
-    native.origin = checked.origins.at(.{ .target = .{ .value = .{ .subject = target.subject, .field = target.field } } });
-    return .{ .authorized = try bindRetry(a, try atomic.authorize(a, try sessions.ownerFor(a, facts.session, target.unit), facts.session.revision, .{ .unit = target.unit, .part = .{ .value = .{ .subject = target.subject, .field = target.field } } }, .{ .value = (try candidates.attributedValue(.canonical, checked.response, target.subject, target.field)).value }, facts, .{ .coverage = native })) };
-}
-pub fn merge(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, authorization: Authorization) Error!sessions.Session {
-    const facts = try capture(a, current, context, candidate);
-    defer a.free(facts.references.lineage.history);
-    const target = authorization.target;
-    if (target.part != .value or authorization.rule != .coverage) return error.InvalidSpecificationCoverageRepair;
-    if (authorization.rule.coverage.issue != .missing_exact_copy) return error.InvalidSpecificationCoverageRepair;
-    return mergeChecked(a, validator, context, facts, authorization, .{ .value = .{ .segments = &.{.{ .exact_copy = .{ .claim_id = authorization.rule.coverage.claim_id } }} } }, null);
 }
 
 fn reviewedFacts(a: std.mem.Allocator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, support: Support) Error!Facts {
@@ -340,14 +292,15 @@ pub fn parseOmission(a: std.mem.Allocator, authorization: Authorization, input: 
         },
     };
 }
-pub fn mergeOmission(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, support: Support, authorization: Authorization, proposed: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!sessions.Session {
+pub fn mergeOmission(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, validator: @import("typed_text.zig").Validator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent, support: Support, authorization: Authorization, proposed: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!sessions.Session {
+    if (!canonical.matchesInputs(context.inputs)) return error.InvalidAtomicRepair;
     if (authorization.rule != .omission) return error.InvalidSpecificationCoverageRepair;
     const facts = try reviewedFacts(a, current, context, candidate, support);
     defer a.free(facts.references.lineage.history);
-    return mergeChecked(a, validator, context, facts, authorization, proposed, origin);
+    return mergeChecked(a, canonical, validator, context, facts, authorization, proposed, origin);
 }
 
-fn mergeChecked(a: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: p.Context, facts: Facts, authorization: Authorization, proposed: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!sessions.Session {
+fn mergeChecked(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, validator: @import("typed_text.zig").Validator, context: p.Context, facts: Facts, authorization: Authorization, proposed: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!sessions.Session {
     const current = facts.session;
     const target = authorization.target;
     if (target.unit >= current.units.len) return error.InvalidSpecificationCoverageRepair;
@@ -356,7 +309,7 @@ fn mergeChecked(a: std.mem.Allocator, validator: @import("typed_text.zig").Valid
         .record => null,
         .value => |field| .{ .value = (try candidates.attributedValue(.canonical, checked.response, field.subject, field.field)).value },
     };
-    const merged = try atomic.checkMerge(a, try sessions.ownerFor(a, current, target.unit), current.revision, expected, facts, authorization, proposed, origin);
+    const merged = try atomic.checkMerge(a, canonical, try sessions.ownerFor(a, current, target.unit), current.revision, expected, facts, authorization, proposed, origin);
     const replacement = try atomic.copyReplacement(a, proposed);
     var response = checked.response;
     const origin_target: candidates.Target = switch (target.part) {
@@ -390,14 +343,11 @@ fn mergeChecked(a: std.mem.Allocator, validator: @import("typed_text.zig").Valid
             break :record .{ .record = index };
         },
     };
-    var origins = if (authorization.rule == .coverage) checked.origins else try checked.origins.replacing(a, origin_target, origin);
+    var origins = try checked.origins.replacing(a, origin_target, origin);
     if (authorization.operation == .insert) origins.record_occurrences = try origins.record_occurrences.inserting(a, target.part.record, checked.response.content.records.len);
     var next = try sessions.replaceCompleted(a, validator, context, current, target.unit, response, merged, origins);
     const permit = authorization.retry orelse return error.InvalidSpecificationCoverageRepair;
-    switch (try repairSubject(authorization.rule)) {
-        .token => |target_subject| next.pending_coverage_repair = .{ .permit = permit, .target = target_subject },
-        .requirement => next.omission_target_bound = permit.maximum_targets,
-    }
+    next.omission_target_bound = permit.maximum_targets;
     return next;
 }
 
@@ -425,7 +375,6 @@ fn effectiveTarget(a: std.mem.Allocator, checked: g.Checked, subject: candidates
 
 fn repairSubject(rule: Rule) Error!RepairSubject {
     return switch (rule) {
-        .coverage => |rejection| if (rejection.issue == .missing_exact_copy) .{ .token = rejection.claim_id } else error.InvalidSpecificationCoverageRepair,
         .omission => |evidence| .{ .requirement = evidence.requirement },
     };
 }
@@ -438,27 +387,14 @@ pub fn retryPermit(a: std.mem.Allocator, authorization: Authorization) Error!ret
     const current = authorization.dependencies.session;
     const subject = try repairSubject(authorization.rule);
     const count: usize = switch (authorization.rule) {
-        .coverage => authorization.dependencies.references.lineage.plan.layout.items.entries.len,
         .omission => current.omission_target_bound orelse (authorization.dependencies.support orelse return error.InvalidSpecificationCoverageRepair).inputs.seeds.len,
     };
     const bound = std.math.cast(u32, count) orelse return error.InvalidSpecificationCoverageRepair;
     var owner = authorization.owner;
-    owner.specification_unit.unit_slot_id.bytes = if (subject == .token) "specification-coverage" else "specification-omission";
+    owner.specification_unit.unit_slot_id.bytes = "specification-omission";
     var permit = try shared.permit(RepairSubject, std.meta.Tag(Rule), a, owner, subject, std.meta.activeTag(authorization.rule), authorization.id, authorization.revision, bound);
-    const Scope = struct { owner: @import("model_request_identity.zig").ImmutableUnitOwnerId, origin: ?@import("model_candidate_origin.zig").Origin };
-    permit.key.scope = if (subject == .requirement) try omissionScope(a, current.feature, current.reference_state) else (try shared.snapshot(Scope, a, .{ .owner = owner, .origin = (current.units[0] orelse return error.InvalidSpecificationCoverageRepair).origins.initial })).bytes;
+    permit.key.scope = try omissionScope(a, current.feature, current.reference_state);
     return permit;
-}
-/// The canonical token obligation owns progress, independently of which field
-/// supplied its exact-copy representation or which sibling fails next.
-pub fn coverageValidation(a: std.mem.Allocator, current: sessions.Session, context: p.Context, candidate: g.spec.IdentifiedContent) Error!?retry.Transition {
-    const receipt = current.pending_coverage_repair orelse return null;
-    if (current.revision != std.math.add(u64, receipt.permit.revision, 1) catch return error.InvalidSpecificationCoverageRepair) return error.InvalidSpecificationCoverageRepair;
-    const claim = (try r.item(try p.items(context), receipt.target)).claim;
-    if (claim.content != .preserved_token) return error.InvalidSpecificationCoverageRepair;
-    const targets = try coverage.exactTargets(a, current.units[0].?.response.content.brief, candidate, receipt.target);
-    defer a.free(targets);
-    return .{ .validated = .{ .permit = receipt.permit, .revision = current.revision, .result = if (targets.len != 0) .resolved else .recurring } };
 }
 fn omissionScope(a: std.mem.Allocator, feature: @import("feature_identity.zig").FeatureId, state: @import("reference_identity.zig").StateId) Error![32]u8 {
     const scope = .{ .contract = @typeName(Rule), .purpose = @as(std.meta.Tag(Rule), .omission), .feature = feature, .source_state = state };

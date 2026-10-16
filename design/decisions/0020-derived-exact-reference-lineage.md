@@ -9,6 +9,22 @@
 - **11 October 2026 authoring-association amendment authority:** Explicit user instruction to implement FIX03 Phase 5 and its resolved replacement in [§5.2.1](../../fixes/FIX03.md#521-phase-5-replacement-contract--implemented-candidate-qualification-pending); supersedes the presentation-role classifier and prebinding gate.
 - **9 October 2026 loss-evidence amendment authority:** Explicit user instruction to implement R7 authoring-input projection and R6 retained producer-loss evidence; no change to exact-reference lineage or retry policy.
 - **Amends:** Design §§7.1, 12.2, 16.3, 17.3, 22.4, 23.1 and 24.1. The overall design remains Proposed.
+- **16 October 2026 Phase 1A amendment authority:** explicit user instruction to
+  settle and implement shared composition admission, field-specific exact-copy
+  coverage, source-aware wire syntax and unchanged-repair exhaustion.
+
+## Composition and coverage amendment — 16 October 2026
+
+The accepted [field inventory](../contracts/text-field-composition.md) determines
+whether a field requires prose and whether its exact-copy occurrences are
+prohibited, incidental or obligation-bearing. All exact occurrences retain the
+same handle, lineage, scope and byte-resolution contracts below. Only occurrences
+in successfully validated obligation-bearing fields satisfy behavioral exact-copy
+coverage. An incidental title, entity name or other descriptive occurrence cannot
+discharge that duty. This supersedes counting an occurrence in any field. The
+policy is shared across generation, correction, repair and stored readback; it is
+not another model role classifier or support decision. Wire syntax embedded in
+prose never creates an occurrence and follows the source-aware protocol rule.
 
 ## Boundary and representation
 

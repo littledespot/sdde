@@ -58,7 +58,10 @@ pub const ResolvedNeeds = struct {
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const result = authority.read(&input.step.data, @import("required_authority_workflow.zig").result_schema, .result) catch |operation_error| return operation_error;
-        const needs = self.action.execute(result) catch |operation_error| return operation_error;
+        const sources = try values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs);
+        var arena: std.heap.ArenaAllocator = .init(self.allocator);
+        defer arena.deinit();
+        const needs = self.action.execute(arena.allocator(), sources.*, result) catch |operation_error| return operation_error;
         return @import("workflow_candidate.zig").publish(self.allocator, refresh.needs_schema, @import("../domain/clarification_refresh.zig").Needs, needs);
     }
 };

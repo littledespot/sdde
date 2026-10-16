@@ -100,6 +100,8 @@ pub const Request = opaque {
             .result_resource = &value.result,
             .composition = value.composition,
             .restriction = value.restriction,
+            .original_sources = if (self.packet()) |packet_value| packet_value.originalSources() else &.{},
+            .prose_fields = if (self.packet()) |packet_value| packet_value.proseFields() else &.{},
         };
     }
 

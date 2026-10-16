@@ -37,6 +37,7 @@ This catalogue is normative for the first engine version. A project may add vali
 | Clarification state | Only admitted needs reach forms; no unresolved typed clarification at success | Whether a proposed decision is genuinely absent and every ambiguity was discovered |
 | Business-only lint | No obvious code/path/framework/CSS leakage | Nuanced business/technical classification |
 | Exact-copy propagation | Byte-for-byte value from source ledger | Whether source copy is actually required |
+| Field composition | Shared field policy requires nonblank prose, permits insertion kinds and restricts exact-copy coverage; encoded insertion syntax in prose rejects unless its exact bytes occur in original captured sources | Whether admitted prose expresses the correct meaning and uses its insertions correctly |
 | Visual-token propagation | Every required token ID/value rendered in sidecar | Semantic classification of required token |
 | Reference conflict gate | Every candidate conflict has current subject-bound assessment; only admitted source conflicts reach questions | Whether the source meanings are incompatible; discovery of all semantic conflicts |
 | Source omission handoff | Source `candidate_omission` requires a nonblank explicit obligation and authorized source evidence; comparison, correction, repair and readback bind it unchanged under §22.1; other findings forbid it | Whether the stated obligation is faithful to its sources and each complete comparison collection preserves it |

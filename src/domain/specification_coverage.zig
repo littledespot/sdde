@@ -4,6 +4,7 @@ const spec = @import("specification.zig");
 const g = @import("specification_generation.zig");
 const r = @import("reference_reconciliation.zig");
 const provenance = @import("specification_provenance.zig");
+const text = @import("typed_text.zig");
 pub const Key = union(enum) { title, description, primary_goal, primary_user_story, entities, record: spec.Id };
 pub const Account = struct {
     claim_id: r.ClaimId,
@@ -80,32 +81,47 @@ pub fn checkRecords(allocator: std.mem.Allocator, references: @import("reference
     }
     return .{ .valid = .{ .accounts = accounts.items, .obligations = obligations.items } };
 }
-const AttributedTarget = struct { key: Key, value: spec.AttributedValue };
+const AttributedTarget = struct { key: Key, value: spec.AttributedValue, field: text.field_policy.Field };
 fn singletons(brief: g.Brief, candidate: spec.IdentifiedContent) [5]AttributedTarget {
     return .{
-        .{ .key = .title, .value = brief.title },                 .{ .key = .description, .value = brief.description },
-        .{ .key = .primary_goal, .value = brief.primary_goal },   .{ .key = .primary_user_story, .value = candidate.primary_user_story },
-        .{ .key = .entities, .value = candidate.entities.basis },
+        .{ .key = .title, .value = brief.title, .field = .spec_title },                        .{ .key = .description, .value = brief.description, .field = .spec_description },
+        .{ .key = .primary_goal, .value = brief.primary_goal, .field = .spec_goal },           .{ .key = .primary_user_story, .value = candidate.primary_user_story, .field = .spec_story },
+        .{ .key = .entities, .value = candidate.entities.basis, .field = .spec_entity_basis },
     };
 }
 pub fn exactTargets(a: std.mem.Allocator, brief: g.Brief, candidate: spec.IdentifiedContent, claim_id: r.ClaimId) Error![]const Key {
     var exact: std.ArrayList(Key) = .empty;
-    for (singletons(brief, candidate)) |entry| if (copies(entry.value.value, claim_id)) try exact.append(a, entry.key);
+    for (singletons(brief, candidate)) |entry| if (copies(entry.value.value, entry.field, claim_id)) try exact.append(a, entry.key);
     for (candidate.records) |record| if (recordCopies(record.proposal.content, claim_id)) try exact.append(a, .{ .record = record.id });
     return exact.toOwnedSlice(a);
 }
-fn copies(value: spec.BusinessValue, claim_id: r.ClaimId) bool {
+fn copies(value: spec.BusinessValue, field: text.field_policy.Field, claim_id: r.ClaimId) bool {
+    if (text.field_policy.get(field).exact_copy != .obligation_bearing or text.composition(text.BusinessSegment, field, value.segments) != null) return false;
     for (value.segments) |segment| if (segment == .exact_copy and segment.exact_copy.claim_id.ordinal == claim_id.ordinal) return true;
     return false;
 }
 fn recordCopies(content: spec.Content(spec.BusinessValue), claim_id: r.ClaimId) bool {
     switch (content) {
-        inline else => |fields| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
+        inline else => |fields, kind| inline for (@typeInfo(@TypeOf(fields)).@"struct".fields) |field| {
             const value = @field(fields, field.name);
             if (comptime field.type == spec.BusinessValue) {
-                if (copies(value, claim_id)) return true;
-            } else for (value) |relationship| if (copies(relationship, claim_id)) return true;
+                if (copies(value, spec.textField(kind, field.name), claim_id)) return true;
+            } else for (value) |relationship| if (copies(relationship, spec.textField(kind, field.name), claim_id)) return true;
         },
     }
     return false;
+}
+
+test "only composition-admitted behavioral insertions satisfy exact-copy obligations" {
+    const claim: r.ClaimId = .{ .ordinal = 1 };
+    const insertion: text.BusinessSegment = .{ .exact_copy = .{ .claim_id = claim } };
+    const mixed: spec.BusinessValue = .{ .segments = &.{ .{ .literal = .{ .value = "The user sees " } }, insertion } };
+    const insertion_only: spec.BusinessValue = .{ .segments = &.{ insertion, insertion } };
+    const raw_prose: spec.BusinessValue = .{ .segments = &.{.{ .literal = .{ .value = "The user sees Hello, World!" } }} };
+    for (std.meta.tags(text.field_policy.Field)) |field| {
+        try std.testing.expectEqual(text.field_policy.get(field).exact_copy == .obligation_bearing, copies(mixed, field, claim));
+        try std.testing.expect(!copies(insertion_only, field, claim));
+        try std.testing.expect(!copies(raw_prose, field, claim));
+    }
+    try std.testing.expect(!copies(mixed, .spec_story, .{ .ordinal = 2 }));
 }

@@ -32,7 +32,7 @@ pub const Validation = struct {
     latency_ms: ?u32 = null,
 };
 pub const RequestRecord = struct {
-    version: enum { @"request-replay/v4" } = .@"request-replay/v4",
+    version: enum { @"request-replay/v5" } = .@"request-replay/v5",
     id: []const u8,
     run: []const u8,
     sequence: u64,

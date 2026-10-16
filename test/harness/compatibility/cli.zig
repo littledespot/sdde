@@ -15,6 +15,7 @@ pub fn preflight(a: std.mem.Allocator, config_bytes: []const u8) !void {
     var config = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, config_bytes);
     defer config.deinit();
     try @import("../model_cost_policy.zig").requireConfiguredSlots(&config.value().models);
+    try @import("../frozen_binding.zig").validateModels(a, &config.value().models);
     const logging = try @import("../../../src/domain/log_policy.zig").canonicalizeConfiguredLevel(config.value().logs.level);
     switch (logging.threshold) {
         .trace, .debug => {},
@@ -43,7 +44,7 @@ fn command(init: std.process.Init) !bool {
     defer run.close(init.io);
     const output = try @import("../e2e/report.zig").Output.reserve(init.io, run.dir);
     defer output.close(init.io);
-    var report: reports.Report = .{ .started_at_utc = &run.started_at_utc, .case_source = case_path, .execution_id = &run.name };
+    var report: reports.Report = .{ .schema = .@"provider-compatibility-report/v1", .started_at_utc = &run.started_at_utc, .case_source = case_path, .execution_id = &run.name };
     const bundle = try @import("../contracts.zig").decode(@import("../../../build/provenance.zig").Bundle, a, @embedFile("build_provenance"));
     report.build = .{ .source = bundle.identity, .zig_version = @import("builtin").zig_version_string, .target = @tagName(@import("builtin").cpu.arch) ++ "-" ++ @tagName(@import("builtin").os.tag) ++ "-" ++ @tagName(@import("builtin").abi), .optimize = @tagName(@import("builtin").mode) };
     execute(init.io, a, init.environ_map, case_path, run, &report) catch |err| {
@@ -77,7 +78,7 @@ fn execute(io: std.Io, a: std.mem.Allocator, environment: *const std.process.Env
     report.status = .inconclusive;
     report.build.?.reconstruction = try @import("../e2e/build_evidence.zig").save(store, @embedFile("build_provenance"));
     report.build.?.inputs_file = "build-inputs.json";
-    var workflow: c.Report = .{ .started_at_utc = report.started_at_utc, .status = .input_invalid };
+    var workflow: c.Report = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = report.started_at_utc, .status = .input_invalid };
     var probe: @import("../e2e/invoke.zig").Probe = .{};
     defer reports.applyExecution(report, probe, workflow);
     _ = try @import("../e2e/invoke.zig").run(io, a, run.project, selected, captured, key, store, &workflow, .{ .purpose = .{ .single_exchange = &probe } });

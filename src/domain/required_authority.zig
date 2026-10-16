@@ -73,6 +73,7 @@ pub const Finding = enum { supported, ambiguous, conflicting, unsupported, candi
 /// A real source decision gap retained alongside invalid candidate content.
 /// It shares the bound finding's subject, authorities, provenance and origin.
 pub const AuthorityGap = struct {
+    pub const model_prose = .{ .question = @import("text_field_policy.zig").Field.clarification_question };
     kind: GapKind,
     source_ids: []const @import("reference_identity.zig").SourceId,
     detail: []const u8,

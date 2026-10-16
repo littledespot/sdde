@@ -10,7 +10,7 @@ pub const Action = struct {
         .produces = &.{.refreshed_clarification_state},
         .side_effect = .none,
     };
-    pub fn execute(_: Action, allocator: std.mem.Allocator, inputs: c.Inputs, needs: refresh.Needs) refresh.Error!c.ValidatedState {
+    pub fn execute(_: Action, allocator: std.mem.Allocator, inputs: c.Inputs, needs: refresh.Needs) refresh.Error!refresh.Ready {
         return refresh.refresh(allocator, inputs, needs);
     }
 };

@@ -117,21 +117,21 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
             break :need .{ .clarification = .{
                 .reason = need.reason,
                 .record_kind = need.record_kind,
-                .question = inspectAuthored(boundary, allocator, validator, context, need.question, .question, &inspection) catch |err| return rejected(unit, .clarification_question, null, inspection.text_issue, err),
+                .question = inspectAuthored(boundary, allocator, validator, context, need.question, .clarification_question, .question, &inspection) catch |err| return rejected(unit, .clarification_question, null, inspection.text_issue, err),
             } };
         },
         .content => |content| blk: {
             if (@intFromEnum(std.meta.activeTag(unit)) != @intFromEnum(std.meta.activeTag(content))) return .{ .invalid = .{ .unit = unit, .field = .unit, .rule = .unit_kind, .observed = null, .blocked = .unit_kind } };
             break :blk .{ .content = switch (content) {
                 .brief => |brief| .{ .brief = .{
-                    .title = inspectAuthored(boundary, allocator, validator, context, brief.title, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .title, inspection, err),
-                    .description = inspectAuthored(boundary, allocator, validator, context, brief.description, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .description, inspection, err),
-                    .primary_goal = inspectAuthored(boundary, allocator, validator, context, brief.primary_goal, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .primary_goal, inspection, err),
+                    .title = inspectAuthored(boundary, allocator, validator, context, brief.title, .spec_title, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .title, inspection, err),
+                    .description = inspectAuthored(boundary, allocator, validator, context, brief.description, .spec_description, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .description, inspection, err),
+                    .primary_goal = inspectAuthored(boundary, allocator, validator, context, brief.primary_goal, .spec_goal, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .primary_goal, inspection, err),
                 } },
-                .primary_user_story => |story| .{ .primary_user_story = inspectAuthored(boundary, allocator, validator, context, story, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .story, inspection, err) },
+                .primary_user_story => |story| .{ .primary_user_story = inspectAuthored(boundary, allocator, validator, context, story, .spec_story, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .story, inspection, err) },
                 .entities => |entities| .{ .entities = .{
                     .disposition = entities.disposition,
-                    .basis = inspectAuthored(boundary, allocator, validator, context, entities.basis, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .entity_basis, inspection, err),
+                    .basis = inspectAuthored(boundary, allocator, validator, context, entities.basis, .spec_entity_basis, .content, &inspection) catch |err| return rejectedPart(boundary, unit, proposed, .entity_basis, inspection, err),
                 } },
                 .records => |records| records: {
                     const checked = try allocator.alloc(spec.RecordProposal, records.len);
@@ -148,12 +148,12 @@ fn check(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validat
     return .{ .valid = .{ .unit = unit, .response = result } };
 }
 
-// Every authored value retains an explicit group occurrence. General provenance
-// utilities may still inspect exact-only values outside an authoring unit.
-fn inspectAuthored(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, value: spec.Values(boundary).AttributedValue, mode: @import("specification_source_binding.zig").Mode, inspection: *provenance.Inspection) provenance.Error!spec.AttributedValue {
+// Every authored value retains an explicit group occurrence and the owning
+// field's composition policy. Prose presence does not establish semantic truth.
+fn inspectAuthored(comptime boundary: spec.Boundary, allocator: std.mem.Allocator, validator: @import("typed_text.zig").Validator, context: provenance.Context, value: spec.Values(boundary).AttributedValue, field: @import("text_field_policy.zig").Field, mode: @import("specification_source_binding.zig").Mode, inspection: *provenance.Inspection) provenance.Error!spec.AttributedValue {
     inspection.* = .{};
     if (value.source_group_ids.len == 0) return error.InvalidSpecification;
-    return provenance.inspectAttributedFor(boundary, allocator, validator, context, value, mode, inspection);
+    return provenance.inspectAttributedFor(boundary, allocator, validator, context, value, field, mode, inspection);
 }
 
 /// Equality over normalized typed content, never a second rendered text source.

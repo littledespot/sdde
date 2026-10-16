@@ -5,6 +5,131 @@ const invocation = @import("domain/provider_invocation_validation.zig");
 const schema = @import("domain/model_result_schema.zig");
 const Fixture = @import("provider_invocation_test_fixture.zig").Fixture;
 
+const model_text_schema =
+    \\{"type":"object","properties":{"text":{"oneOf":[{"type":"string","minLength":1,"maxLength":4294967295},{"type":"object","properties":{"fragments":{"type":"array","minItems":1,"maxItems":4294967295,"items":{"oneOf":[{"type":"string","minLength":1,"maxLength":4294967295},{"type":"object","properties":{"kind":{"const":"exact_copy"}},"required":["kind"],"additionalProperties":false}]}}},"required":["fragments"],"additionalProperties":false}]}},"required":["text"],"additionalProperties":false}
+;
+
+const raw_prose_schema =
+    \\{"type":"object","properties":{"question":{"type":"string","minLength":1,"maxLength":4294967295},"diagnostic":{"type":"string","maxLength":4294967295},"gap":{"type":"object","properties":{"question":{"type":"string","minLength":1,"maxLength":4294967295}},"required":["question"],"additionalProperties":false},"rows":{"type":"array","minItems":0,"maxItems":32,"items":{"type":"object","properties":{"question":{"type":"string","minLength":1,"maxLength":4294967295}},"required":["question"],"additionalProperties":false}}},"required":[],"additionalProperties":false}
+;
+
+test "native prose selectors reject raw question wire syntax and retain independent payload checks" {
+    const wire = @import("domain/model_text_wire.zig");
+    const fields = [_]wire.ProseField{
+        .{ .field = .clarification_question, .path = &.{.{ .property = "question" }} },
+        .{ .field = .clarification_question, .path = &.{ .{ .property = "gap" }, .{ .property = "question" } } },
+        .{ .field = .clarification_question, .path = &.{ .{ .property = "rows" }, .items, .{ .property = "question" } } },
+    };
+    for ([_]struct { bytes: []const u8, source: ?[]const u8 = null, accepted: bool }{
+        .{ .bytes = "{\"question\":\"What follows {\\\"kind\\\":\\\"exact_copy\\\"}?\"}", .accepted = false },
+        .{ .bytes = "{\"gap\":{\"question\":\"Select {\\\"kind\\\":\\\"source\\\",\\\"source_id\\\":1}?\"}}", .accepted = false },
+        .{ .bytes = "{\"rows\":[{\"question\":\"Choose {\\\"fragments\\\":[\\\"a\\\",{\\\"kind\\\":\\\"passive\\\",\\\"passive_literal_id\\\":2}]}?\"}]}", .accepted = false },
+        .{ .bytes = "{\"question\":\"What follows {\\\"kind\\\":\\\"exact_copy\\\"}?\"}", .source = "Original source: {\"kind\":\"exact_copy\"}", .accepted = true },
+        .{ .bytes = "{\"diagnostic\":\"{\\\"kind\\\":\\\"exact_copy\\\"}\"}", .accepted = true },
+        .{ .bytes = "{\"question\":\"Which literal braces {} apply?\"}", .accepted = true },
+        // Incorrect property shape is left for payload validation, not treated
+        // as an alternate text grammar or silently accepted as prose.
+        .{ .bytes = "{\"question\":{\"kind\":\"exact_copy\"}}", .accepted = true },
+    }) |case| {
+        var fixture: Fixture = undefined;
+        const sources: []const wire.SourceText = if (case.source) |bytes| &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = bytes }} else &.{};
+        try fixture.initWithProseFields(raw_prose_schema, sources, &fields);
+        defer fixture.deinit();
+        fixture.fake.invocation_plan = .{ .complete = .{ .content = case.bytes, .input_tokens = 7, .output_tokens = 3 } };
+        var response = try fixture.response();
+        defer response.deinit();
+        var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
+        defer validated.deinit();
+        var diagnostic: ?@import("domain/model_envelope.zig").Diagnostic = null;
+        defer if (diagnostic) |value| value.deinit(std.testing.allocator);
+        if (case.accepted) {
+            var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic);
+            defer decoded.deinit();
+            try std.testing.expect(diagnostic == null);
+            if (std.mem.eql(u8, case.bytes, "{\"question\":{\"kind\":\"exact_copy\"}}")) {
+                const rejection = @import("domain/model_payload_schema.zig").validateValue(@import("domain/model_envelope.zig").value(decoded.candidate.json()), fixture.prepared.request.response_schema.root());
+                try std.testing.expect(rejection != null);
+            }
+        } else {
+            try std.testing.expectError(error.InvalidModelEnvelope, (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic));
+            try std.testing.expectEqual(.EmbeddedInsertionSyntax, diagnostic.?.reason);
+            var correction = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, validated.evidence, .{ .decoder = diagnostic.? }, .unconfirmed, "Correct the rejected prose encoding.");
+            defer correction.deinit();
+            try std.testing.expectEqualDeep(fixture.prepared.request.prose_fields, correction.request.prose_fields);
+            try std.testing.expect(correction.request.model_request_id == fixture.prepared.request.model_request_id);
+        }
+        try std.testing.expectEqual(@as(usize, 1), fixture.fake.invocation_call_count);
+        try std.testing.expectEqual(@as(u64, 10), validated.evidence.usage().?.total_tokens);
+    }
+}
+
+test "model text wire grammar rejects encoded insertions before schema admission and retains source exceptions" {
+    const wire = @import("domain/model_text_wire.zig");
+    for ([_]struct { prose: []const u8, source: ?[]const u8 = null, accepted: bool }{
+        .{ .prose = "Display the exact_copy label, using ordinary braces {}.", .accepted = true },
+        .{ .prose = "Send {\"kind\":\"exact_copy\"} to the user.", .accepted = false },
+        .{ .prose = "Send {\"kind\":\"exact_copy\"} to the user.", .source = "The protocol displays `{\"kind\":\"exact_copy\"}` literally.", .accepted = true },
+        .{ .prose = "Send { \"kind\":\"exact_copy\"} to the user.", .source = "The protocol displays `{\"kind\":\"exact_copy\"}` literally.", .accepted = false },
+        .{ .prose = "Audit {\"fragments\":[\"retained \",{\"kind\":\"passive\",\"passive_literal_id\":1}]} now.", .accepted = false },
+        .{ .prose = "A source {\"kind\":\"source\",\"source_id\":2} cannot be prose.", .accepted = false },
+        .{ .prose = "Unrelated JSON {\"kind\":\"record\",\"id\":2} remains ordinary prose.", .accepted = true },
+    }) |case| {
+        const sources: []const wire.SourceText = if (case.source) |bytes| &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = bytes }} else &.{};
+        var fixture: Fixture = undefined;
+        try fixture.initWithOriginalSources(model_text_schema, sources);
+        defer fixture.deinit();
+        const bytes = try std.json.Stringify.valueAlloc(std.testing.allocator, .{ .text = case.prose }, .{});
+        defer std.testing.allocator.free(bytes);
+        fixture.fake.invocation_plan = .{ .complete = .{ .content = bytes, .input_tokens = 7, .output_tokens = 3 } };
+        var response = try fixture.response();
+        defer response.deinit();
+        var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
+        defer validated.deinit();
+        var diagnostic: ?@import("domain/model_envelope.zig").Diagnostic = null;
+        defer if (diagnostic) |value| value.deinit(std.testing.allocator);
+        if (case.accepted) {
+            var decoded = try (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic);
+            defer decoded.deinit();
+            try std.testing.expect(diagnostic == null);
+        } else {
+            try std.testing.expectError(error.InvalidModelEnvelope, (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, &diagnostic));
+            try std.testing.expectEqual(.EmbeddedInsertionSyntax, diagnostic.?.reason);
+            try std.testing.expect(diagnostic.?.explanation().len != 0);
+            var correction = try (@import("actions/model/build_model_protocol_retry.zig").Action{}).execute(std.testing.allocator, try fixture.requestSource(), fixture.prepared.request.content, validated.evidence, .{ .decoder = diagnostic.? }, .unconfirmed, "Correct the rejected wire text only.");
+            defer correction.deinit();
+            try std.testing.expect(correction.request.model_request_id == fixture.prepared.request.model_request_id);
+            try std.testing.expect(correction.request.response_schema == fixture.prepared.request.response_schema);
+            try std.testing.expect(std.mem.indexOf(u8, correction.request.content[correction.request.content.len - 2].bytes(), "EmbeddedInsertionSyntax") != null);
+        }
+        try std.testing.expectEqual(@as(usize, 1), fixture.fake.invocation_call_count);
+        try std.testing.expectEqual(@as(u64, 10), validated.evidence.usage().?.total_tokens);
+        try std.testing.expectEqualStrings(bytes, validated.evidence.result().complete.content());
+    }
+}
+
+test "adjacent prose fragments cannot split an encoded insertion past the protocol boundary" {
+    var fixture: Fixture = undefined;
+    try fixture.initWithSchema(model_text_schema);
+    defer fixture.deinit();
+    fixture.fake.invocation_plan = .{ .complete = .{ .content = "{\"text\":{\"fragments\":[\"Display {\\\"ki\",\"nd\\\":\\\"exact_copy\\\"}\"]}}", .input_tokens = 1, .output_tokens = 1 } };
+    var response = try fixture.response();
+    defer response.deinit();
+    var validated = try (validate.Action{}).execute(std.testing.allocator, fixture.call, &response);
+    defer validated.deinit();
+    try std.testing.expectError(error.InvalidModelEnvelope, (action.Action{}).execute(std.testing.allocator, validated.evidence.result().complete, null));
+}
+
+test "source-aware wire scanner preserves ordinary prose and frees every failed allocation" {
+    const wire = @import("domain/model_text_wire.zig");
+    try std.testing.expect((try wire.checkProse(std.testing.allocator, "Use {broken JSON or the fragments label.", &.{})) == null);
+    try std.testing.expectEqual(wire.Issue.embedded_insertion_syntax, (try wire.checkProse(std.testing.allocator, "{\"fragments\":[\"text\"]}", &.{})).?);
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, wireAllocation, .{});
+}
+fn wireAllocation(a: std.mem.Allocator) !void {
+    const issue = try @import("domain/model_text_wire.zig").checkProse(a, "Before {\"fragments\":[\"text \",{\"kind\":\"exact_copy\",\"claim_id\":1}]} after", &.{});
+    try std.testing.expectEqual(.embedded_insertion_syntax, issue.?);
+}
+
 test "fake response decodes one compact object and preserves exact trusted association" {
     for ([_][]const u8{
         "{}",

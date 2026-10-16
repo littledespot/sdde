@@ -5,6 +5,7 @@ const packet = @import("packet.zig");
 test {
     _ = @import("model_cost_policy.zig");
     _ = @import("generation_comparison.zig");
+    _ = @import("baseline/tests.zig");
     _ = @import("e2e/tests.zig");
     _ = @import("compatibility/tests.zig");
     _ = @import("call/tests.zig");

@@ -321,7 +321,7 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
                 if (descriptor != .repair_validate or change == .seal) return error.InvalidOutcomeAssociation;
                 const permit = switch (progress) {
                     .validated => |value| if (value.result == .recurring) value.permit else return error.InvalidOutcomeAssociation,
-                    .merged_validated => |value| if (value.result == .recurring) value.permit else return error.InvalidOutcomeAssociation,
+                    .merged_validated => |value| if (value.changed and value.result == .recurring) value.permit else return error.InvalidOutcomeAssociation,
                     .authorized, .merged => return error.InvalidOutcomeAssociation,
                 };
                 if (!associated(aliases.items, observation.subject, .{ .repair = permit.key })) return error.InvalidOutcomeAssociation;
@@ -453,7 +453,7 @@ fn apply(a: std.mem.Allocator, entries: *std.ArrayList(Entry), aliases: *std.Arr
                     if (descriptor != .repair_validate) return error.InvalidOutcomeAssociation;
                     const permit = switch (value.transition) {
                         .validated => |progress| if (progress.result == .resolved) progress.permit else return error.InvalidOutcomeAssociation,
-                        .merged_validated => |progress| if (progress.result == .resolved) progress.permit else return error.InvalidOutcomeAssociation,
+                        .merged_validated => |progress| if (progress.changed and progress.result == .resolved) progress.permit else return error.InvalidOutcomeAssociation,
                         .authorized, .merged => return error.InvalidOutcomeAssociation,
                     };
                     if (!associated(aliases.items, subject, .{ .repair = permit.key })) return error.InvalidOutcomeAssociation;
@@ -704,7 +704,8 @@ test "only exact validated repair resolution removes its associated failure" {
     unrelated.generation += 1;
     try std.testing.expect(!state.referencesRepair(unrelated, key));
     try std.testing.expect(!state.compatible(.ok));
-    try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .repair_validate = binding }, .ok, &.{.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = .{ .merged = .{ .permit = permit, .revision_after = 2 } } } } }}));
+    try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .repair_validate = binding }, .ok, &.{.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = .{ .merged = .{ .permit = permit, .changed = true, .revision_after = 2 } } } } }}));
+    try std.testing.expectError(error.InvalidOutcomeAssociation, state.prepare(.{ .repair_validate = binding }, .ok, &.{.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = .{ .merged_validated = .{ .permit = permit, .changed = false, .revision_after = 2, .result = .resolved } } } } }}));
     var recurring = try state.prepare(.{ .repair_validate = binding }, .invalid, &.{});
     defer recurring.deinit();
     try std.testing.expect(!recurring.compatible(.ok));
@@ -775,7 +776,7 @@ test "joined native carriers retain parent and foreign repair obligations" {
     var native_validation = retry.State.init(std.testing.allocator);
     defer native_validation.deinit();
     try native_validation.commit(try native_validation.prepare(.{ .authorized = child_permit }));
-    try native_validation.commit(try native_validation.prepare(.{ .merged = .{ .permit = child_permit, .revision_after = 3 } }));
+    try native_validation.commit(try native_validation.prepare(.{ .merged = .{ .permit = child_permit, .changed = true, .revision_after = 3 } }));
     try std.testing.expect(!native_validation.permitsDependentContinuation(child_permit, child_permit.key));
     var observed = try state.prepare(.{ .observe = binding }, .invalid, &.{
         .{ .observe = .{ .subject = parent, .outcome = .invalid } },
@@ -790,7 +791,7 @@ test "joined native carriers retain parent and foreign repair obligations" {
     defer authorized.deinit();
     try state.commit(&authorized);
     try native.commit(try native.prepare(.{ .authorized = parent_permit }));
-    try native.commit(try native.prepare(.{ .merged = .{ .permit = parent_permit, .revision_after = 2, .validation = .dependent_review } }));
+    try native.commit(try native.prepare(.{ .merged = .{ .permit = parent_permit, .changed = true, .revision_after = 2, .validation = .dependent_review } }));
     try native.commit(try native.prepare(.{ .authorized = child_permit }));
     var joined = try state.prepare(.{ .preserve = binding }, .ok, &.{.{ .associate = .{ .source = parent, .target = child } }});
     defer joined.deinit();
@@ -799,7 +800,7 @@ test "joined native carriers retain parent and foreign repair obligations" {
     try std.testing.expect(!native.permitsContinuation(parent_permit, child_permit.key));
     const dependent: RepairContinuation = .{ .owner = &native, .permit = child_permit, .mode = .dependent_regeneration };
     try std.testing.expect(!state.permitsRequest(request.model_request_id, null, dependent, &.{child.native}));
-    try native.commit(try native.prepare(.{ .merged = .{ .permit = child_permit, .revision_after = 3, .validation = .dependent_review } }));
+    try native.commit(try native.prepare(.{ .merged = .{ .permit = child_permit, .changed = true, .revision_after = 3, .validation = .dependent_review } }));
     try std.testing.expect(native.permitsDependentContinuation(child_permit, parent_permit.key));
     try std.testing.expect(!native.permitsDependentContinuation(parent_permit, child_permit.key));
     try std.testing.expect(state.permitsRequest(request.model_request_id, null, dependent, &.{child.native}));

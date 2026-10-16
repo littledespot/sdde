@@ -110,6 +110,7 @@ pub const Runner = struct {
 
     fn invokeInvocation(self: *Runner) execution.Applied {
         self.last_effects = null;
+        if (self.repair_retry.terminal_exhaustion) |exhausted| return .{ .rejected = .{ .retry_limit = exhausted } };
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!self.authorityMatches()) return .{ .rejected = .authority };
         const authority = self.selected.graph.authority;
@@ -162,6 +163,7 @@ pub const Runner = struct {
     }
 
     fn executeStep(self: *Runner, id: workflow.WorkflowStepId) execution.Applied {
+        if (self.repair_retry.terminal_exhaustion) |exhausted| return .{ .rejected = .{ .retry_limit = exhausted } };
         if (runtimeTerminal(self.runtime)) |outcome| return .{ .rejected = outcome };
         if (!self.authorityMatches()) return .{ .rejected = .authority };
         const index = findStepIndex(self.selected.graph.authority.steps, id) orelse return .{ .rejected = .authority };
@@ -725,6 +727,17 @@ pub const Runner = struct {
             .merge_validate => candidate.outcome == .ok or candidate.outcome == .invalid,
         };
         if (repair_required and candidate.delta.repair_transition == null) return .{ .rejected = .authority };
+        if (candidate.delta.repair_transition) |transition| {
+            const unchanged = switch (transition) {
+                .merged => |value| !value.changed,
+                .merged_validated => |value| !value.changed,
+                .authorized, .validated => false,
+            };
+            if (unchanged) {
+                const exhausted = self.repair_retry.unchangedExhaustion(transition) catch return .{ .rejected = .authority };
+                return .{ .rejected = .{ .retry_limit = exhausted orelse return .{ .rejected = .authority } } };
+            }
+        }
         const repair_pending = if (candidate.delta.repair_transition) |transition|
             self.repair_retry.prepare(transition) catch |err| return .{ .rejected = if (err == error.OutOfMemory) .{ .operation_failed = error.OutOfMemory } else .authority }
         else

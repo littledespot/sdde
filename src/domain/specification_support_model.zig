@@ -32,6 +32,7 @@ pub const Decision = enum {
     }
 };
 pub const Canonical = struct {
+    pub const model_prose = .{ .question = @import("text_field_policy.zig").Field.clarification_question };
     loss: loss = .{ .unlocalized = .{} },
     preservation: ?@import("source_omission.zig").comparisons.Evidence = null,
     kind: Decision,
@@ -52,7 +53,13 @@ const Question = struct { source_ids: []const SourceId, detail: []const u8, ques
 const Explanation = struct { source_ids: []const SourceId, detail: []const u8 };
 const Omission = struct { source_ids: []const SourceId, detail: []const u8, missing_obligation: []const u8 };
 const Invalid = struct { source_ids: []const SourceId, detail: []const u8, authority_gap: ?a.AuthorityGap };
-pub const Detail = struct { detail: []const u8, missing_obligation: ?[]const u8 = null, question: ?[]const u8 = null, authority_gap: ?a.AuthorityGap = null };
+pub const Detail = struct {
+    pub const model_prose = .{ .question = @import("text_field_policy.zig").Field.clarification_question };
+    detail: []const u8,
+    missing_obligation: ?[]const u8 = null,
+    question: ?[]const u8 = null,
+    authority_gap: ?a.AuthorityGap = null,
+};
 
 /// Decode the selected correction shape without permitting a missing obligation
 /// or admitting omission-only fields into another retained finding.

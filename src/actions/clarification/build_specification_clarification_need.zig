@@ -32,6 +32,6 @@ pub const Action = struct {
             .why_required = prepared.why_required,
             .answer_schema = .{ .bounded_business_text = @import("../../domain/clarification_inputs.zig").max_text_bytes },
         };
-        return .{ .feature = feature, .entries = needs };
+        return .{ .feature = feature, .original_sources = refresh.originalSources(allocator, context.inputs) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecification, .entries = needs };
     }
 };

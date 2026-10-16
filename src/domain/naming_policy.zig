@@ -53,6 +53,20 @@ pub fn validateBinding(allocator: std.mem.Allocator, compiled: Compiled, current
 /// Workspace is derived from input length and Unicode expansion, not a policy
 /// limit on model input/output. Source/resource readers retain their own bounds.
 pub fn normalize(allocator: std.mem.Allocator, bytes: []const u8, case_sensitive: bool, normalizer: unicode.Normalizer, folder: unicode.CaseFolder) Error![]const u8 {
-    const capacity = std.math.add(usize, std.math.mul(usize, bytes.len, 4) catch return error.OutOfMemory, 4) catch return error.OutOfMemory;
-    return (if (case_sensitive) normalizer.nfc(allocator, bytes, capacity) else folder.key(allocator, bytes, capacity)) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidNamingPolicy;
+    if (case_sensitive) return normalizeNfc(allocator, bytes, normalizer);
+    return folder.key(allocator, bytes, try workspaceCapacity(bytes.len)) catch |err| return normalizationError(err);
+}
+
+/// The same Unicode owner, expansion workspace and error policy apply when
+/// prose normalization must preserve separately witnessed source spans.
+pub fn normalizeNfc(allocator: std.mem.Allocator, bytes: []const u8, normalizer: unicode.Normalizer) Error![]const u8 {
+    return normalizer.nfc(allocator, bytes, try workspaceCapacity(bytes.len)) catch |err| return normalizationError(err);
+}
+
+fn workspaceCapacity(length: usize) std.mem.Allocator.Error!usize {
+    return std.math.add(usize, std.math.mul(usize, length, 4) catch return error.OutOfMemory, 4) catch return error.OutOfMemory;
+}
+
+fn normalizationError(err: unicode.Error) Error {
+    return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidNamingPolicy;
 }

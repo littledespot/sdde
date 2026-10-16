@@ -134,7 +134,15 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 .detail => if (purpose == .source and review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) "invalid_detail" else if (purpose == .source and review.decisionOf(authorization.rule.finding.?) == .candidate_omission) "omission_detail" else if (purpose == .source and @import("specification_support_evidence.zig").questionRequired(review.decisionOf(authorization.rule.finding.?).finding())) "gap_detail" else "detail",
                 .selection => if (purpose == .principles) "principle_selection" else if (review.decisionOf(authorization.rule.finding.?) == .candidate_invalid) "invalid_selection" else "selection",
             };
-            const prepared_input = try atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index]);
+            const raw_input = try atomic.packet(a, authorization, base, .{ .bytes = definition }, if (authorization.operation == .insert) candidate.origin else candidate.origins[authorization.target.index]);
+            defer packets.release(raw_input);
+            // A narrowed result schema owns its prose paths. It cannot inherit
+            // question paths from the complete finding when they are absent.
+            const Field = @import("model_text_wire.zig").ProseField;
+            const prose_fields: []const Field = if (purpose == .source and kind == .detail)
+                (if (std.mem.eql(u8, definition, "gap_detail")) &.{.{ .field = .clarification_question, .path = &.{.{ .property = "question" }} }} else if (std.mem.eql(u8, definition, "invalid_detail")) &.{.{ .field = .clarification_question, .path = &.{ .{ .property = "authority_gap" }, .{ .property = "question" } } }} else &.{})
+            else if (kind == .finding) base.proseFields() else &.{};
+            const prepared_input = try packets.withProseFields(a, raw_input, prose_fields);
             if (purpose != .source or kind != .selection) return prepared_input;
             defer packets.release(prepared_input);
             const rule = (authorization.rule.rejection.evidence orelse return error.InvalidAtomicRepair).rule;
@@ -171,13 +179,14 @@ pub fn Contract(comptime purpose: @import("specification_support.zig").Purpose) 
                 },
             };
         }
-        pub fn merge(a: std.mem.Allocator, inputs: authority.Inputs, context: p.Context, candidate: review.Candidate, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!review.Collection {
+        pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, inputs: authority.Inputs, context: p.Context, candidate: review.Candidate, authorization: Authorization, replacement: ?Replacement, origin: ?Origin) Error!review.Collection {
+            if (!canonical.matchesInputs(context.inputs)) return error.InvalidAtomicRepair;
             const target = authorization.target;
             const base = try review.packetFor(a, inputs, context, .{ .finding = target.requirement });
             defer packets.release(base);
             const expected: ?Replacement = if (authorization.operation == .insert) null else valueAt(candidate, target.index, std.meta.activeTag(if (authorization.operation == .replace) authorization.operation.replace else authorization.operation.delete));
             const facts: Facts = .{ .inputs = inputs, .sources = context.inputs, .candidate = candidate };
-            const merged = try atomic.checkMerge(a, base.unit(), candidate.revision, expected, facts, authorization, replacement, origin);
+            const merged = try atomic.checkMerge(a, canonical, base.unit(), candidate.revision, expected, facts, authorization, replacement, origin);
             var entries: std.ArrayList(review.Finding) = .empty;
             var origins: std.ArrayList(?Origin) = .empty;
             for (candidate.review.entries, candidate.origins, 0..) |finding, previous_origin, index| {

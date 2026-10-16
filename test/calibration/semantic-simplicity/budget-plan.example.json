@@ -1,0 +1,10 @@
+{
+  "schema": "baseline-budget-plan/v1",
+  "phases": ["baseline", "selection", "qualification"],
+  "workflow_token_budget": 100000,
+  "maximum_sends": 1000,
+  "maximum_actual_tokens": 2000000,
+  "projection": "worst_observed_workflow",
+  "decision": {"unresolved": {}},
+  "evidence_runs": []
+}

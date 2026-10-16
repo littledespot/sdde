@@ -3987,7 +3987,7 @@ const RepairSequence = struct {
         _ = try @import("application/model_candidate_handoff.zig").read(&input.step.data);
         const permit = input.step.repair_permit orelse return error.OperationExecutionFailed;
         context.?.merges += 1;
-        return .{ .outcome = .ok, .delta = .{ .repair_transition = .{ .merged_validated = .{ .permit = permit, .revision_after = permit.revision + 1, .result = .resolved } } } };
+        return .{ .outcome = .ok, .delta = .{ .repair_transition = .{ .merged_validated = .{ .permit = permit, .changed = true, .revision_after = permit.revision + 1, .result = .resolved } } } };
     }
 };
 
@@ -4104,7 +4104,7 @@ const DependentReviewSequence = struct {
 
     fn merge(_: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const permit = input.step.repair_permit orelse return error.OperationExecutionFailed;
-        return .{ .outcome = .ok, .delta = .{ .repair_transition = .{ .merged = .{ .permit = permit, .revision_after = permit.revision + 1, .validation = .dependent_review } } } };
+        return .{ .outcome = .ok, .delta = .{ .repair_transition = .{ .merged = .{ .permit = permit, .changed = true, .revision_after = permit.revision + 1, .validation = .dependent_review } } } };
     }
 
     fn observe(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {

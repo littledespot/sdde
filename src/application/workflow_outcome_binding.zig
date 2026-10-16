@@ -155,7 +155,7 @@ pub fn prepare(
         .repair_validate => {
             if (candidate.delta.repair_transition) |transition| switch (transition) {
                 .validated => |progress| if (progress.result == .resolved) try changes.add(.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = transition } } }),
-                .merged_validated => |progress| if (progress.result == .resolved) try changes.add(.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = transition } } }),
+                .merged_validated => |progress| if (progress.changed and progress.result == .resolved) try changes.add(.{ .resolve = .{ .repair_resolved = .{ .subject = subject, .transition = transition } } }),
                 .authorized, .merged => return error.InvalidOutcomeAssociation,
             };
         },
@@ -207,7 +207,7 @@ pub fn prepare(
             const transition = candidate.delta.repair_transition orelse break :progress null;
             break :progress switch (transition) {
                 .validated => |value| if (value.result == .recurring) transition else null,
-                .merged_validated => |value| if (value.result == .recurring) transition else null,
+                .merged_validated => |value| if (value.changed and value.result == .recurring) transition else null,
                 .authorized, .merged => return error.InvalidOutcomeAssociation,
             };
         } else null;
@@ -354,8 +354,8 @@ fn repairMergeEvidence(envelope: *const envelope_module.PipelineEnvelope, descri
     if (evidence != .native or candidate.delta.data_replacements[@intFromEnum(key)] == null) return false;
     const transition = candidate.delta.repair_transition orelse return false;
     const permit: retry.Permit = switch (descriptor) {
-        .repair_merge => if (transition == .merged) transition.merged.permit else return false,
-        .repair_validate => if (transition == .merged_validated) transition.merged_validated.permit else return false,
+        .repair_merge => if (transition == .merged and transition.merged.changed) transition.merged.permit else return false,
+        .repair_validate => if (transition == .merged_validated and transition.merged_validated.changed) transition.merged_validated.permit else return false,
         else => return false,
     };
     return envelope.outcomes.referencesRepair(evidence.native, permit.key);
@@ -634,16 +634,16 @@ test "native merges carry only the exact authorized repair reference through cap
         const binding: association.Binding = .{ .kind = .candidate, .subject = target.key, .evidence = authorization_schema.key, .result = target.key };
         const descriptor: association.Descriptor = if (combined_validation) .{ .repair_validate = binding } else .{ .repair_merge = binding };
         const transition: retry.Transition = if (combined_validation)
-            .{ .merged_validated = .{ .permit = permit, .revision_after = 2, .result = .resolved } }
+            .{ .merged_validated = .{ .permit = permit, .changed = true, .revision_after = 2, .result = .resolved } }
         else
-            .{ .merged = .{ .permit = permit, .revision_after = 2, .validation = .dependent_review } };
+            .{ .merged = .{ .permit = permit, .changed = true, .revision_after = 2, .validation = .dependent_review } };
         const state_revision = envelope.outcomes.revision;
         // Neither missing native progress, another transition kind, nor a
         // disconnected parent's authorization permits this candidate bridge.
         try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, descriptor, &merged, null));
         merged.delta.repair_transition = .{ .validated = .{ .permit = permit, .revision = 1, .result = .resolved } };
         try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, descriptor, &merged, null));
-        merged.delta.repair_transition = if (combined_validation) .{ .merged_validated = .{ .permit = foreign, .revision_after = 2, .result = .resolved } } else .{ .merged = .{ .permit = foreign, .revision_after = 2, .validation = .dependent_review } };
+        merged.delta.repair_transition = if (combined_validation) .{ .merged_validated = .{ .permit = foreign, .changed = true, .revision_after = 2, .result = .resolved } } else .{ .merged = .{ .permit = foreign, .changed = true, .revision_after = 2, .validation = .dependent_review } };
         try std.testing.expectError(error.InvalidOutcomeAssociation, prepare(&envelope, merge_occurrence, descriptor, &merged, null));
         merged.delta.repair_transition = transition;
         var foreign_binding = binding;
@@ -831,7 +831,7 @@ test "dependent regeneration requires native merged authority and current packet
         // Authorization alone is insufficient for a generation continuation.
         try std.testing.expect(!permitsPacket(&envelope, assignment.model_request_id, null, original, null, &native_retry));
         const merge_occurrence = try envelope.beginOccurrence("test.regeneration-merge");
-        var merged: execution.Candidate = .{ .outcome = .ok, .delta = .{ .repair_transition = .{ .merged = .{ .permit = permit, .revision_after = 2, .validation = validation } } } };
+        var merged: execution.Candidate = .{ .outcome = .ok, .delta = .{ .repair_transition = .{ .merged = .{ .permit = permit, .changed = true, .revision_after = 2, .validation = validation } } } };
         defer envelope.discard(&merged.delta);
         merged.delta.data_replacements[@intFromEnum(subject_schema.key)] = try values.create(std.testing.allocator, subject_schema, u8, 3);
         merged.delta.data_invalidations.insert(unrelated_schema.key);

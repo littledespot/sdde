@@ -121,6 +121,7 @@ fn runScenario(case_path: []const u8, scenario: Scenario) !void {
     var prefix_cancellation: PrefixCancellation = .{ .wire = &wire };
     var probe: invoke.Probe = .{};
     var report: contracts.Report = .{
+        .schema = .@"spec-e2e-report/v2",
         .started_at_utc = "2026-10-15T00:00:00Z",
         .case_id = selected.id,
         .workflow_id = selected.workflow_id,
@@ -477,4 +478,101 @@ test "test.integration.provider_compatibility missing usage malformed responses 
     for (cases) |case_path| {
         for ([_]Scenario{ .missing_usage, .malformed_provider, .noncandidate_stop, .schema_invalid, .malformed_candidate }) |scenario| try runScenario(case_path, scenario);
     }
+}
+
+const ExperimentScenario = enum { known_usage, missing_usage, uncertain_delivery, native_budget_stop, capture_failure };
+
+fn runExperimentCase(case_path: []const u8, scenario: ExperimentScenario) !void {
+    const io = std.testing.io;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var temporary = std.testing.tmpDir(.{});
+    defer temporary.cleanup();
+    try temporary.dir.createDirPath(io, "project");
+    const project = try temporary.dir.openDir(io, "project", .{});
+    defer project.close(io);
+    const selected = try contracts.parse(a, try files.read(io, a, .cwd(), case_path));
+    const captured = try fixture.capture(io, a, .cwd(), selected);
+    try fixture.materialize(io, project, captured);
+    var gate = try @import("../harness/baseline/dispatch.zig").Gate.init(.{ .maximum_sends = 1, .maximum_actual_tokens = 2_000_000 });
+    var log = @import("../harness/e2e/trace.zig").CaptureLog.init(a);
+    defer log.deinit();
+    const normal_body = try body(a, if (scenario == .missing_usage) .missing_usage else .complete);
+    const response = if (scenario == .native_budget_stop)
+        try std.mem.replaceOwned(u8, a, normal_body, "\"inputTokens\":10,\"outputTokens\":2,\"totalTokens\":12", "\"inputTokens\":100000,\"outputTokens\":1,\"totalTokens\":100001")
+    else
+        normal_body;
+    var wire: @import("../../src/bedrock_transport_test_fixture.zig").Wire = .{ .expected_json = true, .inference_body = response };
+    wire.result = if (scenario == .uncertain_delivery) .{ .failed = .{
+        .cause = .transport_failed,
+        .retry_class = .policy_eligible,
+        .delivery = .accepted_or_unknown,
+    } } else .{ .received = .{ .status = 200, .body = response } };
+    const store: evidence.Store = .{ .io = io, .allocator = a, .run = temporary.dir, .secrets = &.{key} };
+    var report: contracts.Report = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "2026-10-16T00:00:00Z", .status = .input_invalid };
+    if (scenario == .capture_failure) try temporary.dir.createDirPath(io, try evidence.Store.path(a, .generation, 1, .context));
+    const published = invoke.run(io, a, project, selected, captured, key, store, &report, .{
+        .purpose = .whole_workflow,
+        .experiment = &gate,
+        .capture = &log,
+        .transport = wire.port(),
+    }) catch |err| {
+        if (scenario != .capture_failure) return err;
+        try std.testing.expectEqual(error.EvidenceCaptureFailed, err);
+        try std.testing.expectEqual(@as(usize, 0), wire.calls);
+        try std.testing.expectEqual(@as(u64, 0), gate.snapshot().physical_sends);
+        try std.testing.expectEqual(@as(usize, 0), log.records.items.len);
+        try std.testing.expectEqual(@as(?@import("../harness/baseline/dispatch.zig").Reason, .evidence_failure), gate.snapshot().halt_reason);
+        return;
+    };
+    if (scenario == .capture_failure) return error.TestExpectedError;
+    try std.testing.expect(published == null);
+    try std.testing.expectEqual(@as(usize, 1), wire.calls);
+    try std.testing.expectEqual(@as(u64, 1), gate.snapshot().physical_sends);
+    try std.testing.expectEqual(@as(u64, 1), gate.snapshot().reconciled_sends);
+    try std.testing.expectEqual(@as(usize, 1), log.records.items.len);
+    try std.testing.expectError(error.ExperimentHalted, gate.beforeSend());
+    try std.testing.expect(report.workflow_outcome != .ok and report.specification == null);
+    try std.testing.expectEqual(.not_run, report.semantic_quality);
+    const receipt = log.records.items[0];
+    try std.testing.expectEqual(@as(usize, 1), receipt.call);
+    try std.testing.expectEqual(@as(u64, 1), receipt.experiment_send.?.ordinal);
+    try std.testing.expectEqualDeep(report.last_model_origin.?, receipt.origin);
+    const raw_context = try files.read(io, a, temporary.dir, try evidence.Store.path(a, .generation, 1, .context));
+    const raw_request = try files.read(io, a, temporary.dir, try evidence.Store.path(a, .generation, 1, .request));
+    try std.testing.expectEqualDeep(digest(raw_context), receipt.context_sha256);
+    try std.testing.expectEqualDeep(digest(raw_request), receipt.request_sha256);
+    const known = scenario == .known_usage or scenario == .native_budget_stop;
+    try std.testing.expectEqual(known, gate.snapshot().usage_complete);
+    if (known) {
+        const tokens: u128 = if (scenario == .native_budget_stop) 100001 else 12;
+        try std.testing.expectEqual(@as(?u128, tokens), gate.snapshot().total_actual_tokens);
+        try std.testing.expectEqual(tokens, report.total_tokens);
+        try std.testing.expectEqualDeep(report.last_model_usage, receipt.usage);
+        if (scenario == .native_budget_stop) try std.testing.expectEqual(.token_budget, report.terminal_rejection.?.kind);
+    } else {
+        try std.testing.expect(gate.snapshot().total_actual_tokens == null);
+        try std.testing.expect(receipt.usage == null);
+    }
+    try std.testing.expectEqual(scenario == .uncertain_delivery, receipt.uncertain_delivery);
+    if (scenario != .uncertain_delivery) {
+        const raw_response = try files.read(io, a, temporary.dir, try evidence.Store.path(a, .generation, 1, .response));
+        try std.testing.expectEqualStrings(response, raw_response);
+        try std.testing.expectEqualDeep(digest(response), receipt.response_sha256.?);
+        try std.testing.expect(receipt.raw_response_available);
+    }
+    if (scenario == .known_usage) {
+        const raw_output = try files.read(io, a, temporary.dir, try evidence.Store.path(a, .generation, 1, .model_output));
+        try std.testing.expectEqualStrings(payload, raw_output);
+        try std.testing.expectEqualDeep(digest(raw_output), receipt.model_output_sha256.?);
+        try std.testing.expect(receipt.model_output_available);
+    }
+    try fixture.verifySources(io, a, .cwd(), captured);
+}
+
+test "test.integration.provider_compatibility experiment gate retains authentic-boundary receipts and native accounting before stops" {
+    for (cases) |case_path| for ([_]ExperimentScenario{ .known_usage, .missing_usage, .uncertain_delivery, .native_budget_stop, .capture_failure }) |scenario| {
+        try runExperimentCase(case_path, scenario);
+    };
 }

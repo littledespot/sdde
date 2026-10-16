@@ -3,7 +3,7 @@ const std = @import("std");
 const provider = @import("llm_provider_operation.zig");
 const binding = @import("llm_provider_binding.zig");
 pub const Description = struct {
-    version: enum { @"model-request-debug/v3" } = .@"model-request-debug/v3",
+    version: enum { @"model-request-debug/v4" } = .@"model-request-debug/v4",
     provider: []const u8,
     model: []const u8,
     provider_config: @import("llm_provider_contracts.zig").ValidatedProviderConfig,
@@ -18,6 +18,8 @@ pub const Description = struct {
     controls: @import("model_controls.zig").InferenceControls,
     reasoning_effort: ?[]const u8,
     operation_kind: provider.ProviderOperationKind,
+    original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
+    prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
 
     pub fn from(request: *const provider.IdentifiedProviderNeutralModelRequest, selected: *const binding.ValidatedProviderModelBinding, kind: provider.ProviderOperationKind) Description {
         return .{
@@ -35,11 +37,14 @@ pub const Description = struct {
             .controls = request.controls,
             .reasoning_effort = selected.reasoning_effort,
             .operation_kind = kind,
+            .original_sources = request.original_sources,
+            .prose_fields = request.prose_fields,
         };
     }
 
     pub fn decode(a: std.mem.Allocator, bytes: []const u8) @import("strict_json.zig").Error!Description {
         const value = try @import("strict_json.zig").decode(Description, a, bytes, .{ .maximum_depth = 64 });
+        if (!@import("model_text_wire.zig").validSources(value.original_sources) or !@import("model_text_wire.zig").validProseFields(value.prose_fields)) return error.InvalidJsonDocument;
         const ids = @import("llm_provider_identity.zig");
         const workflow = @import("workflow.zig");
         if (ids.ProviderId.parse(value.provider) == null or ids.ModelId.parse(value.model) == null or ids.ModelSlotId.parse(value.model_slot) == null or

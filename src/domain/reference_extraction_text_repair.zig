@@ -75,11 +75,12 @@ pub fn packet(a: std.mem.Allocator, facts: Facts, registry: @import("passive_lit
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
     return atomic.parse(a, authorization, input, bytes);
 }
-pub fn merge(a: std.mem.Allocator, facts: Facts, authorization: Authorization, proposed_replacement: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!e.Parsed {
+pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, facts: Facts, authorization: Authorization, proposed_replacement: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!e.Parsed {
+    if (!canonical.matchesInputs(facts.text.inputs)) return error.InvalidAtomicRepair;
     const replacement = try atomic.copyReplacement(a, proposed_replacement);
     const target = authorization.target;
     const scope: @import("reference_evidence.zig").Scope = .{ .state_id = facts.text.inputs.corpus.state_id, .chunk_id = target.scope };
-    const merged = try atomic.checkMerge(a, unit(scope), facts.candidate.revision, try select(facts.candidate, target), facts, authorization, replacement, origin);
+    const merged = try atomic.checkMerge(a, canonical, unit(scope), facts.candidate.revision, try select(facts.candidate, target), facts, authorization, replacement, origin);
     const entries = try a.dupe(e.ParsedResult, facts.candidate.entries);
     for (entries) |*entry| if (entry.scope.chunk_id.eql(target.scope)) {
         switch (target.field) {

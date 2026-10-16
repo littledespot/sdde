@@ -81,7 +81,7 @@ pub const Merge = struct {
     pub const Action = @import("../actions/reference/merge_reference_extraction_repair.zig").Action;
     pub const outcomes = @import("reference_extraction_repair_workflow.zig").outcomes;
     allocator: std.mem.Allocator,
-    action: Action = .{},
+    action: Action,
     pub fn invoke(context: ?*@This(), input: operations.Input) operations.Error!execution.Candidate {
         const self = context.?;
         const authorization = owned.read(&input.step.data, authorization_schema, .authorization) catch |operation_error| return operation_error;
@@ -91,7 +91,7 @@ pub const Merge = struct {
         errdefer reference.destroy(owner);
         owner.payload = .{ .text_validated = self.action.execute(owner.arena.allocator(), try facts(&input.step.data, prior.payload().text_validated), authorization, replacement.value, replacement.origin) catch |operation_error| return operation_error };
         var delta: pipeline.NodeDelta = .{};
-        delta.repair_transition = .{ .merged = .{ .permit = authorization.retry orelse return error.OperationExecutionFailed, .revision_after = owner.payload.text_validated.revision } };
+        delta.repair_transition = (owner.payload.text_validated.last_repair orelse return error.OperationExecutionFailed).transition(.native) catch return error.OperationExecutionFailed;
         delta.data_replacements[@intFromEnum(extraction.text_schema.key)] = values.adopt(self.allocator, extraction.text_schema, reference.Value, reference.Owner, owner, reference.view, reference.destroy, null) catch |operation_error| return operation_error;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
         return .{ .outcome = .ok, .delta = delta };

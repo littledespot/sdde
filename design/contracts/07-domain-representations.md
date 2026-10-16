@@ -88,6 +88,16 @@ correction and authorized repair share this conversion. Canonical persistence,
 text validation, provenance, renderer bytes and editable readback retain their
 existing contracts. Other arrays and undeclared fields are unaffected.
 
+#### Accepted composition-admission amendment — 16 October 2026
+
+The user-authorized [Phase 1A contract](text-field-composition.md) adds a closed
+per-field prose/insertion policy, source-aware rejection of encoded insertion
+syntax inside prose, coverage eligibility and shared no-progress exhaustion.
+It supersedes acceptance of insertion-only values in prose-required fields and
+unrestricted exact-copy coverage. The same owners enforce initial output,
+correction, every repair and stored readback. It does not infer semantic quality,
+reference occurrences or operational authority from prose.
+
 ### 7.2 Stage IRs
 
 Execution-local information occurrences use the common envelope contract in

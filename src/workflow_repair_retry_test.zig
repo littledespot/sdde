@@ -1,6 +1,126 @@
 const std = @import("std");
 const retry = @import("domain/workflow_retry.zig");
 
+test "unchanged canonical replacements exhaust actual repair attempts without acceptance" {
+    const atomic = @import("domain/atomic_repair.zig");
+    const Replacement = union(enum) { narrative: []const u8, selection: []const u32 };
+    const Contract = atomic.Contract(enum { subject }, Replacement, struct { source: u32 }, enum { rejected });
+    for ([_]Replacement{ .{ .narrative = "Preserve the specified duty." }, .{ .selection = &.{ 2, 7 } } }) |expected| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const owner: @import("domain/model_request_identity.zig").ImmutableUnitOwnerId = .{ .reference_global = .{ .reference_state_id = .{ .bytes = "source" }, .unit_slot_id = .{ .bytes = "subject" } } };
+        var authorization = try Contract.authorize(a, owner, 1, .subject, expected, .{ .source = 3 }, .rejected);
+        authorization.retry = permit(3, 1, 4);
+        const same = try Contract.copyReplacement(a, expected);
+        const merged = try Contract.checkMerge(a, .{ .normalizer = .{ .normalize_fn = identityNormalize }, .original_sources = &.{} }, owner, 1, expected, .{ .source = 3 }, authorization, same, null);
+        try std.testing.expect(!merged.changed);
+        const transition = try merged.transition(.dependent_review);
+        try std.testing.expect(!transition.merged.changed);
+        const combined = try merged.validatedTransition(.resolved);
+        try std.testing.expect(!combined.merged_validated.changed);
+        for ([_]retry.Transition{ transition, combined }) |unchanged| {
+            var state = retry.State.init(std.testing.allocator);
+            defer state.deinit();
+            try apply(&state, .{ .authorized = authorization.retry.? });
+            try std.testing.expectError(error.InvalidRepairProgress, state.prepare(unchanged));
+            try std.testing.expectError(error.InvalidRepairProgress, state.unchangedExhaustion(unchanged));
+            _ = try state.beginAttempt(.{ .bytes = "merge" }, .{ .value = 8 }, authorization.retry.?);
+            var foreign = unchanged;
+            switch (foreign) {
+                .merged => |*value| value.permit.authorization[0] ^= 1,
+                .merged_validated => |*value| value.permit.authorization[0] ^= 1,
+                else => unreachable,
+            }
+            try std.testing.expectError(error.InvalidRepairProgress, state.unchangedExhaustion(foreign));
+            var stale = unchanged;
+            switch (stale) {
+                .merged => |*value| value.revision_after += 1,
+                .merged_validated => |*value| value.revision_after += 1,
+                else => unreachable,
+            }
+            try std.testing.expectError(error.InvalidRepairProgress, state.unchangedExhaustion(stale));
+            try std.testing.expectError(error.InvalidRepairProgress, state.beginAttempt(.{ .bytes = "merge" }, .{ .value = 7 }, authorization.retry.?));
+            try std.testing.expect(state.terminal_exhaustion == null);
+            const revision = state.revision;
+            const exhausted = (try state.unchangedExhaustion(unchanged)).?;
+            try std.testing.expectEqual(.unchanged_repair, exhausted.reason);
+            try std.testing.expectEqual(@as(u64, 1), exhausted.completed_executions);
+            try std.testing.expectEqual(@as(u32, 8), exhausted.limit.value);
+            try std.testing.expectEqualDeep(authorization.retry.?.key, exhausted.defect.?);
+            try std.testing.expectEqual(revision, state.revision);
+            try std.testing.expectEqualDeep(authorization.retry.?, state.currentPermit().?);
+            try std.testing.expect(!state.permitsContinuation(authorization.retry.?, authorization.retry.?.key));
+            try std.testing.expectError(error.InvalidRepairProgress, state.beginAttempt(.{ .bytes = "merge" }, .{ .value = 8 }, authorization.retry.?));
+            try std.testing.expectError(error.InvalidRepairProgress, state.prepare(.{ .authorized = permit(4, 1, 5) }));
+        }
+        var unbound = merged;
+        unbound.retry = null;
+        try std.testing.expectError(error.InvalidAtomicRepair, unbound.transition(.native));
+        const changed: Replacement = switch (expected) {
+            .narrative => .{ .narrative = "Preserve the corrected duty." },
+            .selection => .{ .selection = &.{ 2, 8 } },
+        };
+        const different = try Contract.checkMerge(a, .{ .normalizer = .{ .normalize_fn = identityNormalize }, .original_sources = &.{} }, owner, 1, expected, .{ .source = 3 }, authorization, changed, null);
+        try std.testing.expect(different.changed);
+        var state = retry.State.init(std.testing.allocator);
+        defer state.deinit();
+        try apply(&state, .{ .authorized = authorization.retry.? });
+        const changed_transition = try different.transition(.native);
+        try std.testing.expectEqual(@as(?retry.Exhaustion, null), try state.unchangedExhaustion(changed_transition));
+        try apply(&state, changed_transition);
+        try std.testing.expect(state.currentPermit() != null);
+        try apply(&state, .{ .validated = .{ .permit = authorization.retry.?, .revision = 2, .result = .recurring } });
+        try std.testing.expect(state.currentPermit() != null);
+        try std.testing.expectError(error.InvalidAtomicRepair, Contract.checkMerge(a, .{ .normalizer = .{ .normalize_fn = identityNormalize }, .original_sources = &.{} }, owner, 1, changed, .{ .source = 3 }, authorization, same, null));
+    }
+}
+
+test "unchanged repair exhausts the exact authorization's latest admitted allowance owner" {
+    const current = permit(3, 1, 4);
+    const unchanged: retry.Transition = .{ .merged = .{ .permit = current, .revision_after = 2, .changed = false } };
+    for ([_]bool{ false, true }) |merge_owns_allowance| {
+        var state = retry.State.init(std.testing.allocator);
+        defer state.deinit();
+        try apply(&state, .{ .authorized = current });
+        // The account owner can admit a protocol correction before a merge
+        // that has no separate retry descriptor of its own.
+        _ = try state.beginAttempt(.{ .bytes = "account" }, .{ .value = 3 }, current);
+        _ = try state.beginAttempt(.{ .bytes = "account" }, .{ .value = 3 }, current);
+        if (merge_owns_allowance) _ = try state.beginAttempt(.{ .bytes = "merge" }, .{ .value = 8 }, current);
+        const revision = state.revision;
+        const exhausted = (try state.unchangedExhaustion(unchanged)).?;
+        try std.testing.expectEqualStrings(if (merge_owns_allowance) "merge" else "account", exhausted.operation().bytes);
+        try std.testing.expectEqual(@as(u32, if (merge_owns_allowance) 8 else 3), exhausted.limit.value);
+        try std.testing.expectEqual(@as(u64, if (merge_owns_allowance) 1 else 2), exhausted.completed_executions);
+        try std.testing.expectEqualDeep(current.key, exhausted.defect.?);
+        try std.testing.expectEqual(.unchanged_repair, exhausted.reason);
+        try std.testing.expectEqual(revision, state.revision);
+    }
+}
+
+test "new repair authorizations cannot borrow an earlier authorization's admitted attempt" {
+    var state = retry.State.init(std.testing.allocator);
+    defer state.deinit();
+    const original = permit(3, 1, 4);
+    try apply(&state, .{ .authorized = original });
+    _ = try state.beginAttempt(.{ .bytes = "account" }, .{ .value = 3 }, original);
+    try apply(&state, .{ .merged = .{ .permit = original, .revision_after = 2, .changed = true } });
+    try apply(&state, .{ .validated = .{ .permit = original, .revision = 2, .result = .recurring } });
+    const next = permit(3, 2, 5);
+    try apply(&state, .{ .authorized = next });
+    const unchanged: retry.Transition = .{ .merged = .{ .permit = next, .revision_after = 3, .changed = false } };
+    try std.testing.expectError(error.InvalidRepairProgress, state.unchangedExhaustion(unchanged));
+    try std.testing.expectError(error.InvalidRepairProgress, state.beginAttempt(.{ .bytes = "account" }, .{ .value = 3 }, original));
+    try std.testing.expectError(error.InvalidRepairProgress, state.unchangedExhaustion(.{ .merged = .{ .permit = original, .revision_after = 2, .changed = false } }));
+    try std.testing.expect(state.terminal_exhaustion == null);
+    try std.testing.expectEqual(@as(u64, 1), state.completedAttempts(.{ .bytes = "account" }, next.key));
+    _ = try state.beginAttempt(.{ .bytes = "account" }, .{ .value = 3 }, next);
+    const exhausted = (try state.unchangedExhaustion(unchanged)).?;
+    try std.testing.expectEqual(@as(u64, 2), exhausted.completed_executions);
+    try std.testing.expectEqualStrings("account", exhausted.operation().bytes);
+}
+
 test "protocol assignment history survives new request ordinals and separates units parents and executions" {
     const identity = @import("domain/model_request_identity.zig");
     const epoch = try @import("domain/execution_reference.zig").create(std.testing.allocator);
@@ -26,7 +146,7 @@ test "protocol assignment history survives new request ordinals and separates un
     try std.testing.expectEqualDeep(retry.AttemptResult{ .allowed = 1 }, try state.beginAssignmentAttempt(operation, .{ .value = 1 }, .{ .request = &other, .record = .{ .value = 3 } }));
     const parent = permit(1, 1, 1);
     try apply(&state, .{ .authorized = parent });
-    try apply(&state, .{ .merged = .{ .permit = parent, .revision_after = 2, .validation = .dependent_review } });
+    try apply(&state, .{ .merged = .{ .permit = parent, .changed = true, .revision_after = 2, .validation = .dependent_review } });
     try std.testing.expectError(error.InvalidRepairProgress, state.beginAssignmentAttempt(operation, .{ .value = 1 }, .{ .request = &first, .record = .{ .value = 4 } }));
     try std.testing.expectEqualDeep(retry.AttemptResult{ .allowed = 1 }, try state.beginAssignmentAttempt(operation, .{ .value = 1 }, .{ .request = &first, .record = .{ .value = 4 }, .parent = parent.key }));
     try std.testing.expectEqualDeep(parent, state.currentDependentPermit().?);
@@ -49,7 +169,7 @@ fn apply(state: *retry.State, transition: retry.Transition) retry.StateError!voi
 }
 
 fn finish(state: *retry.State, value: retry.Permit, result: retry.Validation) !void {
-    try apply(state, .{ .merged = .{ .permit = value, .revision_after = value.revision + 1 } });
+    try apply(state, .{ .merged = .{ .permit = value, .changed = true, .revision_after = value.revision + 1 } });
     try apply(state, .{ .validated = .{ .permit = value, .revision = value.revision + 1, .result = result } });
 }
 
@@ -76,7 +196,7 @@ test "successful independent repairs continue beyond an operation-wide allowance
     }
 }
 
-test "unchanged and alternating invalid values cannot reset the same defect allowance" {
+test "alternating changed invalid values cannot reset the same defect allowance" {
     var state = retry.State.init(std.testing.allocator);
     defer state.deinit();
     for (0..2) |index| {
@@ -120,14 +240,14 @@ test "authorization merge and validation require exact ordered association" {
     defer state.deinit();
     const first = permit(1, 1, 1);
     const next = permit(2, 2, 2);
-    try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .merged = .{ .permit = first, .revision_after = 2 } }));
+    try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .merged = .{ .permit = first, .changed = true, .revision_after = 2 } }));
     try apply(&state, .{ .authorized = first });
     try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .authorized = next }));
     try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .validated = .{ .permit = first, .revision = 2, .result = .resolved } }));
-    try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .merged = .{ .permit = first, .revision_after = 3 } }));
-    try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .merged = .{ .permit = permit(1, 1, 2), .revision_after = 2 } }));
-    try apply(&state, .{ .merged = .{ .permit = first, .revision_after = 2 } });
-    try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .merged = .{ .permit = first, .revision_after = 2 } }));
+    try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .merged = .{ .permit = first, .changed = true, .revision_after = 3 } }));
+    try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .merged = .{ .permit = permit(1, 1, 2), .changed = true, .revision_after = 2 } }));
+    try apply(&state, .{ .merged = .{ .permit = first, .changed = true, .revision_after = 2 } });
+    try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .merged = .{ .permit = first, .changed = true, .revision_after = 2 } }));
     try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .authorized = next }));
     try std.testing.expectError(error.InvalidRepairProgress, state.beginAttempt(.{ .bytes = "repair-account" }, .{ .value = 1 }, first));
     try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .validated = .{ .permit = first, .revision = 3, .result = .resolved } }));
@@ -160,10 +280,10 @@ test "prepared transitions allocate before commit and reject stale application" 
     try std.testing.expect(state.active == null);
     try state.commit(prepared);
     try std.testing.expectError(error.InvalidRepairProgress, state.commit(prepared));
-    const merge = try state.prepare(.{ .merged_validated = .{ .permit = first, .revision_after = 2, .result = .resolved } });
+    const merge = try state.prepare(.{ .merged_validated = .{ .permit = first, .changed = true, .revision_after = 2, .result = .resolved } });
     _ = try state.beginAttempt(.{ .bytes = "repair-account" }, .{ .value = 1 }, first);
     try std.testing.expectError(error.InvalidRepairProgress, state.commit(merge));
-    try state.commit(try state.prepare(.{ .merged_validated = .{ .permit = first, .revision_after = 2, .result = .resolved } }));
+    try state.commit(try state.prepare(.{ .merged_validated = .{ .permit = first, .changed = true, .revision_after = 2, .result = .resolved } }));
     try apply(&state, .{ .authorized = permit(2, 2, 2) });
 }
 
@@ -175,14 +295,14 @@ test "dependent semantic review keeps its parent pending across bounded child re
     defer state.deinit();
     const parent = permit(1, 1, 1);
     try apply(&state, .{ .authorized = parent });
-    try state.commit(try state.prepare(.{ .merged = .{ .permit = parent, .revision_after = 2, .validation = .dependent_review } }));
+    try state.commit(try state.prepare(.{ .merged = .{ .permit = parent, .changed = true, .revision_after = 2, .validation = .dependent_review } }));
     try std.testing.expectEqualDeep(retry.AttemptResult{ .allowed = 1 }, try state.beginAssignmentAttempt(.{ .bytes = "review" }, .{ .value = 1 }, .{ .request = &request, .record = .{ .value = 1 }, .parent = parent.key }));
     const child = permit(2, 2, 2);
     try apply(&state, .{ .authorized = child });
     try std.testing.expect(state.currentDependentPermit() == null);
     try std.testing.expectError(error.InvalidRepairProgress, state.beginAssignmentAttempt(.{ .bytes = "review" }, .{ .value = 1 }, .{ .request = &request, .record = .{ .value = 1 }, .parent = parent.key }));
     try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .validated = .{ .permit = parent, .revision = 2, .result = .resolved } }));
-    try apply(&state, .{ .merged = .{ .permit = child, .revision_after = 3 } });
+    try apply(&state, .{ .merged = .{ .permit = child, .changed = true, .revision_after = 3 } });
     try apply(&state, .{ .validated = .{ .permit = child, .revision = 3, .result = .recurring } });
     try std.testing.expectError(error.InvalidRepairProgress, apply(&state, .{ .authorized = permit(3, 3, 3) }));
     const corrected = permit(2, 3, 3);
@@ -213,7 +333,7 @@ test "dependent request attempts require a merged semantic parent and retain rec
         try apply(&state, .{ .authorized = parent });
         try std.testing.expect(state.currentDependentPermit() == null);
         try std.testing.expectError(error.InvalidRepairProgress, state.beginAssignmentAttempt(.{ .bytes = "account" }, .{ .value = 1 }, .{ .request = &request, .record = .{ .value = 1 }, .parent = parent.key }));
-        try apply(&state, .{ .merged = .{ .permit = parent, .revision_after = parent.revision + 1, .validation = .dependent_review } });
+        try apply(&state, .{ .merged = .{ .permit = parent, .changed = true, .revision_after = parent.revision + 1, .validation = .dependent_review } });
         try std.testing.expectEqualDeep(parent, state.currentDependentPermit().?);
         try std.testing.expectError(error.InvalidRepairProgress, state.beginAttempt(.{ .bytes = "merge" }, .{ .value = 1 }, parent));
         try std.testing.expectError(error.InvalidRepairProgress, state.beginAssignmentAttempt(.{ .bytes = "account" }, .{ .value = 1 }, .{ .request = &request, .record = .{ .value = 1 }, .parent = (permit(7, parent.revision, 7)).key }));
@@ -228,7 +348,7 @@ test "dependent request attempts require a merged semantic parent and retain rec
     }
     const native = permit(3, 4, 4);
     try apply(&state, .{ .authorized = native });
-    try apply(&state, .{ .merged = .{ .permit = native, .revision_after = 5 } });
+    try apply(&state, .{ .merged = .{ .permit = native, .changed = true, .revision_after = 5 } });
     try std.testing.expect(state.currentDependentPermit() == null);
     try std.testing.expectError(error.InvalidRepairProgress, state.beginAssignmentAttempt(.{ .bytes = "account" }, .{ .value = 1 }, .{ .request = &request, .record = .{ .value = 1 }, .parent = native.key }));
 }
@@ -251,7 +371,7 @@ fn allocatingScenario(allocator: std.mem.Allocator) !void {
     }
     const parent = permit(4, 4, 4);
     try apply(&state, .{ .authorized = parent });
-    try state.commit(try state.prepare(.{ .merged = .{ .permit = parent, .revision_after = 5, .validation = .dependent_review } }));
+    try state.commit(try state.prepare(.{ .merged = .{ .permit = parent, .changed = true, .revision_after = 5, .validation = .dependent_review } }));
     const child = permit(5, 5, 5);
     try apply(&state, .{ .authorized = child });
     _ = try state.beginAttempt(.{ .bytes = "repair-account" }, .{ .value = 1 }, child);
@@ -278,7 +398,7 @@ test "native progress effects require their exact registered role" {
     _ = try shape.applyDelta(contract, &delta);
     contract.repair_role = .merge;
     try std.testing.expectError(error.UndeclaredRepairTransition, shape.applyDelta(contract, &delta));
-    delta.repair_transition = .{ .merged = .{ .permit = permit(1, 1, 1), .revision_after = 2 } };
+    delta.repair_transition = .{ .merged = .{ .permit = permit(1, 1, 1), .changed = true, .revision_after = 2 } };
     _ = try shape.applyDelta(contract, &delta);
     contract.repair_role = .validate;
     try std.testing.expectError(error.UndeclaredRepairTransition, shape.applyDelta(contract, &delta));
@@ -304,10 +424,29 @@ test "native repair digests keep numeric array wire shape for UTF8 and binary by
         const permit_value: retry.Permit = .{ .key = .{ .scope = @splat(byte), .target = @splat(byte), .family = @splat(byte) }, .authorization = @splat(byte), .revision = 2, .maximum_targets = 3 };
         const bytes = try json.encode(retry.Permit, a, permit_value);
         try std.testing.expectEqualDeep(permit_value, try strict.decode(retry.Permit, a, bytes, .{ .maximum_depth = 8 }));
+        const transition: retry.Transition = .{ .merged = .{ .permit = permit_value, .revision_after = 3, .changed = false } };
+        const encoded = try json.encode(retry.Transition, a, transition);
+        try std.testing.expectEqualDeep(transition, try strict.decode(retry.Transition, a, encoded, .{ .maximum_depth = 12 }));
+        var document = try strict.decode(std.json.Value, a, encoded, .{ .maximum_depth = 12 });
+        const merged = document.object.getPtr("merged").?;
+        _ = merged.object.swapRemove("changed");
+        const missing_change = try std.json.Stringify.valueAlloc(a, document, .{});
+        try std.testing.expectError(error.InvalidJsonDocument, strict.decode(retry.Transition, a, missing_change, .{ .maximum_depth = 12 }));
+        try merged.object.put(a, "changed", .{ .bool = false });
+        try merged.object.put(a, "accepted", .{ .bool = true });
+        const unknown = try std.json.Stringify.valueAlloc(a, document, .{});
+        try std.testing.expectError(error.InvalidJsonDocument, strict.decode(retry.Transition, a, unknown, .{ .maximum_depth = 12 }));
         const Snapshot = @import("domain/atomic_repair.zig").Snapshot;
         const stamp: Snapshot = .{ .bytes = @splat(byte) };
         try std.testing.expectEqualDeep(stamp, try strict.decode(Snapshot, a, try json.encode(Snapshot, a, stamp), .{ .maximum_depth = 8 }));
     }
     const wrong = "{\"bytes\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}";
     try std.testing.expectError(error.InvalidJsonDocument, strict.decode(@import("domain/atomic_repair.zig").Snapshot, a, wrong, .{ .maximum_depth = 8 }));
+}
+
+// This generic retry fixture contains no declared text fields. The pure port is
+// nevertheless explicit; production Unicode behavior is covered with real text
+// values by the atomic merge regressions in reference_extraction_test.zig.
+fn identityNormalize(a: std.mem.Allocator, bytes: []const u8, _: usize) @import("ports/unicode_normalizer.zig").Error![]u8 {
+    return a.dupe(u8, bytes);
 }

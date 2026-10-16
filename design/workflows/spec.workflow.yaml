@@ -826,12 +826,7 @@ subgraphs:
         on: {ok: post, invalid: authorize-coverage-repair, failed: end.failed}
       authorize-coverage-repair:
         use: authorize-specification-coverage-repair
-        on: {ok: merge-coverage-repair, blocked: end.blocked, failed: end.failed}
-      merge-coverage-repair:
-        use: merge-specification-coverage-repair
-        with:
-          retry-limit: 64
-        on: {ok: assemble-specification, failed: end.failed}
+        on: {blocked: end.blocked, failed: end.failed}
       post:
         call: review-candidate
         on: {ok: gate, invalid: end.invalid, blocked: end.blocked, failed: end.failed, cancelled: end.cancelled}

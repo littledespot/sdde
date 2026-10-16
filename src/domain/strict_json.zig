@@ -41,6 +41,7 @@ pub const Diagnostic = struct {
             .MissingField => "JSON decoding failed: a required field is missing.",
             .LengthMismatch => "JSON decoding failed: the value has an invalid length.",
             .ValueTooLong => "JSON decoding failed: the value exceeds the decoder's declared limit.",
+            .EmbeddedInsertionSyntax => "Model text decoding failed: insertion wire syntax cannot be written inside prose unless the exact bytes occur in the original sources. Return prose and typed insertions in their declared wire shapes.",
         };
     }
 
@@ -75,6 +76,7 @@ pub const Diagnostic = struct {
         LengthMismatch,
         BufferUnderrun,
         ValueTooLong,
+        EmbeddedInsertionSyntax,
     };
 };
 

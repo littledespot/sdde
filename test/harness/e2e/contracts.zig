@@ -108,7 +108,7 @@ pub const ProviderRejection = struct {
     reason: []const u8,
     content: ?@import("../../../src/domain/llm_provider_operation.zig").ProviderContentDiagnostic,
 };
-pub const ObservedDefect = struct {
+pub const NativeRejection = struct {
     sequence: usize,
     step: []const u8,
     evidence: union(enum) {
@@ -137,7 +137,7 @@ pub const ExchangeEvidence = struct {
     transport: ?@import("../../../src/domain/llm_provider_operation.zig").TransportDiagnostic,
 };
 pub const Report = struct {
-    schema: []const u8 = "spec-e2e-report/v1",
+    schema: enum { @"spec-e2e-report/v2" },
     origin: enum { live } = .live,
     started_at_utc: []const u8,
     build: ?struct {
@@ -175,7 +175,11 @@ pub const Report = struct {
     model_diagnostic: ?[]const u8 = null,
     last_protocol_rejection: ?ProtocolRejection = null,
     last_provider_rejection: ?ProviderRejection = null,
-    first_observed_defect: ?ObservedDefect = null,
+    first_native_rejection: ?NativeRejection = null,
+    /// Read-only replay of shared mechanical text rules over admitted native
+    /// values. Missing capture is distinct from a measured zero escape count.
+    admission_audit: ?@import("../baseline/admission.zig").Audit = null,
+    admission_escape: ?@import("../baseline/admission.zig").Metric = null,
     corrections: []const Correction = &.{},
     outstanding_work: []const WorkLink = &.{},
     exchange_evidence: ?ExchangeEvidence = null,

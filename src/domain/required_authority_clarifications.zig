@@ -3,7 +3,9 @@ const std = @import("std");
 const a = @import("required_authority.zig");
 const c = @import("clarification_inputs.zig");
 const refresh = @import("clarification_refresh.zig");
-pub fn build(allocator: std.mem.Allocator, inputs: a.Inputs, observations: a.Observations, result: a.Result) a.Error!refresh.Needs {
+pub fn build(allocator: std.mem.Allocator, source_inputs: @import("reference_evidence.zig").Inputs, inputs: a.Inputs, observations: a.Observations, result: a.Result) a.Error!refresh.Needs {
+    if (!std.mem.eql(u8, source_inputs.corpus.feature_id.bytes, inputs.feature.bytes)) return error.InvalidRequiredAuthority;
+    if (inputs.references) |references| if (!source_inputs.corpus.state_id.eql(references.items.state_id)) return error.InvalidRequiredAuthority;
     if (try a.validate(allocator, inputs, observations, result)) return error.InvalidRequiredAuthority;
     for (result.entries) |entry| if (entry.candidate_defect != null) return error.InvalidRequiredAuthority;
     var needs: std.ArrayList(refresh.Need) = .empty;
@@ -72,7 +74,7 @@ pub fn build(allocator: std.mem.Allocator, inputs: a.Inputs, observations: a.Obs
         });
     }
     if (needs.items.len == 0) return error.InvalidRequiredAuthority;
-    return .{ .feature = inputs.feature, .entries = try needs.toOwnedSlice(allocator) };
+    return .{ .feature = inputs.feature, .original_sources = refresh.originalSources(allocator, source_inputs) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority, .entries = try needs.toOwnedSlice(allocator) };
 }
 pub fn subjectFor(allocator: std.mem.Allocator, id: a.Id) a.Error!c.Subject {
     if (a.policy(id) == null) return error.InvalidRequiredAuthority;

@@ -145,6 +145,30 @@ pub fn Content(comptime Value: type) type {
     };
 }
 
+/// The declared field shape owns its exhaustive composition-policy mapping.
+pub fn textField(comptime kind: Kind, comptime name: []const u8) text.field_policy.Field {
+    if (!@hasField(@FieldType(Content(BusinessValue), @tagName(kind)), name)) @compileError("unknown specification text field");
+    if (comptime kind != .acceptance_criterion and kind != .edge_case and kind != .entity and !std.mem.eql(u8, name, "text")) @compileError("undeclared singleton record text policy");
+    return switch (kind) {
+        .acceptance_criterion => @field(text.field_policy.Field, "ac_" ++ name),
+        .edge_case => if (comptime std.mem.eql(u8, name, "condition")) .edge_condition else if (comptime std.mem.eql(u8, name, "expected_outcome")) .edge_outcome else @compileError("undeclared edge text policy"),
+        .entity => if (comptime std.mem.eql(u8, name, "name")) .entity_name else if (comptime std.mem.eql(u8, name, "business_meaning")) .entity_meaning else if (comptime std.mem.eql(u8, name, "relationships")) .entity_relationship else @compileError("undeclared entity text policy"),
+        .user_visible_outcome => .visible_outcome,
+        .functional_requirement => .functional_requirement,
+        .business_rule => .business_rule,
+        .assumption => .assumption,
+        .non_goal => .non_goal,
+        .prohibited_behavior => .prohibited_behavior,
+    };
+}
+
+test "every declared specification text field has a closed composition policy" {
+    inline for (comptime std.meta.tags(Kind)) |kind| inline for (std.meta.fields(@FieldType(Content(BusinessValue), @tagName(kind)))) |field| {
+        const policy = text.field_policy.get(textField(kind, field.name));
+        try std.testing.expectEqual(kind == .entity and std.mem.eql(u8, field.name, "name"), policy.prose == .optional);
+    };
+}
+
 pub const RecordProposal = Values(.canonical).RecordProposal;
 pub const Applicability = enum { required, not_applicable };
 pub fn entityMembershipSatisfied(disposition: Applicability, entity_count: usize) bool {

@@ -3,6 +3,7 @@
   "cohort": "small",
   "provider": "aws-bedrock",
   "model": "openai.gpt-oss-20b-1:0",
+  "generation_slot": "spec_generation",
   "region": "ap-southeast-2",
   "reasoning_effort": "low",
   "response_mode": "native_schema",
@@ -15,6 +16,7 @@
   ],
   "development_features": 8,
   "qualification": {
+    "metric": "first_pass_fidelity",
     "minimum_features": 8,
     "maximum_features": 16,
     "confidence": 0.95,

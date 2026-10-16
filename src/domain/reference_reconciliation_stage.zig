@@ -66,7 +66,11 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     const slot = try slotId(scratch, prior);
     const result = try packets.create(a, with_facts.body(), .{ .reference_global = .{ .reference_state_id = .{ .bytes = current.progress.plan.layout.items.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, .{ .bytes = definition(stage) });
     defer packets.release(result);
-    const inherited = try packets.withRestrictions(a, result, selected.excludedVariants(), selected.integerChoices());
+    const witnessed = try packets.withOriginalSourceTexts(a, result, with_facts.originalSources());
+    defer packets.release(witnessed);
+    const prose = try packets.withProseFields(a, witnessed, with_facts.proseFields());
+    defer packets.release(prose);
+    const inherited = try packets.withRestrictions(a, prose, selected.excludedVariants(), selected.integerChoices());
     if (prior == .signals) return inherited;
     defer packets.release(inherited);
     if (prior == .dispositions) return @import("reference_model_input.zig").withDispositionChoices(a, inherited, current.partition.group.claim_ids, null, true);

@@ -111,6 +111,9 @@ fn validateRecords(allocator: std.mem.Allocator, value: Snapshot) !void {
     const a = scratch.allocator();
     const records = try @import("reference_support.zig").snapshot(a, value);
     const items = records.items;
+    const captured: passive.Captured = .{ .records = value.passive_records, .occurrences = value.passive_occurrences };
+    for (value.extraction.chunks) |chunk| if (chunk.outcome == .no_feature_claim) try x.text.stored(x.text.ReferenceNode, a, .{ .inputs = value.inputs, .passive = captured, .scopes = &.{chunk.scope}, .field = .extraction_reason }, chunk.outcome.no_feature_claim.value.nodes);
+    for (items.entries) |item| if (item.claim.content == .model) try storedContent(a, value.inputs, captured, &.{.{ .state_id = items.state_id, .chunk_id = item.claim.chunk_id }}, .extraction, item.claim.content.model);
     if (try @import("reference_disposition_validation.zig").check(a, items, records.dispositions) == .invalid) return error.InvalidReferenceSnapshot;
     const allowed = try a.alloc(r.ClaimId, items.entries.len);
     for (items.entries, allowed) |item, *id| id.* = item.claim.id;
@@ -121,6 +124,8 @@ fn validateRecords(allocator: std.mem.Allocator, value: Snapshot) !void {
         if (signal.id.ordinal != index + 1 or try v.signalClaims(items, records.dispositions, proposal.claim_ids, allowed) != null or
             try v.contentIssue(items, proposal.claim_ids, proposal.content) != null or
             !v.signalSelectionAvailable(signals[0..index], index, proposal.claim_ids)) return error.InvalidReferenceSnapshot;
+        const selected = try @import("reference_support.zig").select(a, items, value.inputs, proposal.claim_ids);
+        if (signal.value.content == .model) try storedContent(a, value.inputs, captured, selected.scopes, .reconciliation, signal.value.content.model);
         try citationUnion(a, items, proposal.claim_ids, signal.value.citation_ids);
     }
     if (try v.signalCoverage(a, items, records.dispositions, signals) != null) return error.InvalidReferenceSnapshot;
@@ -129,6 +134,8 @@ fn validateRecords(allocator: std.mem.Allocator, value: Snapshot) !void {
         proposal.* = .{ .claim_ids = conflict.value.claim_ids, .kind = conflict.value.kind, .summary = conflict.value.summary.value };
         if (conflict.id.ordinal != index + 1 or try v.conflictClaims(items, records.dispositions, proposal.claim_ids, allowed) != null or
             !v.conflictSelectionAvailable(conflicts[0..index], index, proposal.kind, proposal.claim_ids)) return error.InvalidReferenceSnapshot;
+        const selected = try @import("reference_support.zig").select(a, items, value.inputs, proposal.claim_ids);
+        try x.text.stored(x.text.ReferenceNode, a, .{ .inputs = value.inputs, .passive = captured, .scopes = selected.scopes, .field = .reconciliation_conflict }, conflict.value.summary.value.nodes);
         try citationUnion(a, items, proposal.claim_ids, conflict.value.citation_ids);
     }
     if (try v.conflictCoverage(a, items, records.dispositions, conflicts) != null) return error.InvalidReferenceSnapshot;
@@ -138,4 +145,11 @@ fn citationUnion(a: std.mem.Allocator, items: r.Items, claims: []const r.ClaimId
     const expected = try r.citationUnion(a, items, claims);
     if (expected.len != citations.len) return error.InvalidReferenceSnapshot;
     for (expected, citations) |left, right| if (left.ordinal != right.ordinal) return error.InvalidReferenceSnapshot;
+}
+
+fn storedContent(a: std.mem.Allocator, inputs: e.Inputs, captured: passive.Captured, scopes: []const e.Scope, comptime phase: x.text.field_policy.ReferencePhase, content: x.Content) !void {
+    switch (content) {
+        inline .business, .scope_guard => |value, tag| try x.text.stored(x.text.BusinessSegment, a, .{ .inputs = inputs, .passive = captured, .scopes = scopes, .field = x.text.field_policy.referenceField(phase, @tagName(tag)) }, value.value.segments),
+        inline else => |value, tag| try x.text.stored(x.text.ReferenceNode, a, .{ .inputs = inputs, .passive = captured, .scopes = scopes, .field = x.text.field_policy.referenceField(phase, @tagName(tag)) }, value.value.nodes),
+    }
 }

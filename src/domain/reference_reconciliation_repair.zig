@@ -387,13 +387,14 @@ fn dispositionChoices(a: std.mem.Allocator, parsed: r.Parsed, target: Target) Er
         else => null,
     };
 }
-pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!r.Parsed {
+pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, parsed: r.Parsed, ctx: v.TextContext, authorization: Authorization, proposed_replacement: ?Replacement, origin: ?@import("model_candidate_origin.zig").Origin) Error!r.Parsed {
+    if (!canonical.matchesInputs(ctx.inputs)) return error.InvalidAtomicRepair;
     const replacement = if (proposed_replacement) |value| try atomic.copyReplacement(a, value) else null;
     try v.input(a, parsed.input);
     const facts = try context.capture(a, parsed, if (needsText(authorization.rule.rejection.unit)) ctx else null);
     defer a.free(facts.lineage.history);
     const target = authorization.target;
-    const merged = try atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try select(parsed, target), facts, authorization, replacement, origin);
+    const merged = try atomic.checkMerge(a, canonical, try owner(a, parsed), parsed.source.revision, try select(parsed, target), facts, authorization, replacement, origin);
     var result = try apply(a, parsed, target, replacement, merged, origin);
     if (authorization.retry) |permit| result.source.pending_repair = .{ .permit = permit, .target = .{
         .selected = if (target == .insert_conflict) .{ .insert_conflict = .{ .index = target.insert_conflict.index, .claims = try a.dupe(r.ClaimId, target.insert_conflict.claims) } } else target,
@@ -773,11 +774,12 @@ pub const Omission = struct {
             .preserved_token => return error.InvalidAtomicRepair,
         } };
     }
-    pub fn merge(a: std.mem.Allocator, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support, auth: OmissionAuthorization, proposed: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!r.Parsed {
+    pub fn merge(a: std.mem.Allocator, canonical: @import("typed_text.zig").CanonicalText, parsed: r.Parsed, ctx: v.TextContext, support: loss.Support, auth: OmissionAuthorization, proposed: Replacement, origin: ?@import("model_candidate_origin.zig").Origin) OmissionError!r.Parsed {
+        if (!canonical.matchesInputs(ctx.inputs)) return error.InvalidAtomicRepair;
         const replacement = try Atomic.copyReplacement(a, proposed);
         const current = try facts(a, parsed, ctx, support);
         defer a.free(current.reconciliation.lineage.history);
-        const merged = try Atomic.checkMerge(a, try owner(a, parsed), parsed.source.revision, try selectedValue(a, parsed, auth.target), current, auth, replacement, origin);
+        const merged = try Atomic.checkMerge(a, canonical, try owner(a, parsed), parsed.source.revision, try selectedValue(a, parsed, auth.target), current, auth, replacement, origin);
         var result = if (auth.target == .unit) try apply(a, parsed, auth.target.unit, replacement, merged, origin) else try applyGroup(a, parsed, auth.target.conflict_group, replacement.conflict_group, merged, origin);
         result.source.omission_conflict_claims = if (auth.target == .conflict_group) try a.dupe(r.ClaimId, auth.target.conflict_group) else &.{};
         result.source.omission_retry = auth.retry orelse return error.InvalidAtomicRepair;

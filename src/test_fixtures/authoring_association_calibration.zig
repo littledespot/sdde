@@ -409,7 +409,12 @@ fn wirePreflight(a: std.mem.Allocator, directory: []const u8, trials: []const Tr
     const feature = try std.Io.Dir.cwd().openDir(std.testing.io, captured_feature, .{});
     defer feature.close(std.testing.io);
     var store: @import("../adapters/filesystem/request_debugger_store.zig").Store = .{ .io = std.testing.io, .feature = feature };
-    const calls = try store.load(a);
+    const calls = store.load(a) catch |err| switch (err) {
+        // Unsupported historical evidence cannot be a current replay parent.
+        // All native packet/admission probes still execute independently.
+        error.UnsupportedDebugDescriptionVersion => return .unavailable,
+        else => return err,
+    };
     var parent: ?@import("../domain/request_debugger.zig").Call = null;
     for (calls) |call| if (std.mem.eql(u8, call.run, parent_identity.run) and std.mem.eql(u8, call.id, parent_identity.call)) {
         if (parent != null) return error.AmbiguousCalibrationParent;

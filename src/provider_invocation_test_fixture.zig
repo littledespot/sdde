@@ -21,14 +21,22 @@ pub const Fixture = struct {
     }
 
     pub fn initWithSchema(self: *Fixture, schema_bytes: ?[]const u8) !void {
-        return self.initialize(schema_bytes, null);
+        return self.initialize(schema_bytes, null, &.{}, &.{});
     }
 
     pub fn initWithCompiledSchema(self: *Fixture, selected: *const @import("domain/model_result_schema.zig").Schema) !void {
-        return self.initialize(null, selected);
+        return self.initialize(null, selected, &.{}, &.{});
     }
 
-    fn initialize(self: *Fixture, schema_bytes: ?[]const u8, selected: ?*const @import("domain/model_result_schema.zig").Schema) !void {
+    pub fn initWithOriginalSources(self: *Fixture, schema_bytes: []const u8, sources: []const @import("domain/model_text_wire.zig").SourceText) !void {
+        return self.initialize(schema_bytes, null, sources, &.{});
+    }
+
+    pub fn initWithProseFields(self: *Fixture, schema_bytes: []const u8, sources: []const @import("domain/model_text_wire.zig").SourceText, fields: []const @import("domain/model_text_wire.zig").ProseField) !void {
+        return self.initialize(schema_bytes, null, sources, fields);
+    }
+
+    fn initialize(self: *Fixture, schema_bytes: ?[]const u8, selected: ?*const @import("domain/model_result_schema.zig").Schema, sources: []const @import("domain/model_text_wire.zig").SourceText, fields: []const @import("domain/model_text_wire.zig").ProseField) !void {
         try self.base.init(std.testing.allocator);
         errdefer self.base.deinit();
         if (schema_bytes) |bytes| {
@@ -36,6 +44,8 @@ pub const Fixture = struct {
             self.base.request.response_schema = try adapter.compiler().compile(self.base.schema_arena.allocator(), bytes);
         }
         if (selected) |compiled| self.base.request.response_schema = compiled;
+        self.base.request.original_sources = sources;
+        self.base.request.prose_fields = fields;
         self.resource = .{ .id = .{ .bytes = "result" }, .content = .{ .result_schema = self.base.request.response_schema } };
         const source = try self.requestSource();
         self.prepared = try (build_request.Action{}).execute(std.testing.allocator, source, self.base.request.content);
@@ -68,6 +78,8 @@ pub const Fixture = struct {
             .request_schema_id = self.base.request.request_schema_id,
             .model_visible_input_id = self.base.request.model_visible_input_id,
             .result_resource = &self.resource,
+            .original_sources = self.base.request.original_sources,
+            .prose_fields = self.base.request.prose_fields,
         };
     }
 };

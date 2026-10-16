@@ -6,6 +6,28 @@ const Origin = @import("model_candidate_origin.zig").Origin;
 const occurrences = @import("repair_occurrences.zig");
 pub const Subject = union(enum) { title, description, primary_goal, story, entity_basis, record: usize };
 pub const ValueField = union(enum) { value, given, when, then, text, condition, expected_outcome, name, business_meaning, relationship: usize };
+pub fn singletonTextField(subject: Subject) Error!@import("text_field_policy.zig").Field {
+    return switch (subject) {
+        .title => .spec_title,
+        .description => .spec_description,
+        .primary_goal => .spec_goal,
+        .story => .spec_story,
+        .entity_basis => .spec_entity_basis,
+        .record => error.InvalidSpecificationRepair,
+    };
+}
+pub fn recordTextField(content: g.spec.Content(g.spec.BusinessValue), selected: ValueField) Error!@import("text_field_policy.zig").Field {
+    return recordKindTextField(std.meta.activeTag(content), selected);
+}
+/// The native record tag disambiguates shared field names such as text.
+pub fn recordKindTextField(kind: g.spec.Kind, selected: ValueField) Error!@import("text_field_policy.zig").Field {
+    switch (kind) {
+        inline else => |tag| inline for (std.meta.fields(@FieldType(g.spec.Content(g.spec.BusinessValue), @tagName(tag)))) |field| {
+            if (std.mem.eql(u8, field.name, if (selected == .relationship) "relationships" else @tagName(selected))) return g.spec.textField(tag, field.name);
+        },
+    }
+    return error.InvalidSpecificationRepair;
+}
 pub const Part = union(enum) { provenance, value: ValueField };
 pub const Target = union(enum) { provenance: Subject, value: struct { subject: Subject, field: ValueField }, attributed: Subject, record: usize };
 pub const StableTarget = struct { value: Target };
@@ -76,6 +98,37 @@ pub const Origins = struct {
         next.fields = try result.toOwnedSlice(a);
         next.record_occurrences = try self.record_occurrences.deleting(a, index, length);
         return next;
+    }
+    /// Assemble independent admitted record batches while retaining each
+    /// field's producer. Their initial origins become record-local fallbacks;
+    /// an accepted field repair must remain more specific than that fallback.
+    pub fn appendingRecords(self: Origins, a: std.mem.Allocator, length: usize, right: Origins, right_length: usize) Error!Origins {
+        const joined = try self.record_occurrences.concatenating(a, length, right.record_occurrences, right_length);
+        errdefer a.free(joined.values);
+        var fields: std.ArrayList(FieldOrigin) = .empty;
+        errdefer fields.deinit(a);
+        try appendRecordFields(a, &fields, self, length, 0);
+        try appendRecordFields(a, &fields, right, right_length, length);
+        return .{ .fields = try fields.toOwnedSlice(a), .record_occurrences = joined };
+    }
+    fn appendRecordFields(a: std.mem.Allocator, fields: *std.ArrayList(FieldOrigin), source: Origins, length: usize, offset: usize) Error!void {
+        for (source.fields) |entry| {
+            const index = recordIndex(entry.target) orelse return error.InvalidSpecificationRepair;
+            if (index >= length) return error.InvalidSpecificationRepair;
+            var projected = entry;
+            setRecordIndex(&projected.target, std.math.add(usize, offset, index) catch return error.InvalidSpecificationRepair);
+            try fields.append(a, projected);
+        }
+        for (0..length) |index| {
+            const target: Target = .{ .record = index };
+            const explicit = for (source.fields) |entry| {
+                if (std.meta.eql(entry.target, target)) break true;
+            } else false;
+            if (!explicit) try fields.append(a, .{
+                .target = .{ .record = std.math.add(usize, offset, index) catch return error.InvalidSpecificationRepair },
+                .origin = source.initial,
+            });
+        }
     }
     pub fn stableTarget(self: Origins, target: Target, length: usize) Error!StableTarget {
         var stable = target;

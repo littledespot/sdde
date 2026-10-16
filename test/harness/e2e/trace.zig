@@ -11,6 +11,127 @@ const requests = @import("../../../src/application/model_request_workflow.zig");
 const evidence = @import("../evidence.zig");
 const c = @import("contracts.zig");
 const Origin = @import("../../../src/domain/model_candidate_origin.zig").Origin;
+const dispatch = @import("../baseline/dispatch.zig");
+const frozen_binding = @import("../frozen_binding.zig");
+const request_identity = @import("../../../src/domain/model_request_identity.zig");
+const stages = @import("../baseline/stages.zig");
+const admission = @import("../baseline/admission.zig");
+
+pub const MechanicalRejection = union(enum) {
+    protocol: c.ProtocolRejection,
+    provider: c.ProviderRejection,
+
+    fn copy(self: MechanicalRejection, a: std.mem.Allocator) !MechanicalRejection {
+        return switch (self) {
+            .protocol => |value| blk: {
+                var result = value;
+                result.reason = try a.dupe(u8, value.reason);
+                errdefer a.free(result.reason);
+                result.json_error = if (value.json_error) |diagnostic| try diagnostic.copy(a) else null;
+                errdefer if (result.json_error) |diagnostic| diagnostic.deinit(a);
+                if (value.schema_error) |diagnostic| result.schema_error.?.path = try a.dupe(u8, diagnostic.path);
+                break :blk .{ .protocol = result };
+            },
+            .provider => |value| blk: {
+                var result = value;
+                result.reason = try a.dupe(u8, value.reason);
+                break :blk .{ .provider = result };
+            },
+        };
+    }
+
+    fn deinit(self: MechanicalRejection, a: std.mem.Allocator) void {
+        switch (self) {
+            .protocol => |value| {
+                a.free(value.reason);
+                if (value.json_error) |diagnostic| diagnostic.deinit(a);
+                if (value.schema_error) |diagnostic| a.free(diagnostic.path);
+            },
+            .provider => |value| a.free(value.reason),
+        }
+    }
+};
+
+pub const Receipt = struct {
+    call: usize,
+    origin: Origin,
+    purpose: request_identity.RequestPurposeKind,
+    owner_kind: stages.OwnerKind,
+    /// Native out-of-band repair lineage, never inferred from prompt content.
+    repair_origin: ?Origin = null,
+    experiment_send: ?dispatch.Send,
+    request_step: []const u8,
+    result_definition: ?@import("../../../src/domain/model_result_schema.zig").DefinitionId = null,
+    context_sha256: [32]u8,
+    request_sha256: [32]u8,
+    response_sha256: ?[32]u8 = null,
+    model_output_sha256: ?[32]u8 = null,
+    raw_response_available: bool = false,
+    model_output_available: bool = false,
+    status: ?u16 = null,
+    usage: ?operation.ProviderUsage = null,
+    uncertain_delivery: bool = false,
+    /// First exact origin-joined native failure survives subsequent successes
+    /// and later rejections in other calls. It supplies no semantic verdict.
+    mechanical_rejection: ?MechanicalRejection = null,
+
+    pub fn jsonStringify(self: Receipt, writer: *std.json.Stringify) std.json.Stringify.Error!void {
+        try writer.beginObject();
+        inline for (std.meta.fields(Receipt)) |field| {
+            try writer.objectField(field.name);
+            if (field.type == [32]u8) {
+                try @import("../../../src/domain/canonical_json.zig").writeByteArray(writer, &@field(self, field.name));
+            } else if (field.type == ?[32]u8) {
+                if (@field(self, field.name)) |bytes| try @import("../../../src/domain/canonical_json.zig").writeByteArray(writer, &bytes) else try writer.write(null);
+            } else try writer.write(@field(self, field.name));
+        }
+        try writer.endObject();
+    }
+};
+
+/// Root-owned copies survive the trace and native invocation. A receipt is
+/// appended only for a charged physical send; source bytes stay in evidence.
+pub const CaptureLog = struct {
+    allocator: std.mem.Allocator,
+    records: std.ArrayList(Receipt) = .empty,
+    candidates: @import("../baseline/candidates.zig").Tracker = .{},
+    reviews: @import("../baseline/reviews.zig").Tracker,
+
+    pub fn init(allocator: std.mem.Allocator) CaptureLog {
+        return .{ .allocator = allocator, .reviews = .init(allocator) };
+    }
+    pub fn deinit(self: *CaptureLog) void {
+        self.candidates.deinit(self.allocator);
+        self.reviews.deinit();
+        for (self.records.items) |record| {
+            self.allocator.free(record.request_step);
+            if (record.result_definition) |definition| self.allocator.free(definition.bytes);
+            if (record.mechanical_rejection) |rejection| rejection.deinit(self.allocator);
+        }
+        self.records.deinit(self.allocator);
+    }
+
+    pub fn observeRejections(self: *CaptureLog, report: c.Report) !void {
+        if (report.last_protocol_rejection) |rejection| for (self.records.items) |*receipt| {
+            if (!std.meta.eql(receipt.origin, rejection.origin) or receipt.mechanical_rejection != null) continue;
+            var joined = rejection;
+            joined.call = receipt.call;
+            receipt.mechanical_rejection = try (MechanicalRejection{ .protocol = joined }).copy(self.allocator);
+        };
+        if (report.last_provider_rejection) |rejection| if (rejection.origin) |origin| for (self.records.items) |*receipt| {
+            if (!std.meta.eql(receipt.origin, origin) or receipt.mechanical_rejection != null) continue;
+            var joined = rejection;
+            joined.call = receipt.call;
+            receipt.mechanical_rejection = try (MechanicalRejection{ .provider = joined }).copy(self.allocator);
+        };
+    }
+};
+
+fn reconcileExperiment(gate: *dispatch.Gate, send: dispatch.Send, origin: Origin, attempts: []const c.Attempt, uncertain_delivery: bool) !?operation.ProviderUsage {
+    const usage = try @import("observation.zig").usageFor(attempts, origin);
+    try gate.reconcile(send, usage, uncertain_delivery);
+    return usage;
+}
 
 pub const TransportOutcome = union(enum) {
     transport_error: enum { cancelled, allocation_failed },
@@ -45,12 +166,23 @@ pub const Trace = struct {
     /// Offline tests may replace only the infrastructure-private transport seam.
     /// A live executable rejects this field rather than ignoring the override.
     transport_override: ?transport.Port = null,
+    experiment: ?*dispatch.Gate = null,
+    capture: ?*CaptureLog = null,
+    expected_models: ?*const @import("../../../src/domain/config.zig").ModelsConfig = null,
+    capture_index: ?usize = null,
+    context_sha256: ?[32]u8 = null,
+    request_purpose: ?request_identity.RequestPurposeKind = null,
+    request_owner_kind: ?stages.OwnerKind = null,
+    request_repair_origin: ?Origin = null,
+    request_result_definition: ?@import("../../../src/domain/model_result_schema.zig").DefinitionId = null,
+    pending: ?struct { send: dispatch.Send, origin: Origin, uncertain_delivery: bool = false } = null,
     inner_transport: ?transport.Port = null,
     failure: ?anyerror = null,
     calls: usize = 0,
     call_records: std.ArrayList(Call) = .empty,
     last_rejection: @import("observation.zig").LastModelRejection = .{},
     progress: @import("progress.zig").Progress,
+    admission_audit: admission.Tracker,
     sequence: usize = 0,
     current: ?operation.ProviderOperationId = null,
     last_step: ?workflow.WorkflowStepId = null,
@@ -59,11 +191,17 @@ pub const Trace = struct {
 
     pub fn init(store: evidence.Store, invocation: *@import("../../../src/composition/engine_invocation.zig").Assembly, purpose: Purpose) !Trace {
         try store.run.createDirPath(store.io, "evidence");
-        return .{ .store = store, .invocation = invocation, .purpose = purpose, .progress = .init(store.allocator), .events = try store.run.createFile(store.io, "events.jsonl", .{ .exclusive = true, .permissions = .fromMode(0o600) }) };
+        return .{ .store = store, .invocation = invocation, .purpose = purpose, .progress = .init(store.allocator), .admission_audit = .init(store.allocator), .events = try store.run.createFile(store.io, "events.jsonl", .{ .exclusive = true, .permissions = .fromMode(0o600) }) };
     }
     pub fn close(self: *Trace) void {
+        if (self.pending) |pending| if (self.experiment) |gate| {
+            // An evidence/operational exit must still charge the unresolved
+            // attempt and prevent a subsequent workflow from dispatching.
+            gate.reconcile(pending.send, null, pending.uncertain_delivery) catch gate.stop(.evidence_failure);
+        };
         self.last_rejection.deinit(self.store.allocator);
         self.progress.deinit();
+        self.admission_audit.deinit();
         for (self.call_records.items) |call| {
             self.store.allocator.free(call.step);
             if (call.exception) |bytes| self.store.allocator.free(bytes);
@@ -114,6 +252,7 @@ pub const Trace = struct {
     }
     fn invoke(context: *anyopaque) execution.Applied {
         const self = cast(context);
+        if (self.experimentStopped()) return .{ .rejected = .cancelled };
         const authority = &self.invocation.bindings().selectedGraph().authority;
         if (self.purpose == .single_exchange) {
             if (beforeChild(self.purpose, self.boundary, self.failure)) |stopped| return stopped;
@@ -129,6 +268,7 @@ pub const Trace = struct {
         const self = cast(context);
         // A failed evidence sink aborts the test; it cannot create a passing run.
         if (beforeChild(self.purpose, self.boundary, self.failure)) |stopped| return stopped;
+        if (self.experimentStopped()) return .{ .rejected = .cancelled };
         if (self.purpose == .single_exchange) {
             for (self.invocation.bindings().selectedGraph().authority.steps) |compiled| {
                 if (!std.mem.eql(u8, compiled.id.bytes, id.bytes)) continue;
@@ -141,7 +281,22 @@ pub const Trace = struct {
         self.recordStep(id, result) catch |err| {
             self.fail(err);
         };
+        if (self.experiment != null and self.failure != null) return .{ .rejected = .{ .operation_failed = error.OperationExecutionFailed } };
+        if (self.experimentStopped() and result != .rejected) return .{ .rejected = .cancelled };
         return afterChild(self.purpose, self.boundary, self.failure, result);
+    }
+
+    fn experimentStopped(self: *const Trace) bool {
+        return if (self.experiment) |gate| if (gate.snapshot().halt_reason) |reason| stopsChildren(reason) else false else false;
+    }
+
+    fn stopsChildren(reason: dispatch.Reason) bool {
+        return switch (reason) {
+            // Consuming the final allowed send/token does not discard the
+            // deterministic validation or publication that follows it.
+            .send_limit, .token_limit => false,
+            .usage_unavailable, .uncertain_delivery, .configuration_drift, .evidence_failure, .scoring_disputed, .operator_stop => true,
+        };
     }
 
     fn finalize(context: *anyopaque, outcome: @import("../../../src/domain/run_outcome.zig").Outcome) @import("../../../src/domain/run_outcome.zig").Outcome {
@@ -151,16 +306,68 @@ pub const Trace = struct {
     fn exchange(context: *transport.Context, a: std.mem.Allocator, request: transport.Request) transport.Error!transport.Response {
         const self: *Trace = @ptrCast(@alignCast(context));
         if (self.failure != null) return error.Cancelled;
+        if (self.experiment) |gate| if (gate.snapshot().halt_reason != null) return error.Cancelled;
+        if (self.experiment != null) frozen_binding.validateWire(a, request) catch |err| {
+            self.experiment.?.stop(.configuration_drift);
+            return if (err == error.OutOfMemory) error.OutOfMemory else error.Cancelled;
+        };
         try permitDispatch(a, self.purpose, &self.boundary, self.physical_sends, request);
         self.calls += 1;
         self.captureRequest(request) catch |err| {
-            if (self.purpose == .single_exchange) self.boundary = if (err == error.ProbeBindingRejected) .binding_rejected else .capture_failed;
+            if (self.purpose == .single_exchange) self.boundary = if (err == error.FrozenBindingRejected) .binding_rejected else .capture_failed;
+            if (self.experiment) |gate| gate.stop(if (err == error.FrozenBindingRejected) .configuration_drift else .evidence_failure);
             self.fail(err);
             return error.Cancelled;
         };
         self.request_sha256 = digest(request.body);
         self.response_sha256 = null;
+        self.capture_index = null;
+        var retained_step: ?[]const u8 = null;
+        var retained_definition: ?@import("../../../src/domain/model_result_schema.zig").DefinitionId = null;
+        defer if (retained_step) |step_bytes| if (self.capture) |log| log.allocator.free(step_bytes);
+        defer if (retained_definition) |definition| if (self.capture) |log| log.allocator.free(definition.bytes);
+        if (self.capture) |log| {
+            log.records.ensureUnusedCapacity(log.allocator, 1) catch |err| {
+                self.fail(err);
+                if (self.experiment) |gate| gate.stop(.evidence_failure);
+                return error.OutOfMemory;
+            };
+            retained_step = log.allocator.dupe(u8, self.call_records.items[self.calls - 1].step) catch |err| {
+                self.fail(err);
+                if (self.experiment) |gate| gate.stop(.evidence_failure);
+                return error.OutOfMemory;
+            };
+            if (self.request_result_definition) |definition| retained_definition = .{ .bytes = log.allocator.dupe(u8, definition.bytes) catch |err| {
+                self.fail(err);
+                return error.OutOfMemory;
+            } };
+        }
+        const send = if (self.experiment) |gate| gate.beforeSend() catch |err| {
+            if (err == error.ExchangeInFlight) gate.stop(.evidence_failure);
+            return error.Cancelled;
+        } else null;
+        if (send) |charged| self.pending = .{ .send = charged, .origin = self.call_records.items[self.calls - 1].origin };
+        if (self.capture) |log| {
+            self.capture_index = log.records.items.len;
+            log.records.appendAssumeCapacity(.{
+                .call = self.calls,
+                .origin = self.call_records.items[self.calls - 1].origin,
+                .purpose = self.request_purpose.?,
+                .owner_kind = self.request_owner_kind.?,
+                .repair_origin = self.request_repair_origin,
+                .experiment_send = send,
+                .request_step = retained_step.?,
+                .result_definition = retained_definition,
+                .context_sha256 = self.context_sha256.?,
+                .request_sha256 = self.request_sha256.?,
+            });
+            retained_step = null;
+            retained_definition = null;
+        }
         const response = forwardCaptured(a, self.purpose, &self.boundary, &self.physical_sends, self.inner_transport.?, request) catch |err| {
+            self.call_records.items[self.calls - 1].uncertain_delivery = true;
+            if (self.pending) |*pending| pending.uncertain_delivery = true;
+            if (self.receipt()) |retained| retained.uncertain_delivery = true;
             if (request.response_body_on_error) |slot| if (slot.*) |partial| {
                 if (retainResponse(self.store, self.calls, &self.call_records.items[self.calls - 1], partial.bytes)) |hash| {
                     self.response_sha256 = hash;
@@ -169,6 +376,7 @@ pub const Trace = struct {
             self.saveOutcome(.{ .transport_error = if (err == error.Cancelled) .cancelled else .allocation_failed }) catch |save_error| {
                 self.fail(save_error);
             };
+            self.updateReceipt();
             return err;
         };
         switch (response) {
@@ -183,6 +391,11 @@ pub const Trace = struct {
                 };
             },
             .failed => |failure| {
+                if (failure.delivery == .accepted_or_unknown) {
+                    self.call_records.items[self.calls - 1].uncertain_delivery = true;
+                    if (self.pending) |*pending| pending.uncertain_delivery = true;
+                    if (self.receipt()) |retained| retained.uncertain_delivery = true;
+                }
                 if (failure.body) |partial| {
                     if (retainResponse(self.store, self.calls, &self.call_records.items[self.calls - 1], partial.bytes)) |hash| {
                         self.response_sha256 = hash;
@@ -191,11 +404,28 @@ pub const Trace = struct {
                 self.saveOutcome(.{ .failed = failure }) catch |err| self.fail(err);
             },
         }
+        self.updateReceipt();
         return response;
+    }
+
+    fn receipt(self: *Trace) ?*Receipt {
+        const log = self.capture orelse return null;
+        return if (self.capture_index) |index| &log.records.items[index] else null;
+    }
+
+    fn updateReceipt(self: *Trace) void {
+        if (self.receipt()) |retained| {
+            const call = self.call_records.items[self.calls - 1];
+            retained.response_sha256 = self.response_sha256;
+            retained.raw_response_available = call.raw_response_available;
+            retained.status = call.status;
+            retained.usage = call.usage;
+        }
     }
 
     fn fail(self: *Trace, err: anyerror) void {
         if (self.failure == null) self.failure = err;
+        if (self.experiment) |gate| gate.stop(.evidence_failure);
     }
 
     fn digest(bytes: []const u8) [32]u8 {
@@ -234,9 +464,18 @@ pub const Trace = struct {
         const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
         const handoff = try requests.readCurrent(&view, requests.prepared_schema);
         const request = handoff.prepared() orelse return error.MissingRequestEvidence;
-        if (self.purpose == .single_exchange) {
+        // Composition parts keep their semantic assignment on the immutable
+        // native base packet; the child request may have a workflow-step owner.
+        // Resource-only requests use their canonical ledger identity. Neither
+        // branch inspects prompt text, step names or model content.
+        const packet = handoff.packet() orelse if (handoff.part()) |part| part.base else null;
+        self.request_purpose = std.meta.activeTag(if (packet) |value| value.purpose() else handoff.id().purpose);
+        self.request_owner_kind = std.meta.activeTag(if (packet) |value| value.unit() else handoff.id().immutable_unit_owner_id);
+        self.request_repair_origin = if (packet) |value| value.repairOrigin() else null;
+        self.request_result_definition = handoff.selectedResultDefinition();
+        if (self.purpose == .single_exchange or self.experiment != null) {
             const description = @import("../../../src/domain/model_request_description.zig").Description.from(request, handoff.binding(), wire.kind);
-            try validateProbeDescription(self.store.allocator, description, wire);
+            try frozen_binding.validateDescription(self.store.allocator, description, wire, self.expected_models orelse return error.MissingFrozenModels);
         }
         const accounting = @import("../../../src/application/workflow_model_accounting.zig");
         self.current = (try values.read(&view, accounting.invoked_schema, @import("../../../src/domain/provider_operation_lifecycle.zig").InvokedOperation)).operation().id;
@@ -264,33 +503,8 @@ pub const Trace = struct {
         }, .{ .whitespace = .indent_2 });
         defer self.store.allocator.free(context);
         try self.store.write(.generation, self.calls, .context, context);
+        self.context_sha256 = digest(context);
         try self.store.write(.generation, self.calls, .request, wire.body);
-    }
-
-    fn probeProtocol(a: std.mem.Allocator) !@import("../generation_comparison.zig").Protocol {
-        return @import("../generation_comparison.zig").parseProtocol(a, @embedFile("../../calibration/semantic-simplicity/protocol.json"));
-    }
-
-    fn validateProbeWire(a: std.mem.Allocator, wire: transport.Request) !void {
-        try @import("../model_cost_policy.zig").require(.{ .bytes = "aws-bedrock" }, wire.model);
-        var arena: std.heap.ArenaAllocator = .init(a);
-        defer arena.deinit();
-        const protocol = try probeProtocol(arena.allocator());
-        if (!std.mem.eql(u8, @tagName(wire.region), protocol.region) or !std.mem.eql(u8, wire.model.bytes, protocol.model)) return error.ProbeBindingRejected;
-    }
-
-    fn validateProbeDescription(a: std.mem.Allocator, description: @import("../../../src/domain/model_request_description.zig").Description, wire: transport.Request) !void {
-        @import("../diagnostic_binding.zig").validateBinding(description) catch return error.ProbeBindingRejected;
-        var arena: std.heap.ArenaAllocator = .init(a);
-        defer arena.deinit();
-        const protocol = try probeProtocol(arena.allocator());
-        const temperature = if (description.controls.temperature) |value| value.wireValue() else null;
-        if (description.response_mode != .native_schema or description.reasoning_effort == null or
-            !std.mem.eql(u8, description.reasoning_effort.?, @tagName(protocol.reasoning_effort)) or
-            !std.meta.eql(temperature, @as(?f64, protocol.temperature)) or description.controls.max_output_tokens == null or
-            description.controls.max_output_tokens.?.value != protocol.max_output_tokens or
-            description.provider_config != .aws_bedrock or description.provider_config.aws_bedrock.region != wire.region or
-            !std.mem.eql(u8, description.model, wire.model.bytes)) return error.ProbeBindingRejected;
     }
 
     fn permitDispatch(a: std.mem.Allocator, purpose: Purpose, boundary: *Boundary, physical_sends: usize, wire: transport.Request) transport.Error!void {
@@ -303,7 +517,7 @@ pub const Trace = struct {
             boundary.* = .send_limit;
             return error.Cancelled;
         }
-        validateProbeWire(a, wire) catch |err| {
+        frozen_binding.validateWire(a, wire) catch |err| {
             boundary.* = .binding_rejected;
             return if (err == error.OutOfMemory) error.OutOfMemory else error.Cancelled;
         };
@@ -354,11 +568,22 @@ pub const Trace = struct {
         var arena: std.heap.ArenaAllocator = .init(self.store.allocator);
         defer arena.deinit();
         const a = arena.allocator();
-        var report: c.Report = .{ .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
+        var report: c.Report = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = result.status(), .terminal_rejection = if (result == .rejected) c.TerminalRejection.fromNative(result.rejected) else null };
         try @import("observation.zig").capture(a, runner, &report);
+        if (self.pending) |pending| {
+            const usage = try reconcileExperiment(self.experiment.?, pending.send, pending.origin, report.attempts, pending.uncertain_delivery);
+            self.pending = null;
+            if (self.receipt()) |retained| retained.usage = usage;
+        }
         try self.last_rejection.observe(self.store.allocator, self.calls, report);
         try self.last_rejection.project(a, self.calls, &report);
         const view: @import("../../../src/domain/pipeline_data.zig").View = .{ .slots = runner.envelope.slots };
+        try self.admission_audit.observe(&view, self.sequence + 1, self.physical_sends);
+        if (self.capture) |log| {
+            try log.observeRejections(report);
+            try log.candidates.observe(log.allocator, &view);
+            try log.reviews.observe(&view);
+        }
         const invocation = @import("../../../src/application/model_invocation_workflow.zig");
         if (view.slots[@intFromEnum(invocation.schema.key)] != null) {
             const raw = try values.read(&view, invocation.schema, @import("../../../src/domain/model_invocation_result.zig").For(.inference).Result);
@@ -370,11 +595,16 @@ pub const Trace = struct {
                             return err;
                         };
                         self.call_records.items[self.calls - 1].output = .available;
+                        if (self.receipt()) |retained| {
+                            retained.model_output_available = true;
+                            retained.model_output_sha256 = digest(outcome.observation.completed.raw_result.complete.content.bytes);
+                        }
                     }
                 };
             };
         }
         try self.correlate(a, &report);
+        self.updateReceipt();
         self.sequence += 1;
         try self.progress.observe(self.sequence, id.bytes, report, runner.last_effects);
         try self.progress.project(a, &report);
@@ -386,7 +616,7 @@ pub const Trace = struct {
 
     pub fn stepEvent(a: std.mem.Allocator, sequence: usize, id: workflow.WorkflowStepId, result: execution.Applied, report: c.Report) ![]const u8 {
         return std.json.Stringify.valueAlloc(a, .{
-            .schema = "e2e-step-event/v1",
+            .schema = "e2e-step-event/v2",
             .sequence = sequence,
             .step = id.bytes,
             .outcome = result.status(),
@@ -401,7 +631,7 @@ pub const Trace = struct {
             .schema_error = report.schema_error,
             .last_protocol_rejection = report.last_protocol_rejection,
             .last_provider_rejection = report.last_provider_rejection,
-            .first_observed_defect = report.first_observed_defect,
+            .first_native_rejection = report.first_native_rejection,
             .correction = if (report.corrections.len != 0 and report.corrections[report.corrections.len - 1].sequence == sequence) report.corrections[report.corrections.len - 1] else null,
             .outstanding_work = report.outstanding_work,
             .exchange_evidence = report.exchange_evidence,
@@ -417,6 +647,22 @@ pub const Trace = struct {
     pub fn correlate(self: *Trace, a: std.mem.Allocator, report: *c.Report) !void {
         if (self.call_records.items.len != self.calls) return error.MissingRequestEvidence;
         try @import("observation.zig").correlate(a, self.call_records.items, report);
+    }
+
+    pub fn projectAdmission(self: *const Trace, a: std.mem.Allocator, report: *c.Report) !void {
+        if (self.physical_sends > self.call_records.items.len) return error.MissingRequestEvidence;
+        const exchanges = try a.alloc(admission.Exchange, self.physical_sends);
+        defer a.free(exchanges);
+        for (self.call_records.items[0..self.physical_sends], exchanges, 0..) |call, *observed_exchange, index| observed_exchange.* = .{
+            .call = index + 1,
+            .origin = call.origin,
+            .usage = try @import("observation.zig").usageFor(report.attempts, call.origin),
+            .uncertain_delivery = call.uncertain_delivery,
+        };
+        const audit = self.admission_audit.snapshot(self.failure == null);
+        try admission.validate(a, audit, exchanges);
+        report.admission_audit = try @import("../contracts.zig").decode(admission.Audit, a, try std.json.Stringify.valueAlloc(a, audit, .{}));
+        report.admission_escape = try admission.measure(audit, exchanges);
     }
 };
 
@@ -498,7 +744,7 @@ test "single-exchange capture requires the frozen native response settings and e
         .provider = "aws-bedrock",
         .model = "openai.gpt-oss-20b-1:0",
         .provider_config = .{ .aws_bedrock = .{ .region = .@"ap-southeast-2" } },
-        .model_slot = "unit-generation",
+        .model_slot = "spec_generation",
         .workflow_id = "unit-workflow",
         .workflow_version = 1,
         .request_step = "unit-request",
@@ -510,8 +756,11 @@ test "single-exchange capture requires the frozen native response settings and e
         .reasoning_effort = "low",
         .operation_kind = .inference,
     };
+    var models: @import("../../../src/domain/config.zig").ModelsConfig = .{ .slots = .{} };
+    defer models.slots.deinit(std.testing.allocator);
+    try models.slots.map.put(std.testing.allocator, description.model_slot, .{ .provider = description.provider, .model = description.model, .reasoningEffort = "low", .maxOutputTokens = 16384 });
     const request = probeWireRequest();
-    try Trace.validateProbeDescription(std.testing.allocator, description, request);
+    try frozen_binding.validateDescription(std.testing.allocator, description, request, &models);
     for (0..9) |fault| {
         var invalid = description;
         switch (fault) {
@@ -526,7 +775,7 @@ test "single-exchange capture requires the frozen native response settings and e
             8 => invalid.reasoning_effort = null,
             else => unreachable,
         }
-        try std.testing.expectError(error.ProbeBindingRejected, Trace.validateProbeDescription(std.testing.allocator, invalid, request));
+        try std.testing.expectError(error.FrozenBindingRejected, frozen_binding.validateDescription(std.testing.allocator, invalid, request, &models));
     }
 }
 
@@ -585,6 +834,69 @@ test "whole-workflow trace leaves native outcomes and multiple inference or coun
     }
 }
 
+test "experiment trace charges only current native usage across serial workflow origins" {
+    const first: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const current: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 2 } };
+    const known = operation.ProviderUsage.init(9, 4, 13).?;
+    const records = [_]c.Attempt{
+        .{ .origin = first, .step = "unit-first", .accounting = .exact_usage, .usage = operation.ProviderUsage.init(1, 1, 2).? },
+        .{ .origin = current, .step = "unit-current", .accounting = .exact_usage, .usage = known },
+    };
+    var gate = try dispatch.Gate.init(.{ .maximum_sends = 4, .maximum_actual_tokens = 100 });
+    const send = try gate.beforeSend();
+    try std.testing.expectEqual(@as(?operation.ProviderUsage, known), try reconcileExperiment(&gate, send, current, &records, false));
+    try std.testing.expectEqual(@as(?u128, 13), gate.snapshot().total_actual_tokens);
+    // New native invocations may restart their local request identities, but
+    // globally charged sends remain distinct and never replay old usage.
+    const next_send = try gate.beforeSend();
+    try std.testing.expectEqual(@as(u64, 2), next_send.ordinal);
+    _ = try reconcileExperiment(&gate, next_send, first, records[0..1], false);
+    try std.testing.expectEqual(@as(?u128, 15), gate.snapshot().total_actual_tokens);
+}
+
+test "experiment trace cannot substitute older native usage for an unknown exchange" {
+    const previous: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const current: Origin = .{ .request = .{ .value = 2 }, .attempt = .{ .value = 1 } };
+    const records = [_]c.Attempt{.{ .origin = previous, .step = "unit-previous", .accounting = .exact_usage, .usage = operation.ProviderUsage.init(10, 5, 15).? }};
+    for ([_]bool{ false, true }) |uncertain| {
+        var gate = try dispatch.Gate.init(.{ .maximum_sends = 4, .maximum_actual_tokens = 100 });
+        const retained = try reconcileExperiment(&gate, try gate.beforeSend(), current, &records, uncertain);
+        try std.testing.expect(retained == null);
+        try std.testing.expectEqual(@as(u128, 0), gate.snapshot().total_accounted_tokens);
+        try std.testing.expectEqual(@as(u64, 1), gate.snapshot().physical_sends);
+        try std.testing.expect(!gate.snapshot().usage_complete);
+        try std.testing.expectEqual(@as(?dispatch.Reason, .usage_unavailable), gate.snapshot().halt_reason);
+        try std.testing.expectEqual(uncertain, gate.snapshot().uncertain_delivery);
+        try std.testing.expectError(error.ExperimentHalted, gate.beforeSend());
+    }
+}
+
+test "experiment trace rejects ambiguous native origin and preserves send accounting" {
+    const origin: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const record: c.Attempt = .{ .origin = origin, .step = "unit-ambiguous", .accounting = .exact_usage, .usage = operation.ProviderUsage.init(10, 5, 15).? };
+    var gate = try dispatch.Gate.init(.{ .maximum_sends = 4, .maximum_actual_tokens = 100 });
+    const send = try gate.beforeSend();
+    try std.testing.expectError(error.MissingRequestEvidence, reconcileExperiment(&gate, send, origin, &.{ record, record }, false));
+    try std.testing.expectEqual(@as(u64, 1), gate.snapshot().physical_sends);
+    try std.testing.expectEqual(@as(u128, 0), gate.snapshot().total_accounted_tokens);
+    // The trace's operational cleanup reconciles unknown rather than refunding.
+    gate.stop(.evidence_failure);
+    try gate.reconcile(send, null, false);
+    try std.testing.expectError(error.ExperimentHalted, gate.beforeSend());
+}
+
+test "experiment equality limits permit deterministic successors while every other stop aborts them" {
+    for (std.meta.tags(dispatch.Reason)) |reason| {
+        const intrinsic_limit = reason == .send_limit or reason == .token_limit;
+        try std.testing.expectEqual(!intrinsic_limit, Trace.stopsChildren(reason));
+    }
+    var gate = try dispatch.Gate.init(.{ .maximum_sends = 1, .maximum_actual_tokens = 13 });
+    try gate.reconcile(try gate.beforeSend(), operation.ProviderUsage.init(9, 4, 13).?, false);
+    try std.testing.expect(!Trace.stopsChildren(gate.snapshot().halt_reason.?));
+    try std.testing.expectError(error.ExperimentHalted, gate.beforeSend());
+    try std.testing.expectEqual(@as(?u128, 13), gate.snapshot().total_actual_tokens);
+}
+
 test "trace retains partial error response bytes without inventing candidate or usage" {
     const io = std.testing.io;
     var directory = std.testing.tmpDir(.{});
@@ -622,4 +934,95 @@ test "trace response capture failure cannot claim retained bytes or erase the or
     defer std.testing.allocator.free(bytes);
     try std.testing.expectEqualStrings("original partial bytes", bytes);
     try std.testing.expectEqualDeep(Trace.digest(bytes), original_hash);
+}
+
+fn receiptFixture(call: usize, byte: u8) Receipt {
+    return .{
+        .call = call,
+        .origin = .{ .request = .{ .value = call }, .attempt = .{ .value = 1 } },
+        .purpose = .initial_generation,
+        .owner_kind = .reference_chunk,
+        .experiment_send = .{ .ordinal = call },
+        .request_step = "native-upstream-request",
+        .context_sha256 = @splat(byte),
+        .request_sha256 = @splat(byte),
+        .response_sha256 = @splat(byte),
+        .model_output_sha256 = @splat(byte),
+        .raw_response_available = true,
+        .model_output_available = true,
+    };
+}
+
+test "capture receipt hash serialization always emits exact closed byte arrays" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const strict = @import("../../../src/domain/strict_json.zig");
+    for ([_]u8{ 0, 1, 'a', 127, 255 }) |byte| {
+        const original = receiptFixture(1, byte);
+        const bytes = try std.json.Stringify.valueAlloc(a, original, .{});
+        const decoded = try strict.decode(Receipt, a, bytes, .{ .maximum_depth = 32 });
+        try std.testing.expectEqualSlices(u8, &original.context_sha256, &decoded.context_sha256);
+        try std.testing.expectEqualSlices(u8, &original.request_sha256, &decoded.request_sha256);
+        try std.testing.expectEqualSlices(u8, &original.response_sha256.?, &decoded.response_sha256.?);
+        try std.testing.expectEqualSlices(u8, &original.model_output_sha256.?, &decoded.model_output_sha256.?);
+        var parsed = try strict.parse(a, bytes, .{ .maximum_depth = 32 }, false, null);
+        defer parsed.deinit();
+        inline for (.{ "context_sha256", "request_sha256", "response_sha256", "model_output_sha256" }) |field| {
+            try std.testing.expect(parsed.value.object.get(field).? == .array);
+        }
+        parsed.value.object.getPtr("context_sha256").?.* = .{ .string = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" };
+        try std.testing.expectError(error.InvalidJsonDocument, strict.decode(Receipt, a, try std.json.Stringify.valueAlloc(a, parsed.value, .{}), .{ .maximum_depth = 32 }));
+    }
+}
+
+fn appendReceiptFixture(log: *CaptureLog, call: usize) !void {
+    try log.records.ensureUnusedCapacity(log.allocator, 1);
+    var receipt = receiptFixture(call, 'a');
+    receipt.request_step = try log.allocator.dupe(u8, receipt.request_step);
+    log.records.appendAssumeCapacity(receipt);
+}
+
+test "native receipt failure proofs preserve intermediate upstream rejections after later summaries change" {
+    var log: CaptureLog = .init(std.testing.allocator);
+    defer log.deinit();
+    for (1..4) |call| try appendReceiptFixture(&log, call);
+    var report: c.Report = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "", .status = .workflow_failed };
+    report.last_protocol_rejection = .{ .call = 1, .origin = log.records.items[0].origin, .reason = "MOCK initial schema rejection", .json_error = null, .schema_error = .{ .reason = .missing_required_property, .path = "/claims" } };
+    try log.observeRejections(report);
+    report.last_protocol_rejection = null;
+    report.last_provider_rejection = .{ .call = 2, .origin = log.records.items[1].origin, .reason = "MOCK middle provider rejection", .content = .missing_final_text };
+    try log.observeRejections(report);
+    report.last_provider_rejection = null;
+    report.last_protocol_rejection = .{ .call = 3, .origin = log.records.items[2].origin, .reason = "MOCK final JSON rejection", .json_error = .{ .reason = .UnexpectedToken }, .schema_error = null };
+    try log.observeRejections(report);
+    try std.testing.expect(log.records.items[0].mechanical_rejection.? == .protocol);
+    try std.testing.expect(log.records.items[1].mechanical_rejection.? == .provider);
+    try std.testing.expect(log.records.items[2].mechanical_rejection.? == .protocol);
+    try std.testing.expectEqualStrings("MOCK middle provider rejection", log.records.items[1].mechanical_rejection.?.provider.reason);
+    try std.testing.expectEqualStrings("/claims", log.records.items[0].mechanical_rejection.?.protocol.schema_error.?.path);
+    // A later projection may reference a pre-send failure with no physical
+    // receipt; it must not attach that rejection to another actual exchange.
+    report.last_protocol_rejection.?.origin.request.value = 99;
+    try log.observeRejections(report);
+    try std.testing.expectEqual(@as(usize, 3), log.records.items.len);
+    try std.testing.expectEqual(@as(usize, 3), log.records.items[2].mechanical_rejection.?.protocol.call);
+}
+
+fn rejectionAllocationScenario(a: std.mem.Allocator) !void {
+    var log: CaptureLog = .init(a);
+    defer log.deinit();
+    try appendReceiptFixture(&log, 1);
+    const report: c.Report = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "", .status = .workflow_failed, .last_protocol_rejection = .{
+        .call = 1,
+        .origin = log.records.items[0].origin,
+        .reason = "MOCK malformed JSON",
+        .json_error = .{ .reason = .DuplicateField, .context = .{ .path = "/claims", .key = "kind", .first_occurrence = null, .repeated_occurrence = null } },
+        .schema_error = .{ .reason = .unknown_property, .path = "/unknown" },
+    } };
+    try log.observeRejections(report);
+}
+
+test "native receipt failure proof ownership cleans up every allocation failure" {
+    try std.testing.checkAllAllocationFailures(std.testing.allocator, rejectionAllocationScenario, .{});
 }

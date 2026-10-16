@@ -78,7 +78,8 @@ pub const Merge = struct {
         const owner = owned.create(self.allocator, input.step.data) catch |operation_error| return operation_error;
         errdefer owned.destroy(owner);
         owner.payload = .{ .session = self.action.execute(owner.arena.allocator(), try spec.readSession(&input.step.data), try spec.readContext(&input.step.data), try content(&input.step.data), try support(&input.step.data), state) catch |operation_error| return operation_error };
-        var delta: @import("../domain/pipeline.zig").NodeDelta = .{ .repair_transition = .{ .merged = .{ .permit = state.authorization.retry orelse return error.OperationExecutionFailed, .revision_after = owner.payload.session.revision, .validation = .dependent_review } } };
+        const merged = owner.payload.session.units[state.authorization.target.unit].?.last_repair orelse return error.OperationExecutionFailed;
+        var delta: @import("../domain/pipeline.zig").NodeDelta = .{ .repair_transition = merged.transition(.dependent_review) catch return error.OperationExecutionFailed };
         delta.data_replacements[@intFromEnum(spec.session_schema.key)] = values.adopt(self.allocator, spec.session_schema, owned.Value, owned.Owner, owner, owned.view, owned.destroy, null) catch |operation_error| return operation_error;
         for (Action.contract.invalidates) |key| delta.data_invalidations.insert(key);
         return .{ .outcome = .ok, .delta = delta };

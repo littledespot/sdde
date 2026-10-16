@@ -8,7 +8,7 @@ pub fn validate(validator: text.Validator, allocator: std.mem.Allocator, registr
     if (parsed.revision == 0) return error.InvalidReferenceExtraction;
     const entries = try allocator.alloc(extraction.TextValidatedResult, parsed.entries.len);
     for (parsed.entries, entries) |candidate, *entry| {
-        const context: text.ScopeSetContext = .{ .registry = registry, .current = current, .inputs = inputs, .scopes = &.{candidate.scope} };
+        const context: text.ScopeSetContext = .{ .registry = registry, .current = current, .inputs = inputs, .scopes = &.{candidate.scope}, .field = .extraction_reason };
         _ = try evidence.resolve(inputs, candidate.scope);
         entry.scope = candidate.scope;
         entry.origin = candidate.origin;
@@ -45,14 +45,21 @@ pub fn validate(validator: text.Validator, allocator: std.mem.Allocator, registr
 }
 
 fn checkContent(validator: text.Validator, a: std.mem.Allocator, context: text.ScopeSetContext, content: extraction.ProposalContent) extraction.Error!text.Result(extraction.Content) {
+    var selected = context;
     return switch (content) {
-        inline .business, .scope_guard => |value, tag| switch (try validator.checkBusinessIn(a, context, value)) {
-            .valid => |accepted| .{ .valid = @unionInit(extraction.Content, @tagName(tag), accepted) },
-            .invalid => |issue| .{ .invalid = issue },
+        inline .business, .scope_guard => |value, tag| checked: {
+            selected.field = text.field_policy.referenceField(.extraction, @tagName(tag));
+            break :checked switch (try validator.checkBusinessIn(a, selected, value)) {
+                .valid => |accepted| .{ .valid = @unionInit(extraction.Content, @tagName(tag), accepted) },
+                .invalid => |issue| .{ .invalid = issue },
+            };
         },
-        inline else => |value, tag| switch (try validator.checkReferenceIn(a, context, value)) {
-            .valid => |accepted| .{ .valid = @unionInit(extraction.Content, @tagName(tag), accepted) },
-            .invalid => |issue| .{ .invalid = issue },
+        inline else => |value, tag| checked: {
+            selected.field = text.field_policy.referenceField(.extraction, @tagName(tag));
+            break :checked switch (try validator.checkReferenceIn(a, selected, value)) {
+                .valid => |accepted| .{ .valid = @unionInit(extraction.Content, @tagName(tag), accepted) },
+                .invalid => |issue| .{ .invalid = issue },
+            };
         },
     };
 }
@@ -64,7 +71,7 @@ pub fn validTarget(validator: text.Validator, a: std.mem.Allocator, registry: @i
     _ = try evidence.resolve(inputs, scope);
     for (parsed.entries) |entry| if (entry.scope.chunk_id.eql(scope.chunk_id)) {
         if (!entry.scope.state_id.eql(scope.state_id)) return error.InvalidReferenceExtraction;
-        const context: text.ScopeSetContext = .{ .registry = registry, .current = current, .inputs = inputs, .scopes = &.{scope} };
+        const context: text.ScopeSetContext = .{ .registry = registry, .current = current, .inputs = inputs, .scopes = &.{scope}, .field = .extraction_reason };
         return switch (target) {
             .reason => if (entry.outcome == .no_feature_claim)
                 (try validator.checkReferenceIn(a, context, entry.outcome.no_feature_claim)) == .valid

@@ -22,6 +22,7 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
         try selected.append(scratch, projection.exactCandidate(token));
     };
     const payload = .{
+        .text_fields = @import("text_field_policy.zig").referencePolicies(.extraction),
         .source_id = chunk.chunk.source_id,
         .block_id = chunk.chunk.block_id,
         .source_lines = try @import("source_selections.zig").project(scratch, inputs, scope),
@@ -31,7 +32,9 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
     const body = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
     const packet = try packets.create(allocator, body, .{ .reference_chunk = .{ .reference_state_id = .{ .bytes = scope.state_id.bytes }, .chunk_id = .{ .bytes = scope.chunk_id.bytes } } }, .initial_generation, null);
     defer packets.release(packet);
-    return withTextChoices(allocator, packet, try passiveIds(scratch, payload.passive_literals), &.{});
+    const witnessed = try packets.withOriginalSources(allocator, packet, inputs);
+    defer packets.release(witnessed);
+    return withTextChoices(allocator, witnessed, try passiveIds(scratch, payload.passive_literals), &.{});
 }
 
 pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, guidance_scope: Constraint.Scope) ReconciliationError!*packets.Packet {
@@ -69,6 +72,7 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     for (input.items, scopes) |item, *scope| scope.* = .{ .state_id = inputs.corpus.state_id, .chunk_id = item.claim.chunk_id };
     const projected = try projection.project(scratch, input.items);
     const common = .{
+        .text_fields = @import("text_field_policy.zig").referencePolicies(.reconciliation),
         .claims = projected.claims,
         .citations = projected.citations,
         .preserved_tokens = projected.preserved_tokens,
@@ -83,6 +87,7 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     };
     const body = if (presentation == .shared) shared: {
         const payload = .{
+            .text_fields = common.text_fields,
             .purpose = hierarchy.purpose,
             .level = hierarchy.level,
             .member_claim_ids = hierarchy.member_claim_ids,
@@ -99,10 +104,12 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     const slot = try std.fmt.allocPrint(scratch, "reconciliation-{d}", .{input.partition.id.ordinal});
     const packet = try packets.create(allocator, body, .{ .reference_global = .{ .reference_state_id = .{ .bytes = inputs.corpus.state_id.bytes }, .unit_slot_id = .{ .bytes = slot } } }, .initial_generation, .{ .bytes = @tagName(input.purpose) });
     defer packets.release(packet);
+    const witnessed = try packets.withOriginalSources(allocator, packet, inputs);
+    defer packets.release(witnessed);
     const summary_context = if (input.purpose == .summary)
-        try packets.withContext([]const u8, allocator, packet, "summary_purpose", summary_purpose)
+        try packets.withContext([]const u8, allocator, witnessed, "summary_purpose", summary_purpose)
     else
-        try packets.retain(packet);
+        try packets.retain(witnessed);
     defer packets.release(summary_context);
     const selected = try withTextChoices(allocator, summary_context, try passiveIds(scratch, common.passive_literals), &.{});
     if (presentation == .shared) return selected;

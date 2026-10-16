@@ -376,7 +376,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             const all = try @import("../domain/specification_provenance.zig").items(context);
             const dispositions = @import("../domain/reference_support.zig").records(context.references).dispositions;
             const first = for (dispositions) |disposition| {
-                if (@import("../domain/reference_support.zig").eligibleClaim(disposition.disposition) and (try businessValue(allocator, (try r.item(all, disposition.claim_id)).claim)) != null) break disposition.claim_id;
+                if (@import("../domain/reference_support.zig").eligibleClaim(disposition.disposition) and (try r.item(all, disposition.claim_id)).claim.content == .model and (try businessValue(allocator, (try r.item(all, disposition.claim_id)).claim)) != null) break disposition.claim_id;
             } else return error.InvalidFixture;
             const value = try attributed(allocator, all, &.{first});
             if (request.id().purpose == .atomic_repair) {
@@ -469,10 +469,14 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                             if (kind == .user_visible_outcome and item.claim.content == .model and std.meta.eql(item.claim.id, try outcomeClaim(allocator, all, dispositions, item.claim.chunk_id))) for (all.entries) |exact_item| {
                                 if (exact_item.claim.content != .preserved_token or !std.mem.eql(u8, exact_item.claim.chunk_id.bytes, item.claim.chunk_id.bytes)) continue;
                                 const token = exact_item.claim.content.preserved_token;
-                                const exact: g.spec.BusinessValue = if (options.normalize_exact)
-                                    .{ .segments = try allocator.dupe(@import("../domain/typed_text.zig").BusinessSegment, &.{.{ .literal = .{ .value = token.value.raw_value.bytes } }}) }
+                                var outcome: std.ArrayList(r.text.BusinessSegment) = .empty;
+                                try outcome.appendSlice(allocator, selected.value.segments);
+                                try outcome.append(allocator, .{ .literal = .{ .value = " " } });
+                                try outcome.append(allocator, if (options.normalize_exact)
+                                    .{ .literal = .{ .value = token.value.raw_value.bytes } }
                                 else
-                                    .{ .segments = try allocator.dupe(r.text.BusinessSegment, &.{.{ .exact_copy = .{ .claim_id = exact_item.claim.id } }}) };
+                                    .{ .exact_copy = .{ .claim_id = exact_item.claim.id } });
+                                const exact: g.spec.BusinessValue = .{ .segments = try outcome.toOwnedSlice(allocator) };
                                 try records.append(allocator, .{ .content = .{ .user_visible_outcome = .{ .text = exact } }, .provenance = selected.provenance });
                             };
                         }

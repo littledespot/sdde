@@ -101,7 +101,7 @@ test "test.integration.generation_protocol Phase 0 prepares sources and accounts
     try std.testing.expectEqual(@as(u32, 2), gap_base);
     try std.testing.expect(small_features > 0 and medium_features > 0);
 
-    const trials = try comparison.plan(a, inventory, protocol);
+    const trials = try comparison.plan(a, inventory, protocol, .paired);
     try std.testing.expectEqual(@as(usize, 144), trials.len);
     try std.Io.Dir.cwd().createDirPath(std.testing.io, output ++ "/source-inputs");
     var prepared: u32 = 0;
@@ -122,7 +122,7 @@ test "test.integration.generation_protocol Phase 0 prepares sources and accounts
     try write(a, output ++ "/development-plan.json", trials);
 
     const observations = try faithful(a, inventory, trials);
-    const score = try comparison.aggregate(a, inventory, protocol, trials, observations, .synthetic);
+    const score = try comparison.aggregate(a, inventory, protocol, .paired, trials, observations, .synthetic);
     defer score.deinit(a);
     try std.testing.expectEqual(@as(u32, 144), score.attempted);
     try std.testing.expectEqual(@as(u64, 0), score.physical_sends);
@@ -133,7 +133,7 @@ test "test.integration.generation_protocol Phase 0 prepares sources and accounts
         try std.testing.expectEqual(@as(f64, 1), arm.first_pass_fidelity);
         try std.testing.expectEqual(@as(f64, 1), arm.robust_success);
         try std.testing.expectEqual(@as(f64, 0), arm.useful_completion);
-        try std.testing.expectEqual(@as(f64, 0), arm.repeat_inconsistency);
+        try std.testing.expectEqual(@as(?f64, 0), arm.repeat_inconsistency);
         try std.testing.expect(arm.brittleness_evidence_sufficient);
     }
     try std.testing.expect(!score.semantic_benefit_demonstrated and !score.workflow_authority);
@@ -160,7 +160,7 @@ test "test.integration.generation_protocol Phase 0 prepares sources and accounts
         } else return error.ForeignSpecimenCase;
         changed[index] = specimen.observation;
         changed[index].trial_ordinal = trials[index].ordinal;
-        const evaluated = try comparison.aggregate(a, inventory, protocol, trials, changed, .synthetic);
+        const evaluated = try comparison.aggregate(a, inventory, protocol, .paired, trials, changed, .synthetic);
         defer evaluated.deinit(a);
         const feature = for (evaluated.features) |feature| {
             if (feature.arm == .A and std.mem.eql(u8, feature.feature_id, trials[index].feature_id)) break feature;
@@ -190,18 +190,18 @@ test "test.integration.generation_protocol Phase 0 prepares sources and accounts
         .uncertain_delivery = false,
         .scoring_disputed = false,
     };
-    const incomplete = try comparison.aggregate(a, inventory, protocol, trials, partial, .synthetic);
+    const incomplete = try comparison.aggregate(a, inventory, protocol, .paired, trials, partial, .synthetic);
     defer incomplete.deinit(a);
     try std.testing.expectEqual(@as(u32, 143), incomplete.attempted);
     try std.testing.expectEqual(@as(u32, 1), incomplete.unattempted);
     try std.testing.expect(incomplete.inconclusive);
     const unknown = try a.dupe(comparison.Observation, observations);
     unknown[0].usage = null;
-    const halted = try comparison.aggregate(a, inventory, protocol, trials, unknown, .synthetic);
+    const halted = try comparison.aggregate(a, inventory, protocol, .paired, trials, unknown, .synthetic);
     defer halted.deinit(a);
     try std.testing.expect(halted.halt_required and halted.inconclusive);
     const missing = observations[0 .. observations.len - 1];
-    try std.testing.expectError(error.InvalidComparisonContract, comparison.aggregate(a, inventory, protocol, trials, missing, .synthetic));
+    try std.testing.expectError(error.InvalidComparisonContract, comparison.aggregate(a, inventory, protocol, .paired, trials, missing, .synthetic));
 
     const interval = try comparison.pairedInterval(a, protocol, &.{ 0.1, 0.2, 0.1, 0.2, 0.1, 0.2, 0.1, 0.2 });
     try std.testing.expect(interval.lower > 0 and interval.mean >= protocol.thresholds.minimum_effect);
@@ -236,4 +236,85 @@ test "test.integration.generation_protocol Phase 0 prepares sources and accounts
         .semantic_quality = "not_measured",
         .phase1_provider_exchange = "not_run",
     });
+}
+
+test "test.integration.generation_protocol Phase 2 baseline accounts all 72 A workloads without qualification or C observations" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const inventory = try comparison.parseInventory(a, @embedFile("../calibration/semantic-simplicity/cases.json"));
+    const protocol = try comparison.parseProtocol(a, @embedFile("../calibration/semantic-simplicity/protocol.json"));
+    try std.testing.expectEqual(.first_pass_fidelity, protocol.qualification.metric);
+    const trials = try comparison.plan(a, inventory, protocol, .baseline);
+    try std.testing.expectEqual(@as(usize, 72), trials.len);
+    for (trials) |trial| {
+        try std.testing.expectEqual(comparison.Arm.A, trial.arm);
+        const example = try caseFor(inventory, trial.case_id);
+        try std.testing.expectEqual(comparison.Partition.development, example.partition);
+    }
+    const observations = try faithful(a, inventory, trials);
+    const score = try comparison.aggregate(a, inventory, protocol, .baseline, trials, observations, .synthetic);
+    defer score.deinit(a);
+    try std.testing.expectEqual(@as(usize, 8), score.features.len);
+    try std.testing.expectEqual(@as(usize, 1), score.arms.len);
+    try std.testing.expectEqual(@as(usize, 1), score.resources.len);
+    try std.testing.expectEqual(@as(u32, 72), score.attempted);
+    try std.testing.expectEqual(@as(u32, 0), score.unattempted);
+    try std.testing.expectEqual(@as(u32, 60), score.statuses.completed);
+    try std.testing.expectEqual(@as(u32, 12), score.statuses.clarification);
+    try std.testing.expectEqual(@as(u64, 144), score.simulated_physical_sends);
+    for (score.features) |feature| {
+        try std.testing.expectEqual(@as(u64, 18), feature.resources.simulated_physical_sends);
+        try std.testing.expectEqual(@as(u64, 10800), feature.resources.simulated_tokens);
+        try std.testing.expectEqual(@as(u64, 0), feature.resources.actual_tokens);
+    }
+    try std.testing.expectEqual(@as(u64, 86400), score.simulated_tokens);
+    try std.testing.expectEqual(@as(u64, 0), score.actual_tokens);
+    try std.testing.expectEqual(@as(u64, 0), score.physical_sends);
+    try std.testing.expectEqual(@as(f64, 0), score.arms[0].useful_completion);
+    try std.testing.expectEqual(@as(?f64, 0), score.arms[0].representation_sensitivity);
+    try std.testing.expect(score.arms[0].common_representation_sensitivity == null);
+    try std.testing.expect(!score.arms[0].brittleness_evidence_sufficient);
+    const baseline = score.baseline.?;
+    try std.testing.expectEqual(@as(u32, 8), baseline.fidelity_features);
+    try std.testing.expectEqual(@as(u32, 8), baseline.robustness_features);
+    try std.testing.expectEqual(@as(?f64, 0), baseline.fidelity_sample_stddev);
+    try std.testing.expectEqual(@as(?f64, 0), baseline.robustness_sample_stddev);
+    try std.testing.expectEqual(.first_pass_fidelity, baseline.qualification_metric);
+    try std.testing.expectEqual(.sized, baseline.qualification.status);
+    try std.testing.expectEqual(@as(?u32, 8), baseline.qualification.required_features);
+    try std.testing.expectEqual(@as(?u64, 144), baseline.qualification.paired_workloads);
+    try std.testing.expectEqual(@as(?u64, 288), baseline.qualification.sends_at_observed_worst);
+    try std.testing.expectEqual(@as(?u64, 172800), baseline.qualification.tokens_at_observed_worst);
+    try std.testing.expectEqual(.fits, baseline.qualification.observed_cost_budget);
+    try std.testing.expect(!score.workflow_authority and !score.semantic_benefit_demonstrated);
+
+    const specimens = try comparison.decode(Specimens, a, @embedFile("../calibration/semantic-simplicity/specimens.json"));
+    for (specimens.specimens) |specimen| {
+        const changed = try a.dupe(comparison.Observation, observations);
+        const index = for (trials, 0..) |trial, index| {
+            if (std.mem.eql(u8, trial.case_id, specimen.case_id) and trial.repetition == 1) break index;
+        } else return error.ForeignSpecimenCase;
+        changed[index] = specimen.observation;
+        changed[index].trial_ordinal = trials[index].ordinal;
+        changed[index].failure_stage = if (specimen.expected.harmful_repair) .repair else if (specimen.expected.material_harm) .generation else null;
+        const assessed = try comparison.aggregate(a, inventory, protocol, .baseline, trials, changed, .synthetic);
+        defer assessed.deinit(a);
+        const feature = for (assessed.features) |feature| {
+            if (std.mem.eql(u8, feature.feature_id, trials[index].feature_id)) break feature;
+        } else return error.MissingFixtureFeature;
+        try std.testing.expectEqual(@as(u32, if (specimen.expected.first_pass) 9 else 8), feature.first_pass_successes);
+        try std.testing.expectEqual(@as(u32, if (specimen.expected.material_harm) 1 else 0), feature.material_workloads);
+        try std.testing.expectEqual(@as(u32, if (specimen.expected.false_gap) 1 else 0), feature.false_gap_workloads);
+        try std.testing.expectEqual(@as(u32, if (specimen.expected.harmful_repair) 1 else 0), assessed.failure_stages.repair);
+        try std.testing.expect(assessed.baseline != null);
+    }
+
+    // The selected variance is a closed, required freeze rather than a report
+    // heuristic, including when both metrics happen to have the same variance.
+    const protocol_bytes = @embedFile("../calibration/semantic-simplicity/protocol.json");
+    const wrong_metric = try std.mem.replaceOwned(u8, a, protocol_bytes, "first_pass_fidelity", "robust_success");
+    try std.testing.expectError(error.InvalidComparisonContract, comparison.parseProtocol(a, wrong_metric));
+    const missing_metric = try std.mem.replaceOwned(u8, a, protocol_bytes, "    \"metric\": \"first_pass_fidelity\",\n", "");
+    try std.testing.expectError(error.InvalidComparisonContract, comparison.parseProtocol(a, missing_metric));
 }

@@ -7,8 +7,11 @@ const inputs = @import("clarification_input_workflow.zig");
 const operations = @import("../ports/workflow_operation_registry.zig");
 const execution = @import("../domain/workflow_execution.zig");
 const publish = @import("workflow_candidate.zig").publish;
-pub const needs_schema = values.schema(.clarification_needs, refresh.Needs, 1, c.max_state_bytes);
-pub const state_schema = values.schema(.refreshed_clarification_state, refresh.Result, 1, c.max_state_bytes * 4);
+// Current corpus witnesses are execution-local and retain the already bounded
+// reference-input size in addition to the existing clarification-state size.
+const maximum = @import("reference_evidence_workflow.zig").inputs_schema.maximum_bytes.? + c.max_state_bytes * 4;
+pub const needs_schema = values.schema(.clarification_needs, refresh.Needs, 2, maximum);
+pub const state_schema = values.schema(.refreshed_clarification_state, refresh.Result, 2, maximum);
 pub const views_schema = values.schema(.clarification_views, []const views.View, 1, c.max_forms * c.max_form_bytes * 4);
 pub const schemas = [_]@import("../domain/pipeline_data.zig").Schema{ needs_schema, state_schema, views_schema };
 
@@ -102,12 +105,13 @@ pub const BuildAuthorityNeeds = struct {
         const self = context.?;
         const authority = @import("required_authority_workflow.zig");
         const owned = @import("required_authority_values.zig");
+        const sources = try values.read(&input.step.data, @import("reference_evidence_workflow.zig").inputs_schema, @import("../domain/reference_evidence.zig").Inputs);
         const source = owned.read(&input.step.data, authority.inputs_schema, .inputs) catch |operation_error| return operation_error;
         const observations = owned.read(&input.step.data, authority.observations_schema, .observations) catch |operation_error| return operation_error;
         const result = owned.read(&input.step.data, authority.result_schema, .result) catch |operation_error| return operation_error;
         var arena: std.heap.ArenaAllocator = .init(self.allocator);
         defer arena.deinit();
-        const needs = self.action.execute(arena.allocator(), source, observations, result) catch |err| return switch (err) {
+        const needs = self.action.execute(arena.allocator(), sources.*, source, observations, result) catch |err| return switch (err) {
             error.OutOfMemory => error.OutOfMemory,
             error.InvalidRequiredAuthority => .{ .outcome = .blocked, .delta = .{}, .diagnostic = err },
         };
