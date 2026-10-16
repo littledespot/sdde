@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(zig version)",
+      "Bash(zig build)",
+      "Bash(zig build --help)",
+      "Bash(zig build lint)",
+      "Bash(zig build test)",
+      "Bash(zig build test *)",
+      "Bash(zig build test-*)",
+      "Bash(zig build smoke)",
+      "Bash(zig build smoke *)",
+      "Bash(zig build smoke-*)",
+      "Bash(zig build verify)",
+      "Bash(zig build verify *)",
+      "Bash(zig build build-*)",
+      "Bash(zig build code-heuristics)",
+      "Bash(zig fmt *)",
+      "Bash(./scripts/test-integration.sh)",
+      "Bash(./scripts/test-integration.sh *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)"
+    ],
+    "ask": [
+      "Bash(zig build run)",
+      "Bash(zig build run *)",
+      "Bash(zig build * run)",
+      "Bash(zig build * run *)",
+      "Bash(zig build e2e-spec*)",
+      "Bash(zig build * e2e-spec*)",
+      "Bash(zig build e2e-call*)",
+      "Bash(zig build * e2e-call*)",
+      "Bash(zig build evaluate-spec*)",
+      "Bash(zig build * evaluate-spec*)",
+      "Bash(zig build provider-compatibility*)",
+      "Bash(zig build * provider-compatibility*)",
+      "Bash(zig build baseline*)",
+      "Bash(zig build * baseline*)",
+      "Bash(*scripts/e2e-spec.sh*)",
+      "Bash(*scripts/e2e-call.sh*)",
+      "Bash(*scripts/provider-compatibility.sh*)",
+      "Bash(*scripts/baseline.sh*)",
+      "Bash(*zig-out/bin/*)",
+      "Bash(git push*)",
+      "Bash(gh pr create*)",
+      "Bash(gh pr merge*)",
+      "Bash(gh release*)",
+      "Edit(/AGENTS.md)",
+      "Edit(/CLAUDE.md)",
+      "Edit(/design/decisions/**)",
+      "Edit(/.claude/settings.json)",
+      "Edit(/.claude/hooks/**)"
+    ],
+    "deny": [
+      "Read(/.env.e2e)",
+      "Edit(/.env.e2e)",
+      "Bash(*.env.e2e)",
+      "Bash(*.env.e2e *)",
+      "Edit(/zig-pkg/**)",
+      "Edit(/.zig-cache/**)",
+      "Edit(/zig-out/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-bash.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format-zig.sh",
+            "timeout": 30,
+            "statusMessage": "zig fmt"
+          }
+        ]
+      }
+    ]
+  }
+}

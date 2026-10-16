@@ -21,6 +21,7 @@ implementation status and verification records are evidence, not new authority.
 
 | Need | Read |
 | --- | --- |
+| Purpose, intended outcomes and success measures (orientation, not contract authority) | [Engine intent](intent.md) |
 | Architecture, rules and acceptance | [Design overview and section map](design.md) |
 | Detailed requirements and action responsibilities | [Contracts](contracts/), [action catalogues](contracts/actions/) |
 | Decision context, scope and consequences | [ADRs](decisions/) |

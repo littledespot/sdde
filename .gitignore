@@ -3,3 +3,8 @@ zig-pkg/
 zig-out/
 .DS_Store
 /.env.e2e
+
+# Claude Code personal overrides and worktrees
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
