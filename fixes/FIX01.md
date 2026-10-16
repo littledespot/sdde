@@ -77,6 +77,22 @@ implemented changes, finished experiments and their verification. A failed
 experiment is completed execution, not completed semantic acceptance. Outstanding
 work remains below.
 
+**16 October 2026 — FIX04 Phase 1A live result and Phase 1A.2 decision:** Phase 1A
+(text-field composition admission) is committed as `bfec3d7`; its implementation
+and offline evidence are in [the Phase 1A record](FIX04-phase1a-implementation.md).
+On that clean build the 16:16 one-send probe was `compatible`, and the separately
+approved [16:20 hello-world run](../zig-out/e2e-spec/2026-10-16T05-20-15Z-44b2ac5e19cbf8d2ade89b149aed73c8/report.json)
+failed with `RepairNoProgress` after 8 calls and 12,896 tokens. Native admission
+rejected the brief's insertion-only title as `reference_only` before any review, and
+the unit repair returned the same value. Enforcement is confirmed live; generation
+did not recover, because schemas, guidance, offered choices and the repair packet
+still present the rejected shape ([FIX04 F11](FIX04.md#f11--high-admission-now-stops-the-defect-but-generation-cannot-recover-from-it)).
+The user approved Phase 1A.2 decision 1: descriptive fields whose exact copies
+cannot satisfy coverage now have a prohibited exact-copy role, recorded in the
+[composition contract](../design/contracts/text-field-composition.md#phase-1a2-amendment--exact-copies-only-where-they-can-carry-an-obligation)
+and ADR 0020. Implementation of [Phase 1A.2](FIX04.md#phase-1a2--make-model-facing-presentation-consistent-with-admission)
+is pending and precedes the Phase 2 baseline freeze.
+
 **16 October 2026 — FIX04 baseline measurement harness:** unchanged arm A now has
 independent planning and scoring, a committed-build/budget-feasibility admission
 gate, authentic production exchange/candidate capture, experiment-wide physical
@@ -206,7 +222,7 @@ Bodies from interrupted/uncertain delivery remain unvalidated and inconclusive.
 Guard/CLI/report tests belong to `test-provider-compatibility`; fresh production
 runtime scenarios with fake exchanges belong to `test-integration`. See
 [the offline evidence record](../test/calibration/semantic-simplicity/phase1-offline-results.md),
-[FIX04 Phase 1](FIX04.md#phase-1--establish-compatible-current-model-execution)
+[FIX04 Phase 1](FIX04.md#phase-1--establish-compatible-selected-model-execution)
 and the [harness operating contract](../design/harness/e2e.md#test-one-fresh-provider-exchange).
 That implementation request authorized offline work/checks, not a live diagnostic
 or E2E run. The later separately authorized 16 October compatibility result is

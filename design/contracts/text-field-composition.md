@@ -19,7 +19,7 @@ semantic judgments.
 | Declared fields | Nonblank prose | Exact-copy role | Passive/source roles |
 | --- | --- | --- | --- |
 | Brief description, story; AC Given/When/Then; visible outcome; edge condition/outcome; functional requirement, business rule, non-goal, prohibited behavior | Required | Obligation-bearing | Passive incidental; source prohibited |
-| Brief title and goal; entity-applicability basis; entity meaning and each relationship; assumption; clarification question | Required | Incidental | Passive incidental; source prohibited |
+| Brief title and goal; entity-applicability basis; entity meaning and each relationship; assumption; clarification question | Required | Prohibited ([Phase 1A.2 amendment](#phase-1a2-amendment--exact-copies-only-where-they-can-carry-an-obligation)) | Passive incidental; source prohibited |
 | Entity name | Optional: supplied insertions may express an identity label | Incidental | Passive incidental; source prohibited |
 | Extraction and reconciliation business and scope-guard text | Required | Prohibited: preserved-token records carry exact-value identity separately | Passive incidental; source prohibited by their business-text contract |
 | Extraction design, technical, validation, implementation-assumption and open-question text; no-feature-claim reason; reconciled versions of those meanings and conflict summary | Required | Prohibited: preserved-token records carry exact-value identity separately | Passive and source incidental |
@@ -32,6 +32,34 @@ Entity names are the sole field allowed to omit prose; no workflow, filename,
 provider, model or current fixture creates another exception. This is not a
 fragment-count restriction: several legitimate identity components retain their
 normal lineage and semantic checks, without satisfying behavioral coverage.
+
+## Phase 1A.2 amendment — exact copies only where they can carry an obligation
+
+**Approved 16 October 2026; implementation pending.** Authority: the user's explicit
+approval of [FIX04 Phase 1A.2](../../fixes/FIX04.md#phase-1a2--make-model-facing-presentation-consistent-with-admission)
+decision 1, following the live evidence in
+[FIX04 F11](../../fixes/FIX04.md#f11--high-admission-now-stops-the-defect-but-generation-cannot-recover-from-it).
+Until Phase 1A.2 is implemented, the engine applies the earlier incidental role;
+this section is the accepted target, not a description of current enforcement.
+
+- **Role change.** In the descriptive fields of the inventory's second row (brief
+  title and goal, entity-applicability basis, entity meaning and each relationship,
+  assumption, clarification question), the exact-copy role changes from incidental
+  to **prohibited**. Prose remains required. Passive and source roles are unchanged.
+- **Presentation follows the role.** These fields' projected schemas, guidance and
+  offered choices contain no exact-copy insertion, so constrained decoding itself
+  requires prose in them. A literal the model types there is ordinary prose: it
+  creates no occurrence, lineage or coverage, and display equality never supplies one.
+- **Admission and readback.** Admission, protocol correction, every repair route and
+  stored readback reject an exact-copy insertion in these fields as a prohibited
+  insertion, through the same owners as other prohibited insertions. There is no
+  compatibility reader for stored values that contain one.
+- **Coverage is unchanged.** Occurrences in these fields could not satisfy behavioral
+  exact-copy coverage before this amendment and no longer exist after it.
+  Obligation-bearing fields keep exact-copy insertions together with the native prose
+  requirement, which schemas still cannot express.
+- **Entity names keep the identity-label exception** and an incidental exact-copy
+  role; after this amendment they are the only field with that role.
 
 The previous whole-field raw-literal-to-`exact_copy` coverage reconstruction
 cannot produce valid prose in an obligation-bearing field and is removed.

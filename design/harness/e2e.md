@@ -223,7 +223,7 @@ and useful publication are not assessed.
 A compatible first exchange qualifies only that observed request/settings; it
 does not qualify every workflow request shape or establish complete E2E acceptance.
 
-The [FIX04 Phase 1 gate](../../fixes/FIX04.md#phase-1--establish-compatible-current-model-execution)
+The [FIX04 Phase 1 gate](../../fixes/FIX04.md#phase-1--establish-compatible-selected-model-execution)
 requires both offline checks and an authentic retained exchange. Implementing and
 testing this command offline does not close the live gate or authorize a run.
 

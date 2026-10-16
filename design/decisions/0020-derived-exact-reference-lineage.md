@@ -12,6 +12,10 @@
 - **16 October 2026 Phase 1A amendment authority:** explicit user instruction to
   settle and implement shared composition admission, field-specific exact-copy
   coverage, source-aware wire syntax and unchanged-repair exhaustion.
+- **16 October 2026 Phase 1A.2 amendment authority:** explicit user approval of
+  [FIX04 Phase 1A.2](../../fixes/FIX04.md#phase-1a2--make-model-facing-presentation-consistent-with-admission)
+  decision 1, prohibiting exact-copy insertions in descriptive fields whose
+  occurrences cannot satisfy coverage. Implementation pending.
 
 ## Composition and coverage amendment — 16 October 2026
 
@@ -20,8 +24,12 @@ whether a field requires prose and whether its exact-copy occurrences are
 prohibited, incidental or obligation-bearing. All exact occurrences retain the
 same handle, lineage, scope and byte-resolution contracts below. Only occurrences
 in successfully validated obligation-bearing fields satisfy behavioral exact-copy
-coverage. An incidental title, entity name or other descriptive occurrence cannot
-discharge that duty. This supersedes counting an occurrence in any field. The
+coverage. An incidental entity-name occurrence cannot discharge that duty. Under the
+approved [Phase 1A.2 amendment](../contracts/text-field-composition.md#phase-1a2-amendment--exact-copies-only-where-they-can-carry-an-obligation),
+titles and the other descriptive fields in the inventory's second row carry no
+exact-copy occurrence at all; until it is implemented, their occurrences remain
+incidental and likewise cannot discharge it. This supersedes counting an occurrence
+in any field. The
 policy is shared across generation, correction, repair and stored readback; it is
 not another model role classifier or support decision. Wire syntax embedded in
 prose never creates an occurrence and follows the source-aware protocol rule.
