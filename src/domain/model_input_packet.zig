@@ -42,6 +42,12 @@ pub const Packet = opaque {
     pub fn proseFields(self: *const Packet) []const @import("model_text_wire.zig").ProseField {
         return storage(self).prose_fields;
     }
+    pub fn fieldPolicies(self: *const Packet) []const @import("model_text_field.zig").Binding {
+        return storage(self).field_policies;
+    }
+    pub fn presentationOmissions(self: *const Packet) []const @import("model_field_presentation.zig").Omission {
+        return storage(self).presentation_omissions;
+    }
     pub fn originalSources(self: *const Packet) []const @import("model_text_wire.zig").SourceText {
         return storage(self).original_sources;
     }
@@ -66,6 +72,8 @@ const Storage = struct {
     integer_choices: []const schema.IntegerChoice = &.{},
     original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
     prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
+    field_policies: []const @import("model_text_field.zig").Binding = &.{},
+    presentation_omissions: []const @import("model_field_presentation.zig").Omission = &.{},
     assignment_contexts: []const AssignmentContext = &.{},
     handle: Handle,
 };
@@ -178,6 +186,27 @@ fn cloneWith(allocator: std.mem.Allocator, base: *const Packet, body: []const u8
     storage(result).assignment_contexts = copied_contexts;
     try copyOriginalSources(storage(result), base.originalSources());
     storage(result).prose_fields = try @import("model_text_wire.zig").cloneProseFields(a, base.proseFields());
+    storage(result).field_policies = try @import("model_text_field.zig").clone(a, base.fieldPolicies());
+    storage(result).presentation_omissions = try @import("model_field_presentation.zig").clone(a, base.presentationOmissions());
+    return result;
+}
+
+pub fn withPresentationOmissions(a: std.mem.Allocator, base: *const Packet, omissions: []const @import("model_field_presentation.zig").Omission) Error!*Packet {
+    const presentation = @import("model_field_presentation.zig");
+    if (!presentation.valid(omissions)) return error.InvalidModelInputPacket;
+    const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+    errdefer release(result);
+    storage(result).presentation_omissions = try presentation.clone(storage(result).arena.allocator(), omissions);
+    return result;
+}
+
+/// Only native field declarations bind a semantic policy to a wire-text leaf.
+pub fn withFieldPolicies(a: std.mem.Allocator, base: *const Packet, fields: []const @import("model_text_field.zig").Binding) Error!*Packet {
+    const owner = @import("model_text_field.zig");
+    if (!owner.valid(fields)) return error.InvalidModelInputPacket;
+    const result = try cloneWith(a, base, base.body(), base.excludedVariants(), base.integerChoices(), storage(base).assignment_contexts);
+    errdefer release(result);
+    storage(result).field_policies = try owner.clone(storage(result).arena.allocator(), fields);
     return result;
 }
 

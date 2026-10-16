@@ -93,7 +93,7 @@ pub const AssessmentInputs = struct {
     trials: []const AssessorPacket,
 };
 pub const Report = struct {
-    schema: enum { @"baseline-score/v2" },
+    schema: enum { @"baseline-score/v3" },
     build: build.Identity,
     toolchain: frozen_inputs.Toolchain,
     freeze_sha256: []const u8,
@@ -259,7 +259,7 @@ pub fn command(io: std.Io, a: std.mem.Allocator, repository: std.Io.Dir, freeze_
         },
     }, failure_classes);
     const report: Report = .{
-        .schema = .@"baseline-score/v2",
+        .schema = .@"baseline-score/v3",
         .build = frozen.build,
         .toolchain = frozen.toolchain,
         .freeze_sha256 = freeze_sha256,
@@ -910,7 +910,7 @@ fn render(a: std.mem.Allocator, report: Report) ![]const u8 {
     try w.writeAll("Resource distributions retain median and observed worst sends, input/output/total tokens and elapsed time for all dispatched workloads and known useful workloads separately. Amortized cost per useful completion includes failed and genuine-gap workload costs in its numerator. Missing usage or a missing useful-completion denominator stays null; known partial consumption remains explicit.\n\n");
     try w.print("Native admission escapes: {d}/{d} invoked native workloads; {d} measured, {d} unknown, {d} never invoked. Workload incidence: ", .{ report.admission_escape.escaped_workloads, report.admission_escape.attempted_workloads, report.admission_escape.measured_workloads, report.admission_escape.unknown_workloads, report.admission_escape.unattempted_workloads });
     try std.json.Stringify.value(report.admission_escape.workload_escape_rate, .{}, w);
-    try w.print(". Secondary producer-origin diagnostic: {d}/{d}. Downstream chronological exposure after the first escaped admission in each workload: {d} sends, {d} known actual tokens; complete usage: {}. These resources remain included in their native paid stages and are not a causal cost estimate.\n\n", .{ report.admission_escape.escaped_origins, report.admission_escape.admitted_origins, report.admission_escape.downstream.physical_sends, report.admission_escape.downstream.known_actual_tokens, report.admission_escape.downstream.usage_complete });
+    try w.print(". Secondary model/native producer diagnostic: {d}/{d}. Downstream chronological exposure after the first escaped admission in each workload: {d} sends, {d} known actual tokens; complete usage: {}. These resources remain included in their native paid stages and are not a causal cost estimate.\n\n", .{ report.admission_escape.escaped_origins, report.admission_escape.admitted_origins, report.admission_escape.downstream.physical_sends, report.admission_escape.downstream.known_actual_tokens, report.admission_escape.downstream.usage_complete });
     try w.writeAll("Missing or disputed labels remain incomplete; absent duty judgments are not invented omissions. Native terminal stages and first native rejections describe chronology. Supplied loss-stage attributions, including representation_admission, are separate semantic judgments. A native invocation that fails before its first physical model send is retained below but has no attempted generation workload. All physical sends and actual usage, including corrections and rejected outputs, contribute to resources. Correction sends are native later attempts or explicitly atomic-repair requests, including failed repairs. Per-stage sends and tokens use native purpose/owner categories, not semantic loss attribution; latency remains a measured whole-workload value. feature_stage_resources preserves known partial consumption when a workload has unknown usage; actual_tokens:null never means zero spent.\n\n");
     try w.writeAll("| Trial | Case | Native result | Assessment | Supplied loss stage | Sends |\n| --- | --- | --- | --- | --- | --- |\n");
     for (report.rows) |row| try w.print("| {d} | {s} | {s} | {s} | {s} | {d} |\n", .{ row.trial.ordinal, row.trial.case_id, if (row.native_status) |value| @tagName(value) else "unattempted", @tagName(row.evidence), if (row.supplied_failure_stage) |value| @tagName(value) else "unknown", row.physical_sends });
@@ -959,7 +959,7 @@ test "native projection retains original generation independently of later block
     var facts: acquisition.Facts = .{
         .trial = .{ .ordinal = 1, .case_id = "test-base", .feature_id = "test", .arm = .A, .repetition = 1 },
         .freeze_sha256 = "freeze",
-        .workflow = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked },
+        .workflow = .{ .schema = .@"spec-e2e-report/v3", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked },
         .receipts = &receipts,
         .first_candidate = .{ .json = original, .sha256 = std.fmt.bytesToHex(first_hash, .lower), .first_pass = true },
         .final_candidate = .{ .json = final, .sha256 = std.fmt.bytesToHex(last_hash, .lower), .first_pass = false },
@@ -995,7 +995,7 @@ test "receipt hashes reject changed bytes and unknown usage never becomes zero c
         .trial = .{ .ordinal = 1, .case_id = "test-base", .feature_id = "test", .arm = .A, .repetition = 1 },
         .freeze_sha256 = "freeze",
         .elapsed_ns = 1,
-        .workflow = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .provider_diagnostic = "unknown usage" },
+        .workflow = .{ .schema = .@"spec-e2e-report/v3", .started_at_utc = "", .status = .workflow_failed, .workflow_outcome = .failed, .provider_diagnostic = "unknown usage" },
         .receipts = &.{.{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .experiment_send = .{ .ordinal = 1 }, .purpose = .initial_generation, .owner_kind = .specification_unit, .request_step = "generate", .context_sha256 = @splat(0), .request_sha256 = @splat(0), .uncertain_delivery = true }},
     };
     const projected = try projectCapture(a, try acquisition.record(a, facts), &.{});
@@ -1014,7 +1014,7 @@ test "native genuine clarification targets include registered question bytes wit
         .trial = .{ .ordinal = 1, .case_id = "approval-gap", .feature_id = "approval", .arm = .A, .repetition = 1 },
         .freeze_sha256 = "freeze",
         .elapsed_ns = 1,
-        .workflow = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "", .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed },
+        .workflow = .{ .schema = .@"spec-e2e-report/v3", .started_at_utc = "", .status = .awaiting_clarification, .workflow_outcome = .needs_user, .publication_check = .passed },
         .receipts = &.{.{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .experiment_send = .{ .ordinal = 1 }, .purpose = .initial_generation, .owner_kind = .reference_chunk, .request_step = "understand", .context_sha256 = @splat(0), .request_sha256 = @splat(0), .usage = .{ .input_tokens = 5, .output_tokens = 3, .total_tokens = 8 } }},
         .published_output = "Urgent requests require manager sign-off. Ordinary approval remains unresolved.",
         .clarification_outputs = &.{.{ .path = "specs/approval/clarify/spec-01.md", .bytes = question, .sha256 = try frozen_inputs.hash(a, question) }},
@@ -1126,7 +1126,7 @@ test "native purposes count failed first repair sends and preserve unknown per-s
         .trial = .{ .ordinal = 1, .case_id = "test-base", .feature_id = "test", .arm = .A, .repetition = 1 },
         .freeze_sha256 = "freeze",
         .elapsed_ns = 1,
-        .workflow = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked },
+        .workflow = .{ .schema = .@"spec-e2e-report/v3", .started_at_utc = "", .status = .workflow_blocked, .workflow_outcome = .blocked },
         .receipts = &receipts,
     };
     const projected = try projectCapture(a, try acquisition.record(a, facts), &.{});
@@ -1228,7 +1228,7 @@ test "partial setup without invocation stays unattempted while native exchanges 
     var facts: acquisition.Facts = .{ .trial = row.trial, .freeze_sha256 = "freeze", .directory = "trials/0001/partial", .inputs_sha256 = "reserved-input-identity", .diagnostic = "InputUnavailable" };
     try std.testing.expect(try invocationUnstarted(facts));
     try std.testing.expectEqual(comparison.Status.unattempted, nativeStatus(facts));
-    facts.workflow = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "", .status = .input_invalid };
+    facts.workflow = .{ .schema = .@"spec-e2e-report/v3", .started_at_utc = "", .status = .input_invalid };
     try std.testing.expect(!try invocationUnstarted(facts));
     facts.workflow = null;
     facts.receipts = &.{.{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .purpose = .initial_generation, .owner_kind = .reference_chunk, .experiment_send = .{ .ordinal = 1 }, .request_step = "extract", .context_sha256 = @splat(0), .request_sha256 = @splat(0) }};
@@ -1272,7 +1272,7 @@ test "representation attribution stays separate from native paid-resource stages
     const receipt: trace.Receipt = .{ .call = 1, .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } }, .purpose = .initial_generation, .owner_kind = .specification_unit, .experiment_send = .{ .ordinal = 1 }, .request_step = "generation", .context_sha256 = @splat(0), .request_sha256 = @splat(0), .usage = operation.ProviderUsage.init(4, 3, 7) };
     const resources = try resourceStages(a, &.{receipt});
     try std.testing.expectEqual(@as(?u64, 7), resources[@intFromEnum(stages.Stage.generation)].actual_tokens);
-    var facts: acquisition.Facts = .{ .trial = testRow("audit", &.{}).trial, .freeze_sha256 = "freeze", .receipts = &.{receipt}, .workflow = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "", .status = .workflow_failed, .admission_audit = .{ .sources = &.{}, .checks = &.{}, .complete = true }, .admission_escape = .{ .status = .measured } } };
+    var facts: acquisition.Facts = .{ .trial = testRow("audit", &.{}).trial, .freeze_sha256 = "freeze", .receipts = &.{receipt}, .workflow = .{ .schema = .@"spec-e2e-report/v3", .started_at_utc = "", .status = .workflow_failed, .admission_audit = .{ .sources = &.{}, .checks = &.{}, .complete = true }, .admission_escape = .{ .status = .measured } } };
     const metric = try admissionMetric(a, facts);
     try std.testing.expectEqual(.measured, metric.status);
     facts.workflow.?.admission_escape.?.escaped_values = 1;
@@ -1286,7 +1286,7 @@ test "native admission workload incidence includes zero-send invocations and exc
     try std.testing.expect(!acquisition.nativeInvocationObserved(never_invoked));
     try std.testing.expectEqual(comparison.Status.unattempted, nativeStatus(never_invoked));
     var invoked = never_invoked;
-    invoked.workflow = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "", .status = .input_invalid };
+    invoked.workflow = .{ .schema = .@"spec-e2e-report/v3", .started_at_utc = "", .status = .input_invalid };
     try std.testing.expect(acquisition.nativeInvocationObserved(invoked));
     const missing = try admissionMetric(a, invoked);
     try std.testing.expectEqual(.unavailable, missing.status);

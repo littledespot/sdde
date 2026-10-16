@@ -67,10 +67,28 @@ pub fn packet(a: std.mem.Allocator, facts: Facts, registry: @import("passive_lit
     const scope: @import("reference_evidence.zig").Scope = .{ .state_id = facts.text.inputs.corpus.state_id, .chunk_id = authorization.target.scope };
     const base = try @import("reference_model_input.zig").extractionPacket(a, facts.text.inputs, registry, candidates, scope);
     defer packets.release(base);
+    const entry = try entryAt(facts.candidate, authorization.target);
+    const field: e.text.field_policy.Field = switch (authorization.target.field) {
+        .reason => .extraction_reason,
+        .claim => |index| switch (entry.outcome.claims[index].content) {
+            inline else => |_, tag| e.text.field_policy.referenceField(.extraction, @tagName(tag)),
+        },
+    };
+    var options: shared.PacketOptions = .{ .presentation = .structured, .fields = .{ .replacement = .{ .inherited = field, .reference_phase = .extraction } } };
+    var rendered: ?[]const u8 = null;
+    defer if (rendered) |bytes| a.free(bytes);
+    if (shared.isCompositionIssue(authorization.rule.issue)) {
+        const value: @import("model_evidence.zig").Text = switch (authorization.operation.replace) {
+            .business => |text| .{ .business = text },
+            .reference => |text| .{ .reference = text },
+        };
+        rendered = @import("model_evidence.zig").resolveText(a, facts.text.inputs, registry, &.{scope}, value) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidAtomicRepair;
+        options.presentation = .{ .composition = .{ .rendered_text = rendered.?, .issue = authorization.rule.issue } };
+    }
     return atomic.packet(a, authorization, base, .{ .bytes = switch (authorization.operation.replace) {
         .business => "business_text_replacement",
         .reference => "reference_text_replacement",
-    } }, e.textOrigin(try entryAt(facts.candidate, authorization.target), authorization.target.field));
+    } }, e.textOrigin(entry, authorization.target.field), options);
 }
 pub fn parse(a: std.mem.Allocator, authorization: Authorization, input: *const packets.Packet, bytes: []const u8) Error!Replacement {
     return atomic.parse(a, authorization, input, bytes);

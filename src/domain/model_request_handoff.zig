@@ -53,6 +53,7 @@ pub const Request = opaque {
     }
 
     pub fn input(self: *const Request) ?[]const u8 {
+        if (storage(self).presented_input) |bytes| return bytes;
         return switch (storage(self).input orelse return null) {
             .resource => |resource| resource.content.data,
             .packet => |value| value.body(),
@@ -102,6 +103,7 @@ pub const Request = opaque {
             .restriction = value.restriction,
             .original_sources = if (self.packet()) |packet_value| packet_value.originalSources() else &.{},
             .prose_fields = if (self.packet()) |packet_value| packet_value.proseFields() else &.{},
+            .field_policies = if (self.packet()) |packet_value| packet_value.fieldPolicies() else &.{},
         };
     }
 
@@ -151,6 +153,9 @@ const Storage = struct {
     result: compilation.CompiledResource,
     result_definition: ?@import("model_result_schema.zig").DefinitionId = null,
     input: ?Input,
+    /// Model-visible projection of the immutable native packet. Keep the
+    /// original packet for exact assignment, retention and repair authority.
+    presented_input: ?[]const u8 = null,
     composition: ?composition.Binding = null,
     restriction: ?*@import("model_result_schema.zig").Restricted = null,
     protocol_rejection: ?struct { diagnostic: retry.Diagnostic, operation_id: provider.ProviderOperationId } = null,
@@ -226,15 +231,17 @@ pub const Selection = struct {
         const Restrictions = struct {
             excluded: []const @import("model_result_schema.zig").ExcludedVariant,
             choices: []const @import("model_result_schema.zig").IntegerChoice,
+            fields: []const @import("model_text_field.zig").Binding,
+            omissions: []const @import("model_field_presentation.zig").Omission,
         };
         const codec = @import("canonical_json.zig");
-        const current_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = current.packet.excludedVariants(), .choices = current.packet.integerChoices() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+        const current_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = current.packet.excludedVariants(), .choices = current.packet.integerChoices(), .fields = current.packet.fieldPolicies(), .omissions = current.packet.presentationOmissions() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         defer allocator.free(current_restrictions);
-        const old_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = old.packet.excludedVariants(), .choices = old.packet.integerChoices() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
+        const old_restrictions = codec.encode(Restrictions, allocator, .{ .excluded = old.packet.excludedVariants(), .choices = old.packet.integerChoices(), .fields = old.packet.fieldPolicies(), .omissions = old.packet.presentationOmissions() }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false;
         defer allocator.free(old_restrictions);
         if (!std.mem.eql(u8, current_restrictions, old_restrictions)) return false;
-        const effective = if (current.packet.excludedVariants().len != 0 or current.packet.integerChoices().len != 0)
-            @import("model_result_schema.zig").restrict(allocator, canonical, current.packet.excludedVariants(), current.packet.integerChoices()) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false
+        const effective = if (current.packet.excludedVariants().len != 0 or current.packet.integerChoices().len != 0 or current.packet.fieldPolicies().len != 0)
+            @import("model_result_schema.zig").restrictFieldPolicies(allocator, canonical, current.packet.excludedVariants(), current.packet.integerChoices(), current.packet.fieldPolicies()) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else false
         else
             null;
         defer if (effective) |restricted| restricted.release();
@@ -322,11 +329,20 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
     }
     const excluded = if (input != null and input.? == .packet) input.?.packet.excludedVariants() else &.{};
     const integer_choices = if (input != null and input.? == .packet) input.?.packet.integerChoices() else &.{};
-    const restriction = if (excluded.len != 0 or integer_choices.len != 0)
-        @import("model_result_schema.zig").restrict(allocator, if (part_binding) |part| part.schema else bound_result.content.result_schema, excluded, integer_choices) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidModelRequestSource
+    const field_policies = if (input != null and input.? == .packet) input.?.packet.fieldPolicies() else &.{};
+    const restriction = if (excluded.len != 0 or integer_choices.len != 0 or field_policies.len != 0)
+        @import("model_result_schema.zig").restrictFieldPolicies(allocator, if (part_binding) |part| part.schema else bound_result.content.result_schema, excluded, integer_choices, field_policies) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidModelRequestSource
     else
         null;
     defer if (restriction) |owned| owned.release();
+    const presented: ?[]const u8 = if (input != null and input.? == .packet and
+        (field_policies.len != 0 or input.?.packet.presentationOmissions().len != 0))
+    presented: {
+        const packet = input.?.packet;
+        const response = if (restriction) |value| value.selected() else if (part_binding) |part| part.schema else bound_result.content.result_schema;
+        break :presented @import("model_field_presentation.zig").project(allocator, packet.body(), response.root(), packet.fieldPolicies(), packet.presentationOmissions()) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidModelRequestSource;
+    } else null;
+    defer if (presented) |bytes| allocator.free(bytes);
     return create(.{
         .allocator = allocator,
         .ledger_owner = ledger_owner,
@@ -338,6 +354,7 @@ pub fn assign(allocator: std.mem.Allocator, ledger_owner: *identity.Owner, id: *
         .result = bound_result,
         .result_definition = if (selection == .input) input.?.packet.resultDefinition() else null,
         .input = input,
+        .presented_input = presented,
         .composition = part_binding,
         .restriction = restriction,
         .phase = .assigned,
@@ -380,6 +397,7 @@ pub fn destroy(request: *Request) void {
     if (value.phase == .prepared) value.phase.prepared.deinit();
     if (value.restriction) |restriction| restriction.release();
     if (value.protocol_rejection) |rejected| rejected.diagnostic.deinit(value.allocator);
+    if (value.presented_input) |bytes| value.allocator.free(bytes);
     if (value.input) |input| if (input == .packet) packets.release(input.packet);
     if (value.composition) |part| {
         packets.release(part.base);
@@ -403,6 +421,8 @@ fn create(value: Storage) Error!*Request {
     };
     errdefer if (value.input) |input| if (input == .packet) packets.release(input.packet);
     result.* = value;
+    if (value.presented_input) |bytes| result.presented_input = try value.allocator.dupe(u8, bytes);
+    errdefer if (result.presented_input) |bytes| value.allocator.free(bytes);
     if (value.composition) |part| {
         result.composition.?.prerequisites = try value.allocator.dupe(composition.Prerequisite, part.prerequisites);
         errdefer value.allocator.free(result.composition.?.prerequisites);

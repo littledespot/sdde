@@ -25,6 +25,7 @@ pub const Adapter = struct {
         const request_profile = try self.authorization.authorize_fn(self.authorization.context, description);
         if (description.provider_config != .aws_bedrock or description.operation_kind != .inference or !std.mem.eql(u8, description.protocol_prompt, @import("../../domain/model_controls.zig").response_format_guidance)) return error.InvalidReplay;
         const schema = self.compiler.compileSelected(a, description.schema) catch return error.InvalidReplay;
+        if (!@import("../../domain/model_text_field.zig").validSchema(schema.root(), description.field_policies)) return error.InvalidReplay;
         const body = request.encodeText(a, .{
             .content = description.content,
             .schema = switch (description.response_mode) {
@@ -149,6 +150,10 @@ pub const Adapter = struct {
             result.reason = "Captured schema is invalid";
             return result;
         };
+        if (!@import("../../domain/model_text_field.zig").validSchema(schema.root(), description.field_policies)) {
+            result.reason = "Captured schema and native field policies disagree";
+            return result;
+        }
         if (try @import("../../domain/model_text_wire.zig").checkValue(a, document.parsed.value, schema.root(), description.original_sources)) |_| {
             result.json = .invalid;
             result.reason = "EmbeddedInsertionSyntax";

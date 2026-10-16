@@ -22,7 +22,6 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
         try selected.append(scratch, projection.exactCandidate(token));
     };
     const payload = .{
-        .text_fields = @import("text_field_policy.zig").referencePolicies(.extraction),
         .source_id = chunk.chunk.source_id,
         .block_id = chunk.chunk.block_id,
         .source_lines = try @import("source_selections.zig").project(scratch, inputs, scope),
@@ -34,7 +33,10 @@ pub fn extractionPacket(allocator: std.mem.Allocator, inputs: evidence.Inputs, r
     defer packets.release(packet);
     const witnessed = try packets.withOriginalSources(allocator, packet, inputs);
     defer packets.release(witnessed);
-    return withTextChoices(allocator, witnessed, try passiveIds(scratch, payload.passive_literals), &.{});
+    const policies = @import("model_candidate_json.zig").fieldBindings(@import("reference_extraction_parser.zig").Response, scratch, .{ .reference_phase = .extraction }) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceExtraction;
+    const bound = try packets.withFieldPolicies(allocator, witnessed, policies);
+    defer packets.release(bound);
+    return withTextChoices(allocator, bound, try passiveIds(scratch, payload.passive_literals), &.{});
 }
 
 pub fn reconciliationPacket(allocator: std.mem.Allocator, input: reconciliation.Input, inputs: evidence.Inputs, registry: literals.Registry, guidance_scope: Constraint.Scope) ReconciliationError!*packets.Packet {
@@ -72,7 +74,6 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     for (input.items, scopes) |item, *scope| scope.* = .{ .state_id = inputs.corpus.state_id, .chunk_id = item.claim.chunk_id };
     const projected = try projection.project(scratch, input.items);
     const common = .{
-        .text_fields = @import("text_field_policy.zig").referencePolicies(.reconciliation),
         .claims = projected.claims,
         .citations = projected.citations,
         .preserved_tokens = projected.preserved_tokens,
@@ -87,7 +88,6 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     };
     const body = if (presentation == .shared) shared: {
         const payload = .{
-            .text_fields = common.text_fields,
             .purpose = hierarchy.purpose,
             .level = hierarchy.level,
             .member_claim_ids = hierarchy.member_claim_ids,
@@ -106,10 +106,20 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     defer packets.release(packet);
     const witnessed = try packets.withOriginalSources(allocator, packet, inputs);
     defer packets.release(witnessed);
-    const summary_context = if (input.purpose == .summary)
-        try packets.withContext([]const u8, allocator, witnessed, "summary_purpose", summary_purpose)
+    const codec = @import("model_candidate_json.zig");
+    const policies = (if (presentation == .composed) switch (presentation.composed.assignment) {
+        .summary => codec.fieldBindings(@import("reference_reconciliation_projection.zig").SemanticSummary, scratch, .{ .reference_phase = .reconciliation }),
+        inline else => |tag| codec.selectedFieldBindings(@import("reference_reconciliation_stage.zig").Response, scratch, @field(@import("reference_reconciliation_stage.zig").Stage, @tagName(tag)), .{ .reference_phase = .reconciliation }),
+    } else if (input.purpose == .summary)
+        codec.fieldBindings(@import("reference_reconciliation_projection.zig").SemanticSummary, scratch, .{ .reference_phase = .reconciliation })
     else
-        try packets.retain(witnessed);
+        codec.fieldBindings(reconciliation.Proposal, scratch, .{ .reference_phase = .reconciliation })) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidReferenceReconciliation;
+    const bound = try packets.withFieldPolicies(allocator, witnessed, policies);
+    defer packets.release(bound);
+    const summary_context = if (input.purpose == .summary)
+        try packets.withContext([]const u8, allocator, bound, "summary_purpose", summary_purpose)
+    else
+        try packets.retain(bound);
     defer packets.release(summary_context);
     const selected = try withTextChoices(allocator, summary_context, try passiveIds(scratch, common.passive_literals), &.{});
     if (presentation == .shared) return selected;

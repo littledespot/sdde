@@ -32,6 +32,7 @@ pub const Decision = enum {
     }
 };
 pub const Canonical = struct {
+    pub const model_field_projection = Value;
     pub const model_prose = .{ .question = @import("text_field_policy.zig").Field.clarification_question };
     loss: loss = .{ .unlocalized = .{} },
     preservation: ?@import("source_omission.zig").comparisons.Evidence = null,
@@ -49,7 +50,12 @@ pub fn fixedClaims(required: evidence.Requirements) ?[]const r.ClaimId {
 }
 
 const Positive = struct { source_ids: []const SourceId, detail: []const u8 };
-const Question = struct { source_ids: []const SourceId, detail: []const u8, question: []const u8 };
+const Question = struct {
+    pub const model_prose = .{ .question = @import("text_field_policy.zig").Field.clarification_question };
+    source_ids: []const SourceId,
+    detail: []const u8,
+    question: []const u8,
+};
 const Explanation = struct { source_ids: []const SourceId, detail: []const u8 };
 const Omission = struct { source_ids: []const SourceId, detail: []const u8, missing_obligation: []const u8 };
 const Invalid = struct { source_ids: []const SourceId, detail: []const u8, authority_gap: ?a.AuthorityGap };

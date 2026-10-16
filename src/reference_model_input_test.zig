@@ -826,7 +826,7 @@ test "reconciliation phase recreation retains native source exceptions through r
             try std.testing.expectEqualDeep(original.id, retained.source_id);
             try std.testing.expectEqualStrings(original.bytes, retained.bytes);
         }
-        const selected = try schema.restrict(a, resource.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+        const selected = try schema.restrictFieldPolicies(a, resource.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices(), packet.fieldPolicies());
         defer selected.release();
         const response: stage.Response = if (prior == .signals)
             .{ .signals = .{ .signals = &.{.{ .claim_ids = &.{dispositions[2].claim_id}, .content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "MOCK Retain help describing " ++ encoded ++ "." } }} } } } }} } }
@@ -835,7 +835,7 @@ test "reconciliation phase recreation retains native source exceptions through r
         const bytes = try json.encodeSelected(stage.Response, a, response);
         for ([_]bool{ true, false }) |retain_source| {
             var invoked: Invocation = undefined;
-            try invoked.initWithProseFields(selected.selected().modelBytes(), if (retain_source) packet.originalSources() else &.{}, packet.proseFields());
+            try invoked.initWithFieldPolicies(selected.selected().modelBytes(), if (retain_source) packet.originalSources() else &.{}, packet.proseFields(), packet.fieldPolicies());
             defer invoked.deinit();
             invoked.fake.invocation_plan = .{ .complete = .{ .content = bytes, .input_tokens = 5, .output_tokens = 3 } };
             var observed = try invoked.response();

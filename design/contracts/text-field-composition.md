@@ -35,20 +35,23 @@ normal lineage and semantic checks, without satisfying behavioral coverage.
 
 ## Phase 1A.2 amendment — exact copies only where they can carry an obligation
 
-**Approved 16 October 2026; implementation pending.** Authority: the user's explicit
+**Approved and implemented offline, 16 October 2026.** Authority: the user's explicit
 approval of [FIX04 Phase 1A.2](../../fixes/FIX04.md#phase-1a2--make-model-facing-presentation-consistent-with-admission)
 decision 1, following the live evidence in
 [FIX04 F11](../../fixes/FIX04.md#f11--high-admission-now-stops-the-defect-but-generation-cannot-recover-from-it).
-Until Phase 1A.2 is implemented, the engine applies the earlier incidental role;
-this section is the accepted target, not a description of current enforcement.
+The native registry now enforces this amendment; separately approved live diagnostics
+remain required before closing Phase 1A.2's exit gate.
 
 - **Role change.** In the descriptive fields of the inventory's second row (brief
   title and goal, entity-applicability basis, entity meaning and each relationship,
   assumption, clarification question), the exact-copy role changes from incidental
   to **prohibited**. Prose remains required. Passive and source roles are unchanged.
 - **Presentation follows the role.** These fields' projected schemas, guidance and
-  offered choices contain no exact-copy insertion, so constrained decoding itself
-  requires prose in them. A literal the model types there is ordinary prose: it
+  offered choices contain no exact-copy insertion. Passive references remain
+  permitted, so the native prose-presence check still applies. Where the selected
+  contract permits no insertion kind, its schema offers only literal text forms;
+  native admission still checks that prose is nonblank.
+  A literal the model types there is ordinary prose: it
   creates no occurrence, lineage or coverage, and display equality never supplies one.
 - **Admission and readback.** Admission, protocol correction, every repair route and
   stored readback reject an exact-copy insertion in these fields as a prohibited
@@ -60,6 +63,16 @@ this section is the accepted target, not a description of current enforcement.
   requirement, which schemas still cannot express.
 - **Entity names keep the identity-label exception** and an incidental exact-copy
   role; after this amendment they are the only field with that role.
+
+Native wire-type declarations bind each returned text leaf to the registry. The
+shared schema owner projects its permitted insertion alternatives for initial
+requests, protocol corrections and repairs. Guidance lists only leaves present in
+the actual selected schema, including clarification questions when that schema
+permits a clarification response. It identifies the fields that may use each
+insertion kind; exact-copy catalogues and token-only source-group choices are
+offered only when a returned field can use them. Original source evidence remains
+available under its separate evidence contract. Model-visible projection does not
+change the immutable native packet used for assignment and retention checks.
 
 The previous whole-field raw-literal-to-`exact_copy` coverage reconstruction
 cannot produce valid prose in an obligation-bearing field and is removed.
@@ -105,6 +118,12 @@ User answers retain their separate input contract.
 
 ## Unchanged repair and reporting
 
+Composition repairs present the canonical rendered defect and its registry rule.
+They omit the rejected wire value and raw containing candidate from model-visible
+context. Exact old-value, revision and dependency witnesses remain native for
+compare-and-swap. Repairs with other diagnostic kinds keep their structured
+presentation; every replacement uses the same per-field schema projection.
+
 After exact active-permit, old-value, revision and dependency checks, canonical
 replacement equality identifies no progress for that same defect key. The shared
 comparison joins adjacent prose fragments and applies that canonical text
@@ -133,7 +152,12 @@ does not prove that every later call was caused by it.
 The primary escape denominator is invoked native workflows, including recorded
 invocations that fail before their first model send. Missing audits remain
 unknown. The comparison scorer's dispatched generation-arm convention is
-unchanged; distinct producer origins provide a secondary admission diagnostic.
+unchanged; distinct observed producers provide a secondary admission diagnostic.
+Producer evidence is a closed model/native/unavailable union. Native summary reuse
+links to an earlier audited value and its validation digest; refreshed engine-owned
+questions retain validated clarification-state identity. Neither creates a model
+receipt. Complete audits containing native producers can report measured zero;
+missing model receipts and missing native parents remain unavailable.
 
 Offline tests cover the complete field inventory, legitimate in-sentence and
 identity insertions, source exceptions, wire syntax, all repair/readback paths,

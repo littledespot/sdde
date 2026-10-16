@@ -264,10 +264,10 @@ test "test.integration.baseline source-only native acquisition retains exact fir
         const claim: experiment.Claim = .{ .schema = .@"baseline-experiment-claim/v1", .experiment_sha256 = try frozen_inputs.experimentHash(a, frozen), .freeze_sha256 = freeze_sha256, .execution_id = "offline-partial-panel", .limits = gate.snapshot().limits, .phases = &.{.baseline} };
         try experiment.consume(std.testing.io, a, parent.dir, claim);
         try experiment.verify(std.testing.io, a, parent.dir, claim);
-        const report: acquisition.Report = .{ .schema = .@"baseline-acquisition/v2", .freeze_sha256 = freeze_sha256, .build = frozen.build, .toolchain = frozen.toolchain, .execution_id = "offline-partial-panel", .experiment_claim = claim, .budget = gate.snapshot(), .allowance = try experiment.remaining(a, claim.phases, gate.snapshot()), .records = records, .complete = false };
-        const unversioned = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "\"schema\":\"baseline-acquisition/v2\",", "");
+        const report: acquisition.Report = .{ .schema = .@"baseline-acquisition/v3", .freeze_sha256 = freeze_sha256, .build = frozen.build, .toolchain = frozen.toolchain, .execution_id = "offline-partial-panel", .experiment_claim = claim, .budget = gate.snapshot(), .allowance = try experiment.remaining(a, claim.phases, gate.snapshot()), .records = records, .complete = false };
+        const unversioned = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "\"schema\":\"baseline-acquisition/v3\",", "");
         try std.testing.expectError(error.InvalidJsonDocument, acquisition.decode(a, unversioned, frozen, freeze_sha256));
-        const old_version = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "baseline-acquisition/v2", "baseline-acquisition/v1");
+        const old_version = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, report, .{}), "baseline-acquisition/v3", "baseline-acquisition/v2");
         try std.testing.expectError(error.InvalidJsonDocument, acquisition.decode(a, old_version, frozen, freeze_sha256));
         _ = try acquisition.decode(a, try std.json.Stringify.valueAlloc(a, report, .{}), frozen, freeze_sha256);
         // Rehashing a changed receipt cannot make it match native evidence.

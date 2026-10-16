@@ -40,6 +40,8 @@ pub const Field = enum {
     reconciliation_conflict,
 };
 pub const Role = enum { prohibited, incidental, obligation_bearing };
+pub const Insertion = enum { exact_copy, passive, source };
+pub const Insertions = std.EnumSet(Insertion);
 pub const Policy = struct {
     field: Field,
     prose: enum { required, optional },
@@ -54,7 +56,8 @@ pub fn get(field: Field) Policy {
     const exact_role: Role = switch (field) {
         .extraction_business, .extraction_design, .extraction_technical, .extraction_validation, .extraction_implementation_assumption, .extraction_open_question, .extraction_scope_guard, .extraction_reason, .reconciliation_business, .reconciliation_design, .reconciliation_technical, .reconciliation_validation, .reconciliation_implementation_assumption, .reconciliation_open_question, .reconciliation_scope_guard, .reconciliation_conflict => .prohibited,
         .spec_description, .spec_story, .ac_given, .ac_when, .ac_then, .visible_outcome, .edge_condition, .edge_outcome, .functional_requirement, .business_rule, .non_goal, .prohibited_behavior => .obligation_bearing,
-        .spec_title, .spec_goal, .spec_entity_basis, .clarification_question, .assumption, .entity_name, .entity_meaning, .entity_relationship => .incidental,
+        .spec_title, .spec_goal, .spec_entity_basis, .clarification_question, .assumption, .entity_meaning, .entity_relationship => .prohibited,
+        .entity_name => .incidental,
     };
     const source_role: Role = switch (field) {
         .extraction_design, .extraction_technical, .extraction_validation, .extraction_implementation_assumption, .extraction_open_question, .extraction_reason, .reconciliation_design, .reconciliation_technical, .reconciliation_validation, .reconciliation_implementation_assumption, .reconciliation_open_question, .reconciliation_conflict => .incidental,
@@ -76,15 +79,43 @@ pub const ReferencePhase = enum { extraction, reconciliation };
 pub fn referenceField(comptime phase: ReferencePhase, comptime name: []const u8) Field {
     return @field(Field, @tagName(phase) ++ "_" ++ name);
 }
-/// Presentation is a projection of the same closed inventory as validation.
-pub fn referencePolicies(comptime phase: ReferencePhase) [8]Policy {
-    var result: [8]Policy = undefined;
-    inline for (.{ "business", "design", "technical", "validation", "implementation_assumption", "open_question", "scope_guard" }, 0..) |name, index| result[index] = get(referenceField(phase, name));
-    result[7] = get(if (phase == .extraction) .extraction_reason else .reconciliation_conflict);
-    return result;
-}
 pub fn referenceOnlyExplanation(field: Field) []const u8 {
     return get(field).explanation;
+}
+pub const Guidance = struct { field: Field, prose_required: bool, instruction: []const u8, exact_copy: Role, passive: Role, source: Role };
+pub fn guidance(field: Field) Guidance {
+    const policy = get(field);
+    return .{ .field = field, .prose_required = policy.prose == .required, .instruction = if (policy.prose == .optional)
+        "Supply the identity label using only forms permitted by the selected response schema."
+    else
+        "Write nonblank prose for this field's declared meaning or behavior. Any insertion must be permitted by the selected response schema.", .exact_copy = policy.exact_copy, .passive = policy.passive, .source = policy.source };
+}
+/// Presentation may offer only alternatives in the exact selected wire leaf.
+/// Native admission and exact-copy coverage continue to use get(), unchanged.
+pub fn selectedGuidance(field: Field, offered: Insertions) Guidance {
+    const policy = get(field);
+    var result = guidance(field);
+    if (!offered.contains(.exact_copy)) result.exact_copy = .prohibited;
+    if (!offered.contains(.passive)) result.passive = .prohibited;
+    if (!offered.contains(.source)) result.source = .prohibited;
+    const insertions_available = result.exact_copy != .prohibited or result.passive != .prohibited or result.source != .prohibited;
+    result.instruction = if (!insertions_available)
+        (if (policy.prose == .optional) "Write the identity label as plain text." else "Write nonblank prose for this field's declared meaning or behavior as plain text.")
+    else if (result.exact_copy == .obligation_bearing)
+        "Write nonblank prose describing the behavior or constraint. Exact copies may carry its exact-value obligation inside that prose; use only insertion alternatives listed for this field."
+    else if (policy.prose == .optional)
+        "Supply the identity label using only insertion alternatives listed for this field or plain text. Its occurrence does not satisfy a behavioral exact-copy obligation."
+    else
+        "Write nonblank prose for this field's declared meaning or behavior. Only insertion alternatives listed for this field may supplement that prose.";
+    return result;
+}
+pub fn permits(field: Field, kind: Insertion) bool {
+    const policy = get(field);
+    return switch (kind) {
+        .exact_copy => policy.exact_copy,
+        .passive => policy.passive,
+        .source => policy.source,
+    } != .prohibited;
 }
 
 test "closed composition inventory has one justified identity exception and distinct coverage roles" {
@@ -103,8 +134,8 @@ test "closed composition inventory has one justified identity exception and dist
     try std.testing.expectEqual(@as(usize, 1), exceptions);
     try std.testing.expectEqual(.prohibited, get(.extraction_business).exact_copy);
     try std.testing.expectEqual(.obligation_bearing, get(.functional_requirement).exact_copy);
-    try std.testing.expectEqual(.incidental, get(.spec_title).exact_copy);
-    try std.testing.expectEqual(.incidental, get(.clarification_question).exact_copy);
+    try std.testing.expectEqual(.prohibited, get(.spec_title).exact_copy);
+    try std.testing.expectEqual(.prohibited, get(.clarification_question).exact_copy);
     try std.testing.expectEqual(.prohibited, get(.extraction_business).source);
     try std.testing.expectEqual(.prohibited, get(.reconciliation_scope_guard).source);
     try std.testing.expectEqual(.incidental, get(.extraction_design).source);

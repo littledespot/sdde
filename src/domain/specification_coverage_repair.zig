@@ -271,10 +271,14 @@ pub fn omissionPacket(a: std.mem.Allocator, current: sessions.Session, context: 
         break :narrow try sessions.withSelectionChoices(a, contextual, context, .{ .claim_ids = allowed.?, .clarification_response_ids = value.provenance.clarification_response_ids });
     } else try packets.withExcludedVariants(a, contextual, contextual.excludedVariants());
     defer packets.release(narrowed);
+    const text_field: ?@import("text_field_policy.zig").Field = switch (authorization.target.part) {
+        .record => null,
+        .value => |value| if (value.subject == .record) try candidates.recordTextField(current.units[authorization.target.unit].?.response.content.records[value.subject.record].content, value.field) else try candidates.singletonTextField(value.subject),
+    };
     return atomic.packet(a, authorization, narrowed, .{ .bytes = definition }, current.units[authorization.target.unit].?.origins.at(switch (authorization.target.part) {
         .record => .unit,
         .value => |field| .{ .target = .{ .value = .{ .subject = field.subject, .field = field.field } } },
-    }));
+    }), .{ .presentation = .structured, .fields = .{ .replacement = .{ .inherited = text_field } } });
 }
 pub fn parseOmission(a: std.mem.Allocator, authorization: Authorization, input: *const @import("model_input_packet.zig").Packet, bytes: []const u8) Error!Replacement {
     if (authorization.rule != .omission) return error.InvalidSpecificationCoverageRepair;

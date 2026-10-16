@@ -232,7 +232,6 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         scopes.items;
     const source_groups = if (assigned != null and selected != .records) try binding.groupGuidance(a, @import("reference_support.zig").records(context.references), requirements.items) else &.{};
     const payload = .{
-        .text_fields = try fieldPolicies(a, selected, record_kinds.items),
         .source_assignment = assigned,
         .source_groups = source_groups,
         .context_requirements = contextual_requirements.items,
@@ -251,6 +250,20 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     const witnessed = try packets.withOriginalSources(allocator, result, context.inputs);
     packets.release(result);
     result = witnessed;
+    const model_fields = @import("model_candidate_json.zig").fieldBindings(g.ModelResponse, a, .{}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit;
+    const policies = try packets.withFieldPolicies(allocator, result, model_fields);
+    packets.release(result);
+    result = policies;
+    const presentation = @import("model_field_presentation.zig");
+    var omissions: std.ArrayList(presentation.Omission) = .empty;
+    try omissions.append(a, .{ .requires = .exact_copy, .path = &.{.{ .property = "preserved_tokens" }} });
+    for (source_groups, 0..) |group, group_index| if (try binding.tokenOnly(@import("reference_support.zig").records(context.references), group.signal_id)) {
+        const path = try a.dupe(presentation.BodyStep, &.{ .{ .property = "source_groups" }, .{ .index = std.math.cast(u32, group_index) orelse return error.InvalidSpecificationUnit } });
+        try omissions.append(a, .{ .requires = .exact_copy, .path = path });
+    };
+    const offered = try packets.withPresentationOmissions(allocator, result, omissions.items);
+    packets.release(result);
+    result = offered;
     if (options.task) |task| {
         const contextual = try packets.withContext([]const u8, allocator, result, "task", task);
         packets.release(result);
@@ -294,22 +307,6 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
     return withGroupChoices(allocator, choices, context, selected, current.record_cursor);
 }
 
-fn fieldPolicies(a: std.mem.Allocator, selected: g.Unit, record_kinds: []const g.spec.Kind) std.mem.Allocator.Error![]const @import("text_field_policy.zig").Policy {
-    const policy = @import("text_field_policy.zig");
-    var result: std.ArrayList(policy.Policy) = .empty;
-    errdefer result.deinit(a);
-    try result.append(a, policy.get(.clarification_question));
-    switch (selected) {
-        .brief => inline for (.{ policy.Field.spec_title, .spec_description, .spec_goal }) |field| try result.append(a, policy.get(field)),
-        .primary_user_story => try result.append(a, policy.get(.spec_story)),
-        .entities => try result.append(a, policy.get(.spec_entity_basis)),
-        .records => inline for (comptime std.meta.tags(g.spec.Kind)) |kind| {
-            if (std.mem.indexOfScalar(g.spec.Kind, record_kinds, kind) != null) inline for (std.meta.fields(@FieldType(g.spec.Content(g.spec.BusinessValue), @tagName(kind)))) |field| try result.append(a, policy.get(g.spec.textField(kind, field.name)));
-        },
-    }
-    return result.toOwnedSlice(a);
-}
-
 fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, context: p.Context, selected: g.Unit, cursor: usize) Error!*packets.Packet {
     var arena: std.heap.ArenaAllocator = .init(allocator);
     defer arena.deinit();
@@ -317,12 +314,25 @@ fn withGroupChoices(allocator: std.mem.Allocator, base: *const packets.Packet, c
     const records = @import("reference_support.zig").records(context.references);
     const positive = try binding.catalogue(a, records, .content);
     const questions = try binding.catalogue(a, records, .question);
+    const returned_fields = switch (selected) {
+        inline else => |_, tag| @import("model_candidate_json.zig").selectedFieldBindings(g.ModelResponse, a, @field(std.meta.Tag(g.ModelResponse), @tagName(tag)), .{}) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationUnit,
+    };
+    const permits_exact = for (returned_fields) |field| {
+        if (@import("text_field_policy.zig").permits(field.field, .exact_copy)) break true;
+    } else false;
     var question_ids: std.ArrayList(i64) = .empty;
     if (selected == .records) {
         try question_ids.append(a, (try binding.record(a, records, context.inputs, cursor)).records.signal.ordinal);
-    } else for (questions) |group| try question_ids.append(a, group.signal_id.ordinal);
-    const positive_ids = try a.alloc(i64, positive.len);
-    for (positive, positive_ids) |group, *id| id.* = group.signal_id.ordinal;
+    } else for (questions) |group| {
+        if (!permits_exact and try binding.tokenOnly(records, group.signal_id)) continue;
+        try question_ids.append(a, group.signal_id.ordinal);
+    }
+    var eligible_positive: std.ArrayList(i64) = .empty;
+    for (positive) |group| {
+        if (!permits_exact and try binding.tokenOnly(records, group.signal_id)) continue;
+        try eligible_positive.append(a, group.signal_id.ordinal);
+    }
+    const positive_ids = eligible_positive.items;
     var choices: std.ArrayList(@import("model_result_schema.zig").IntegerChoice) = .empty;
     try choices.append(a, .{ .target = .{ .path = &.{ .{ .property = "question" }, .{ .property = "signal_ids" } } }, .allowed = question_ids.items, .collection = .unique_subset });
     if (selected != .records and positive_ids.len != 0) switch (selected) {
@@ -400,7 +410,11 @@ fn narrowDisplayCatalogues(a: std.mem.Allocator, base: *const packets.Packet, pa
     defer packets.release(witnessed);
     const prose = try packets.withProseFields(a, witnessed, base.proseFields());
     defer packets.release(prose);
-    return packets.withRestrictions(a, prose, base.excludedVariants(), base.integerChoices());
+    const policies = try packets.withFieldPolicies(a, prose, base.fieldPolicies());
+    defer packets.release(policies);
+    const offered = try packets.withPresentationOmissions(a, policies, base.presentationOmissions());
+    defer packets.release(offered);
+    return packets.withRestrictions(a, offered, base.excludedVariants(), base.integerChoices());
 }
 
 pub fn append(current: Session, checked: g.Checked) Error!Session {

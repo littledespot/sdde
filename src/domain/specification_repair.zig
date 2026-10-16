@@ -220,6 +220,7 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
     if (kind == .record and unit != .records) return error.InvalidSpecificationRepair;
     var guidance_arena: std.heap.ArenaAllocator = .init(allocator);
     defer guidance_arena.deinit();
+    const options = try packetOptions(guidance_arena.allocator(), context, authorization);
     const task = repairTask(guidance_arena.allocator(), authorization) catch |err| return switch (err) {
         error.InvalidRequiredAuthority => error.InvalidSpecificationRepair,
         else => |other| other,
@@ -237,7 +238,7 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
             .membership => |membership| if (membership.disposition == .required) "repair_record_entity" else "repair_record_non_entity",
         },
     };
-    if (authorization.operation == .insert) return atomic.packet(allocator, authorization, base, .{ .bytes = definition }, authorization.dependencies.candidate.origins.initial);
+    if (authorization.operation == .insert) return atomic.packet(allocator, authorization, base, .{ .bytes = definition }, authorization.dependencies.candidate.origins.initial, options);
     // current_value already carries the whole selected record. Containing-field
     // context is needed only when a smaller value selection is writable.
     if (kind == .record or kind == .attributed) {
@@ -247,25 +248,51 @@ pub fn packet(allocator: std.mem.Allocator, current: session.Session, context: p
         else
             try packets.withExcludedVariants(allocator, base, base.excludedVariants());
         defer packets.release(narrowed);
-        return atomic.packet(allocator, authorization, narrowed, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }));
+        return atomic.packet(allocator, authorization, narrowed, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
     }
     if (kind == .value) {
         const value = try candidates.attributedValue(.model, authorization.dependencies.candidate.response, authorization.target.value.subject, authorization.target.value.field);
         // The rejected value is already in current_value; only its pinned
         // provenance is needed as containing-field context.
+        const identity = .{ .source_group_ids = value.source_group_ids, .provenance = value.provenance };
         const contextual = if (authorization.target.value.subject == .record)
-            try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try candidates.readContext(authorization.dependencies.candidate.response, authorization.target))
+            (if (options.presentation == .composition) try packets.withContext(@TypeOf(identity), allocator, base, "candidate", identity) else try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try candidates.readContext(authorization.dependencies.candidate.response, authorization.target)))
         else
             try packets.withContext(g.spec.Selection, allocator, base, "provenance", value.provenance);
         defer packets.release(contextual);
         const bound = authorization.rule.value_bound orelse return error.InvalidSpecificationRepair;
         const narrowed = try session.withSelectionChoices(allocator, contextual, context, .{ .claim_ids = bound.effective, .clarification_response_ids = value.provenance.clarification_response_ids });
         defer packets.release(narrowed);
-        return atomic.packet(allocator, authorization, narrowed, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }));
+        return atomic.packet(allocator, authorization, narrowed, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
     }
     const contextual = try packets.withContext(candidates.ReadContext, allocator, base, "candidate", try candidates.readContext(authorization.dependencies.candidate.response, authorization.target));
     defer packets.release(contextual);
-    return atomic.packet(allocator, authorization, contextual, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }));
+    return atomic.packet(allocator, authorization, contextual, .{ .bytes = definition }, authorization.dependencies.candidate.origins.at(.{ .target = authorization.target }), options);
+}
+
+fn packetOptions(a: std.mem.Allocator, context: p.Context, authorization: Authorization) Error!shared.PacketOptions {
+    const response = authorization.dependencies.candidate.response;
+    const field: ?@import("text_field_policy.zig").Field = switch (authorization.target) {
+        .value => |selected| if (selected.subject == .record) try candidates.recordTextField(response.content.records[selected.subject.record].content, selected.field) else try candidates.singletonTextField(selected.subject),
+        .attributed => |subject| try candidates.singletonTextField(subject),
+        .provenance, .record => null,
+    };
+    var options: shared.PacketOptions = .{ .presentation = .structured, .fields = .{ .replacement = .{ .inherited = field } } };
+    const issue = authorization.rule.text_issue orelse return options;
+    if (!shared.isCompositionIssue(issue)) return options;
+    if (authorization.operation != .replace) return error.InvalidSpecificationRepair;
+    const projection = @import("specification_projection.zig");
+    const rendered = switch (authorization.operation.replace) {
+        .value => |value| if (authorization.target.value.subject == .record)
+            (try projection.modelRecordScalar(a, context, response.content.records[authorization.target.value.subject.record], value)).bytes
+        else
+            (try projection.modelValue(a, context, try candidates.attributedValue(.model, response, authorization.target.value.subject, authorization.target.value.field))).bytes,
+        .attributed => |value| (try projection.modelValue(a, context, value)).bytes,
+        .record => |record| try std.json.Stringify.valueAlloc(a, try projection.modelRecord(a, context, record), .{}),
+        .provenance => return error.InvalidSpecificationRepair,
+    };
+    options.presentation = .{ .composition = .{ .rendered_text = rendered, .issue = issue } };
+    return options;
 }
 
 /// Present the engine-selected target without reviving an authoring assignment.

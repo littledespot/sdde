@@ -41,11 +41,26 @@ pub const Validation = union(enum) { valid: Checked, invalid: candidate.Issue };
 /// Initial authoring owns its supporting-group choice; repair remains value-only.
 pub const AuthoringValue = struct { value: spec.BusinessValue, signal_ids: []const @import("reference_reconciliation.zig").SignalId };
 pub const ModelResponse = union(enum) {
-    brief: struct { title: AuthoringValue, description: AuthoringValue, primary_goal: AuthoringValue },
+    pub const model_fields = .{ .primary_user_story = @import("text_field_policy.zig").Field.spec_story };
+    brief: struct {
+        pub const model_fields = .{ .title = @import("text_field_policy.zig").Field.spec_title, .description = @import("text_field_policy.zig").Field.spec_description, .primary_goal = @import("text_field_policy.zig").Field.spec_goal };
+        title: AuthoringValue,
+        description: AuthoringValue,
+        primary_goal: AuthoringValue,
+    },
     primary_user_story: AuthoringValue,
-    entities: struct { disposition: spec.Applicability, basis: AuthoringValue },
+    entities: struct {
+        pub const model_fields = .{ .basis = @import("text_field_policy.zig").Field.spec_entity_basis };
+        disposition: spec.Applicability,
+        basis: AuthoringValue,
+    },
     records: struct { records: []const spec.Wire.RecordProposal },
-    clarification: struct { reason: NeedReason, question: AuthoringValue, record_kind: ?spec.Kind = null },
+    clarification: struct {
+        pub const model_fields = .{ .question = @import("text_field_policy.zig").Field.clarification_question };
+        reason: NeedReason,
+        question: AuthoringValue,
+        record_kind: ?spec.Kind = null,
+    },
     inconclusive: Inconclusive,
 
     pub fn from(allocator: std.mem.Allocator, response: Response) std.mem.Allocator.Error!ModelResponse {

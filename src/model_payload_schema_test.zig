@@ -158,7 +158,9 @@ test "child requirements stay inside selected definitions parts and repair schem
     const repair_schema = generation.select(.{ .bytes = "attributed_value" }).?;
     for ([_]*const @import("domain/model_result_schema.zig").Schema{ selected, try plan.selectSchema(0, &.{}), repair_schema }) |schema| {
         var fixture: Fixture = undefined;
-        try fixture.initWithCompiledSchema(schema);
+        if (schema == repair_schema) {
+            try fixture.initWithCompiledFieldPolicies(schema, &.{.{ .field = .functional_requirement, .path = &.{.{ .property = "value" }} }});
+        } else try fixture.initWithCompiledSchema(schema);
         defer fixture.deinit();
         fixture.fake.invocation_plan.complete.content = "{\"foreign\":true}";
         var response = try fixture.response();
@@ -448,11 +450,19 @@ test "unrelated schemas retain one universal framing instruction across initial 
 }
 
 test "fake provider through decode and schema validation retains only existing candidate authority" {
-    try checkDocument(empty, .{ .bytes = "{}" });
+    {
+        var fixture: Fixture = undefined;
+        try fixture.initWithSchema(empty);
+        defer fixture.deinit();
+        try checkFixture(&fixture, .{ .bytes = "{}" });
+    }
     const schema =
         \\{"type":"object","properties":{"status":{"enum":["completed"]},"requestId":{"type":"string","maxLength":32},"values":{"type":"array","minItems":1,"maxItems":2,"items":{"type":"integer","minimum":1,"maximum":2}},"optional":{"type":"boolean"}},"required":["status","requestId","values"],"additionalProperties":false}
     ;
-    try checkDocument(schema, .{ .bytes = "{\"status\":\"completed\",\"requestId\":\"model-only\",\"values\":[1.0,2e0]}" });
+    var fixture: Fixture = undefined;
+    try fixture.initWithSchema(schema);
+    defer fixture.deinit();
+    try checkFixture(&fixture, .{ .bytes = "{\"status\":\"completed\",\"requestId\":\"model-only\",\"values\":[1.0,2e0]}" });
 }
 
 test "complete model payloads beyond former byte ceilings still use their exact schema" {
@@ -679,17 +689,61 @@ fn checkField(field: []const u8, cases: []const Case) !void {
 }
 
 pub fn checkDocument(contract: []const u8, case: Case) !void {
-    var fixture: Fixture = undefined;
-    try fixture.initWithSchema(contract);
-    defer fixture.deinit();
-    try checkFixture(&fixture, case);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    try checkCompiled(try compiler.compiler().compile(arena.allocator(), contract), case);
 }
 
 pub fn checkCompiled(contract: *const @import("domain/model_result_schema.zig").Schema, case: Case) !void {
-    var fixture: Fixture = undefined;
-    try fixture.initWithCompiledSchema(contract);
-    defer fixture.deinit();
-    try checkFixture(&fixture, case);
+    // These helpers test structural schema semantics. Native request admission
+    // separately requires the producer's explicit semantic field bindings.
+    var parsed = try @import("domain/model_envelope.zig").parseContent(std.testing.allocator, case.bytes, null);
+    defer parsed.deinit();
+    const result = validation.validateValue(@import("domain/model_envelope.zig").value(&parsed.parsed.value), contract.root());
+    if (case.rejection) |reason| {
+        try std.testing.expect(result != null);
+        try std.testing.expectEqual(reason, result.?.reason);
+        if (case.path) |path| {
+            const description = try result.?.describe(std.testing.allocator);
+            defer std.testing.allocator.free(description.path);
+            try std.testing.expectEqualStrings(path, description.path);
+        }
+    } else try std.testing.expect(result == null);
+}
+
+test "provider schema rejection proofs and protocol corrections retain every diagnostic kind" {
+    const ProtocolCase = struct { field: []const u8, value: []const u8, rejection: ?validation.Rejection = null, path: []const u8 = "/value" };
+    for ([_]ProtocolCase{
+        .{ .field = text, .value = "\"ok\"" },
+        .{ .field = text, .value = "0", .rejection = .type_mismatch },
+        .{ .field = text, .value = "\"long\"", .rejection = .string_length },
+        .{ .field = "{\"type\":\"integer\",\"minimum\":1,\"maximum\":2}", .value = "3", .rejection = .integer_range },
+        .{ .field = "{\"type\":\"array\",\"minItems\":1,\"maxItems\":2,\"items\":{\"type\":\"boolean\"}}", .value = "[]", .rejection = .array_length },
+        .{ .field = "{\"const\":1}", .value = "2", .rejection = .constant_mismatch },
+        .{ .field = "{\"enum\":[\"yes\",\"no\"]}", .value = "\"other\"", .rejection = .enum_mismatch },
+        .{ .field = variants, .value = "{\"kind\":\"other\"}", .rejection = .unknown_variant, .path = "/value/kind" },
+        .{ .field = variants, .value = "{\"kind\":0}", .rejection = .type_mismatch, .path = "/value/kind" },
+    }) |case| {
+        const contract = try std.fmt.allocPrint(std.testing.allocator, "{{\"type\":\"object\",\"properties\":{{\"value\":{s}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{case.field});
+        defer std.testing.allocator.free(contract);
+        const bytes = try std.fmt.allocPrint(std.testing.allocator, "{{\"value\":{s}}}", .{case.value});
+        defer std.testing.allocator.free(bytes);
+        var fixture: Fixture = undefined;
+        try fixture.initWithSchema(contract);
+        defer fixture.deinit();
+        try checkFixture(&fixture, .{ .bytes = bytes, .rejection = case.rejection, .path = case.path });
+    }
+    const contract = "{\"type\":\"object\",\"properties\":{\"value\":{\"type\":\"boolean\"}},\"required\":[\"value\"],\"additionalProperties\":false}";
+    for ([_]Case{
+        .{ .bytes = "{}", .rejection = .missing_required_property, .path = "/value" },
+        .{ .bytes = "{\"value\":true,\"extra\":false}", .rejection = .unknown_property, .path = "/extra" },
+    }) |case| {
+        var fixture: Fixture = undefined;
+        try fixture.initWithSchema(contract);
+        defer fixture.deinit();
+        try checkFixture(&fixture, case);
+    }
 }
 
 fn checkFixture(fixture: *Fixture, case: Case) !void {

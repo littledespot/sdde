@@ -450,3 +450,70 @@ test "native repair digests keep numeric array wire shape for UTF8 and binary by
 fn identityNormalize(a: std.mem.Allocator, bytes: []const u8, _: usize) @import("ports/unicode_normalizer.zig").Error![]u8 {
     return a.dupe(u8, bytes);
 }
+
+test "composition repair presentation hides rejected wire while retaining native CAS and selected field metadata" {
+    const atomic = @import("domain/atomic_repair.zig");
+    const typed = @import("domain/typed_text.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    const Replacement = union(enum) { value: typed.BusinessText };
+    const Rule = struct { observed: Replacement, diagnostic: []const u8 };
+    const Contract = atomic.Contract(enum { subject }, Replacement, struct { source: u32 }, Rule);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const expected: Replacement = .{ .value = .{ .segments = &.{.{ .exact_copy = .{ .claim_id = .{ .ordinal = 7 } } }} } };
+    const owner: @import("domain/model_request_identity.zig").ImmutableUnitOwnerId = .{ .reference_global = .{ .reference_state_id = .{ .bytes = "source" }, .unit_slot_id = .{ .bytes = "subject" } } };
+    var authorization = try Contract.authorize(a, owner, 1, .subject, expected, .{ .source = 3 }, .{ .observed = expected, .diagnostic = "RAW_RULE_MUST_STAY_NATIVE" });
+    authorization.retry = try atomic.permit(enum { subject }, enum { composition }, a, owner, .subject, .composition, authorization.id, 1, 1);
+    const before = try atomic.snapshot(Contract.Authorization, a, authorization);
+    const raw = try packets.create(a, "{\"catalogue\":[7],\"source\":\"Native source evidence.\"}", owner, .initial_generation, .{ .bytes = "initial" });
+    const witnessed = try packets.withOriginalSourceTexts(a, raw, &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = "Native source evidence." }});
+    const stale_fields = try packets.withFieldPolicies(a, witnessed, &.{.{ .field = .entity_name, .path = &.{.{ .property = "old_field" }} }});
+    const base = try packets.withPresentationOmissions(a, stale_fields, &.{.{ .requires = .exact_copy, .path = &.{.{ .property = "catalogue" }} }});
+    defer packets.release(base);
+    defer packets.release(stale_fields);
+    defer packets.release(witnessed);
+    defer packets.release(raw);
+    for ([_]@FieldType(typed.Issue, "reason"){ .reference_only, .prohibited_exact, .prohibited_passive, .prohibited_source, .embedded_insertion_syntax }) |reason| {
+        const issue: typed.Issue = .{ .reason = reason, .field = .spec_title, .first_node = 0, .last_node = 0, .rejected_exact = .{ .claim_id = .{ .ordinal = 7 } } };
+        const request = try Contract.packet(std.testing.allocator, authorization, base, .{ .bytes = "replacement" }, null, .{ .presentation = .{ .composition = .{ .rendered_text = "The original business value.", .issue = issue } }, .fields = .{ .replacement = .{ .inherited = .spec_title } } });
+        defer packets.release(request);
+        const body = (try std.json.parseFromSlice(std.json.Value, a, request.body(), .{})).value;
+        const repair = body.object.get("repair").?.object;
+        try std.testing.expect(!repair.contains("current_value"));
+        const rule = repair.get("rule").?.object;
+        try std.testing.expectEqualStrings("The original business value.", rule.get("rendered_text").?.string);
+        try std.testing.expect(!rule.contains("observed"));
+        try std.testing.expect(!rule.get("issue").?.object.contains("rejected_exact"));
+        try std.testing.expect(std.mem.indexOf(u8, request.body(), "RAW_RULE_MUST_STAY_NATIVE") == null);
+        try std.testing.expectEqualDeep(authorization.retry, request.repairPermit());
+        try std.testing.expectEqualDeep(base.originalSources(), request.originalSources());
+        try std.testing.expectEqual(@as(usize, 1), request.fieldPolicies().len);
+        try std.testing.expectEqual(.spec_title, request.fieldPolicies()[0].field);
+        try std.testing.expectEqualStrings("segments", request.fieldPolicies()[0].path[0].property);
+        try std.testing.expectEqual(@as(usize, 1), request.presentationOmissions().len);
+        try std.testing.expectEqualStrings("input", request.presentationOmissions()[0].path[0].property);
+        try std.testing.expectEqualStrings("catalogue", request.presentationOmissions()[0].path[1].property);
+        try std.testing.expectEqualDeep(before, try atomic.snapshot(Contract.Authorization, a, authorization));
+        const canonical: typed.CanonicalText = .{ .normalizer = .{ .normalize_fn = identityNormalize }, .original_sources = &.{} };
+        const same = try Contract.checkMerge(a, canonical, owner, 1, expected, .{ .source = 3 }, authorization, expected, null);
+        try std.testing.expect(!same.changed);
+        const changed: Replacement = .{ .value = .{ .segments = &.{.{ .literal = .{ .value = "A corrected business value." } }} } };
+        try std.testing.expect((try Contract.checkMerge(a, canonical, owner, 1, expected, .{ .source = 3 }, authorization, changed, null)).changed);
+        try std.testing.expectError(error.InvalidAtomicRepair, Contract.checkMerge(a, canonical, owner, 1, changed, .{ .source = 3 }, authorization, changed, null));
+    }
+    const structured = try Contract.packet(a, authorization, base, .{ .bytes = "replacement" }, null, .{ .presentation = .structured, .fields = .{ .replacement = .{ .inherited = .spec_title } } });
+    defer packets.release(structured);
+    const body = (try std.json.parseFromSlice(std.json.Value, a, structured.body(), .{})).value;
+    try std.testing.expect(body.object.get("repair").?.object.contains("current_value"));
+    const issue: typed.Issue = .{ .reason = .reference_only, .field = .spec_story, .first_node = 0, .last_node = 0 };
+    try std.testing.expectError(error.InvalidAtomicRepair, Contract.packet(a, authorization, base, .{ .bytes = "replacement" }, null, .{ .presentation = .{ .composition = .{ .rendered_text = "Source value.", .issue = issue } }, .fields = .{ .replacement = .{ .inherited = .spec_title } } }));
+    try std.testing.expectError(error.InvalidAtomicRepair, Contract.packet(a, authorization, base, .{ .bytes = "replacement" }, null, .{ .presentation = .structured, .fields = .{ .replacement = .{} } }));
+    const selected = try @import("domain/model_candidate_json.zig").selectedFieldBindings(Replacement, a, .value, .{ .inherited = .spec_title });
+    const selected_request = try Contract.packet(std.testing.allocator, authorization, base, .{ .bytes = "replacement" }, null, .{ .presentation = .structured, .fields = .{ .selected = selected } });
+    defer packets.release(selected_request);
+    try std.testing.expectEqualDeep(selected, selected_request.fieldPolicies());
+    try std.testing.expect(selected.ptr != selected_request.fieldPolicies().ptr);
+    const duplicate = [_]@import("domain/model_text_field.zig").Binding{ selected[0], selected[0] };
+    try std.testing.expectError(error.InvalidAtomicRepair, Contract.packet(a, authorization, base, .{ .bytes = "replacement" }, null, .{ .presentation = .structured, .fields = .{ .selected = &duplicate } }));
+}

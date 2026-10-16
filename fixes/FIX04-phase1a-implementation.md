@@ -1,5 +1,9 @@
 # FIX04 Phase 1A implementation — 16 October 2026
 
+This records Phase 1A's original validation. Its subsequent presentation, native
+producer and format changes are recorded in
+[Phase 1A.2](FIX04-phase1a2-implementation.md); the counts below remain historical.
+
 The explicit implementation instruction settles the four policy decisions in
 [the accepted composition contract](../design/contracts/text-field-composition.md).
 It amends §§7.1, 17.3, 22 and ADR 0020 without changing the overall Proposed

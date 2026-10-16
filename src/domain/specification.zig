@@ -113,9 +113,18 @@ pub fn Values(comptime boundary: Boundary) type {
         const Self = @This();
         pub const Evidence = if (boundary == .model) Selection else Provenance;
         pub const AttributedValue = struct { value: BusinessValue, source_group_ids: []const @import("reference_reconciliation.zig").SignalId = &.{}, provenance: Evidence };
-        pub const Brief = struct { title: Self.AttributedValue, description: Self.AttributedValue, primary_goal: Self.AttributedValue };
+        pub const Brief = struct {
+            pub const model_fields = .{ .title = text.field_policy.Field.spec_title, .description = text.field_policy.Field.spec_description, .primary_goal = text.field_policy.Field.spec_goal };
+            title: Self.AttributedValue,
+            description: Self.AttributedValue,
+            primary_goal: Self.AttributedValue,
+        };
         pub const RecordProposal = struct { content: Content(BusinessValue), source_group_ids: []const @import("reference_reconciliation.zig").SignalId = &.{}, provenance: Evidence };
-        pub const ApplicabilityProposal = struct { disposition: Applicability, basis: Self.AttributedValue };
+        pub const ApplicabilityProposal = struct {
+            pub const model_fields = .{ .basis = text.field_policy.Field.spec_entity_basis };
+            disposition: Applicability,
+            basis: Self.AttributedValue,
+        };
     };
 }
 pub const Model = Values(.model);
@@ -133,33 +142,56 @@ pub const Brief = Values(.canonical).Brief;
 pub fn Content(comptime Value: type) type {
     if (Value != BusinessValue and Value != Scalar) @compileError("unsupported specification text boundary");
     return union(Kind) {
-        acceptance_criterion: struct { given: Value, when: Value, then: Value },
-        user_visible_outcome: struct { text: Value },
-        edge_case: struct { condition: Value, expected_outcome: Value },
-        functional_requirement: struct { text: Value },
-        business_rule: struct { text: Value },
-        assumption: struct { text: Value },
-        non_goal: struct { text: Value },
-        prohibited_behavior: struct { text: Value },
-        entity: struct { name: Value, business_meaning: Value, relationships: []const Value },
+        acceptance_criterion: struct {
+            pub const model_fields = .{ .given = text.field_policy.Field.ac_given, .when = text.field_policy.Field.ac_when, .then = text.field_policy.Field.ac_then };
+            given: Value,
+            when: Value,
+            then: Value,
+        },
+        user_visible_outcome: struct {
+            pub const model_fields = .{ .text = text.field_policy.Field.visible_outcome };
+            text: Value,
+        },
+        edge_case: struct {
+            pub const model_fields = .{ .condition = text.field_policy.Field.edge_condition, .expected_outcome = text.field_policy.Field.edge_outcome };
+            condition: Value,
+            expected_outcome: Value,
+        },
+        functional_requirement: struct {
+            pub const model_fields = .{ .text = text.field_policy.Field.functional_requirement };
+            text: Value,
+        },
+        business_rule: struct {
+            pub const model_fields = .{ .text = text.field_policy.Field.business_rule };
+            text: Value,
+        },
+        assumption: struct {
+            pub const model_fields = .{ .text = text.field_policy.Field.assumption };
+            text: Value,
+        },
+        non_goal: struct {
+            pub const model_fields = .{ .text = text.field_policy.Field.non_goal };
+            text: Value,
+        },
+        prohibited_behavior: struct {
+            pub const model_fields = .{ .text = text.field_policy.Field.prohibited_behavior };
+            text: Value,
+        },
+        entity: struct {
+            pub const model_fields = .{ .name = text.field_policy.Field.entity_name, .business_meaning = text.field_policy.Field.entity_meaning, .relationships = text.field_policy.Field.entity_relationship };
+            name: Value,
+            business_meaning: Value,
+            relationships: []const Value,
+        },
     };
 }
 
 /// The declared field shape owns its exhaustive composition-policy mapping.
 pub fn textField(comptime kind: Kind, comptime name: []const u8) text.field_policy.Field {
-    if (!@hasField(@FieldType(Content(BusinessValue), @tagName(kind)), name)) @compileError("unknown specification text field");
-    if (comptime kind != .acceptance_criterion and kind != .edge_case and kind != .entity and !std.mem.eql(u8, name, "text")) @compileError("undeclared singleton record text policy");
-    return switch (kind) {
-        .acceptance_criterion => @field(text.field_policy.Field, "ac_" ++ name),
-        .edge_case => if (comptime std.mem.eql(u8, name, "condition")) .edge_condition else if (comptime std.mem.eql(u8, name, "expected_outcome")) .edge_outcome else @compileError("undeclared edge text policy"),
-        .entity => if (comptime std.mem.eql(u8, name, "name")) .entity_name else if (comptime std.mem.eql(u8, name, "business_meaning")) .entity_meaning else if (comptime std.mem.eql(u8, name, "relationships")) .entity_relationship else @compileError("undeclared entity text policy"),
-        .user_visible_outcome => .visible_outcome,
-        .functional_requirement => .functional_requirement,
-        .business_rule => .business_rule,
-        .assumption => .assumption,
-        .non_goal => .non_goal,
-        .prohibited_behavior => .prohibited_behavior,
-    };
+    const Fields = @FieldType(Content(BusinessValue), @tagName(kind));
+    if (!@hasField(Fields, name)) @compileError("unknown specification text field");
+    if (!@hasField(@TypeOf(Fields.model_fields), name)) @compileError("undeclared specification text policy");
+    return @field(Fields.model_fields, name);
 }
 
 test "every declared specification text field has a closed composition policy" {

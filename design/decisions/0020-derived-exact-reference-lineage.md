@@ -15,7 +15,8 @@
 - **16 October 2026 Phase 1A.2 amendment authority:** explicit user approval of
   [FIX04 Phase 1A.2](../../fixes/FIX04.md#phase-1a2--make-model-facing-presentation-consistent-with-admission)
   decision 1, prohibiting exact-copy insertions in descriptive fields whose
-  occurrences cannot satisfy coverage. Implementation pending.
+  occurrences cannot satisfy coverage. Implemented offline, 16 October 2026;
+  separately approved live diagnostics remain required by FIX04 Phase 1A.2.
 
 ## Composition and coverage amendment — 16 October 2026
 

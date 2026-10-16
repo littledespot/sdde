@@ -11,6 +11,53 @@ const account = @import("actions/reference/validate_reference_extraction_account
 const text_fixture = @import("test_fixtures/reference_text.zig");
 const token_fixture = @import("test_fixtures/reference_tokens.zig");
 
+test "native extraction composition repair renders the defect without echoing response nodes and preserves CAS" {
+    const repair = @import("domain/reference_extraction_text_repair.zig");
+    const contexts = @import("domain/reference_extraction_context.zig");
+    const atomic = @import("domain/atomic_repair.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    for ([_][]const u8{ "Display the current UTC time. Consult requirements.md.\n", "Renew eligible loans. Consult requirements.md.\n" }) |source| inline for (.{ extraction.Kind.business, extraction.Kind.technical }) |kind| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var ids: fixture.IdSource = .{};
+        const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", source));
+        const context = try text_fixture.prepare(a, inputs);
+        defer context.deinit();
+        const available = try token_fixture.candidates(a, inputs);
+        const passive: extraction.text.PassiveReference = .{ .passive_literal_id = context.registry.records[0].id };
+        const bad: extraction.ProposalContent = @unionInit(extraction.ProposalContent, @tagName(kind), if (kind == .business)
+            extraction.text.BusinessText{ .segments = &.{.{ .passive = passive }} }
+        else
+            extraction.text.ReferenceSemanticText{ .nodes = &.{.{ .passive = passive }} });
+        const scope: evidence.Scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = inputs.chunks.entries[0].id };
+        const candidate: extraction.Parsed = .{ .entries = &.{.{ .scope = scope, .token_classifications = &.{}, .outcome = .{ .claims = &.{.{ .content = bad, .citations = &.{wholeChunk(inputs.chunks.entries[0])} }} } }} };
+        const rejection = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, candidate)).invalid;
+        try std.testing.expectEqual(.reference_only, rejection.issue.reason);
+        const facts = try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), candidate);
+        const authorization = try repair.authorize(a, facts, rejection);
+        const before = try atomic.snapshot(repair.Authorization, a, authorization);
+        const packet = try repair.packet(std.testing.allocator, facts, context.registry, text_fixture.safety.value(context.owner), available, authorization);
+        defer packets.release(packet);
+        const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+        const diagnostic = body.get("repair").?.object;
+        try std.testing.expect(!diagnostic.contains("current_value"));
+        const rule = diagnostic.get("rule").?.object;
+        try std.testing.expectEqualStrings(context.registry.records[0].value, rule.get("rendered_text").?.string);
+        try std.testing.expectEqual(@as(usize, 2), rule.get("field_rule").?.object.count());
+        try std.testing.expectEqual(rejection.issue.field.?, packet.fieldPolicies()[0].field);
+        try std.testing.expectEqualStrings(@tagName(rejection.issue.field.?), rule.get("field_rule").?.object.get("field").?.string);
+        try std.testing.expect(std.mem.indexOf(u8, packet.body(), "\"kind\":\"passive\"") == null);
+        try std.testing.expectEqualDeep(before, try atomic.snapshot(repair.Authorization, a, authorization));
+        const replacement: repair.Replacement = if (kind == .business) .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Preserve the source-backed obligation." } }} } } else .{ .reference = .{ .nodes = &.{.{ .literal = .{ .value = "Preserve the source-backed technical constraint." } }} } };
+        const merged = try repair.merge(a, try extraction.text.CanonicalText.fromInputs(a, text_fixture.normalizer, inputs), facts, authorization, replacement, null);
+        _ = (try text_fixture.validate_text.execute(a, context.registry, text_fixture.safety.value(context.owner), inputs, merged)).valid;
+        try std.testing.expectEqualDeep(candidate.entries[0].outcome.claims[0].citations, merged.entries[0].outcome.claims[0].citations);
+        const changed_facts = try contexts.textFacts(inputs, context.registry, text_fixture.safety.value(context.owner), merged);
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try extraction.text.CanonicalText.fromInputs(a, text_fixture.normalizer, inputs), changed_facts, authorization, replacement, null));
+    };
+}
+
 test "shared repair progress compares canonical prose while exact CAS and native insertions remain unchanged" {
     const atomic = @import("domain/atomic_repair.zig");
     const text = @import("domain/typed_text.zig");

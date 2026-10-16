@@ -546,26 +546,44 @@ include intentionally retired transport data and does not independently determin
 workflow completion. Rejected deltas create no applied-effect evidence. Each fresh
 invocation starts a new projection; earlier recovered errors remain historical.
 
-`admission_audit` records native admitted extraction, reconciliation, specification,
+`admission_audit` records admitted extraction, reconciliation, specification,
 source-review questions and source-validated clarification projections with their
-field policy, producer origin where available, canonical value and original
-source bytes. Clarification projections retain native clarification IDs and do
-not manufacture current producer origins for stored questions. It reruns the shared composition and source-aware wire-syntax checks;
-it supplies no semantic judgment or workflow authority. The baseline's primary
+native subject, field policy, canonical value and original source bytes. Its closed
+`Producer` distinguishes a model call, a proven native projection and unavailable
+provenance. A model producer retains its exact request/attempt origin and must join
+its physical receipt. A reused summary retains the native `carried_from` identity,
+validation digest and an exact earlier child-check link; an unknown model parent
+cannot be relabelled as native. Refreshed clarification questions retain their
+native clarification ID, state identity/revisions and state digest. That is the
+current source-aware native readback operation, not an invented historical model
+origin. Missing model origins, missing physical receipts and missing native parents
+remain explicitly unavailable.
+
+The audit reruns the shared composition and source-aware wire-syntax checks; it
+supplies no semantic judgment or workflow authority. The baseline's primary
 `admission_escape` rate uses `invoked_native_workloads`: workloads with a retained
 native report or physical receipt, including native failures before the first send.
 Never-invoked setup failures and budget-stopped trials are excluded and counted
-separately. Missing audits on invoked workloads count as unknown; measured and
-unknown coverage stay explicit; missing producer attribution remains unavailable.
-This diagnostic denominator is separate from the
-comparison scorecard's dispatched-arm convention. Distinct admitted producer origins
-provide a separate secondary diagnostic; repeated retained or assembled views do not
-inflate it. An absent or incomplete audit remains unavailable, separately from a
-measured zero. Its downstream sends and native
-actual usage cover exchanges after the first observed escaped admission in the
-workflow: chronological exposure, not causal cost. Unknown usage stays unknown.
-The baseline scorer verifies these facts independently of assessor labels and keeps
-`representation_admission` failure attribution separate from native paid-resource stages.
+separately. Missing or incomplete audits on invoked workloads count as unknown;
+measured and unknown coverage stay explicit. Known native projections can support
+measured zero without manufacturing model calls. This diagnostic denominator is
+separate from the comparison scorecard's dispatched-arm convention.
+
+The secondary `distinct_observed_producers` diagnostic counts known model origins
+and native projection identities. Repeated retained or assembled observations of
+the same subject/value/producer do not inflate it. Downstream sends and actual usage
+cover exchanges after the first observed escaped admission in the workflow:
+chronological exposure, not causal cost. Unknown usage stays unknown. The baseline
+scorer verifies these facts independently of assessor labels and keeps
+`representation_admission` failure attribution separate from native paid-resource
+stages.
+
+The current closed report formats are `spec-e2e-report/v3`,
+`baseline-acquisition/v3` and `baseline-score/v3`. Step events remain
+`e2e-step-event/v2`; evaluator packets remain `baseline-assessment-inputs/v2` and
+assessor documents retain numeric schema `2`. The compatibility report's outer
+format remains `provider-compatibility-report/v1`. Earlier captures remain immutable
+historical evidence; current readers reject superseded report versions and fields.
 
 ### Reliability assessment
 

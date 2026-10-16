@@ -221,8 +221,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .reference => |reference| reference != .signal,
                 .source_preservation, .collection, .entity_applicability => true,
             };
-            const policy = @import("text_field_policy.zig");
-            const payload = .{ .text_fields = if (inputs.projection == .source_preservation) null else @as(?[]const policy.Policy, &.{policy.get(.clarification_question)}), .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(subject), .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
+            const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(subject), .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
             const encoded = try @import("model_candidate_json.zig").encode(@TypeOf(payload), scratch, payload);
             var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
             packets.omitAbsent(&projected_input);
@@ -270,7 +269,23 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .{ .field = .clarification_question, .path = &.{.{ .property = "question" }} },
                 .{ .field = .clarification_question, .path = &.{ .{ .property = "authority_gap" }, .{ .property = "question" } } },
             };
-            return packets.withProseFields(allocator, witnessed, fields);
+            const prose = try packets.withProseFields(allocator, witnessed, fields);
+            defer packets.release(prose);
+            const bindings = (if (batch)
+                @import("model_candidate_json.zig").fieldBindings(source_model.Batch, allocator, .{})
+            else
+                @import("model_candidate_json.zig").fieldBindings(source_model.Value, allocator, .{})) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidRequiredAuthority;
+            defer {
+                for (bindings) |binding| {
+                    for (binding.path) |step| switch (step) {
+                        .property, .variant => |name| allocator.free(name),
+                        .items => {},
+                    };
+                    allocator.free(binding.path);
+                }
+                allocator.free(bindings);
+            }
+            return packets.withFieldPolicies(allocator, prose, bindings);
         }
 
         fn lossFinding(allocator: std.mem.Allocator, inputs: a.Inputs, context: p.Context, candidate: Candidate) Error!struct { finding: Finding, target: a.Id } {

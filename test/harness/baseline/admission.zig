@@ -35,10 +35,33 @@ pub const Subject = union(enum) {
     source_review: struct { requirement: authority.Id, ordinal: u32, question: enum { question, authority_gap_question } },
     clarification: clarification.Id,
 };
+/// Model production and deterministic native projection are distinct facts.
+/// Native facts never manufacture a model request/attempt or its authority.
+pub const Producer = union(enum) {
+    model: Origin,
+    native: NativeProducer,
+    unavailable: enum { missing_model_origin, missing_model_receipt, missing_native_parent },
+};
+pub const NativeProducer = union(enum) {
+    summary_reuse: struct {
+        partition: reconciliation.PartitionId,
+        from_summary: reconciliation.SummaryId,
+        source_statement: usize,
+        source_check: usize,
+        validation_sha256: []const u8,
+    },
+    clarification_refresh: struct {
+        id: clarification.Id,
+        state_ordinal: u64,
+        state_revision: u64,
+        record_revision: u64,
+        state_sha256: []const u8,
+    },
+};
 pub const Check = struct {
     sequence: usize,
     after_call: usize,
-    origin: ?Origin,
+    producer: Producer,
     subject: Subject,
     field: policy.Field,
     value: Value,
@@ -63,7 +86,7 @@ pub const Exposure = struct {
 };
 pub const Metric = struct {
     status: enum { measured, unavailable },
-    denominator: enum { distinct_native_producer_origins } = .distinct_native_producer_origins,
+    denominator: enum { distinct_observed_producers } = .distinct_observed_producers,
     admitted_values: u64 = 0,
     escaped_values: u64 = 0,
     admitted_origins: u64 = 0,
@@ -109,6 +132,25 @@ pub const Tracker = struct {
         return .{ .sources = self.sources, .checks = self.checks.items, .complete = complete };
     }
 
+    /// Native observations can survive a transport-evidence failure. Preserve
+    /// that uncertainty explicitly; never turn an unmatched call into native
+    /// production or a measured zero. Readback still validates known claims.
+    pub fn reconcile(self: *Tracker, exchanges: []const Exchange) void {
+        for (self.checks.items, 0..) |*observed, index| switch (observed.producer) {
+            .model => |origin| {
+                const found = for (exchanges) |exchange| {
+                    if (std.meta.eql(exchange.origin, origin)) break true;
+                } else false;
+                if (!found) observed.producer = .{ .unavailable = .missing_model_receipt };
+            },
+            .native => |native| if (native == .summary_reuse) {
+                const parent = native.summary_reuse.source_check;
+                if (parent != 0 and parent <= index and self.checks.items[parent - 1].producer == .unavailable) observed.producer = .{ .unavailable = .missing_native_parent };
+            },
+            .unavailable => {},
+        };
+    }
+
     pub fn observe(self: *Tracker, view: *const data.View, sequence: usize, after_call: usize) !void {
         const input_schema = @import("../../../src/application/reference_evidence_workflow.zig").inputs_schema;
         if (!view.contains(input_schema.key)) return;
@@ -126,7 +168,11 @@ pub const Tracker = struct {
             const owned = try values.read(view, native_reconciliation.summary_schema, @import("../../../src/domain/reference_candidate_value.zig").Value);
             if (owned.payload().* == .reconciliation_summary) {
                 const checked = owned.payload().reconciliation_summary;
-                for (checked.projection.originals, 0..) |statement, index| if (statement.content == .model) try self.claim(.reconciliation, sequence, after_call, checked.projection.source.at(.{ .statement = index }, .content), .{ .reconciliation = .{ .partition = checked.input.partition.id, .unit = .{ .statement = index } } }, statement.content.model);
+                for (checked.projection.originals, 0..) |statement, index| if (statement.content == .model) {
+                    const subject: Subject = .{ .reconciliation = .{ .partition = checked.input.partition.id, .unit = .{ .statement = index } } };
+                    const producer = if (checked.projection.carried_from != null) try self.reuseProducer(checked, index, statement.content.model) else modelProducer(checked.projection.source.at(.{ .statement = index }, .content));
+                    try self.claimProduced(.reconciliation, sequence, after_call, producer, subject, statement.content.model);
+                };
             }
         }
         if (view.contains(native_reconciliation.signals_schema.key)) {
@@ -181,10 +227,45 @@ pub const Tracker = struct {
     }
 
     fn claim(self: *Tracker, comptime phase: policy.ReferencePhase, sequence: usize, after_call: usize, origin: ?Origin, subject: Subject, content: extraction.Content) !void {
+        return self.claimProduced(phase, sequence, after_call, modelProducer(origin), subject, content);
+    }
+
+    fn claimProduced(self: *Tracker, comptime phase: policy.ReferencePhase, sequence: usize, after_call: usize, producer: Producer, subject: Subject, content: extraction.Content) !void {
         switch (content) {
-            inline .business, .scope_guard => |value, tag| try self.inspect(sequence, after_call, origin, subject, policy.referenceField(phase, @tagName(tag)), .{ .business = value.value }),
-            inline else => |value, tag| try self.inspect(sequence, after_call, origin, subject, policy.referenceField(phase, @tagName(tag)), .{ .reference = value.value }),
+            inline else => |_, tag| try self.inspectProduced(sequence, after_call, producer, subject, policy.referenceField(phase, @tagName(tag)), claimValue(content)),
         }
+    }
+
+    /// Native reuse was admitted by the canonical checker and carries its exact
+    /// child identity/validation. Bind each copied statement to the earlier
+    /// observed child occurrence; a missing model parent stays unavailable.
+    fn reuseProducer(self: *Tracker, checked: reconciliation.CheckedSummary, index: usize, content: extraction.Content) !Producer {
+        const from = checked.projection.carried_from orelse return error.InvalidAdmissionAudit;
+        if (checked.projection.source.at(.{ .statement = index }, .content) != null) return error.InvalidAdmissionAudit;
+        const child = for (checked.input.summaries) |summary| {
+            if (summary.id.ordinal == from.ordinal) break summary;
+        } else return error.InvalidAdmissionAudit;
+        const value = claimValue(content);
+        const a = self.arena.allocator();
+        const bytes = try std.json.Stringify.valueAlloc(a, value, .{});
+        defer a.free(bytes);
+        const digest = hash(bytes);
+        for (child.projection.originals, child.projection.statement_indices, 0..) |original, mapped, source_index| {
+            if (mapped != index or original.content != .model or !reconciliation.equivalentContent(original.content, .{ .model = content })) continue;
+            const expected_origin = child.projection.source.at(.{ .statement = source_index }, .content);
+            var prior_index = self.checks.items.len;
+            while (prior_index != 0) {
+                prior_index -= 1;
+                const prior = self.checks.items[prior_index];
+                if (prior.subject != .reconciliation or prior.subject.reconciliation.partition.ordinal != child.partition_id.ordinal or prior.subject.reconciliation.unit != .statement or prior.subject.reconciliation.unit.statement != source_index or !std.mem.eql(u8, prior.value_sha256, &digest)) continue;
+                if (expected_origin) |origin| {
+                    if (prior.producer != .model or !std.meta.eql(prior.producer.model, origin)) continue;
+                } else if (child.projection.carried_from == null or prior.producer != .native) continue;
+                const validation = std.fmt.bytesToHex(checked.validation.bytes, .lower);
+                return .{ .native = .{ .summary_reuse = .{ .partition = checked.input.partition.id, .from_summary = child.id, .source_statement = source_index, .source_check = prior_index + 1, .validation_sha256 = try a.dupe(u8, &validation) } } };
+            }
+        }
+        return .{ .unavailable = .missing_native_parent };
     }
 
     /// Only natively admitted collections and validated working prefixes own
@@ -212,17 +293,20 @@ pub const Tracker = struct {
         try self.inspect(sequence, after_call, origin, .{ .source_review = .{ .requirement = requirement, .ordinal = ordinal, .question = question_kind } }, .clarification_question, .{ .business = .{ .segments = &nodes } });
     }
 
-    /// Ready is the native source-aware refresh projection. Persisted question
-    /// records have no producer origin; retaining that absence prevents a false
-    /// measured zero even when the complete mechanical check found no escape.
+    /// Ready owns deterministic source-aware question readback. Its current
+    /// native admission has an explicit state identity, without inventing the
+    /// historical model origin of a persisted question.
     fn refreshedQuestions(self: *Tracker, sequence: usize, after_call: usize, ready: clarification_refresh.Ready) !void {
         if (!wire.validSources(ready.original_sources) or ready.original_sources.len != self.sources.len) return error.InvalidAdmissionAudit;
         for (ready.original_sources, self.sources) |witness, source| if (witness.source_id.ordinal != source.source_id.ordinal or !std.mem.eql(u8, witness.bytes, source.bytes)) return error.InvalidAdmissionAudit;
         const state = ready.state.value orelse return;
+        const bytes = try @import("../../../src/domain/canonical_json.zig").encode(clarification.State, self.arena.allocator(), state);
+        defer self.arena.allocator().free(bytes);
+        const digest = hash(bytes);
         for (state.records) |record| {
             const id = clarification.Id.parse(record.id) orelse return error.InvalidAdmissionAudit;
             const nodes = [_]text.BusinessSegment{.{ .literal = .{ .value = record.question } }};
-            try self.inspect(sequence, after_call, null, .{ .clarification = id }, .clarification_question, .{ .business = .{ .segments = &nodes } });
+            try self.inspectProduced(sequence, after_call, .{ .native = .{ .clarification_refresh = .{ .id = id, .state_ordinal = state.state_ordinal, .state_revision = state.revision, .record_revision = record.revision, .state_sha256 = &digest } } }, .{ .clarification = id }, .clarification_question, .{ .business = .{ .segments = &nodes } });
         }
     }
 
@@ -265,6 +349,10 @@ pub const Tracker = struct {
     }
 
     fn inspect(self: *Tracker, sequence: usize, after_call: usize, origin: ?Origin, subject: Subject, field: policy.Field, value: Value) !void {
+        return self.inspectProduced(sequence, after_call, modelProducer(origin), subject, field, value);
+    }
+
+    fn inspectProduced(self: *Tracker, sequence: usize, after_call: usize, producer: Producer, subject: Subject, field: policy.Field, value: Value) !void {
         const a = self.arena.allocator();
         var scratch: std.heap.ArenaAllocator = .init(a);
         defer scratch.deinit();
@@ -273,12 +361,38 @@ pub const Tracker = struct {
         const digest = hash(bytes);
         // Stable native subjects deduplicate assembly views without collapsing
         // two equal fields authored for distinct records in one response.
-        for (self.checks.items) |prior| if (std.meta.eql(prior.origin, origin) and prior.field == field and std.mem.eql(u8, prior.value_sha256, &digest) and try sameSubject(temporary, prior.subject, subject)) return;
+        for (self.checks.items) |prior| if (sameProducer(prior.producer, producer) and prior.field == field and std.mem.eql(u8, prior.value_sha256, &digest) and try sameSubject(temporary, prior.subject, subject)) return;
         if (!validSubject(subject, field, value)) return error.InvalidAdmissionAudit;
         const owned_value = try @import("../contracts.zig").decode(Value, a, bytes);
-        try self.checks.append(a, .{ .sequence = sequence, .after_call = after_call, .origin = origin, .subject = try @import("../contracts.zig").decode(Subject, a, try std.json.Stringify.valueAlloc(temporary, subject, .{})), .field = field, .value = owned_value, .value_sha256 = try a.dupe(u8, &digest), .violation = try check(temporary, self.sources, field, value) });
+        try self.checks.append(a, .{ .sequence = sequence, .after_call = after_call, .producer = try @import("../contracts.zig").decode(Producer, a, try std.json.Stringify.valueAlloc(temporary, producer, .{})), .subject = try @import("../contracts.zig").decode(Subject, a, try std.json.Stringify.valueAlloc(temporary, subject, .{})), .field = field, .value = owned_value, .value_sha256 = try a.dupe(u8, &digest), .violation = try check(temporary, self.sources, field, value) });
     }
 };
+
+fn modelProducer(origin: ?Origin) Producer {
+    return if (origin) |value| .{ .model = value } else .{ .unavailable = .missing_model_origin };
+}
+fn claimValue(content: extraction.Content) Value {
+    return switch (content) {
+        inline .business, .scope_guard => |value| .{ .business = value.value },
+        inline else => |value| .{ .reference = value.value },
+    };
+}
+fn sameProducer(left: Producer, right: Producer) bool {
+    if (std.meta.activeTag(left) != std.meta.activeTag(right)) return false;
+    return switch (left) {
+        .model => |value| std.meta.eql(value, right.model),
+        .unavailable => |value| value == right.unavailable,
+        .native => |value| if (std.meta.activeTag(value) != std.meta.activeTag(right.native)) false else switch (value) {
+            .summary_reuse => |proof| proof.partition.ordinal == right.native.summary_reuse.partition.ordinal and proof.from_summary.ordinal == right.native.summary_reuse.from_summary.ordinal and proof.source_statement == right.native.summary_reuse.source_statement and proof.source_check == right.native.summary_reuse.source_check and std.mem.eql(u8, proof.validation_sha256, right.native.summary_reuse.validation_sha256),
+            .clarification_refresh => |proof| std.meta.eql(proof.id, right.native.clarification_refresh.id) and proof.state_ordinal == right.native.clarification_refresh.state_ordinal and proof.state_revision == right.native.clarification_refresh.state_revision and proof.record_revision == right.native.clarification_refresh.record_revision and std.mem.eql(u8, proof.state_sha256, right.native.clarification_refresh.state_sha256),
+        },
+    };
+}
+fn validDigest(bytes: []const u8) bool {
+    if (bytes.len != 64) return false;
+    for (bytes) |byte| if (!std.ascii.isDigit(byte) and (byte < 'a' or byte > 'f')) return false;
+    return true;
+}
 
 /// Batch-local occurrence ordinals project through the native concatenation
 /// order. Combined units already carry global stable occurrence ordinals.
@@ -379,13 +493,32 @@ pub fn validate(a: std.mem.Allocator, audit: Audit, exchanges: []const Exchange)
         if (!validSubject(observed.subject, observed.field, observed.value) or observed.sequence == 0 or observed.after_call > exchanges.len or (index != 0 and observed.sequence < audit.checks[index - 1].sequence) or
             !std.mem.eql(u8, observed.value_sha256, &hash(bytes)) or
             !std.meta.eql(observed.violation, try check(a, audit.sources, observed.field, observed.value))) return error.InvalidAdmissionAudit;
-        if (observed.origin) |origin| {
-            const producing = for (exchanges) |exchange| {
-                if (std.meta.eql(exchange.origin, origin)) break exchange;
-            } else return error.InvalidAdmissionAudit;
-            if (producing.call > observed.after_call) return error.InvalidAdmissionAudit;
+        switch (observed.producer) {
+            .model => |origin| {
+                const producing = for (exchanges) |exchange| {
+                    if (std.meta.eql(exchange.origin, origin)) break exchange;
+                } else return error.InvalidAdmissionAudit;
+                if (producing.call > observed.after_call) return error.InvalidAdmissionAudit;
+            },
+            .native => |native| switch (native) {
+                .summary_reuse => |proof| {
+                    if (observed.subject != .reconciliation or observed.subject.reconciliation.unit != .statement or observed.subject.reconciliation.partition.ordinal != proof.partition.ordinal or
+                        proof.from_summary.ordinal == 0 or proof.from_summary.ordinal >= proof.partition.ordinal or proof.source_check == 0 or proof.source_check > index or !validDigest(proof.validation_sha256)) return error.InvalidAdmissionAudit;
+                    const parent = audit.checks[proof.source_check - 1];
+                    if (parent.producer == .unavailable or parent.subject != .reconciliation or parent.subject.reconciliation.partition.ordinal != proof.from_summary.ordinal or parent.subject.reconciliation.unit != .statement or
+                        parent.subject.reconciliation.unit.statement != proof.source_statement or parent.field != observed.field or !std.mem.eql(u8, parent.value_sha256, observed.value_sha256) or parent.sequence >= observed.sequence) return error.InvalidAdmissionAudit;
+                },
+                .clarification_refresh => |proof| {
+                    if (observed.subject != .clarification or !std.meta.eql(proof.id, observed.subject.clarification) or proof.state_ordinal == 0 or proof.state_revision == 0 or proof.record_revision == 0 or proof.record_revision > proof.state_revision or !validDigest(proof.state_sha256)) return error.InvalidAdmissionAudit;
+                    for (audit.checks[0..index]) |prior| if (prior.producer == .native and prior.producer.native == .clarification_refresh) {
+                        const preceding = prior.producer.native.clarification_refresh;
+                        if (preceding.state_ordinal == proof.state_ordinal and preceding.state_revision == proof.state_revision and !std.mem.eql(u8, preceding.state_sha256, proof.state_sha256)) return error.InvalidAdmissionAudit;
+                    };
+                },
+            },
+            .unavailable => {},
         }
-        for (audit.checks[0..index]) |prior| if (std.meta.eql(prior.origin, observed.origin) and prior.field == observed.field and std.mem.eql(u8, prior.value_sha256, observed.value_sha256) and try sameSubject(a, prior.subject, observed.subject)) return error.InvalidAdmissionAudit;
+        for (audit.checks[0..index]) |prior| if (sameProducer(prior.producer, observed.producer) and prior.field == observed.field and std.mem.eql(u8, prior.value_sha256, observed.value_sha256) and try sameSubject(a, prior.subject, observed.subject)) return error.InvalidAdmissionAudit;
     }
 }
 
@@ -398,13 +531,13 @@ pub fn measure(audit: ?Audit, exchanges: []const Exchange) !Metric {
             result.escaped_values += 1;
             if (result.first_escape_after_call == null or item.after_call < result.first_escape_after_call.?) result.first_escape_after_call = item.after_call;
         }
-        const origin = item.origin orelse {
+        if (item.producer == .unavailable) {
             result.unattributed_values += 1;
             continue;
-        };
+        }
         var seen = false;
         var escaped = false;
-        for (observed.checks[0..index]) |prior| if (std.meta.eql(prior.origin, origin)) {
+        for (observed.checks[0..index]) |prior| if (sameProducer(prior.producer, item.producer)) {
             seen = true;
             escaped = escaped or prior.violation != null;
         };
@@ -501,7 +634,7 @@ test "native admitted values use shared policy and retain chronological downstre
     changed[0].violation = null;
     try std.testing.expectError(error.InvalidAdmissionAudit, validate(a, .{ .sources = audit.sources, .checks = changed, .complete = true }, &exchanges));
     changed[0] = audit.checks[0];
-    changed[0].origin = testOrigin(99);
+    changed[0].producer = .{ .model = testOrigin(99) };
     try std.testing.expectError(error.InvalidAdmissionAudit, validate(a, .{ .sources = audit.sources, .checks = changed, .complete = true }, &exchanges));
     const summary = try summarize(&.{ .{ .attempted = true, .metric = metric }, .{ .attempted = true, .metric = .{ .status = .unavailable } }, .{ .attempted = false, .metric = .{ .status = .unavailable } } });
     try std.testing.expectEqual(@as(u64, 1), summary.escaped_workloads);
@@ -529,7 +662,8 @@ test "wire escape checking uses original source bytes and declared identity exce
     try std.testing.expect((try check(a, &.{}, .entity_name, .{ .business = .{ .segments = &insertion } })) == null);
     for ([_]policy.Field{ .spec_story, .functional_requirement, .ac_then, .entity_meaning }) |field| {
         const failure = (try check(a, &.{}, field, .{ .business = .{ .segments = &insertion } })).?;
-        try std.testing.expectEqual(.reference_only, failure.reason);
+        const expected: @FieldType(Violation, "reason") = if (policy.get(field).exact_copy == .prohibited) .prohibited_exact else .reference_only;
+        try std.testing.expectEqual(expected, failure.reason);
         try std.testing.expectEqual(field, failure.field.?);
     }
 }
@@ -558,7 +692,7 @@ test "audit observes native admitted slots and ignores rejected candidate payloa
     try tracker.observe(&view, 3, 1);
     try std.testing.expectEqual(@as(usize, 1), tracker.checks.items.len);
     try std.testing.expectEqual(.reference_only, tracker.checks.items[0].violation.?.reason);
-    try std.testing.expectEqualDeep(testOrigin(1), tracker.checks.items[0].origin.?);
+    try std.testing.expectEqualDeep(testOrigin(1), tracker.checks.items[0].producer.model);
     owner.payload = .rejected;
     try tracker.observe(&view, 4, 1);
     try std.testing.expectEqual(@as(usize, 1), tracker.checks.items.len);
@@ -682,11 +816,11 @@ test "audit batch offsets share native reserved occurrence spans and repaired fi
     const assembled: generation.Checked = .{ .unit = .records, .response = .{ .content = .{ .records = &assembled_records } }, .origins = joined };
     try tracker.unit(2, 3, assembled, 0);
     try std.testing.expectEqual(@as(usize, 2), tracker.checks.items.len);
-    try std.testing.expectEqualDeep(testOrigin(3), tracker.checks.items[0].origin.?);
+    try std.testing.expectEqualDeep(testOrigin(3), tracker.checks.items[0].producer.model);
     try validate(a, tracker.snapshot(true), &.{ .{ .call = 1, .origin = testOrigin(1), .usage = null }, .{ .call = 2, .origin = testOrigin(2), .usage = null }, .{ .call = 3, .origin = testOrigin(3), .usage = null } });
 }
 
-test "source-checked refreshed questions retain native IDs and unknown producer coverage" {
+test "source-checked refreshed questions retain native producers without inventing model origins" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -711,13 +845,13 @@ test "source-checked refreshed questions retain native IDs and unknown producer 
     try tracker.observe(&view, 2, 0);
     try std.testing.expectEqual(@as(usize, 1), tracker.checks.items.len);
     try std.testing.expectEqualDeep(clarification.Id.parse("S01").?, tracker.checks.items[0].subject.clarification);
-    try std.testing.expect(tracker.checks.items[0].origin == null and tracker.checks.items[0].violation == null);
+    try std.testing.expect(tracker.checks.items[0].producer == .native and tracker.checks.items[0].violation == null);
     try validate(a, tracker.snapshot(true), &.{});
     const metric = try measure(tracker.snapshot(true), &.{});
-    try std.testing.expectEqual(.unavailable, metric.status);
-    try std.testing.expectEqual(@as(u64, 1), metric.unattributed_values);
+    try std.testing.expectEqual(.measured, metric.status);
+    try std.testing.expectEqual(@as(u64, 0), metric.unattributed_values);
     try std.testing.expectEqual(@as(u64, 0), metric.escaped_values);
-    try std.testing.expect(metric.producer_escape_rate == null);
+    try std.testing.expectEqual(@as(?f64, 0), metric.producer_escape_rate);
     var tampered = tracker.checks.items[0];
     tampered.field = .entity_name;
     try std.testing.expectError(error.InvalidAdmissionAudit, validate(a, .{ .sources = tracker.sources, .checks = &.{tampered}, .complete = true }, &.{}));
@@ -735,6 +869,8 @@ test "source-checked refreshed questions retain native IDs and unknown producer 
     escaped_records[0].question = "Which {\"kind\":\"exact_copy\",\"claim_id\":8} controls approval?";
     var escaped_ready = ready;
     escaped_ready.state.value.?.records = &escaped_records;
+    escaped_ready.state.value.?.state_ordinal = 2;
+    escaped_ready.state.value.?.revision = 2;
     try std.testing.expectError(error.InvalidClarificationInput, escaped_ready.validate(a));
     const escaped = try values.create(a, native_clarifications.state_schema, clarification_refresh.Result, .{ .ready = escaped_ready });
     defer values.destroy(escaped);
@@ -743,15 +879,17 @@ test "source-checked refreshed questions retain native IDs and unknown producer 
     try std.testing.expectEqual(@as(usize, 2), tracker.checks.items.len);
     try std.testing.expectEqual(.embedded_insertion_syntax, tracker.checks.items[1].violation.?.reason);
     const escaped_metric = try measure(tracker.snapshot(true), &.{});
-    try std.testing.expectEqual(.unavailable, escaped_metric.status);
+    try std.testing.expectEqual(.measured, escaped_metric.status);
     try std.testing.expectEqual(@as(u64, 1), escaped_metric.escaped_values);
-    try std.testing.expectEqual(@as(u64, 2), escaped_metric.unattributed_values);
+    try std.testing.expectEqual(@as(u64, 0), escaped_metric.unattributed_values);
     // The exact source-backed grammar object remains legitimate prose under
     // both the native readback owner and the independent audit.
     var quoted_records = records;
     quoted_records[0].question = "Which example " ++ quoted ++ " controls approval?";
     var quoted_ready = ready;
     quoted_ready.state.value.?.records = &quoted_records;
+    quoted_ready.state.value.?.state_ordinal = 3;
+    quoted_ready.state.value.?.revision = 3;
     _ = try quoted_ready.validate(a);
     const source_backed = try values.create(a, native_clarifications.state_schema, clarification_refresh.Result, .{ .ready = quoted_ready });
     defer values.destroy(source_backed);
@@ -761,6 +899,29 @@ test "source-checked refreshed questions retain native IDs and unknown producer 
     try std.testing.expect(tracker.checks.items[2].violation == null);
     try validate(a, tracker.snapshot(true), &.{});
     const all = try measure(tracker.snapshot(true), &.{});
-    try std.testing.expectEqual(.unavailable, all.status);
+    try std.testing.expectEqual(.measured, all.status);
     try std.testing.expectEqual(@as(u64, 1), all.escaped_values);
+}
+
+test "missing model provenance remains unavailable and cannot be relabelled native" {
+    const a = std.testing.allocator;
+    var tracker: Tracker = .init(a);
+    defer tracker.deinit();
+    const nodes = [_]text.BusinessSegment{.{ .literal = .{ .value = "Retain the original decision." } }};
+    const subject: Subject = .{ .specification = .{ .unit = .brief, .field = .{ .target = .{ .value = .{ .subject = .title, .field = .value } } } } };
+    try tracker.inspect(1, 0, null, subject, .spec_title, .{ .business = .{ .segments = &nodes } });
+    try validate(a, tracker.snapshot(true), &.{});
+    const metric = try measure(tracker.snapshot(true), &.{});
+    try std.testing.expectEqual(.unavailable, metric.status);
+    try std.testing.expectEqual(@as(u64, 1), metric.unattributed_values);
+    var forged = tracker.checks.items[0];
+    forged.producer = .{ .native = .{ .clarification_refresh = .{ .id = .{ .stage = .spec, .ordinal = 1 }, .state_ordinal = 1, .state_revision = 1, .record_revision = 1, .state_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" } } };
+    try std.testing.expectError(error.InvalidAdmissionAudit, validate(a, .{ .sources = &.{}, .checks = &.{forged}, .complete = true }, &.{}));
+    forged.producer = .{ .model = testOrigin(1) };
+    try std.testing.expectError(error.InvalidAdmissionAudit, validate(a, .{ .sources = &.{}, .checks = &.{forged}, .complete = true }, &.{}));
+    try tracker.inspect(2, 0, testOrigin(1), subject, .spec_title, .{ .business = .{ .segments = &nodes } });
+    tracker.reconcile(&.{});
+    try std.testing.expectEqual(.missing_model_receipt, tracker.checks.items[1].producer.unavailable);
+    try validate(a, tracker.snapshot(true), &.{});
+    try std.testing.expectEqual(.unavailable, (try measure(tracker.snapshot(true), &.{})).status);
 }

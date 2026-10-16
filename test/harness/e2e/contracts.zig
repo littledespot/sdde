@@ -137,7 +137,7 @@ pub const ExchangeEvidence = struct {
     transport: ?@import("../../../src/domain/llm_provider_operation.zig").TransportDiagnostic,
 };
 pub const Report = struct {
-    schema: enum { @"spec-e2e-report/v2" },
+    schema: enum { @"spec-e2e-report/v3" },
     origin: enum { live } = .live,
     started_at_utc: []const u8,
     build: ?struct {

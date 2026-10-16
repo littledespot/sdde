@@ -1,5 +1,8 @@
 const std = @import("std");
 const codec = @import("domain/model_candidate_json.zig");
+test {
+    _ = @import("model_text_field_test.zig");
+}
 const Choice = union(enum) {
     count: struct { amount: u32 },
     note: struct { text: []const u8 },

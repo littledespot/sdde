@@ -126,6 +126,11 @@ fn restrictedStorage(value: *const Restricted) *RestrictedStorage {
 }
 
 pub fn restrict(allocator: std.mem.Allocator, canonical: *const Schema, excluded: []const ExcludedVariant, integer_choices: []const IntegerChoice) Error!*Restricted {
+    return restrictFieldPolicies(allocator, canonical, excluded, integer_choices, &.{});
+}
+
+/// Native field semantics add only restrictions to the existing generic schema.
+pub fn restrictFieldPolicies(allocator: std.mem.Allocator, canonical: *const Schema, excluded: []const ExcludedVariant, integer_choices: []const IntegerChoice, field_policies: []const @import("model_text_field.zig").Binding) Error!*Restricted {
     const owned = try allocator.create(RestrictedStorage);
     errdefer allocator.destroy(owned);
     var arena: std.heap.ArenaAllocator = .init(allocator);
@@ -147,6 +152,7 @@ pub fn restrict(allocator: std.mem.Allocator, canonical: *const Schema, excluded
         };
     }
     var root = try restrictNode(arena.allocator(), canonical.root(), excluded);
+    if (field_policies.len != 0) root = (try @import("model_text_field.zig").project(arena.allocator(), root, field_policies, true)).root;
     for (integer_choices) |entry| {
         if (entry.definition) |id| {
             const current = storage(canonical).definition_id orelse return invalid();

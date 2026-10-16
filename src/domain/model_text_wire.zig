@@ -249,7 +249,7 @@ fn wireObject(value: std.json.Value) bool {
 
 /// The closed string-or-fragments shape declares a model text value. Plain
 /// strings in unrelated schemas (identifiers, diagnostics, code) are unaffected.
-fn textContract(node: *const schema.Node) bool {
+pub fn textContract(node: *const schema.Node) bool {
     if (node.* != .one_of or node.one_of.len != 2) return false;
     var prose = false;
     var composition = false;

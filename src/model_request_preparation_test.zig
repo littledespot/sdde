@@ -62,14 +62,36 @@ fn prosePacketAllocation(a: std.mem.Allocator) !void {
     defer packets.release(declared);
     const witnessed = try packets.withOriginalSourceTexts(a, declared, &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = "Original question." }});
     defer packets.release(witnessed);
-    const cloned = try packets.withRestrictions(a, witnessed, &.{}, &.{});
+    const policies = [_]@import("domain/model_text_field.zig").Binding{.{ .field = .clarification_question, .path = &.{.{ .property = &name }} }};
+    const bound = try packets.withFieldPolicies(a, witnessed, &policies);
+    defer packets.release(bound);
+    var catalogue = "catalogue".*;
+    const omissions = [_]@import("domain/model_field_presentation.zig").Omission{.{ .requires = .exact_copy, .path = &.{ .{ .property = &catalogue }, .{ .index = 2 } } }};
+    const presented = try packets.withPresentationOmissions(a, bound, &omissions);
+    defer packets.release(presented);
+    const cloned = try packets.withRestrictions(a, presented, &.{}, &.{});
     defer packets.release(cloned);
     name[0] = 'X';
+    catalogue[0] = 'X';
     try std.testing.expectEqualStrings("question", cloned.proseFields()[0].path[0].property);
+    try std.testing.expectEqualStrings("question", cloned.fieldPolicies()[0].path[0].property);
+    try std.testing.expectEqualStrings("catalogue", cloned.presentationOmissions()[0].path[0].property);
+    try std.testing.expectEqual(@as(u32, 2), cloned.presentationOmissions()[0].path[1].index);
+    try std.testing.expectEqual(@import("domain/text_field_policy.zig").Insertion.exact_copy, cloned.presentationOmissions()[0].requires);
+    try std.testing.expect(cloned.fieldPolicies().ptr != bound.fieldPolicies().ptr);
+    try std.testing.expect(cloned.fieldPolicies()[0].path.ptr != bound.fieldPolicies()[0].path.ptr);
+    try std.testing.expect(cloned.fieldPolicies()[0].path[0].property.ptr != bound.fieldPolicies()[0].path[0].property.ptr);
+    try std.testing.expect(cloned.presentationOmissions().ptr != presented.presentationOmissions().ptr);
+    try std.testing.expect(cloned.presentationOmissions()[0].path.ptr != presented.presentationOmissions()[0].path.ptr);
+    try std.testing.expect(cloned.presentationOmissions()[0].path[0].property.ptr != presented.presentationOmissions()[0].path[0].property.ptr);
     try std.testing.expectEqualStrings("Original question.", cloned.originalSources()[0].bytes);
     try std.testing.expectEqualStrings(packet.body(), cloned.body());
     try std.testing.expectEqual(@as(usize, 0), packet.proseFields().len);
+    try std.testing.expectEqual(@as(usize, 0), packet.fieldPolicies().len);
+    try std.testing.expectEqual(@as(usize, 0), packet.presentationOmissions().len);
     try std.testing.expectError(error.InvalidModelInputPacket, packets.withProseFields(a, packet, &.{ .{ .field = .clarification_question, .path = &.{.{ .property = "question" }} }, .{ .field = .spec_goal, .path = &.{.{ .property = "question" }} } }));
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withFieldPolicies(a, packet, &.{ .{ .field = .clarification_question, .path = &.{.{ .property = "question" }} }, .{ .field = .spec_goal, .path = &.{.{ .property = "question" }} } }));
+    try std.testing.expectError(error.InvalidModelInputPacket, packets.withPresentationOmissions(a, packet, &.{ .{ .requires = .exact_copy, .path = &.{.{ .property = "catalogue" }} }, .{ .requires = .passive, .path = &.{.{ .property = "catalogue" }} } }));
 }
 
 test "native original-source witness is owned bound and absent from provider content" {

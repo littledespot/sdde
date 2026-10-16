@@ -30,6 +30,68 @@ const text = @import("test_fixtures/reference_text.zig");
 const tokens = @import("test_fixtures/reference_tokens.zig");
 const extraction = @import("reference_extraction_test.zig");
 
+test "native reconciliation composition repair renders selected text without rejected candidate fragments and preserves CAS" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    const atomic = @import("domain/atomic_repair.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    for ([_][]const u8{ "Display the current UTC time. Consult source-0.md.\n", "Renew eligible loans. Consult source-0.md.\n" }) |source| for ([_]bool{ false, true }) |global| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const prepared = try prepare(a, &.{source});
+        defer prepared.deinit();
+        const progress = try f.initialize(a, prepared.inputs, prepared.extracted, 2);
+        const input = if (global) try f.summaries(a, progress, prepared.context()) else try f.build_input.execute(a, progress);
+        const passive: r.text.PassiveReference = .{ .passive_literal_id = prepared.text.registry.records[0].id };
+        const bad: r.ContentProposal = .{ .model = .{ .business = .{ .segments = &.{.{ .passive = passive }} } } };
+        var parsed: r.Parsed = .{ .input = input, .proposal = if (global) .{ .global = try f.global(a, input) } else .{ .summary = try f.summary(a, input) } };
+        if (global) {
+            const values = try a.dupe(r.SignalProposal, parsed.proposal.global.signals);
+            values[0].content = bad;
+            parsed.proposal.global.signals = values;
+        } else {
+            const values = try a.dupe(r.StatementProposal, parsed.proposal.summary.statements);
+            values[0].content = bad;
+            parsed.proposal.summary.statements = values;
+        }
+        const rejection = if (global) (try f.finish(a, input, parsed.proposal.global, prepared.context())).invalid else (try f.validate_summary.execute(a, parsed, prepared.context())).invalid;
+        try std.testing.expectEqual(.typed_text, rejection.issue.rule);
+        try std.testing.expectEqual(.reference_only, rejection.issue.expected.text_issue.reason);
+        const authorization = (try repair.authorize(a, parsed, prepared.context(), rejection)).model;
+        const before = try atomic.snapshot(repair.Authorization, a, authorization);
+        const packet = try repair.packet(std.testing.allocator, parsed, prepared.context(), authorization);
+        defer packets.release(packet);
+        const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+        const diagnostic = body.get("repair").?.object;
+        try std.testing.expect(!diagnostic.contains("current_value"));
+        const rule = diagnostic.get("rule").?.object;
+        try std.testing.expectEqualStrings(prepared.text.registry.records[0].value, rule.get("rendered_text").?.string);
+        try std.testing.expectEqual(@as(usize, 2), rule.get("field_rule").?.object.count());
+        const field = rejection.issue.expected.text_issue.field.?;
+        try std.testing.expectEqualStrings(@tagName(field), rule.get("field_rule").?.object.get("field").?.string);
+        for (packet.fieldPolicies()) |binding| {
+            if (binding.field == field) break;
+        } else return error.MissingNativeCompositionField;
+        const contextual = body.get("input").?.object.get("candidate").?.object;
+        try std.testing.expectEqual(@as(usize, 1), contextual.count());
+        try std.testing.expect(contextual.contains("claim_ids"));
+        try std.testing.expect(std.mem.indexOf(u8, packet.body(), "\"kind\":\"passive\"") == null);
+        try std.testing.expectEqualDeep(before, try atomic.snapshot(repair.Authorization, a, authorization));
+        const replacement: repair.Replacement = .{ .content = .{ .model = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = "Preserve the source-backed business obligation." } }} } } } };
+        const merged = try repair.merge(a, try r.text.CanonicalText.fromInputs(a, text.normalizer, prepared.inputs), parsed, prepared.context(), authorization, replacement, null);
+        if (global) {
+            _ = (try f.finish(a, input, merged.proposal.global, prepared.context())).valid;
+            try std.testing.expectEqualDeep(parsed.proposal.global.signals[0].claim_ids, merged.proposal.global.signals[0].claim_ids);
+            try std.testing.expectEqualDeep(parsed.proposal.global.signals[1..], merged.proposal.global.signals[1..]);
+        } else {
+            _ = (try f.validate_summary.execute(a, merged, prepared.context())).valid;
+            try std.testing.expectEqualDeep(parsed.proposal.summary.statements[0].claim_ids, merged.proposal.summary.statements[0].claim_ids);
+            try std.testing.expectEqualDeep(parsed.proposal.summary.statements[1..], merged.proposal.summary.statements[1..]);
+        }
+        try std.testing.expectError(error.InvalidAtomicRepair, repair.merge(a, try r.text.CanonicalText.fromInputs(a, text.normalizer, prepared.inputs), merged, prepared.context(), authorization, replacement, null));
+    };
+}
+
 test "semantic summary authoring leaves exact tokens native and rejects model-authored token membership" {
     const projection = @import("domain/reference_reconciliation_projection.zig");
     const codec = @import("domain/model_candidate_json.zig");
@@ -2949,5 +3011,73 @@ test "checked phase facts retire resolved receipts and preserve repairs owned by
         const facts = (try native.read(&.{ .slots = checked.delta.data_writes }, workflow.dispositions_schema, .reconciliation_dispositions)).payload().reconciliation_dispositions;
         try std.testing.expectEqual(later, facts.source.pending_repair != null);
         if (!later) try std.testing.expectEqual(.resolved, checked.delta.repair_transition.?.validated.result);
+    }
+}
+
+test "prepared reconciliation content repairs bind every selected wire member for statement and signal insertion and replacement" {
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    const codec = @import("domain/model_candidate_json.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    inline for (comptime std.meta.tags(r.extraction.Kind)) |kind| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try prepare(a, &.{"Retain the requested outcome.\n"});
+        defer fixture.deinit();
+        const good: r.extraction.ProposalContent = @unionInit(r.extraction.ProposalContent, @tagName(kind), if (comptime kind == .business or kind == .scope_guard)
+            r.text.BusinessText{ .segments = &.{.{ .literal = .{ .value = "Retain the requested outcome." } }} }
+        else
+            r.text.ReferenceSemanticText{ .nodes = &.{.{ .literal = .{ .value = "Retain the requested outcome." } }} });
+        const bad: r.extraction.ProposalContent = @unionInit(r.extraction.ProposalContent, @tagName(kind), if (comptime kind == .business or kind == .scope_guard)
+            r.text.BusinessText{ .segments = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} }
+        else
+            r.text.ReferenceSemanticText{ .nodes = &.{.{ .literal = .{ .value = "Invalid\x01text" } }} });
+        const results = try a.alloc(r.extraction.RawResult, fixture.inputs.chunks.entries.len);
+        for (fixture.inputs.chunks.entries, results) |chunk, *result| result.* = .{
+            .scope = .{ .state_id = fixture.inputs.corpus.state_id, .chunk_id = chunk.id },
+            .result = .{ .response = try codec.encode(@import("domain/reference_extraction_parser.zig").Response, a, .{ .claims = .{ .claims = &.{.{ .content = good, .citations = &.{extraction.wholeChunk(chunk)} }}, .token_classifications = &.{} } }) },
+        };
+        const extracted = try extraction.finish(a, fixture.inputs, results);
+        const progress = try f.initialize(a, fixture.inputs, extracted, 2);
+        for ([_]bool{ false, true }) |global| {
+            const input = if (global) try f.summaries(a, progress, fixture.context()) else try f.build_input.execute(a, progress);
+            for ([_]bool{ false, true }) |insertion| {
+                errdefer std.debug.print("prepared reconciliation repair: {s}, {s}, {s}\n", .{ @tagName(kind), if (global) "signal" else "statement", if (insertion) "insert" else "replace" });
+                var parsed: r.Parsed = .{ .input = input, .proposal = if (global) .{ .global = try f.global(a, input) } else .{ .summary = try f.summary(a, input) } };
+                if (global) {
+                    if (insertion) parsed.proposal.global.signals = parsed.proposal.global.signals[1..] else {
+                        const signals = try a.dupe(r.SignalProposal, parsed.proposal.global.signals);
+                        signals[0].content = .{ .model = bad };
+                        parsed.proposal.global.signals = signals;
+                    }
+                } else {
+                    if (insertion) parsed.proposal.summary.statements = parsed.proposal.summary.statements[1..] else {
+                        const statements = try a.dupe(r.StatementProposal, parsed.proposal.summary.statements);
+                        statements[0].content = .{ .model = bad };
+                        parsed.proposal.summary.statements = statements;
+                    }
+                }
+                const rejected = (try textRejection(a, parsed, fixture.context())).?;
+                try std.testing.expectEqual(@as(r.diagnostic.Rule, if (insertion) (if (global) .signal_coverage else .membership) else .typed_text), rejected.issue.rule);
+                const authorization = (try repair.authorize(a, parsed, fixture.context(), rejected)).model;
+                try std.testing.expectEqual(@as(std.meta.Tag(repair.Target), if (insertion) (if (global) .insert_signal else .insert_statement) else (if (global) .signal_content else .statement_content)), std.meta.activeTag(authorization.target));
+                const packet = try repair.packet(a, parsed, fixture.context(), authorization);
+                defer packets.release(packet);
+                try std.testing.expectEqualStrings(if (kind == .business or kind == .scope_guard) "business_text" else "reference_text", packet.resultDefinition().?.bytes);
+                try std.testing.expectEqual(@as(usize, 1), packet.fieldPolicies().len);
+                try std.testing.expectEqual(@import("domain/text_field_policy.zig").referenceField(.reconciliation, @tagName(kind)), packet.fieldPolicies()[0].field);
+                const bindings = try codec.selectedFieldBindings(r.extraction.ProposalContent, a, kind, .{ .reference_phase = .reconciliation });
+                try std.testing.expect(@import("domain/model_text_field.zig").same(bindings, packet.fieldPolicies()));
+                const replacement: repair.Replacement = .{ .content = .{ .model = good } };
+                const bytes = try f.repairResponse(a, replacement);
+                var compiler: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+                const schema = try compiler.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .limited(1_048_576)));
+                try @import("test_fixtures/prepared_model_repair.zig").check(a, packet, schema, bytes, try codec.encode(r.ContentProposal, a, replacement.content));
+                const decoded = try repair.parse(a, authorization, packet, bytes);
+                try std.testing.expectEqualDeep(replacement, decoded);
+                const merged = try repair.merge(a, try r.text.CanonicalText.fromInputs(a, text.normalizer, fixture.inputs), parsed, fixture.context(), authorization, decoded, null);
+                try std.testing.expect((try textRejection(a, merged, fixture.context())) == null);
+            }
+        }
     }
 }

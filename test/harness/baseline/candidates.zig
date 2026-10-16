@@ -245,17 +245,19 @@ test "native assembled observations resolve unrelated exact values and preserve 
             if (item.claim.content == .preserved_token) exact = item.claim.id;
         }
         const narrative: specification.Model.AttributedValue = .{
-            .value = .{ .segments = &.{ .{ .literal = .{ .value = "The requested outcome is " } }, .{ .exact_copy = .{ .claim_id = exact orelse return error.MissingExactFixture } } } },
+            .value = .{ .segments = &.{.{ .literal = .{ .value = example[1] } }} },
             .source_group_ids = groups,
             .provenance = .{ .claim_ids = claims, .clarification_response_ids = &.{} },
         };
+        var behavior = narrative;
+        behavior.value = .{ .segments = &.{ .{ .literal = .{ .value = "The requested outcome is " } }, .{ .exact_copy = .{ .claim_id = exact orelse return error.MissingExactFixture } } } };
         var current = (try session.initialize(a, inputs.corpus.feature_id, context)).ready;
         var request: usize = 1;
         while (current.completed < session.unit_count) : (request += 1) {
             const unit = try session.unit(current.completed);
             const response: generation.Response = .{ .content = switch (unit) {
-                .brief => .{ .brief = .{ .title = narrative, .description = narrative, .primary_goal = narrative } },
-                .primary_user_story => .{ .primary_user_story = narrative },
+                .brief => .{ .brief = .{ .title = narrative, .description = behavior, .primary_goal = narrative } },
+                .primary_user_story => .{ .primary_user_story = behavior },
                 .entities => .{ .entities = .{ .disposition = .not_applicable, .basis = narrative } },
                 .records => batch: {
                     const bound = (try session.currentBinding(a, current, context)).records;
@@ -302,7 +304,8 @@ test "native assembled observations resolve unrelated exact values and preserve 
         try std.testing.expect(first.first_pass);
         const captured = try std.json.parseFromSlice(std.json.Value, a, first.json, .{});
         defer captured.deinit();
-        try std.testing.expect(std.mem.indexOf(u8, captured.value.object.get("document").?.object.get("display_name").?.object.get("bytes").?.string, example[2]) != null);
+        try std.testing.expectEqualStrings(example[1], captured.value.object.get("document").?.object.get("display_name").?.object.get("bytes").?.string);
+        try std.testing.expect(std.mem.indexOf(u8, captured.value.object.get("document").?.object.get("primary_user_story").?.object.get("bytes").?.string, example[2]) != null);
         try std.testing.expect(captured.value.object.get("native_reference_support").?.object.get("claims").?.array.items.len == support.items.entries.len);
         try std.testing.expectEqualStrings(example[0], captured.value.object.get("native_reference_support").?.object.get("sources").?.array.items[0].object.get("bytes").?.string);
         const after = try std.json.Stringify.valueAlloc(a, .{ .session = try native.readSession(&view), .content = try authority_values.read(&view, authority.content_schema, .content), .support = @import("../../../src/domain/reference_support.zig").records((try native.readContext(&view)).references) }, .{});

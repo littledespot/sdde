@@ -7,6 +7,81 @@
 const std = @import("std");
 const json = @import("strict_json.zig");
 const limits: json.Limits = .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth };
+pub const FieldOptions = struct { inherited: ?@import("text_field_policy.zig").Field = null, reference_phase: ?@import("text_field_policy.zig").ReferencePhase = null };
+pub const FieldError = std.mem.Allocator.Error || error{InvalidModelTextBinding};
+pub fn fieldBindings(comptime T: type, a: std.mem.Allocator, options: FieldOptions) FieldError![]const @import("model_text_field.zig").Binding {
+    var arena: std.heap.ArenaAllocator = .init(a);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+    var path: std.ArrayList(@import("model_text_field.zig").Step) = .empty;
+    var result: std.ArrayList(@import("model_text_field.zig").Binding) = .empty;
+    if (comptime needsEnvelope(T)) try path.append(scratch, .{ .property = "value" });
+    try collectFields(T, scratch, options, &path, &result);
+    return @import("model_text_field.zig").clone(a, result.items);
+}
+pub fn selectedFieldBindings(comptime T: type, a: std.mem.Allocator, tag: std.meta.Tag(T), options: FieldOptions) FieldError![]const @import("model_text_field.zig").Binding {
+    inline for (@typeInfo(T).@"union".fields) |field| if (tag == @field(std.meta.Tag(T), field.name)) {
+        var selected = options;
+        selected.inherited = try declaredField(T, field.name, options);
+        return fieldBindings(field.type, a, selected);
+    };
+    unreachable;
+}
+fn declaredField(comptime T: type, comptime name: []const u8, options: FieldOptions) FieldError!?@import("text_field_policy.zig").Field {
+    if (comptime declared(T, "model_fields")) if (comptime @hasField(@TypeOf(T.model_fields), name)) return @field(T.model_fields, name);
+    if (comptime declared(T, "model_prose")) if (comptime @hasField(@TypeOf(T.model_prose), name)) return @field(T.model_prose, name);
+    if (comptime declared(T, "model_reference_fields")) return switch (options.reference_phase orelse return error.InvalidModelTextBinding) {
+        .extraction => @import("text_field_policy.zig").referenceField(.extraction, name),
+        .reconciliation => @import("text_field_policy.zig").referenceField(.reconciliation, name),
+    };
+    return options.inherited;
+}
+fn collectFields(comptime T: type, a: std.mem.Allocator, options: FieldOptions, path: *std.ArrayList(@import("model_text_field.zig").Step), result: *std.ArrayList(@import("model_text_field.zig").Binding)) FieldError!void {
+    // Some domain codecs deliberately separate admitted canonical evidence from
+    // their smaller wire value. Only that declared wire shape has model fields.
+    if (comptime declared(T, "model_field_projection")) return collectFields(T.model_field_projection, a, options, path, result);
+    const old = path.items.len;
+    defer path.shrinkRetainingCapacity(old);
+    switch (@typeInfo(T)) {
+        .@"struct" => |shape| {
+            if (comptime declared(T, "model_scalar")) {
+                if (comptime declared(T, "model_text")) {
+                    try result.append(a, .{ .field = options.inherited orelse return error.InvalidModelTextBinding, .path = try a.dupe(@import("model_text_field.zig").Step, path.items) });
+                    return;
+                }
+                return collectFields(@FieldType(T, T.model_scalar), a, options, path, result);
+            }
+            inline for (shape.fields) |field| {
+                var selected = options;
+                selected.inherited = try declaredField(T, field.name, options);
+                try path.append(a, .{ .property = field.name });
+                if (comptime (declared(T, "model_text") and std.mem.eql(u8, T.model_text, field.name)) or (declared(T, "model_prose") and @hasField(@TypeOf(T.model_prose), field.name))) {
+                    try result.append(a, .{ .field = selected.inherited orelse return error.InvalidModelTextBinding, .path = try a.dupe(@import("model_text_field.zig").Step, path.items) });
+                } else try collectFields(field.type, a, selected, path, result);
+                _ = path.pop();
+            }
+        },
+        .@"union" => |shape| {
+            inline for (shape.fields) |field| {
+                if (comptime declared(T, "model_inline") and @hasField(@TypeOf(T.model_inline), field.name)) continue;
+                var selected = options;
+                selected.inherited = try declaredField(T, field.name, options);
+                try path.append(a, .{ .variant = field.name });
+                const direct = comptime @typeInfo(field.type) == .@"struct" and !@hasField(field.type, "kind");
+                if (!direct) try path.append(a, .{ .property = field.name });
+                try collectFields(field.type, a, selected, path, result);
+                if (!direct) _ = path.pop();
+                _ = path.pop();
+            }
+        },
+        .pointer => |pointer| if (pointer.size == .slice and pointer.child != u8) {
+            try path.append(a, .items);
+            try collectFields(pointer.child, a, options, path, result);
+        },
+        .optional => |optional| try collectFields(optional.child, a, options, path, result),
+        else => {},
+    }
+}
 
 /// Restore only engine-determined fields from the same native choices that
 /// selected the response schema. Raw provider bytes remain untouched evidence.

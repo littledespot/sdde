@@ -111,6 +111,7 @@ pub const SignalSelectionId = struct {
 pub const ValidatedSignal = struct { claim_ids: []const ClaimId, citation_ids: []const CitationId, content: Content };
 pub const ConflictKind = enum { mutually_exclusive, precedence_missing, value_mismatch, scope_mismatch };
 pub const ConflictProposal = struct {
+    pub const model_fields = .{ .summary = @import("text_field_policy.zig").Field.reconciliation_conflict };
     claim_ids: []const ClaimId,
     kind: ConflictKind,
     summary: text.ReferenceSemanticText,

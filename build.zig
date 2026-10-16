@@ -626,6 +626,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/model_candidate_json_test.zig"),
         .target = target,
         .optimize = optimize,
+        .imports = &.{.{ .name = "unicode_normalization", .module = unicode_module }},
     }) });
     b.step("test-model-candidate-json", "Test compact model wire contracts against independent schema cases").dependOn(&b.addRunArtifact(candidate_json_tests).step);
 

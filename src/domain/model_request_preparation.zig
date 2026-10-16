@@ -29,6 +29,7 @@ pub fn build(allocator: std.mem.Allocator, source: Source, content: []const prov
         .controls = selected.controls,
         .original_sources = source.original_sources,
         .prose_fields = source.prose_fields,
+        .field_policies = source.field_policies,
     };
     try validateRequest(source, &request);
     var arena = std.heap.ArenaAllocator.init(allocator);
@@ -45,6 +46,7 @@ pub fn build(allocator: std.mem.Allocator, source: Source, content: []const prov
     for (source.original_sources, sources) |original, *copy| copy.* = .{ .source_id = original.source_id, .bytes = try owned.dupe(u8, original.bytes) };
     request.original_sources = sources;
     request.prose_fields = try @import("model_text_wire.zig").cloneProseFields(owned, source.prose_fields);
+    request.field_policies = try @import("model_text_field.zig").clone(owned, source.field_policies);
     request.request_schema_id.bytes = try owned.dupe(u8, request.request_schema_id.bytes);
     request.model_visible_input_id.bytes = try owned.dupe(u8, request.model_visible_input_id.bytes);
     const result = try owned.create(provider.IdentifiedProviderNeutralModelRequest);
@@ -66,6 +68,7 @@ pub const Source = struct {
     restriction: ?*const @import("model_result_schema.zig").Restricted = null,
     original_sources: []const @import("model_text_wire.zig").SourceText = &.{},
     prose_fields: []const @import("model_text_wire.zig").ProseField = &.{},
+    field_policies: []const @import("model_text_field.zig").Binding = &.{},
 
     pub fn resultSchema(self: Source) ValidationError!*const @import("model_result_schema.zig").Schema {
         const canonical = try self.canonicalSchema();
@@ -119,6 +122,7 @@ pub fn validateRequest(source: Source, request: *const provider.IdentifiedProvid
     const complete = if (source.composition) |part| part.plan.completeSchema() else source.result_resource.content.result_schema;
     if (!@import("model_text_wire.zig").validProseSchema(source.prose_fields, complete.root())) return error.InvalidModelRequestSource;
     if (!@import("model_text_wire.zig").sameProseFields(source.prose_fields, request.prose_fields)) return error.ModelRequestAssociationInvalid;
+    if (!@import("model_text_field.zig").same(source.field_policies, request.field_policies)) return error.ModelRequestAssociationInvalid;
     if (request.model_request_id != source.request_binding.modelRequestId() or
         !std.mem.eql(u8, request.request_schema_id.bytes, source.request_schema_id.bytes) or
         !std.mem.eql(u8, request.result_schema_id.bytes, source.result_resource.id.bytes) or

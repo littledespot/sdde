@@ -8470,7 +8470,20 @@ test "protocol correction retains summary and signal guidance selection bounds c
         const content = schema.findProperty(record.object, "content").?.schema;
         const model = schema.findProperty(content.object, "model").?.schema;
         try std.testing.expectEqualStrings("business", schema.findProperty(model.object, "kind").?.schema.constant.string);
-        try std.testing.expectEqualStrings(packet.body(), original_parts[1].user);
+        try std.testing.expect(initial.packet() == packet);
+        try std.testing.expectEqualStrings(initial.input().?, original_parts[1].user);
+        const visible = (try std.json.parseFromSlice(std.json.Value, a, original_parts[1].user, .{})).value.object;
+        const native_packet = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+        // Reference evidence remains complete; only selected-field guidance is
+        // added to its model-visible projection. Correction retains both views.
+        try std.testing.expectEqual(native_packet.count() + 2, visible.count());
+        for (native_packet.keys(), native_packet.values()) |name, value| {
+            try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, value, .{}), try std.json.Stringify.valueAlloc(a, visible.get(name).?, .{}));
+        }
+        const active = try @import("domain/model_text_field.zig").activeBindings(a, selected.root(), packet.fieldPolicies());
+        try std.testing.expect(active.len != 0);
+        try std.testing.expectEqual(active.len, visible.get("field_rules").?.array.items.len);
+        try std.testing.expectEqual(@as(usize, 0), visible.get("insertion_fields").?.object.get("exact_copy").?.array.items.len);
         try std.testing.expect(std.mem.indexOf(u8, packet.body(), "Other claims are supporting evidence") != null);
         try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "summary_purpose") != null);
         try std.testing.expectEqual(kind == .summary, std.mem.indexOf(u8, packet.body(), "Together, the statements must cover every assigned claim ID") != null);

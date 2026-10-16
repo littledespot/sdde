@@ -18,7 +18,12 @@ pub fn catalogue(a: std.mem.Allocator, groups: []const Group) r.Error![]const Ca
 pub fn members(groups: []const Group, id: Id) []const r.ClaimId {
     return if (id.ordinal == 0 or id.ordinal > groups.len) &.{} else groups[id.ordinal - 1].claim_ids;
 }
-pub const Explanation = struct { group_id: Id, kind: r.ConflictKind, summary: r.text.ReferenceSemanticText };
+pub const Explanation = struct {
+    pub const model_fields = .{ .summary = @import("text_field_policy.zig").Field.reconciliation_conflict };
+    group_id: Id,
+    kind: r.ConflictKind,
+    summary: r.text.ReferenceSemanticText,
+};
 pub fn expand(a: std.mem.Allocator, selection: Selection) r.Error![]const r.ClaimDispositionProposal {
     const values = try a.alloc(r.ClaimDispositionProposal, selection.claim_dispositions.len);
     for (selection.claim_dispositions, values) |choice, *value| {

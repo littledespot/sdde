@@ -70,7 +70,9 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     defer packets.release(witnessed);
     const prose = try packets.withProseFields(a, witnessed, with_facts.proseFields());
     defer packets.release(prose);
-    const inherited = try packets.withRestrictions(a, prose, selected.excludedVariants(), selected.integerChoices());
+    const fields = try packets.withFieldPolicies(a, prose, with_facts.fieldPolicies());
+    defer packets.release(fields);
+    const inherited = try packets.withRestrictions(a, fields, selected.excludedVariants(), selected.integerChoices());
     if (prior == .signals) return inherited;
     defer packets.release(inherited);
     if (prior == .dispositions) return @import("reference_model_input.zig").withDispositionChoices(a, inherited, current.partition.group.claim_ids, null, true);

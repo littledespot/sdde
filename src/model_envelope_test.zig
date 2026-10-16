@@ -76,7 +76,7 @@ test "model text wire grammar rejects encoded insertions before schema admission
     }) |case| {
         const sources: []const wire.SourceText = if (case.source) |bytes| &.{.{ .source_id = .{ .ordinal = 1 }, .bytes = bytes }} else &.{};
         var fixture: Fixture = undefined;
-        try fixture.initWithOriginalSources(model_text_schema, sources);
+        try fixture.initWithFieldPolicies(model_text_schema, sources, &.{}, &.{.{ .field = .functional_requirement, .path = &.{.{ .property = "text" }} }});
         defer fixture.deinit();
         const bytes = try std.json.Stringify.valueAlloc(std.testing.allocator, .{ .text = case.prose }, .{});
         defer std.testing.allocator.free(bytes);
@@ -109,7 +109,7 @@ test "model text wire grammar rejects encoded insertions before schema admission
 
 test "adjacent prose fragments cannot split an encoded insertion past the protocol boundary" {
     var fixture: Fixture = undefined;
-    try fixture.initWithSchema(model_text_schema);
+    try fixture.initWithFieldPolicies(model_text_schema, &.{}, &.{}, &.{.{ .field = .functional_requirement, .path = &.{.{ .property = "text" }} }});
     defer fixture.deinit();
     fixture.fake.invocation_plan = .{ .complete = .{ .content = "{\"text\":{\"fragments\":[\"Display {\\\"ki\",\"nd\\\":\\\"exact_copy\\\"}\"]}}", .input_tokens = 1, .output_tokens = 1 } };
     var response = try fixture.response();

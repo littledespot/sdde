@@ -312,7 +312,7 @@ pub const Driver = struct {
                 if (current_request.id().immutable_unit_owner_id == .semantic_review) self.support_repair_calls += 1;
                 if (view.contains(@import("../application/specification_omission_repair_workflow.zig").schema.key)) self.omission_repair_calls += 1;
                 const packet = @import("../application/pipeline_values.zig").read(&view, requests.packet_schema, @import("../domain/model_input_packet.zig").Packet) catch unreachable;
-                assertRepairRequest(arena.allocator(), current_request.prepared().?, packet, current_request.binding().registry_entry.bedrock_request_profile) catch unreachable;
+                assertRepairRequest(arena.allocator(), current_request, packet, current_request.binding().registry_entry.bedrock_request_profile) catch unreachable;
                 if (current_request.id().immutable_unit_owner_id == .semantic_review and std.mem.startsWith(u8, current_request.id().immutable_unit_owner_id.semantic_review.review_slot_id.bytes, "principle-consistency-")) self.principle_repair_calls += 1;
             }
             if (current_request.id().immutable_unit_owner_id == .reference_global and current_request.id().purpose == .atomic_repair) {
@@ -711,23 +711,51 @@ fn assertGenerationContext(a: std.mem.Allocator, request: *const @import("../dom
     try std.testing.expectEqual(@as(usize, 1), count);
 }
 
-fn assertRepairRequest(a: std.mem.Allocator, request: *const @import("../domain/llm_provider_operation.zig").IdentifiedProviderNeutralModelRequest, packet: *const @import("../domain/model_input_packet.zig").Packet, policy: @import("../domain/llm_provider_contracts.zig").BedrockRequestProfile) !void {
+fn assertRepairRequest(a: std.mem.Allocator, current: *const @import("../domain/model_request_handoff.zig").Request, packet: *const @import("../domain/model_input_packet.zig").Packet, policy: @import("../domain/llm_provider_contracts.zig").BedrockRequestProfile) !void {
+    const request = current.prepared().?;
+    // Presentation is model-facing data. The exact native packet remains the
+    // independent authorization/schema/evidence association throughout retries.
+    try std.testing.expect(current.packet().? == packet);
+    try std.testing.expect(@import("../domain/model_request_identity.zig").unitOwnerEql(packet.unit(), current.id().immutable_unit_owner_id));
+    try std.testing.expectEqualStrings(packet.purpose().atomic_repair.bytes, current.id().purpose.atomic_repair.bytes);
+    try std.testing.expectEqualDeep(packet.originalSources(), request.original_sources);
+    try std.testing.expectEqualDeep(packet.fieldPolicies(), request.field_policies);
     // Exercise the real provider serializer, without making a network call.
     const wire = try @import("../adapters/provider/bedrock_request.zig").encode(a, request, .inference, policy);
     const decoded = try std.json.parseFromSlice(std.json.Value, a, wire, .{});
     const user = decoded.value.object.get("messages").?.array.items[0].object.get("content").?.array.items[0].object.get("text").?.string;
-    try std.testing.expectEqualStrings(packet.body(), user);
+    try std.testing.expectEqualStrings(current.input().?, user);
+    var prepared_users: usize = 0;
+    for (request.content) |part| if (part == .user) {
+        try std.testing.expectEqualStrings(current.input().?, part.user);
+        prepared_users += 1;
+    };
+    try std.testing.expectEqual(@as(usize, 1), prepared_users);
     const input = try std.json.parseFromSlice(std.json.Value, a, user, .{});
     const repair = input.value.object.get("repair").?.object;
+    const native = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value;
+    try std.testing.expectEqualStrings(try std.json.Stringify.valueAlloc(a, native.object.get("repair").?, .{}), try std.json.Stringify.valueAlloc(a, input.value.object.get("repair").?, .{}));
     if (request.model_request_id.immutable_unit_owner_id == .specification_unit) try assertGenerationContext(a, request);
     try std.testing.expect(!repair.contains("expected"));
-    try std.testing.expectEqual(std.mem.eql(u8, repair.get("operation").?.string, "replace"), repair.contains("current_value"));
-    if (request.model_request_id.immutable_unit_owner_id == .semantic_review) {
-        const rule = repair.get("rule").?.object;
+    const rule = repair.get("rule").?.object;
+    const composition = rule.contains("rendered_text");
+    if (composition) {
+        try std.testing.expectEqualStrings("replace", repair.get("operation").?.string);
+        try std.testing.expect(!repair.contains("current_value"));
+        try std.testing.expectEqual(@as(usize, 3), rule.count());
+        try std.testing.expect(rule.get("rendered_text").? == .string);
+        try std.testing.expectEqual(@as(usize, 3), rule.get("issue").?.object.count());
+        try std.testing.expectEqual(@as(usize, 2), rule.get("field_rule").?.object.count());
+        const field = rule.get("field_rule").?.object.get("field").?.string;
+        for (packet.fieldPolicies()) |binding| {
+            if (std.mem.eql(u8, field, @tagName(binding.field))) break;
+        } else return error.MissingRepairCompositionField;
+    } else try std.testing.expectEqual(std.mem.eql(u8, repair.get("operation").?.string, "replace"), repair.contains("current_value"));
+    if (!composition and request.model_request_id.immutable_unit_owner_id == .semantic_review) {
         if (std.mem.eql(u8, rule.get("issue").?.string, "invalid_evidence") and rule.get("evidence_rule").?.object.contains("minimum")) {
-            const current = rule.get("finding").?.object.get("kind").?.string;
+            const decision = rule.get("finding").?.object.get("kind").?.string;
             const minimum = rule.get("evidence_rule").?.object.get("minimum").?.string;
-            if (std.mem.eql(u8, current, "supported") or std.mem.eql(u8, current, "not_applicable")) try std.testing.expectEqualStrings("claim_required", minimum);
+            if (std.mem.eql(u8, decision, "supported") or std.mem.eql(u8, decision, "not_applicable")) try std.testing.expectEqualStrings("claim_required", minimum);
             try std.testing.expect(rule.contains("evidence_issue"));
         }
     }

@@ -25,6 +25,17 @@ pub const GuidanceMode = enum { authoring, repair };
 const Requirement = @import("model_evidence.zig").Requirement;
 pub const FieldGuidance = struct { purpose: ?[]const u8 = null };
 pub const GroupGuidance = struct { signal_id: r.SignalId, requirements: []const Requirement };
+/// A presentation fact over native claims, independent of field policy. It
+/// never decides whether a source group establishes the field's meaning.
+pub fn tokenOnly(records: refs.Records, id: r.SignalId) Error!bool {
+    for (records.signals) |signal| {
+        if (signal.id.ordinal != id.ordinal) continue;
+        if (signal.value.claim_ids.len == 0) return error.InvalidSpecificationBinding;
+        for (signal.value.claim_ids) |claim| if ((try r.item(records.items, claim)).claim.content != .preserved_token) return false;
+        return true;
+    }
+    return error.InvalidSpecificationBinding;
+}
 pub const Guidance = union(enum) {
     brief: struct { title: FieldGuidance, description: FieldGuidance, primary_goal: FieldGuidance },
     primary_user_story: FieldGuidance,

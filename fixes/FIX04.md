@@ -80,12 +80,23 @@ call 8 returned the same value.
 [F11](#f11--high-admission-now-stops-the-defect-but-generation-cannot-recover-from-it)
 records why and the Phase 1A.2 remediation.
 
+The [18:58 hello-world run](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/report.json)
+was the first live test of Phase 1A.2. It ran on `54de975` with the Phase 1A.2 code
+still uncommitted (`modified: true`), so it is diagnostic evidence and cannot close
+that phase's exit gate. The brief and story were admitted with prose, admission
+escape was measured zero, and the run reached record generation before failing with
+`RepairNoProgress` after 14 calls and 20,374 tokens.
+[F12](#f12--high-descriptive-fields-recover-but-record-fields-collapse-to-insertions)
+records the findings and the Phase 1A.3 remediation.
+
 **Repository revision:** findings were first reviewed at
 `5816d9bed631acabcb256025e911bb565b8f9771`. The 16 October evidence ran on uncommitted
 builds of `4f25a0603d14b1d7413f3e992e53c931c97c40eb` and, for the 09:18 diagnostic,
 `94e2838999a889d4b9ea01eeab23bf758f39a1a9`. Phase 1A is committed as
 `bfec3d7f39a4dd25b6d3673206327d4e4c1e92db`, on which the 16:16 probe and 16:20
-diagnostic ran unmodified. Each report records its exact source identity.
+diagnostic ran unmodified. `54de975` commits only the Phase 1A.2 decision documents;
+the 18:58 diagnostic ran on it with the Phase 1A.2 code uncommitted (source
+`fbd52cd8…`). Each report records its exact source identity.
 
 **Status:** **Phase 0 complete (offline), 15 October 2026**; its
 concrete protocol and evidence are linked in §5.6. The user-directed Converse
@@ -98,11 +109,18 @@ offline exit gate are complete, 16 October 2026**: its accepted composition
 contract, retained replay and 1,699 passing verification tests are recorded in
 [the implementation evidence](FIX04-phase1a-implementation.md). Its live mechanical
 behavior is confirmed on committed `bfec3d7`: the defect stopped at admission and the
-run ended early with a typed failure. Generation did not recover, because the
-model-facing presentation still offers and encourages the rejected shape (F11), so
-**Phase 1A.2** must close before the Phase 2 freeze. Phase 2's harness is
-implemented, but its baseline remains unfrozen pending Phase 1A.2 and renewed budget
-feasibility with the recorded user decision. Semantic benefit and reduced
+run ended early with a typed failure. Generation did not recover: that build's
+model-facing presentation still offered and encouraged the rejected shape (F11).
+**Phase 1A.2's offline implementation is complete, 16 October 2026**; its
+implementation and validation are recorded in
+[the Phase 1A.2 evidence](FIX04-phase1a2-implementation.md). Its first live test,
+on uncommitted code, fixed the descriptive fields and repaired the story, but record
+fields collapsed into insertions and their field-level repair repeated the defect
+(F12). Separately approved hello-world and loan-renewal diagnostics on a committed
+build remain required to close its exit gate, and **Phase 1A.3** addresses F12
+before the Phase 2 freeze. Phase 2's harness is implemented, but its baseline
+remains unfrozen pending Phases 1A.2 and 1A.3 and renewed budget feasibility with the
+recorded user decision. Semantic benefit and reduced
 brittleness remain unmeasured.
 
 This review evaluates the supplied recommendations: retain single responsibility
@@ -780,7 +798,8 @@ admission rule it is meant to express:
    preserved token and its token-only source group to title, description and goal
    together, although only the description's role is obligation-bearing.
 4. **The policy is presented as a generic table.** `text_fields` lists every field of
-   the unit (four for the brief, including the irrelevant `clarification_question`;
+   the unit (four for the brief, including `clarification_question`, which its
+   selected schema permits through the clarification alternative;
    eight for extraction) with one identical explanation and engine vocabulary such as
    `incidental` and `obligation_bearing`, instead of a field-specific instruction for
    the assigned target.
@@ -813,6 +832,92 @@ policy, but the schema, static guidance, offered choices and repair packet still
 present an insertion-only answer as available, and in places as preferred. Close this
 in Phase 1A.2 (§5.6) before the Phase 2 freeze. Do not add sampling or temperature
 changes, extra repair attempts, a second model, or field-specific code.
+
+### F12 — High: descriptive fields recover, but record fields collapse to insertions
+
+**Run.** The [18:58 hello-world diagnostic](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/report.json)
+ran on `54de975` with the Phase 1A.2 code uncommitted (source `fbd52cd8…`,
+`modified: true`) and the GPT-OSS-20B binding. It ended `workflow_failed` with
+`RepairNoProgress` (`unchanged_repair`) at `generate-records-merge-repair`, after
+14 calls and 20,374 tokens. Admission escape was **measured zero** (9 admitted values
+from 7 producers). No review call was made and nothing was published.
+
+**What worked:**
+
+| Calls | Unit | Outcome |
+| --- | --- | --- |
+| 2 → 3 | Token classification | Malformed envelope (`{"token{…`), fixed by protocol correction |
+| 8 → 9 | Brief | Title and goal came back as plain prose under their string-only grammar. The description typed insertion syntax inside prose, which was rejected as `EmbeddedInsertionSyntax`; protocol correction, with the complete assignment, produced prose with a real insertion |
+| 10 → 11 | Story | Insertion-only, rejected as `reference_only`. The composition repair with the rendered defect returned prose with an embedded exact copy and was admitted (`changed: true`) |
+| 12 | Entity applicability | Admitted as prose (but see failure 3) |
+| 13 → 14 | Records | Insertion-only in five fields; the repair repeated the value and the run stopped with `unchanged_repair` |
+
+Phase 1A.2's intended effects are therefore visible. Every field whose grammar no
+longer offers exact copies came back as prose (title, goal, entity-applicability
+basis, entity meaning and relationship: five of five), the wire-syntax rule and its
+correction worked, the first rendered composition repair succeeded, and the escape
+metric reports a measured zero.
+
+**What failed:**
+
+1. **Initial record authoring collapsed into insertions.**
+   [Call 13](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000013/model_output.txt)
+   returned `{"fragments":[{"kind":"exact_copy"}]}` for Given, When, Then, the
+   functional requirement and the entity name: every returned field that the request's
+   new `insertion_fields.exact_copy` list named. The unlisted fields (entity meaning
+   and relationship) came back as prose. The pre-Phase-1A records request for the same
+   case ([09:18 run, call 10](../zig-out/e2e-spec/2026-10-15T22-18-35Z-a8740d575019326cb5b63f994c3dc426/evidence/generation/call-000010/model_output.txt))
+   had no such list and returned prose records, typing the literal inline. Across this
+   run, initial outputs in listed fields were insertion-only in six of seven cases
+   (story, Given, When, Then, requirement text, entity name; the description embedded
+   insertion syntax instead), and in none of the five unlisted fields. The records
+   request carried 15 `field_rules` with only three distinct instructions, ten of
+   them identical: "Write nonblank prose describing the behavior or constraint. Exact
+   copies may carry its exact-value obligation inside that prose; use only insertion
+   alternatives listed for this field", plus an 11-path insertion list.
+   **Hypothesis, not yet attributed:** the presentation of where insertions are
+   *permitted*, with obligation wording, is being followed as an instruction to insert.
+   It is confounded by field type, because the listed fields are the obligation-bearing
+   ones most likely to mention the token. It must be attributed before presentation
+   changes.
+2. **Field-level repair cannot recover a collapsed record.** The Given repair
+   ([call 14 request](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000014/request.json))
+   received the rendered defect and field rule, but `source_groups: []`, none of the
+   record's sibling fields, and a field purpose that forbids inventing prerequisites,
+   while four other fields of the same batch were also defective. The successful story
+   repair had its source groups and a narrative purpose. Even had Given succeeded,
+   three more single-field repairs (When, Then, requirement text) would have followed
+   in sequence against the same degenerate siblings. A composition failure spanning a
+   unit is being repaired at field granularity. By contrast, the brief's
+   embedded-syntax failure went through protocol correction with the complete original
+   assignment, and that succeeded.
+3. **Entity applicability was wrong, and the identity-label exception admitted the
+   consequence.** [Call 12](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000012/model_output.txt)
+   declared an entity "required" for a feature with no business data, justified by an
+   invented need to capture "identity, configuration, and runtime behavior". The
+   records batch then needed an entity, and its insertion-only name `Hello, World!` is
+   admissible under the entity-name exception. Native rules cannot judge
+   applicability; this is a semantic defect that inflates record work and later review.
+
+**Also observed:**
+
+- **Extraction merged the three requirements into one claim** again: four of four
+  samples since Phase 1A, against one of two before it. Records therefore receive one
+  source group carrying every behavior. Still unattributed; include it in the
+  attribution replays.
+- **GPT-OSS envelope-prefix malformation recurred** (`{"token{` here; `{"kind{` and
+  `{"find{` in earlier runs), costing one protocol correction each. The approved
+  normalizer covers only `{"{`; do not widen it without a decision, and count it under
+  mechanical enforcement.
+- **No complete-run cost exists yet.** The run used 20,374 tokens in 14 calls and
+  still did not reach review.
+
+**Implication.** Phase 1A.2 resolved the descriptive-field failure and repaired the
+story. The same failure class now concentrates in obligation-bearing record fields,
+and field-level repair cannot recover a unit-wide collapse. Phase 1A.3 attributes
+the presentation hypothesis and settles the repair granularity before the Phase 2
+freeze. Do not add sampling or temperature changes, extra repair attempts, a second
+model, envelope-normalizer widening or field-specific code.
 
 ## 4. Critical feasibility assessment and revised proposal
 
@@ -1670,34 +1775,48 @@ field-, workflow- or model-specific code:
    the user, 16 October 2026.** Fields whose exact-copy role was `incidental` (title,
    goal, entity-applicability basis, entity meaning, relationships, assumption,
    clarification question) change to a `prohibited` exact-copy role and are projected
-   without exact-copy insertion objects, so constrained decoding itself requires
-   prose. A literal the model types there is ordinary prose without lineage, which
+   without exact-copy insertion objects. Passive references remain permitted, so
+   prose presence still needs native admission. A literal the model types there is
+   ordinary prose without lineage, which
    those fields do not need because their occurrences cannot satisfy coverage.
    Entity names keep their identity-label exception. The amendment is recorded in the
    [composition contract](../design/contracts/text-field-composition.md#phase-1a2-amendment--exact-copies-only-where-they-can-carry-an-obligation)
    and [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md);
-   implementation is pending.
+   its offline implementation is recorded in
+   [the Phase 1A.2 evidence](FIX04-phase1a2-implementation.md).
 2. **Project schemas per field from the registry.** Each field's fragment alternatives
    list only its permitted insertion kinds, through the shared schema-projection owner,
    with one rule for generation, protocol correction and every repair route. Where
    insertions remain permitted, "contains prose" still cannot be expressed in the
-   closed schema profile or provider grammars and stays a native admission rule.
+   closed schema profile or provider grammars. Nonblank prose remains a native
+   admission rule for every prose-required field.
 3. **Derive guidance from the registry.** Remove the unconditional `exact_copy`
    sentence from `generation.context.json`. Present the assigned fields' composition
    rules in plain, field-specific terms, only for fields in the selected schema; drop
-   rows for fields the request cannot return, such as `clarification_question` in a
-   brief write request or extraction kinds outside the selected schema.
+   rows for fields the request cannot return, such as extraction kinds outside the
+   selected schema. Retain clarification-question rules when the selected schema
+   permits a clarification response, including the brief's current alternative.
 4. **Offer exact-copy choices only where they can be used.** Supply preserved tokens and
    token-only source groups only with a request containing a field whose policy
    permits them, and identify which fields may use them.
 5. **Make composition repairs present the defect, not an echoable answer.** For a
    composition issue, show the rejected value as rendered text with the specific issue
    and the field's rule, while the exact old value stays native for compare-and-swap.
-   The repair schema uses the same per-field projection, so for fields recommended in
-   item 1 prose is grammar-enforced.
+   The repair schema uses the same per-field projection. When no insertion
+   alternatives remain, it offers only literal text forms; native admission still
+   enforces nonblank prose.
 6. **Close the reporting gap.** Give engine-produced values a native origin, so
    admission escape can report measured zero.
 7. **Keep** the no-progress exhaustion, temperature and repair allowances unchanged.
+
+**Offline implementation and checks:** complete, 16 October 2026. Final
+`zig build verify -j2 --summary all` passed **156/156 steps and 1,718/1,718 tests**,
+including the retained F10/F11 replay and native packaging smoke. The registry drives native
+field bindings, selected schema and guidance, insertion catalogues and every repair
+schema. Composition repairs present rendered defects while exact compare-and-swap
+witnesses remain native. Typed native producer proofs close the attribution gap
+without treating missing model receipts as known evidence. See
+[implementation and validation](FIX04-phase1a2-implementation.md).
 
 **Test:** per-field schema projection for every permitted and prohibited insertion kind
 and every consumer; guidance projection with no unconditional exact-copy instruction
@@ -1712,10 +1831,77 @@ must either admit the brief and story with prose, or end in a typed composition
 failure after a repair whose presentation differed materially, with admission escape
 reported as measured zero. This is mechanical evidence, not quality.
 
+**Live result — 16 October 2026, uncommitted build.** The 18:58 hello-world
+diagnostic exercised Phase 1A.2 on uncommitted code (F12). The brief and story were
+admitted with prose; the run ended in a typed composition failure (in records) after
+a repair with rendered presentation; and admission escape was measured zero. That
+meets this gate's hello-world criteria in substance, but not on a committed build,
+and the loan-renewal diagnostic has not run. The gate therefore remains open. F12's
+record-field failures are addressed in Phase 1A.3.
+
 **Then, before the Phase 2 freeze:** the budget and scope decision in §5.5, using the
 new cost evidence, and the review and repair contract work identified in F9 and the
 [cost investigation](FIX04-phase2-cost-investigation.md), if the runs now reach review
 and exhaust the budget there.
+
+#### Phase 1A.3 — Attribute insertion presentation and repair collapsed units as units
+
+**Why it precedes Phase 2.** F12 shows the composition failure now concentrated in
+obligation-bearing record fields, with a plausible but unattributed presentation
+cause, and a repair granularity that cannot recover a unit-wide collapse. Both
+change which candidates are admitted, so the baseline must be frozen after them.
+
+**Steps:**
+
+1. **Commit Phase 1A.2 and rerun its gate on the committed build.** The 18:58 run used
+   uncommitted code and is diagnostic evidence only.
+2. **Attribute before changing presentation, through separately approved diagnostic
+   replays.** Using the [single-request debugger](../design/decisions/0019-single-request-debugger.md),
+   replay call 13's exact captured request unchanged and in presentation variants:
+   (a) without `insertion_fields`; (b) with `field_rules` reduced to one entry per
+   distinct instruction; (c) both; and (d) without the "obligation" wording. Keep the
+   model, settings and schema identical, with at least three repetitions per arm.
+   Also replay call 1 (extraction) with and without its field rules and insertion list,
+   to test the claim merging. Record the insertion-only rate per field and arm.
+   Replays carry no workflow authority. Expect about 4,000 tokens per records replay
+   and 16 to 20 sends in total.
+3. **Correct presentation at its owner, as the attribution indicates.** In
+   `model_field_presentation.zig`, state the composition rule once (prose is required;
+   a permitted exact copy goes inside a sentence and never forms the whole value), list
+   fields only where that changes the answer, remove duplicate rules, and describe
+   permission without obligation wording. The selected schema stays the authority for
+   what is permitted. No field-, case- or model-specific text.
+4. **Decide the repair granularity for composition failures (decision required).**
+   - **(a) Unit-level correction (recommended).** Route `reference_only` through the
+     unit's existing bounded protocol correction, with the complete original
+     assignment, as embedded insertion syntax already is. Composition is a property of
+     the whole response, its defective fields share one cause, and that route succeeded
+     live for the brief.
+   - **(b) Richer field repair.** Keep unit repair, but give record-field composition
+     repairs the record's sibling values and its source group, and repair all
+     composition defects of one record in one request.
+
+   Either option amends the routing sentence in the
+   [composition contract](../design/contracts/text-field-composition.md#wire-syntax-and-the-source-occurrence-exception).
+   No-progress exhaustion stays, applied to whichever owner handles the failure.
+5. **Measure entity applicability as its own failure class.** No native rule can judge
+   it. Record false-required applicability and its downstream cost in Phase 2
+   attribution, and do not narrow the entity-name exception on this evidence.
+6. **Keep** temperature, retry allowances and the envelope normalizer unchanged, with
+   no field- or model-specific code.
+
+**Test:** presentation projection tests for the chosen wording and deduplication;
+routing tests for the chosen repair granularity across generation, protocol
+correction and every repair route; the retained replay extended with the 18:58
+captures, still rejecting every captured defect; offline integration; then
+`zig build verify --summary all`.
+
+**Exit gate:** offline checks pass and decision 4 is recorded; the change is
+committed; then one separately approved diagnostic each for hello-world and
+loan-renewal on that committed build. Each must either admit records with prose, or
+end in a typed composition failure after one correction or repair that had complete
+unit context, with admission escape measured zero. This also closes Phase 1A.2's live
+gate. It is mechanical evidence, not quality.
 
 #### Phase 2 — Establish baseline quality and failure sensitivity
 
@@ -1727,13 +1913,13 @@ form the baseline. Distinguish controlled-predecessor diagnostics from complete
 production runs using actual predecessors; obtain the required live approvals for
 each scope.
 
-**Prerequisite:** close Phases 1A and 1A.2, then complete the budget-feasibility
-step in §5.5. With the compiled 100,000-token workflow budget, complete production
-runs ended in budget exhaustion during review (F9), and part of that review cost
-followed defects that native admission now rejects (F10). After Phase 1A the run
-fails earlier, at generation (F11), so no complete-run cost has yet been observed.
-Re-measure feasibility after Phase 1A.2; the required budget decision belongs to the
-user and must be recorded before the baseline is frozen.
+**Prerequisite:** close Phases 1A, 1A.2 and 1A.3, then complete the
+budget-feasibility step in §5.5. With the compiled 100,000-token workflow budget,
+complete production runs ended in budget exhaustion during review (F9), and part of
+that review cost followed defects that native admission now rejects (F10). Since
+Phase 1A, runs fail earlier, at generation (F11 and F12), so no complete-run cost has
+yet been observed. Re-measure feasibility after Phase 1A.3; the required budget
+decision belongs to the user and must be recorded before the baseline is frozen.
 
 **Test:** measure every §5.5 outcome, audit material disagreements between evaluation
 and source expectations, and identify reproducible failure classes. Record whether
@@ -1968,14 +2154,16 @@ their separate meanings.
 The Phase 0 and Phase 1 offline verification runs made no model/provider calls.
 Separately authorized live work then ran on 16 October: twenty-two one-send
 compatibility probes, of which three were `compatible` (the last on committed
-`bfec3d7`), and four full-workflow development diagnostics (two loan-renewal, two
+`bfec3d7`), and five full-workflow development diagnostics (two loan-renewal, three
 hello-world), none of which published a specification or ran rubric evaluation
-(header, F9, F10 and F11). No live debugger replay was performed. Phase 1's bounded
+(header and F9–F12). No live debugger replay was performed. Phase 1's bounded
 exchange gate is closed for the observed first request only. Phase 1A's accepted
 contract, implementation and offline gate are complete, and its enforcement is
-confirmed live; Phase 1A.2 and Phases 2–6 remain open. Phase 2 requires Phase 1A.2,
-fresh budget-feasibility evidence, the recorded user decision and a committed
-baseline build. Source labels, review and the F9–F11 semantic interpretations remain
+confirmed live. Phase 1A.2 is implemented offline and was exercised once live on
+uncommitted code; its exit gate is still open. Phase 1A.3 and Phases 2–6 remain
+open. Phase 2 requires Phases 1A.2 and 1A.3, fresh budget-feasibility evidence, the
+recorded user decision and a committed baseline build. Source labels, review and the
+F9–F12 semantic interpretations remain
 model-assisted or reviewer readings of retained outputs. Phase 1A adds the separate
 mechanical evidence linked above; no semantic
 benefit, reduced brittleness or useful publication is claimed. Historical results

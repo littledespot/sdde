@@ -10,7 +10,7 @@ const text = @import("../../src/domain/typed_text.zig");
 const policy = @import("../../src/domain/text_field_policy.zig");
 
 const Step = union(enum) { property: []const u8, index: usize };
-const Expected = enum { admitted, reference_only, embedded_insertion_syntax };
+const Expected = enum { admitted, reference_only, prohibited_exact, embedded_insertion_syntax };
 const Selection = struct {
     from: enum { model_output, request_user },
     path: []const Step,
@@ -27,12 +27,18 @@ const Capture = struct {
     construct_exact_copy: bool,
     expected_protocol_rejection: bool,
     values: []const Selection,
+    request: []const u8,
+    request_sha256: []const u8,
+    response: []const u8,
+    response_sha256: []const u8,
+    outcome: []const u8,
+    outcome_sha256: []const u8,
 };
 const Source = struct { project_path: []const u8, bytes: []const u8, sha256: []const u8 };
 const Run = struct { run_id: []const u8, case_id: []const u8, sources: []const Source, captures: []const Capture };
-const Counts = struct { runs: u32 = 0, captures: u32 = 0, values: u32 = 0, reference_only: u32 = 0, embedded_insertion_syntax: u32 = 0, admitted: u32 = 0 };
+const Counts = struct { runs: u32 = 0, captures: u32 = 0, values: u32 = 0, reference_only: u32 = 0, prohibited_exact: u32 = 0, embedded_insertion_syntax: u32 = 0, admitted: u32 = 0 };
 const Fixture = struct {
-    schema: enum { @"representation-admission-capture/v1" },
+    schema: enum { @"representation-admission-capture/v2" },
     scope: enum { offline_native_admission_replay },
     authority: enum { none },
     runs: []const Run,
@@ -119,7 +125,7 @@ fn capturedConstruction(a: std.mem.Allocator, packet: std.json.Value, construct:
     return choices;
 }
 
-test "test.integration.representation_admission all retained F10 values reject at native owners and prose controls admit" {
+test "test.integration.representation_admission all retained F10 and F11 values reject at native owners and prose controls admit" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -130,8 +136,9 @@ test "test.integration.representation_admission all retained F10 values reject a
         "2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4",
         "2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d",
         "2026-10-15T22-18-35Z-a8740d575019326cb5b63f994c3dc426",
+        "2026-10-16T05-20-15Z-44b2ac5e19cbf8d2ade89b149aed73c8",
     };
-    const required_calls = [_][]const u32{ &.{ 7, 8, 11, 13, 40 }, &.{ 8, 10, 11 }, &.{ 9, 10, 12, 13 }, &.{ 7, 8, 10, 11, 12 }, &.{ 7, 8, 9, 10, 11, 36 } };
+    const required_calls = [_][]const u32{ &.{ 7, 8, 11, 13, 40 }, &.{ 8, 10, 11 }, &.{ 9, 10, 12, 13 }, &.{ 7, 8, 10, 11, 12 }, &.{ 7, 8, 9, 10, 11, 36 }, &.{ 7, 8 } };
     try std.testing.expectEqual(required_runs.len, fixture.runs.len);
     var counts: Counts = .{};
     for (fixture.runs, required_runs, required_calls) |run, required_run, calls| {
@@ -149,6 +156,9 @@ test "test.integration.representation_admission all retained F10 values reject a
             try std.testing.expectEqual(required_call, capture.call);
             try std.testing.expectEqualStrings(capture.raw_output_sha256, &hash(capture.raw_output));
             try std.testing.expectEqualStrings(capture.context_sha256, &hash(capture.context));
+            try std.testing.expectEqualStrings(capture.request_sha256, &hash(capture.request));
+            try std.testing.expectEqualStrings(capture.response_sha256, &hash(capture.response));
+            try std.testing.expectEqualStrings(capture.outcome_sha256, &hash(capture.outcome));
             // CallContext has no historical Description-version reader. These
             // are the original, unchanged transport context bytes only.
             stage = .context;
@@ -194,6 +204,7 @@ test "test.integration.representation_admission all retained F10 values reject a
                 const issue: ?text.Issue = if (composition_issue) |failure| failure else try text.wireCompositionSources(text.BusinessSegment, a, sources, selection.field, value.segments);
                 const actual: Expected = if (issue) |failure| switch (failure.reason) {
                     .reference_only => .reference_only,
+                    .prohibited_exact => .prohibited_exact,
                     .embedded_insertion_syntax => .embedded_insertion_syntax,
                     else => return error.UnexpectedNativeAdmissionIssue,
                 } else .admitted;
@@ -201,18 +212,19 @@ test "test.integration.representation_admission all retained F10 values reject a
                 try std.testing.expectEqual(selection.expected, actual);
                 switch (actual) {
                     .reference_only => counts.reference_only += 1,
+                    .prohibited_exact => counts.prohibited_exact += 1,
                     .embedded_insertion_syntax => counts.embedded_insertion_syntax += 1,
                     .admitted => counts.admitted += 1,
                 }
             }
         }
     }
-    const required: Counts = .{ .runs = 5, .captures = 23, .values = 79, .reference_only = 10, .embedded_insertion_syntax = 19, .admitted = 50 };
+    const required: Counts = .{ .runs = 6, .captures = 25, .values = 83, .reference_only = 7, .prohibited_exact = 5, .embedded_insertion_syntax = 19, .admitted = 52 };
     try std.testing.expectEqualDeep(required, fixture.expected);
     try std.testing.expectEqualDeep(required, counts);
     const output = ".zig-cache/representation-admission";
     try std.Io.Dir.cwd().createDirPath(std.testing.io, output);
-    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/replay.json", .data = try std.json.Stringify.valueAlloc(a, .{ .schema = "representation-admission-replay/v1", .scope = "offline_mechanical_native_admission", .counts = counts, .provider_calls = 0, .workflow_authority = false, .semantic_quality_assessed = false }, .{ .whitespace = .indent_2 }) });
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/replay.json", .data = try std.json.Stringify.valueAlloc(a, .{ .schema = "representation-admission-replay/v2", .scope = "offline_mechanical_native_admission", .counts = counts, .provider_calls = 0, .workflow_authority = false, .semantic_quality_assessed = false }, .{ .whitespace = .indent_2 }) });
 }
 
 test "test.integration.representation_admission unrelated domains retain real native references inside prose" {
@@ -247,4 +259,80 @@ test "test.integration.representation_admission unrelated domains retain real na
         const wire_rejected = (try prepared_fixture.validator.checkBusinessIn(a, .{ .registry = scoped.registry, .current = scoped.current, .inputs = inputs, .scopes = &.{scoped.scope}, .field = .spec_story }, encoded)).invalid;
         try std.testing.expectEqual(.embedded_insertion_syntax, wire_rejected.reason);
     }
+}
+
+test "test.integration.representation_admission native summary reuse has measured provenance without model manufacture" {
+    const admission = @import("../harness/baseline/admission.zig");
+    const fixtures = @import("../../src/test_fixtures/reference_reconciliation.zig");
+    const native = @import("../../src/application/reference_reconciliation_workflow.zig");
+    const owned = @import("../../src/domain/reference_candidate_value.zig");
+    const values = @import("../../src/application/pipeline_values.zig");
+    const Origin = @import("../../src/domain/model_candidate_origin.zig").Origin;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const fixture = try @import("../../src/reference_reconciliation_test.zig").prepare(a, &.{"When the gate opens, show `Gate open.`.\n"});
+    defer fixture.deinit();
+    const origin: Origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } };
+    const input = try fixtures.build_input.execute(a, try fixtures.initialize(a, fixture.inputs, fixture.extracted, 8));
+    const leaf = (try fixtures.validate_summary.execute(a, .{ .input = input, .source = .{ .origin = origin }, .proposal = .{ .summary = try fixtures.summary(a, input) } }, fixture.context())).valid;
+    const initial_owner = try owned.create(a, null);
+    initial_owner.payload = .{ .reconciliation_summary = leaf };
+    const leaf_value = try values.adopt(a, native.summary_schema, owned.Value, owned.Owner, initial_owner, owned.view, owned.destroy, null);
+    defer values.destroy(leaf_value);
+    const input_schema = @import("../../src/application/reference_evidence_workflow.zig").inputs_schema;
+    const input_value = try values.create(a, input_schema, fixtures.r.evidence.Inputs, fixture.inputs);
+    defer values.destroy(input_value);
+    var view: @import("../../src/domain/pipeline_data.zig").View = .{};
+    view.slots[@intFromEnum(input_schema.key)] = input_value;
+    view.slots[@intFromEnum(native.summary_schema.key)] = leaf_value;
+    var tracker: admission.Tracker = .init(a);
+    defer tracker.deinit();
+    try tracker.observe(&view, 1, 1);
+    const progress = try fixtures.build_summary.execute(a, try fixtures.assign_summary.execute(a, leaf));
+    const next = try fixtures.build_input.execute(a, progress);
+    const reused = try (@import("../../src/actions/reference/reuse_reference_reconciliation_summary.zig").Action{ .validator = fixtures.validate_summary.validator }).execute(a, next, fixture.context());
+    const checked = (try fixtures.validate_summary.execute(a, reused, fixture.context())).valid;
+    const carried_owner = try owned.create(a, owned.view(initial_owner));
+    carried_owner.payload = .{ .reconciliation_summary = checked };
+    const carried_value = try values.adopt(a, native.summary_schema, owned.Value, owned.Owner, carried_owner, owned.view, owned.destroy, null);
+    defer values.destroy(carried_value);
+    view.slots[@intFromEnum(native.summary_schema.key)] = carried_value;
+    try tracker.observe(&view, 2, 1);
+    try tracker.observe(&view, 3, 1);
+    const exchanges = [_]admission.Exchange{.{ .call = 1, .origin = origin, .usage = @import("../../src/domain/llm_provider_operation.zig").ProviderUsage.init(10, 2, 12) }};
+    const audit = tracker.snapshot(true);
+    try admission.validate(a, audit, &exchanges);
+    const metric = try admission.measure(audit, &exchanges);
+    try std.testing.expectEqual(.measured, metric.status);
+    try std.testing.expectEqual(@as(u64, 0), metric.escaped_values);
+    try std.testing.expectEqual(@as(u64, 0), metric.unattributed_values);
+    try std.testing.expectEqual(@as(?f64, 0), metric.producer_escape_rate);
+    try std.testing.expectEqual(@as(usize, 2), audit.checks.len);
+    try std.testing.expectEqual(.model, std.meta.activeTag(audit.checks[0].producer));
+    try std.testing.expectEqual(.native, std.meta.activeTag(audit.checks[1].producer));
+    try std.testing.expectEqual(leaf.input.partition.id.ordinal, audit.checks[1].producer.native.summary_reuse.from_summary.ordinal);
+    var changed = try a.dupe(admission.Check, audit.checks);
+    changed[0].producer = .{ .unavailable = .missing_model_origin };
+    try std.testing.expectError(error.InvalidAdmissionAudit, admission.validate(a, .{ .sources = audit.sources, .checks = changed, .complete = true }, &exchanges));
+    changed[0] = audit.checks[0];
+    changed[1].producer.native.summary_reuse.source_check = 2;
+    try std.testing.expectError(error.InvalidAdmissionAudit, admission.validate(a, .{ .sources = audit.sources, .checks = changed, .complete = true }, &exchanges));
+    changed[1] = audit.checks[1];
+    changed[1].producer.native.summary_reuse.validation_sha256 = "forged";
+    try std.testing.expectError(error.InvalidAdmissionAudit, admission.validate(a, .{ .sources = audit.sources, .checks = changed, .complete = true }, &exchanges));
+    // A missing model producer is never inferred native from equal text.
+    var unknown: admission.Tracker = .init(a);
+    defer unknown.deinit();
+    initial_owner.payload.reconciliation_summary.projection.source.origin = null;
+    view.slots[@intFromEnum(native.summary_schema.key)] = leaf_value;
+    try unknown.observe(&view, 1, 1);
+    try std.testing.expectEqual(.unavailable, (try admission.measure(unknown.snapshot(true), &exchanges)).status);
+    try std.testing.expectEqual(.unavailable, std.meta.activeTag(unknown.checks.items[0].producer));
+    const foreign = [_]admission.Exchange{.{ .call = 1, .origin = .{ .request = .{ .value = 99 }, .attempt = .{ .value = 1 } }, .usage = null }};
+    tracker.reconcile(&foreign);
+    try std.testing.expectEqual(.missing_model_receipt, tracker.checks.items[0].producer.unavailable);
+    try std.testing.expectEqual(.missing_native_parent, tracker.checks.items[1].producer.unavailable);
+    try admission.validate(a, tracker.snapshot(true), &foreign);
+    try std.testing.expectEqual(.unavailable, (try admission.measure(tracker.snapshot(true), &foreign)).status);
 }

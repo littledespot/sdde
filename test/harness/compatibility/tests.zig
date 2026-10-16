@@ -32,7 +32,7 @@ test "compatibility requires an explicit case and live opt-in without replay or 
 
 test "compatibility classification requires exact usage capture and an incomplete workflow" {
     const probe: @import("../e2e/invoke.zig").Probe = .{ .physical_sends = 1, .boundary = .exchange_finished };
-    const workflow: c.Report = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "2026-10-15T00:00:00Z", .status = .workflow_cancelled, .workflow_outcome = .cancelled };
+    const workflow: c.Report = .{ .schema = .@"spec-e2e-report/v3", .started_at_utc = "2026-10-15T00:00:00Z", .status = .workflow_cancelled, .workflow_outcome = .cancelled };
     const valid: inspection.Inspection = .{
         .request_identity = .{ .run = "run", .call = "call", .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } } },
         .description = description,
@@ -87,7 +87,7 @@ test "compatibility classification requires exact usage capture and an incomplet
 
 test "compatibility missing trusted usage retains precise extraction rejection and stays inconclusive" {
     const probe: @import("../e2e/invoke.zig").Probe = .{ .physical_sends = 1, .boundary = .exchange_finished };
-    const workflow: c.Report = .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = "2026-10-15T00:00:00Z", .status = .workflow_failed, .workflow_outcome = .failed, .usage_complete = false };
+    const workflow: c.Report = .{ .schema = .@"spec-e2e-report/v3", .started_at_utc = "2026-10-15T00:00:00Z", .status = .workflow_failed, .workflow_outcome = .failed, .usage_complete = false };
     const missing_usage: inspection.Inspection = .{
         .request_identity = .{ .run = "run", .call = "call", .origin = .{ .request = .{ .value = 1 }, .attempt = .{ .value = 1 } } },
         .description = description,
@@ -123,13 +123,13 @@ test "compatibility report keeps unknown usage separate from accounted tokens" {
     defer arena.deinit();
     const a = arena.allocator();
     var report: reports.Report = .{ .origin = .offline, .started_at_utc = "2026-10-15T00:00:00Z", .case_source = "case.json", .execution_id = "run", .status = .inconclusive };
-    reports.applyExecution(&report, .{ .physical_sends = 1, .boundary = .exchange_finished }, .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = report.started_at_utc, .status = .workflow_cancelled, .workflow_outcome = .cancelled, .usage_complete = false });
+    reports.applyExecution(&report, .{ .physical_sends = 1, .boundary = .exchange_finished }, .{ .schema = .@"spec-e2e-report/v3", .started_at_utc = report.started_at_utc, .status = .workflow_cancelled, .workflow_outcome = .cancelled, .usage_complete = false });
     const bytes = try std.json.Stringify.valueAlloc(a, report, .{});
     const raw = try @import("../contracts.zig").decode(std.json.Value, a, bytes);
     try std.testing.expect(raw.object.get("total_actual_tokens").? == .null);
     try std.testing.expect(!raw.object.get("usage_complete").?.bool);
     try std.testing.expectEqual(@as(i64, 0), raw.object.get("total_accounted_tokens").?.integer);
-    reports.applyExecution(&report, .{ .physical_sends = 1, .boundary = .exchange_finished }, .{ .schema = .@"spec-e2e-report/v2", .started_at_utc = report.started_at_utc, .status = .workflow_cancelled, .workflow_outcome = .cancelled, .usage_complete = true, .total_tokens = 12 });
+    reports.applyExecution(&report, .{ .physical_sends = 1, .boundary = .exchange_finished }, .{ .schema = .@"spec-e2e-report/v3", .started_at_utc = report.started_at_utc, .status = .workflow_cancelled, .workflow_outcome = .cancelled, .usage_complete = true, .total_tokens = 12 });
     try std.testing.expectEqual(@as(?u128, 12), report.total_actual_tokens);
     try std.testing.expectEqual(@as(u128, 12), report.total_accounted_tokens);
 }

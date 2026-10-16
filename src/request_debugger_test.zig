@@ -238,6 +238,7 @@ test "response inspection admits retained native usage through existing normaliz
     const bytes = @embedFile("test_fixtures/bedrock_converse_usage/response.json");
     var selected = description;
     selected.schema = @embedFile("test_fixtures/bedrock_converse_usage/schema.json");
+    selected.field_policies = try @import("domain/model_candidate_json.zig").fieldBindings(@import("domain/reference_extraction_parser.zig").Response, a, .{ .reference_phase = .extraction });
     selected.response_mode = .native_schema;
     const checked = try fixture.provider.provider().inspect(a, selected, bytes);
     try std.testing.expectEqual(.valid, checked.extraction);
@@ -362,7 +363,7 @@ test "debugger reconstructs full raw request description response and rejects mi
     try std.testing.expectEqual(@as(usize, 1), calls[0].events.len);
     try std.testing.expectEqualStrings("check-evidence", calls[0].events[0].node.?);
     try std.testing.expectEqualStrings("SOURCE_SELECTIONS", calls[0].events[0].diagnostic.?);
-    const obsolete = try std.mem.replaceOwned(u8, a, sink.rows.items, "model-request-debug/v4", "model-request-debug/v3");
+    const obsolete = try std.mem.replaceOwned(u8, a, sink.rows.items, "model-request-debug/v5", "model-request-debug/v3");
     try std.testing.expect(!std.mem.eql(u8, obsolete, sink.rows.items));
     var unsupported: archive.Archive = .{ .allocator = a };
     try unsupported.ingest(obsolete);
@@ -799,7 +800,7 @@ test "replay dispatch order survives shuffled filenames reopening and separate s
     const duplicate_bytes = try std.json.Stringify.valueAlloc(a, record, .{});
     try directory.dir.writeFile(io, .{ .sub_path = "logs/debugger/" ++ "d" ** 32 ++ ".request.json", .data = duplicate_bytes });
     try std.testing.expectError(error.InvalidDebugArchive, store.load(a));
-    const legacy_bytes = try std.mem.replaceOwned(u8, a, duplicate_bytes, "request-replay/v5", "request-replay/v3");
+    const legacy_bytes = try std.mem.replaceOwned(u8, a, duplicate_bytes, "request-replay/v6", "request-replay/v3");
     try std.testing.expectError(error.InvalidJsonDocument, @import("domain/strict_json.zig").decode(debug.RequestRecord, a, legacy_bytes, .{ .maximum_depth = 64 }));
 }
 
@@ -895,7 +896,9 @@ test "selected request schemas survive capture and graph release without whole-s
             production.registry_entry.capabilities.structured_response = .bedrock_json_schema;
             production.registry_entry.bedrock_request_profile = .openai_oss;
             const selected = try debuggerSelectedShape(source, fixture.compiler.compiler(), shape);
+            defer if (selected.restriction) |restriction| restriction.release();
             production.request.response_schema = selected.schema;
+            production.request.field_policies = selected.fields;
             response_text = try a.dupe(u8, selected.response);
             production.request.response_guidance_mode = mode;
             production.registry_entry.json = mode == .native_schema;
@@ -918,6 +921,7 @@ test "selected request schemas survive capture and graph release without whole-s
         const parent = calls[0];
         try std.testing.expect(parent.parent == null);
         const selected = parent.description.?;
+        if (shape == 2 or shape == 6) try std.testing.expect(selected.field_policies.len != 0);
         const inspected = try fixture.provider.provider().inspect(a, selected, parent.response.?);
         if (inspected.schema != .valid) std.debug.print("selected shape {d}: {s}\n", .{ shape, try std.json.Stringify.valueAlloc(a, inspected, .{}) });
         try std.testing.expectEqual(.valid, inspected.schema);
@@ -932,7 +936,7 @@ test "selected request schemas survive capture and graph release without whole-s
         try std.testing.expectEqualStrings(parent.id, replayed.request.parent_call);
         _ = try fixture.replay().replay(a, replayIdentity("b" ** 32, 2), parent, .{ .call = 0, .mode = .modified, .edit = .{ .content = &.{ .{ .guidance = "Recheck the selected response." }, .{ .user = "Generate the selected data." } }, .schema = selected.schema } });
         try std.testing.expectEqual(@as(usize, 2), fixture.wire.calls);
-        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v4", "model-request-debug/v2");
+        const obsolete = try std.mem.replaceOwned(u8, a, try std.json.Stringify.valueAlloc(a, selected, .{}), "model-request-debug/v5", "model-request-debug/v2");
         try std.testing.expectError(error.InvalidJsonDocument, debug.Description.decode(a, obsolete));
     };
 }
@@ -966,7 +970,14 @@ test "replay serializes only the trusted model request profile and rejects legac
     try std.testing.expectEqual(.invalid, (try fixture.provider.provider().inspect(a, selected, legacy)).extraction);
 }
 
-fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_result_schema_compiler.zig").Compiler, shape: usize) !struct { schema: *const @import("domain/model_result_schema.zig").Schema, response: []const u8 } {
+const DebuggerSelectedShape = struct {
+    schema: *const @import("domain/model_result_schema.zig").Schema,
+    response: []const u8,
+    fields: []const @import("domain/model_text_field.zig").Binding = &.{},
+    restriction: ?*@import("domain/model_result_schema.zig").Restricted = null,
+};
+
+fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_result_schema_compiler.zig").Compiler, shape: usize) !DebuggerSelectedShape {
     if (shape == 0) return .{ .schema = try compiler.compile(a, schema), .response = "{\"answer\":\"kept\"}" };
     if (shape == 1) {
         const canonical = try compiler.compile(a,
@@ -988,15 +999,21 @@ fn debuggerSelectedShape(a: std.mem.Allocator, compiler: @import("ports/model_re
     const config = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/extraction.composition.json", a, .limited(1_048_576));
     const canonical = try compiler.compile(a, raw);
     const plan = try compiler.compileComposition(a, config, canonical);
-    if (shape == 6) return .{ .schema = try plan.selectSchema(0, &.{}), .response =
-    \\{"kind":"claims","claims":[{"content":{"kind":"business","segments":{"fragments":["The application must start successfully.","When started, the application must display `Hello, World!`.","Should also output date and time in UTC."]}},"citations":[{"first":5,"last":7}]},{"content":{"kind":"technical","nodes":{"fragments":["The application displays the string `Hello, World!`.","The application outputs the current date and time in UTC."]}},"citations":[{"first":6,"last":7}]}]}
-    };
+    if (shape == 6) return debuggerExtractionShape(a, try plan.selectSchema(0, &.{}),
+        \\{"kind":"claims","claims":[{"content":{"kind":"business","segments":{"fragments":["The application must start successfully.","When started, the application must display `Hello, World!`.","Should also output date and time in UTC."]}},"citations":[{"first":5,"last":7}]},{"content":{"kind":"technical","nodes":{"fragments":["The application displays the string `Hello, World!`.","The application outputs the current date and time in UTC."]}},"citations":[{"first":6,"last":7}]}]}
+    );
     const content = "{\"kind\":\"no_feature_claim\",\"reason\":{\"nodes\":\"No feature behavior.\"}}";
     const prior = try std.json.parseFromSlice(std.json.Value, a, content, .{});
-    if (shape == 2) return .{ .schema = try plan.selectSchema(0, &.{}), .response = content };
-    if (shape == 3) return .{ .schema = try plan.selectSchema(1, &.{.{ .part = 0, .value = prior.value }}), .response = "{\"token_classifications\":[]}" };
+    if (shape == 2) return debuggerExtractionShape(a, try plan.selectSchema(0, &.{}), content);
+    if (shape == 3) return debuggerExtractionShape(a, try plan.selectSchema(1, &.{.{ .part = 0, .value = prior.value }}), "{\"token_classifications\":[]}");
     const claim_prior = try std.json.parseFromSlice(std.json.Value, a, "{\"kind\":\"claims\",\"claims\":[]}", .{});
-    return .{ .schema = try plan.selectSchema(1, &.{.{ .part = 0, .value = claim_prior.value }}), .response = "{\"token_classifications\":[]}" };
+    return debuggerExtractionShape(a, try plan.selectSchema(1, &.{.{ .part = 0, .value = claim_prior.value }}), "{\"token_classifications\":[]}");
+}
+
+fn debuggerExtractionShape(a: std.mem.Allocator, selected: *const @import("domain/model_result_schema.zig").Schema, response: []const u8) !DebuggerSelectedShape {
+    const fields = try @import("domain/model_candidate_json.zig").fieldBindings(@import("domain/reference_extraction_parser.zig").Response, a, .{ .reference_phase = .extraction });
+    const restriction = try @import("domain/model_result_schema.zig").restrictFieldPolicies(a, selected, &.{}, &.{}, fields);
+    return .{ .schema = restriction.selected(), .response = response, .fields = fields, .restriction = restriction };
 }
 
 test "selected diagnostic schema parsing retains closed syntax and bounded root rules" {
