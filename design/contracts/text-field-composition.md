@@ -126,7 +126,7 @@ approval of [FIX04 Phase 1A.3](../../fixes/FIX04.md#phase-1a3--attribute-inserti
 decision 4, option (a), following the live evidence in
 [FIX04 F12](../../fixes/FIX04.md#f12--high-descriptive-fields-recover-but-record-fields-collapse-to-insertions).
 Implementation and verification are recorded in
-[the Phase 1A.3 record](../../fixes/FIX04-phase1a3-implementation.md).
+[the Phase 1A.3 record](../../fixes/Z_FIX02.md#543-phase-1a3-admission-routing-and-attribution-preparation).
 Live attribution and the separately approved workflow diagnostics remain open.
 
 - **Detection moves to response admission.** The composition rules of this contract

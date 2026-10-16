@@ -4,7 +4,7 @@
 - **Date:** 2026-10-06
 - **Authority:** User approval of all changes in FIX_003.
 - **9 October 2026 amendment authority:** Explicit user instruction to implement complete role decisions under [Z_FIX01 §9.8](../../fixes/Z_FIX01.md#98-complete-role-decisions-critical-review--9-october-2026).
-- **11 October 2026 authoring-association amendment authority:** Explicit user instruction to implement [FIX03 Phase 5](../../fixes/FIX03.md#521-phase-5-replacement-contract--implemented-candidate-qualification-pending), removing the independent role phase and moving semantic source selection into authoring under ADR 0020.
+- **11 October 2026 authoring-association amendment authority:** Explicit user instruction to implement [FIX03 Phase 5](../../fixes/archive/FIX03.md#521-phase-5-replacement-contract--implemented-candidate-qualification-pending), removing the independent role phase and moving semantic source selection into authoring under ADR 0020.
 - **10 October 2026 amendment authority:** Explicit user instruction to implement
   summary union coverage and proven duplicate normalization, followed by validated
   single-child carry-forward, under

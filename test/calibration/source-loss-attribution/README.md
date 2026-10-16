@@ -3,7 +3,7 @@
 **Contract cutover:** the retained files below are historical culprit-selection
 comparisons. Their schemas/edits must not be submitted as current production
 `preservation_comparisons` requests. FIX01-01 Phase 2 replaces that contract;
-[Phases 3–4](../../../fixes/FIX01-01.md#phase-3--compare-semantic-outcomes) own new
+[Phases 3–4](../../../fixes/archive/FIX01-01.md#phase-3--compare-semantic-outcomes) own new
 semantic comparison and live recovery evidence. The previous approvals are consumed.
 
 For the new candidate, obtain the packet from `Source.packetForLoss` and the

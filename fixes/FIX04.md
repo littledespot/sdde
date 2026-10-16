@@ -1,155 +1,57 @@
 # FIX04 — Critical review of semantic simplicity and generation feasibility
 
-**Reviewed:** 15 October 2026, Australia/Melbourne.
-
-**Current test selection — 16 October 2026:** The user switched back to
-**Bedrock GPT-OSS-20B**: `aws-bedrock / openai.gpt-oss-20b-1:0 /
-ap-southeast-2`, Converse, native JSON Schema, explicit low reasoning,
-engine-fixed temperature `0.1` and 16,384 requested output tokens. This
-supersedes the review's Luna-only selection and omitted-control instructions.
-The prospective protocol and live fixtures use this binding; the retained
-15 October Phase 0/1 reports and snapshots keep their historical Luna context.
-Their results do not qualify the newly selected binding. The configuration switch
-itself authorized no live run; a later separately authorized exchange passed the
-bounded compatibility gate as recorded below.
-
-**Current response-decoding correction — 16 October 2026:** the
-[07:29 Melbourne attempt](../zig-out/provider-compatibility/2026-10-15T20-29-20Z-a99ee228b9e19af49dd6e2784a35b700/report.json)
-received HTTP 200 with 2,254 reported tokens. The shared decoder rejected
-`usage.serverToolUsage: {}` before accounting or candidate inspection. The
-[provider contract](../design/features/F0007-AWSBedrockProvider.md#response-failure-and-accounting)
-now explicitly supports this closed empty metadata object and retains precise
-rejection diagnostics for unsupported shapes. The existing approved `{"{` prefix
-normalizer is unchanged. Captured-response offline regression is mechanical
-evidence; no new live call or semantic-quality qualification follows from this fix.
-
-**Current live evidence — 16 October 2026:** run details and exact commands
-are recorded in [FIX01](FIX01.md#2-implementation-history); this summary records
-their evaluation scope. Twenty bounded compatibility probes ran between 15 October
-16:25 and 16 October 07:46 Melbourne. Fifteen Luna and three GPT-OSS attempts
-received HTTP 403 `AccessDeniedException` from account access or IAM policy; they
-are inconclusive and reported no usage. One GPT-OSS HTTP-200 exchange exposed the
-decoding defect above. The separately authorized
-[07:46 Melbourne probe](../zig-out/provider-compatibility/2026-10-15T20-46-55Z-cb4fdfbfe3b6aff88bc99e68fa980506/report.json)
-was compatible for its first production request: HTTP 200, accepted JSON/schema,
-2,254 accounted tokens and the existing prefix normalization. The one-send stop
-intentionally cancelled the workflow; it published no specification and ran no
-rubric evaluation.
-
-Two separately authorized loan-renewal full-workflow runs followed. They are
-**development diagnostics, not Phase 2 baseline evidence**: loan-renewal is outside
-the Phase 0 case panel, and both ran on uncommitted builds of `4f25a06` with
-different source identities. The
-[07:54 run](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/report.json)
-(source `abf965…`) blocked on competing duplicate records at
-`UnsafeSpecificationRepair`, before source review, after 13 calls and 25,508 tokens.
-Native reference review subjects were then aligned with omission localization under
-existing authority; this does not change per-group record authoring or authorize
-competing-record repair. The
-[08:09 post-fix run](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/report.json)
-(source `fbb975…`) failed with `WorkflowTokenBudgetExceeded`: 37 calls and 101,002
-tokens against the compiled 100,000-token workflow budget. It stopped during entity
-source review, before the corrected native reference reviews, with no candidate
-repair, specification publication or rubric evaluation. Live validation of that
-correction and full-workflow acceptance remain open. [F9](#f9--high-selected-binding-full-workflow-diagnostics-expose-generation-review-and-budget-failures)
-records what these runs show.
-
-A third separately approved full-workflow diagnostic, the
-[09:18 hello-world run](../zig-out/e2e-spec/2026-10-15T22-18-35Z-a8740d575019326cb5b63f994c3dc426/report.json)
-on an uncommitted build of `94e2838…` (source `2a30ee8d…`), failed with
-`WorkflowTokenBudgetExceeded` after 41 calls and 101,134 tokens; review used 77%
-([Phase 2 audit](FIX04-phase2-audit.md),
-[cost investigation](FIX04-phase2-cost-investigation.md)). Its first defect was not
-the malformed JSON at call 22 that the report labels `first_observed_defect`, but
-call 8's story, made only of two exact-copy insertions and admitted by native
-validation. [F10](#f10--high-model-text-composition-is-not-admitted-against-its-field-purpose)
-traces that failure class through every run that reached generation and sets out
-the architecture-level change. After the correction, `zig build verify --summary all`
-passed 149/149 steps and 1,555/1,555 tests, including native packaging smoke. The
-155/1,786 count in §5.6 comes from the wider Phase 1 command
-`test-provider-compatibility test-rubric-evaluator verify`, so the two counts are
-not comparable.
-
-After Phase 1A was committed as `bfec3d7`, two more one-send probes (13:55 and 16:16)
-were `compatible`, the second on the clean committed build. The separately approved
-[16:20 hello-world run](../zig-out/e2e-spec/2026-10-16T05-20-15Z-44b2ac5e19cbf8d2ade89b149aed73c8/report.json),
-the first full workflow on a committed build and the first after Phase 1A, failed with
-`RepairNoProgress` after 8 calls and 12,896 tokens. Native admission rejected the
-brief's insertion-only title at call 7, before any review, and the unit repair at
-call 8 returned the same value.
-[F11](#f11--high-admission-now-stops-the-defect-but-generation-cannot-recover-from-it)
-records why and the Phase 1A.2 remediation.
-
-The [18:58 hello-world run](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/report.json)
-was the first live test of Phase 1A.2. It ran on `54de975` with the Phase 1A.2 code
-still uncommitted (`modified: true`), so it is diagnostic evidence and cannot close
-that phase's exit gate. The brief and story were admitted with prose, admission
-escape was measured zero, and the run reached record generation before failing with
-`RepairNoProgress` after 14 calls and 20,374 tokens.
-[F12](#f12--high-descriptive-fields-recover-but-record-fields-collapse-to-insertions)
-records the findings and the Phase 1A.3 remediation.
-
-**Repository revision:** findings were first reviewed at
-`5816d9bed631acabcb256025e911bb565b8f9771`. The 16 October evidence ran on uncommitted
-builds of `4f25a0603d14b1d7413f3e992e53c931c97c40eb` and, for the 09:18 diagnostic,
-`94e2838999a889d4b9ea01eeab23bf758f39a1a9`. Phase 1A is committed as
-`bfec3d7f39a4dd25b6d3673206327d4e4c1e92db`, on which the 16:16 probe and 16:20
-diagnostic ran unmodified. `54de975` commits only the Phase 1A.2 decision documents;
-the 18:58 diagnostic ran on it with the Phase 1A.2 code uncommitted (source
-`fbd52cd8…`). Each report records its exact source identity.
-
-**Status:** **Phase 0 complete (offline), 15 October 2026**; its
-concrete protocol and evidence are linked in §5.6. The user-directed Converse
-cutover and small-model test cost policy are included. **Phase 1's offline
-implementation is complete and mechanically verified**: a fresh production-request
-compatibility harness has a one-send boundary. Its authentic separately authorized
-GPT-OSS-20B exchange passed the bounded compatibility gate on 16 October. No full
-workflow has completed on the selected binding. **Phase 1A's implementation and
-offline exit gate are complete, 16 October 2026**: its accepted composition
-contract, retained replay and 1,699 passing verification tests are recorded in
-[the implementation evidence](FIX04-phase1a-implementation.md). Its live mechanical
-behavior is confirmed on committed `bfec3d7`: the defect stopped at admission and the
-run ended early with a typed failure. Generation did not recover: that build's
-model-facing presentation still offered and encouraged the rejected shape (F11).
-**Phase 1A.2's offline implementation is complete, 16 October 2026**; its
-implementation and validation are recorded in
-[the Phase 1A.2 evidence](FIX04-phase1a2-implementation.md). Its first live test,
-on uncommitted code, fixed the descriptive fields and repaired the story, but record
-fields collapsed into insertions and their field-level repair repeated the defect
-(F12). Separately approved hello-world and loan-renewal diagnostics on a committed
-build remain required to close its exit gate, and **Phase 1A.3** addresses F12
-before the Phase 2 freeze. Phase 2's harness is implemented, but its baseline
-remains unfrozen pending Phases 1A.2 and 1A.3 and renewed budget feasibility with the
-recorded user decision. Semantic benefit and reduced
-brittleness remain unmeasured.
+**Reviewed:** 15 October 2026, Australia/Melbourne. **Realigned:** 16 October 2026.
 
 This review evaluates the supplied recommendations: retain single responsibility
 for software, make model assignments semantically simpler, keep related meaning
-together, and leave bookkeeping and authority with deterministic code. At review
-time the test constraint was **current-generation Luna only on Bedrock**, with **Sonnet,
-Sol and Haiku excluded**, and the retained Phase 0 evidence froze
-`global.openai.gpt-6-luna`. Luna was never available to the test account, and the
-16 October selection above replaces it with GPT-OSS-20B. Historical GPT-OSS panels
-are therefore same-model evidence, but they ran under superseded engine contracts
-and codecs. They supply regression cases and plausible failure classes; they do not
-establish the current contract's defect rate or select an architecture (F7).
-Generation quality remains the primary outcome; an improved reviewer alone does not
-satisfy it, and a broken reviewer can prevent good generation from completing (F9).
+together, and leave bookkeeping and authority with deterministic code. Its question
+is whether a semantically simpler generation assignment improves
+**source-faithful complete specification generation** by the selected small model.
+It compares the current per-group record authoring (A) with one complete record
+collection (C) first, and considers a purpose split (B) or per-family collections
+(D) only where measured failures justify them (§5.2). Generation quality is the
+primary outcome. An improved reviewer alone does not satisfy it, and a broken
+reviewer can prevent good generation from completing (F9).
 
-The user has authorized a larger change if necessary and requested its steps and
-supporting research. Section 5 therefore describes the complete change surface;
-size alone is not a reason to stop or request the same authorization again. The
-current implementation delivers the offline evaluation foundation and the
-separately requested Bedrock Converse transport, including typed reasoning
-retention, registration and live-test cost enforcement. The subsequent Phase 1
-implementation prepares a fresh production request and retains bounded provider
-compatibility evidence without publication authority. Generation prompts,
-assignment topology and semantic admission rules are unchanged; F10 proposes an
-admission contract change that is not implemented. The explicit
-transport amendment does not accept the overall **Proposed design**.
-[FIX01](FIX01.md) remains the active implementation
-backlog under the [fix-record convention](README.md). This report supplies findings
-and decision criteria, not a parallel progress checklist.
+This document holds the findings, the feasibility assessment, the experiment design
+and its evidence gates. It is not a progress log: completed implementation, live-run
+records and verification are in [Z_FIX02](Z_FIX02.md#5-fix04--completed-evaluation-foundation-compatibility-and-admission-work-1516-october-2026), and [FIX01](FIX01.md)
+remains the active implementation backlog under the
+[fix-record convention](README.md). The user has authorized a larger change if
+necessary and requested its steps and supporting research. Section 5 therefore
+describes the complete change surface; size alone is not a reason to stop or request
+the same authorization again. That authorization does not select an experimental
+winner, authorize a live dispatch or accept the overall **Proposed design**.
+
+**Selected model.** Live tests use **Bedrock GPT-OSS-20B**: `aws-bedrock /
+openai.gpt-oss-20b-1:0 / ap-southeast-2`, Converse, native JSON Schema, explicit
+low reasoning, engine-fixed temperature `0.1` and 16,384 requested output tokens.
+The user selected it on 16 October, replacing the review's original
+current-generation Luna target, which was never available to the test account.
+The retained 15 October Phase 0 and 1 reports keep their historical Luna context and
+do not qualify this binding. Historical GPT-OSS panels are same-model evidence, but
+they ran under superseded contracts and codecs: they supply regression cases and
+plausible failure classes, not the current defect rate (F7).
+
+**Status — 16 October 2026.**
+
+| Step | Status | Record |
+| --- | --- | --- |
+| Phase 0 — evaluation protocol | Complete offline, 15 October | [Z_FIX02](Z_FIX02.md#phase-0-implementation) |
+| Phase 1 — compatible execution | Offline implementation complete; bounded live gate passed for the observed first request only | [Z_FIX02](Z_FIX02.md#phase-1-implementation-and-live-gate) |
+| Phase 1A — composition admission | Implemented and committed (`bfec3d7`); offline gate passed; enforcement confirmed live | [Z_FIX02](Z_FIX02.md#phase-1a-plan-decisions-and-results) |
+| Phase 1A.2 — presentation from the field registry | Implemented and committed (`2e64a31`); live gate open | [Z_FIX02](Z_FIX02.md#phase-1a2-plan-decisions-and-results) |
+| Phase 1A.3 — composition correction at admission | Routing and attribution preparation implemented and committed (`6676ad8`); attribution sends, presentation correction and committed-build diagnostics pending | [Z_FIX02](Z_FIX02.md#phase-1a3-plan-and-decisions-as-approved) |
+| Budget and scope decision (§5.5) | Required now; feasibility is `insufficient` | [Z_FIX02](Z_FIX02.md#545-phase-2-review-and-repair-cost-investigation) |
+| Phase 2 — baseline | Harness implemented; baseline not frozen | [Z_FIX02](Z_FIX02.md#phase-2-harness-implementation) |
+| Phases 3–6 — A/C comparison to adoption | Not started | — |
+
+Five full-workflow development diagnostics ran on 16 October, two on loan-renewal
+and three on hello-world. None published a specification or ran rubric evaluation;
+F9–F12 record what they show. No semantic benefit, reduced brittleness or useful
+publication is claimed. §1.1 sets the path from here to the A/C comparison.
+Findings were first reviewed at `5816d9bed631acabcb256025e911bb565b8f9771`; each live
+report records its exact source identity.
 
 ## 1. Assessment
 
@@ -177,9 +79,9 @@ purpose: values made only of exact-copy insertions, and insertion syntax typed
 inside prose. Review then became the first detector of a structurally detectable
 defect, misdiagnosed it, and drove a no-progress repair. This is a shared
 representation and admission gap, not a record-authoring boundary, so the A/C
-comparison cannot address it and would inherit it. Close it through the shared
-owners before the Phase 2 baseline is frozen, so that every arm runs under the same
-admission contract.
+comparison cannot address it and would inherit it. Phases 1A to 1A.3 close it at
+the shared owners, so that every arm runs under the same admission contract; their
+remaining live checks are the last prerequisite before the baseline (§1.1).
 
 A small JSON result, one action responsibility and a simple semantic assignment
 are different properties. A concrete design concern is record generation: one
@@ -236,6 +138,65 @@ per complete assigned duty**, with fewer unsupported additions and harmful repai
 Lower call counts, more populated fields and higher schema-admission rates are
 secondary observations.
 
+### 1.1 Path to the A/C comparison and alignment safeguards
+
+On 16 October the work ran through three prerequisite sub-phases, 1A, 1A.2 and
+1A.3, each opened by the latest live diagnostic (F10–F12). Each was justified: a
+known enforcement gap would be measured as a generation result, and closing it later
+would leave the arms under different contracts. But the last two were each opened by
+a single hello-world run, and the A/C comparison has not started. These safeguards
+keep the remaining work on this review's question.
+
+1. **Phase 1A.3 is the last prerequisite sub-phase.** After its remaining live
+   items, a further composition failure opens a new prerequisite only if it shows an
+   engine defect: a value violating a declared native rule escaped admission, or the
+   engine's own schema, guidance or correction presentation contradicts the admission
+   rule. A model that keeps failing under a coherent contract is a baseline result.
+   Phase 2 measures it as first-pass fidelity, mechanical enforcement and admission
+   escape, and the A/C comparison then measures whether either assignment reduces it.
+2. **Decide prerequisites on more than one case.** Hello-world has three short
+   requirements and one preserved token, so it cannot show whether a presentation
+   rule generalizes. A further presentation or contract decision needs evidence from
+   at least two unrelated development cases, starting with the hello-world and
+   loan-renewal diagnostics that Phase 1A.3's exit gate requires. Its rationale must
+   not depend on one case's literal or field.
+3. **Never tune on qualification cases.** Prerequisite diagnostics use development
+   cases or retained captures only. The sixteen reserved qualification features stay
+   unseen until Phase 5 (§5.5, Phase 2).
+4. **A model limitation is a valid outcome.** If the selected model cannot author
+   composition-valid records under a coherent contract, report that limit of the
+   tested request/model combination (§4.8). Do not answer it with field-specific
+   rules, sampling changes, extra repair attempts, a second model or a weaker
+   admission rule.
+5. **Make the budget and scope decision now, not after Phase 1A.3.** It does not
+   depend on Phase 1A.3's outcome. In the most fully measured diagnostic, extraction
+   and generation alone used 18,818 tokens and 11 sends. The experiment-wide stops
+   allow, on average, only 3,968–5,556 tokens and 1.98–2.78 sends per workload across
+   the declared 360–504 workloads, before any review. The decision belongs to the
+   user, its options are listed in §5.5, and it must be recorded before the Phase 2
+   freeze.
+6. **Work on review and repair cost in parallel, under its own owners.** Review used
+   77% of the tokens in that diagnostic (F9). The source-review omission contract, the
+   repair projection and any review batching are FIX01 R5 and R6 work, with their own
+   qualification. They need not wait for generation work, and generation changes
+   must not compensate for them.
+7. **Keep A versus C the primary question.** A new item belongs on this plan's
+   critical path only if it states how it makes A and C measurable under one
+   contract. Otherwise it belongs in FIX01.
+
+**Sequence from here:**
+
+1. **Close Phase 1A.3** (§5.6): run the 21 attribution sends after separate
+   approval; apply the presentation correction they support, or record a decision
+   that none is needed; commit; then run one hello-world and one loan-renewal
+   diagnostic on that committed build, each separately approved. This also closes
+   Phase 1A.2's live gate.
+2. **In parallel, now:** the budget and scope decision, and the review and repair
+   contract work in FIX01 R5 and R6.
+3. **Freeze the Phase 2 baseline** on a committed build with the recorded budget
+   decision and sufficient cost evidence, then measure it on the development panel.
+4. **Run Phase 3's A/C comparison**, then Phases 4–6 as their gates allow.
+
 ## 2. Authority and evidence boundaries
 
 The governing review route is [design §§1, 3, 4, 30 and 31](../design/design.md),
@@ -273,7 +234,7 @@ local FIX03 and its retained evidence, not an asserted byte-identical historical
 snapshot. Later delivery records matter: the 14 October amendment introduces
 `candidate_invalid`, plain-string/explicit-composition model text, native structural
 assembly facts and state v14. It also explicitly leaves authoring-boundary
-experiments unqualified. See [FIX03's amendment](FIX03.md#L1894) and
+experiments unqualified. See [FIX03's amendment](archive/FIX03.md#L1894) and
 [ADR 0020's current state contract](../design/decisions/0020-derived-exact-reference-lineage.md#L205).
 
 ## 3. Detailed findings
@@ -333,7 +294,7 @@ explicit composition object for mixed text/reference insertions. Recommending
 that the model stop assembling prose from bare arrays would repeat an already
 accepted change. Native `required`, `present` and `unmet` family facts likewise
 already reduce structural bookkeeping. Neither change proves meaning preservation.
-[14 October delivery record](FIX03.md#L1904). The representation is accepted, but
+[14 October delivery record](archive/FIX03.md#L1904). The representation is accepted, but
 the 16 October diagnostics show that its admission is incomplete: the selected model
 routinely produces composition the codec and validator accept but that cannot
 express the field's purpose (F10). That is an enforcement gap in the accepted
@@ -391,7 +352,7 @@ The historical 30-call source-review panel mixes responsibilities: it contains
 mostly description assignments, not complete production traversal. Its 15/26
 faithful omission handoffs and failed gap controls remain important, but not all
 benchmark expectations establish a missing duty in the particular field assigned.
-[FIX03 §3.2](FIX03.md#32-benchmark-responsibility-is-not-fully-aligned-with-assigned-review-scope),
+[FIX03 §3.2](archive/FIX03.md#32-benchmark-responsibility-is-not-fully-aligned-with-assigned-review-scope),
 [panel results](../test/calibration/source-loss-attribution/bound-preservation/citation-completeness/handoff-results.md).
 
 **Implication:** freeze the duty being assessed before scoring. Keep original
@@ -413,7 +374,7 @@ work. Native code can bind captured spans, identities and current associations. 
 cannot infer every business proposition or prove that a model-extracted list is
 exhaustive. Current source groups are availability/association structures, not
 certified independent semantic units. [Design §4](../design/design.md#4-deterministic-and-llm-responsibility-boundary),
-[authoring investigation boundary](FIX03.md#L1919).
+[authoring investigation boundary](archive/FIX03.md#L1919).
 
 The existing omission pipeline illustrates the risk. The reviewer supplies
 `missing_obligation`; a later focused comparison assesses whether intermediate
@@ -428,7 +389,7 @@ described invalid or unsupported content (F9).
 
 The 76-call citation comparison supplied the correct obligation. The 30-call
 reviewer panel required discovering it. Their scores cannot be compared as a
-same-task improvement or regression. [Recorded comparison](FIX03.md#21-the-two-latest-panels-test-different-responsibilities).
+same-task improvement or regression. [Recorded comparison](archive/FIX03.md#21-the-two-latest-panels-test-different-responsibilities).
 
 **Implication:** distinguish an oracle-premise capability test from a production
 handoff test. A stronger model or human may define evaluation expectations, but
@@ -449,7 +410,7 @@ semantic duties even when one provider call returns them.
 Historical calls 19 and 34 in the 11 October 07:03:52 UTC run used byte-identical
 complete AC requests but produced opposing Given judgments. A later repair placed
 successful startup in the precondition. Siblings were already visible; absent
-context cannot be asserted as the cause. [Retained case](FIX03.md#L2200).
+context cannot be asserted as the cause. [Retained case](archive/FIX03.md#L2200).
 
 The semantic unit should retain the actor/system, trigger, conditions, exceptions,
 negation, obligation strength and outcome needed to understand the duty. This is
@@ -585,69 +546,41 @@ not measured effects on the selected model.
 
 ### F9 — High: selected-binding full-workflow diagnostics expose generation, review and budget failures
 
-The two 16 October loan-renewal runs are the only full-workflow evidence on the
-selected binding. They are development diagnostics on one five-requirement case
-([source](../test/e2e/wf-002-loan-renewal/stories.md)), not a baseline or a rate.
-Model outputs are untrusted candidates. The classifications below are this
-review's source-based reading, not human adjudication.
+The 16 October full-workflow diagnostics are the first evidence on the selected
+binding under the current contract: two loan-renewal and three hello-world runs on
+development builds, none of which published a specification. They are diagnostics
+on two cases, not a baseline or a rate, and the classifications are this review's
+source-based reading of untrusted model output, not human adjudication. The
+[full record](Z_FIX02.md#f9--high-selected-binding-full-workflow-diagnostics-expose-generation-review-and-budget-failures)
+keeps the call-level evidence. Three consequences shape the experiment:
 
-**Generation: per-group authoring re-drafts the whole feature.** In both runs, each
-record batch re-authored the same renewal acceptance criterion and functional
-requirement instead of its assigned group's duties. At 07:54 the group-2 batch
-([call 13](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/evidence/generation/call-000013/model_output.txt))
-nearly reproduced group 1's records
-([call 12](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/evidence/generation/call-000012/model_output.txt));
-native admission rejected them as `competing_records` and blocked the run. At 08:09
-all three batches emitted overlapping renewal AC/FR records whose wording differed
-enough to be admitted as distinct, so each near-duplicate then needed its own
-source review. The same run's brief titled the feature `Loan renewed!Renewal refused.`,
-two exact-copy literals in place of a name. The entity pass created a `Loan` entity
-with a "has a renewal status" relationship that the source does not state. This is
-selected-binding evidence for the source-group ownership risk in F1 and §4.3. It
-supports running the A/C comparison first, because C removes the per-group
-authoring boundary; it does not show that C will succeed.
-
-**Review: wrong finding types, confirmed downstream.** Before the budget stop,
-review returned 27 findings: 20 `supported`, 3 `candidate_omission`,
-1 `candidate_invalid` and 3 `unsupported`. None of the three omissions described
-source meaning missing from the candidate:
-
-- [call 13](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000013/model_output.txt)
-  reported the invalid title, which is a `candidate_invalid` defect;
-- [call 28](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000028/model_output.txt)
-  reported a renewal-status attribute that the source does not establish;
-- [call 33](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000033/model_output.txt)
-  gave as its `missing_obligation`: "No source requirement for the business
-  meaning of Loan is present in the original source."
-
-The bound-preservation comparisons
-([14](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000014/model_output.txt),
-[29](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000029/model_output.txt),
-[34](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/evidence/generation/call-000034/model_output.txt))
-returned `lost` for all five assessments, which is F4's risk observed on the
-selected binding. The three `unsupported` findings ask the user to define entity
-content the generator invented; admitted as clarifications, they would be false
-gaps. Had the budget allowed, these findings would have driven repair or
-clarification from false premises. F6 applies directly: finding type selects the
-repair or clarification route, so a real defect reported with the wrong type is a
-harmful diagnosis.
-
-**Cost and budget: review dominates, and the workflow cannot finish.** In the 08:09
-run, extraction through validation used 6 calls and 8.8k tokens (9%), generation
-6 calls and 16.8k tokens (17%), and source review 25 calls and 75.4k tokens (75%).
-Review then stopped before the signal, token and conflict assessments. The
-13 October hello-world diagnostic, under an earlier contract, also exhausted the
-budget, with review using about 78k of its 100k tokens. The 100,000-token budget is
-a compiled engine constant
-([core operations](../src/composition/core_workflow_operations.zig#L35),
-[native operations](../src/composition/native_workflow_operations.zig#L641)), not
-case configuration. At current review cost every full workflow on the development
-cases would end `failed` on budget, so Phase 5 useful completion would measure the
-budget rather than quality. The protocol's experiment-wide stop of 2,000,000 actual
-tokens and 1,000 sends includes review and repair, and covers fewer than 20 full
-workflows at 100k tokens or more each. Phase 5 alone needs 144–288 paired full
-workflows (8–16 features × 3 variants × 3 repetitions × 2 builds), and Phase 2
-also requires complete production runs.
+- **Per-group authoring re-drafts the whole feature.** In both loan-renewal runs
+  ([07:54](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/report.json),
+  [08:09](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/report.json)),
+  each record batch re-authored the same renewal acceptance criterion and functional
+  requirement instead of its own group's duties: at 07:54 as `competing_records` that
+  blocked the run, at 08:09 as near-duplicates that each needed their own review.
+  This is selected-binding evidence for the source-group ownership risk in F1 and
+  §4.3. It supports running the A/C comparison first, because C removes the
+  per-group authoring boundary; it does not show that C will succeed.
+- **Review returns wrong finding types.** In the 08:09 run none of the three reported
+  omissions described source meaning missing from the candidate, all five
+  bound-preservation comparisons then returned `lost`, and three `unsupported`
+  findings asked the user to define content the generator had invented. Finding type
+  selects the repair or clarification route (F6), so a real defect reported with the
+  wrong type is a harmful diagnosis. §5.5 therefore measures finding-type accuracy.
+- **Review dominates cost, and the workflow cannot finish within budget.** Source
+  review used 75% of the 08:09 run's tokens and 77% of the
+  [09:18 run's](../zig-out/e2e-spec/2026-10-15T22-18-35Z-a8740d575019326cb5b63f994c3dc426/report.json)
+  ([cost investigation](Z_FIX02.md#545-phase-2-review-and-repair-cost-investigation)). Both stopped on the 100,000-token workflow
+  budget before review finished. That budget is a compiled engine constant
+  ([core operations](../src/composition/core_workflow_operations.zig#L35),
+  [native operations](../src/composition/native_workflow_operations.zig#L641)), not
+  case configuration. At this cost, Phase 5 useful completion would measure the
+  budget rather than quality, and the protocol's experiment-wide stops of 1,000 sends
+  and 2,000,000 actual tokens cover fewer than 20 such workflows, against 144–288
+  paired full workflows in Phase 5 alone (8–16 features × 3 variants × 3 repetitions
+  × 2 builds).
 
 **Implication:** generation decomposition alone cannot produce useful completions
 while review cost and diagnosis quality are unmeasured. Phase 2 must attribute
@@ -656,268 +589,92 @@ accuracy (§5.5) and settle budget feasibility before dispatch. Raising the comp
 budget is an engine contract change, not a test-configuration adjustment. It needs
 an explicit decision and must be frozen before the baseline, so that baseline and
 candidate share it. Do not raise it automatically to obtain a completion, and do not
-weaken review gates to save tokens. Part of this review cost begins earlier, with
-defects native admission should have rejected (F10).
+weaken review gates to save tokens. Part of this review cost began with defects
+native admission should have rejected (F10).
 
 ### F10 — High: model text composition is not admitted against its field purpose
 
-This finding describes the retained diagnostics before the Phase 1A amendment.
-The [completed implementation and offline evidence](FIX04-phase1a-implementation.md)
-record the current enforcement; historical report field names and captures below
-remain unchanged.
-
-**Observed chain (09:18 hello-world diagnostic).** Call 8 asked for the primary user
-story, whose purpose is "one narrative describing the actor or system identified by
-the source, its action and intended result". The model returned
-[`{"fragments":[{"kind":"exact_copy"},{"kind":"exact_copy"}]}`](../zig-out/e2e-spec/2026-10-15T22-18-35Z-a8740d575019326cb5b63f994c3dc426/evidence/generation/call-000008/model_output.txt):
-no prose, and the sole eligible token inserted twice, rendering
-`Hello, World!Hello, World!`. Native admission accepted it. Source review
-(call 15) correctly saw a defect but reported an omission whose "obligation" was the
-engine's own narrative instruction; loss localization (call 16) confirmed it; the
-omission repair (call 36) returned the same two insertions, merged with
-`changed: false`; and re-review (calls 37–41) ran until the 100,000-token budget was
-exhausted. Together these cost about 23,000 tokens: 4,682 for the misdiagnosis
-(calls 15–16) and 18,316 for the unchanged repair and the five reviews it triggered,
-as the cost investigation measured. That is observed cost, not evidence that the run
-would otherwise have completed.
-
-**This is a recurring failure class, not a story defect.** Every full-workflow run
-that reached generation under the 14 October model-text representation shows one or
-both of two inverse composition failures on the selected binding:
-
-| Run | Values made only of insertions | Insertion syntax typed inside prose and admitted as text |
-| --- | --- | --- |
-| [13 Oct 22:02 UTC, hello-world](../zig-out/e2e-spec/2026-10-13T22-02-37Z-b20ce81708023ac1030af300c845affa/report.json) | brief title, story, omission repair (calls 7, 8, 40) | calls 7, 11, 13 |
-| [13 Oct 22:03 UTC, loan-renewal](../zig-out/e2e-spec/2026-10-13T22-03-58Z-facbd733ec967b7453a85ef64d4bb571/report.json) | story (8) | calls 10, 11 |
-| [15 Oct 20:54 UTC, loan-renewal](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/report.json) | story (10) | calls 9, 12, 13 |
-| [15 Oct 21:09 UTC, loan-renewal](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/report.json) | title `Loan renewed!Renewal refused.` and story (7, 8) | calls 10–12 |
-| [15 Oct 22:18 UTC, hello-world](../zig-out/e2e-spec/2026-10-15T22-18-35Z-a8740d575019326cb5b63f994c3dc426/report.json) | story, entity-applicability basis, omission repair (8, 9, 36) | — |
-
-The second column means wire syntax became business text. For example, the 21:09
-run admitted the acceptance criterion "…displays the message
-`{"fragments":[{"kind":"exact_copy","claim_id":2}] }` along with the new due date",
-and source review judged most such fields `supported`. Counts come from a scan of
-retained model outputs; they describe five development diagnostics on two cases,
-not a population rate.
+**Failure class.** Every full-workflow run that reached generation under the
+14 October model-text representation admitted one or both of two inverse composition
+failures. Some values were made only of exact-copy insertions, such as the 09:18
+story `Hello, World!Hello, World!`, built from two insertions and no prose. In
+others, insertion syntax typed inside prose was admitted as business text. Review
+then became the first detector of a structurally detectable defect, misdiagnosed it
+and drove an unchanged repair; in the 09:18 run that chain cost about 23,000 tokens.
+The [full record](Z_FIX02.md#f10--high-model-text-composition-is-not-admitted-against-its-field-purpose)
+traces the five runs and every layer the defect passed through.
 
 **General invariant.** A declared text field's admitted value must be able to
-express that field's declared purpose. Typed insertions are exact-value and
-reference evidence placed inside meaning, not a substitute for it, and the model's
-wire syntax never becomes business text. One owner must declare this per field and
-apply it identically to initial authoring, protocol correction, every repair route,
-collection coverage and stored readback. [Design §7.1](../design/contracts/07-domain-representations.md#71-shared-types)
-already states the intent ("Exact copies can appear within a sentence"), and
-[§17.3](../design/contracts/17-specify.md#173-llm-work) says "a reference alone does
-not describe behavior or a goal" and "literal values alone do not replace the
-behavior involving them". It also says that guidance "is not a deterministic
-semantic validator". The structural part of it, whether any prose exists at all, is
-deterministic and is currently unowned.
+express that field's declared purpose. Typed insertions are exact-value and reference
+evidence placed inside meaning, not a substitute for it, and the model's wire syntax
+never becomes business text. One owner declares this per field and applies it
+identically to initial authoring, protocol correction, every repair route,
+collection coverage and stored readback. Whether any prose exists is deterministic;
+whether the prose is adequate remains a semantic judgment.
 
-**Where the architecture lets the failure through:**
+**Resolution.** The accepted
+[composition contract](../design/contracts/text-field-composition.md) implements the
+invariant through one field-policy registry. Phase 1A enforces it at admission,
+Phase 1A.2 projects it into model-facing presentation, and Phase 1A.3 corrects
+composition defects at response admission (§5.6). The rule applies to every model
+and provider, including the proposed [Claude connector](claude_connector.md). It has
+no field-, case- or model-specific branch, no prompt-only fix, and no normalizer that
+turns strings into insertions.
 
-| Layer | Current behavior | Gap | Required change at the owning boundary |
-| --- | --- | --- | --- |
-| Field-purpose contract | Purposes are prose strings in [required_authority_description.zig](../src/domain/required_authority_description.zig), which declares "no requiredness or routing policy"; generation guidance restates them | No typed property says whether a field needs prose or what role exact copies play in it | Add one closed, typed composition policy per declared text field, owned by the field registry: whether nonblank prose is required, and whether exact-copy and passive insertions are prohibited, incidental or obligation-bearing in that field. Every consumer reads it from that owner. |
-| Wire codec ([§7.1, 14 October amendment](../design/contracts/07-domain-representations.md#approved-model-facing-text-amendment--14-october-2026)) | Any prose string is accepted, including the codec's own insertion-object syntax | Unexecuted insertions become prose in four of the five runs | Reject a prose fragment containing the closed insertion grammar as a protocol error, routed to the existing protocol correction, unless those exact bytes occur in the original source. Never convert such text into an insertion; §7.1 forbids inferring an occurrence from equal text. |
-| Typed-text validator ([typed_text.zig:130-182](../src/domain/typed_text.zig#L130-L182)) | Every insertion sets `visible = true`; only an empty or blank value rejects | Insertion-only values pass for every field | Apply the field policy: a prose-required field without nonblank prose fails with a typed `reference_only` issue whose explanation comes from the policy owner. Callers ([specification_provenance.zig:225-240](../src/domain/specification_provenance.zig#L225-L240), extraction and reconciliation text validation) pass the field's policy instead of applying a local rule. |
-| Collection coverage ([specification_coverage.zig:73-98](../src/domain/specification_coverage.zig#L73-L98), ADR 0020) | A `business_exact_string` token's obligation is satisfied by an `exact_copy` occurrence in any singleton or record field | A literal-only title or story satisfies the exact-copy obligation, so the native gate rewards the degenerate output | Count only occurrences in fields whose policy declares the token's role obligation-bearing and that passed composition. Whether the token is used correctly remains a semantic review judgment. |
-| Admission routing | Native typed issues already route to unit repair (`generate-unit` → `authorize-repair`) | The composition defect never became a native issue, so it fell through to model review | No new route. The new issue uses the existing unit repair with the old value, issue and field purpose; wire-syntax rejections use protocol correction. |
-| Repair ([atomic_repair.zig](../src/domain/atomic_repair.zig), shared retry owner) | Repair outputs pass `valueIn`, but nothing rejected them; an unchanged result merges with `changed: false`, and the merge allowances are 64 executions per defect key | A no-progress repair consumes budget and triggers re-review | Repair outputs automatically meet the same composition rule. Separately, the shared retry owner treats a repair whose canonical result equals the rejected value for the same defect key as no progress, ending in a typed exhausted outcome. This needs an explicit shared contract, not a repair-route branch. |
-| Source review ([specification_support.zig](../src/domain/specification_support.zig)) | Review was the first detector and misdiagnosed the defect | Model review was acting as a mechanical validator, and its wrong finding type selected the wrong repair route | Invariant: a value that fails a declared native rule never reaches model review. Review remains for semantics; qualifying omission statements against original sources stays a separate item (cost investigation step 1). |
-| Model-facing presentation | Shared guidance is mostly insertion syntax; the story prompt is two lines; the story packet offers a token-only group and the preserved token; the schema allows insertion-only arrays | The model is not told the rule, and the schema cannot express it | Present each field's composition policy from its owner in the packet, and offer exact-copy choices only where the policy permits them. Schemas stay guidance: neither the closed schema profile nor provider grammars (Bedrock or Anthropic) can express "contains a prose string". Do not add a new prompt sentence as the fix (F2). |
-| Readback and rendering | Stored state and renderers trust admitted values | A value admitted before the change could persist | Stored readback validates with the same policy, with no compatibility reader; the renderer never emits wire syntax. |
-| Evaluation and reporting | `first_observed_defect` is the first *native* rejection; Phase 2 attribution has no representation category | Structurally detectable defects are attributed to generation or review, and the report label misleads | Rename the label to "first native rejection". Add an admission-escape measure and a representation/admission category to Phase 2 attribution (§5.5, Phase 2). |
-
-**What must not be done.** No branch for stories, titles, Hello World, repeated
-literals or GPT-OSS. No prompt-only fix. No normalizer that turns strings into
-insertions, strips duplicates or merges fragments. No extra model call or reviewer
-instruction acting as the validator. No removal of exact-copy support to hide the
-failure, which would lose ADR 0020 lineage. No weakening of review or coverage gates,
-and no budget increase justified by this finding. The policy applies to every
-model and provider, including the proposed [Claude connector](claude_connector.md).
-
-**Expected effect and its limit.** In the 09:18 run, call 8 would have been rejected
-at admission and sent to one native unit repair with an explicit issue, instead of
-reaching review. The model may repeat the failure; the no-progress rule then ends it
-early as a typed failure. This removes an entry point for the review and repair
-chain in F9 and the cost investigation. It does not establish completion within the
-budget, semantic quality or any comparison result.
-
-**Relation to the other proposals.** The A/B/C/D comparisons all change record
-authoring and share this representation, so none of them addresses F10, and C would
-inherit it. The cost investigation's next steps (qualify review omissions, shrink the
-repair projection, consider review batching) reduce the cost of failures that F10
-would stop at admission; they remain needed for failures F10 cannot detect.
-
-**Implication:** close F10 in Phase 1A (§5.6) before the Phase 2 baseline is frozen.
-It changes accepted contracts in §7.1, §17.3 and ADR 0020, so it needs the
-decisions listed there before implementation. Phase 1A's live result is in F11.
+**Relation to the comparison.** A, B, C and D all share this representation, so none
+of them addresses F10, and C would inherit it. Closing it is a prerequisite for a
+fair comparison, not one of its candidates: a gain from adding such a rule to one arm
+would not be a decomposition benefit (§5.2).
 
 ### F11 — High: admission now stops the defect, but generation cannot recover from it
 
-**Run.** The [16:20 hello-world diagnostic](../zig-out/e2e-spec/2026-10-16T05-20-15Z-44b2ac5e19cbf8d2ade89b149aed73c8/report.json)
-ran on committed `bfec3d7` (`modified: false`) with the GPT-OSS-20B binding. It
-ended `workflow_failed` with `RepairNoProgress` (`unchanged_repair`) at
-`generate-brief-merge-repair`, after 8 calls and 12,896 tokens. No review call was
-made and nothing was published.
+The [16:20 hello-world diagnostic](../zig-out/e2e-spec/2026-10-16T05-20-15Z-44b2ac5e19cbf8d2ade89b149aed73c8/report.json),
+the first full workflow on a committed build (`bfec3d7`, Phase 1A), confirmed the
+enforcement. The brief's insertion-only title was rejected as `reference_only`
+before any review, the unchanged repair exhausted after one execution, and no
+defective value escaped. The run ended with `RepairNoProgress` after 8 calls and
+12,896 tokens, against 101,134 for the 09:18 run that reached review with the same
+failure class.
 
-**What Phase 1A did as designed:**
-
-- Call 7, the brief, returned the title
-  [`{"fragments":[{"kind":"exact_copy"}]}`](../zig-out/e2e-spec/2026-10-16T05-20-15Z-44b2ac5e19cbf8d2ade89b149aed73c8/evidence/generation/call-000007/model_output.txt).
-  Native admission rejected it as `reference_only` for `spec_title`; the report's
-  `first_native_rejection` points there, before any review.
-- The unit repair, [call 8](../zig-out/e2e-spec/2026-10-16T05-20-15Z-44b2ac5e19cbf8d2ade89b149aed73c8/evidence/generation/call-000008/model_output.txt),
-  returned the same single insertion. The shared retry owner ended it after 1 of 64
-  allowed executions, with no re-review or publication.
-- No defective value escaped: 0 of 4 admitted values. The run cost 12,896 tokens,
-  against 101,134 for the 09:18 run that reached review with the same failure class.
-
-**What it shows.** The model behavior persists: this is the sixth consecutive run
-with an insertion-only value, this time in the title rather than the story. Phase 1A
-converts a silent defect into an early, typed failure at its owner. It cannot by
-itself produce a valid specification; the workflow now fails at generation instead
-of in review.
-
-**Why the repair could not succeed.** The model-facing presentation contradicts the
-admission rule it is meant to express:
-
-1. **The schema still offers the rejected shape.** The title's projected schema, in
-   both the [generation request](../zig-out/e2e-spec/2026-10-16T05-20-15Z-44b2ac5e19cbf8d2ade89b149aed73c8/evidence/generation/call-000007/request.json)
-   and the [repair request](../zig-out/e2e-spec/2026-10-16T05-20-15Z-44b2ac5e19cbf8d2ade89b149aed73c8/evidence/generation/call-000008/request.json),
-   allows a fragments array of only `exact_copy` objects. The title's exact-copy role
-   is `incidental`, so the projection offers an insertion that cannot satisfy coverage,
-   and constrained decoding permits the answer admission rejects.
-2. **Static guidance contradicts the policy.**
-   [generation.context.json](../design/workflows/spec/generation.context.json) still
-   tells the model, for every field, to "insert an exact_copy object instead of
-   typing the literal inside a string". Phase 1A's deliverable was to remove guidance
-   the policy owner now supplies; this sentence remains and applies even where the
-   policy requires prose.
-3. **Exact choices are offered to the whole unit.** The brief packet supplies the
-   preserved token and its token-only source group to title, description and goal
-   together, although only the description's role is obligation-bearing.
-4. **The policy is presented as a generic table.** `text_fields` lists every field of
-   the unit (four for the brief, including `clarification_question`, which its
-   selected schema permits through the clarification alternative;
-   eight for extraction) with one identical explanation and engine vocabulary such as
-   `incidental` and `obligation_bearing`, instead of a field-specific instruction for
-   the assigned target.
-5. **The repair packet anchors on the defect.** The rejected value appears as
-   `current_value` in exactly the wire shape the model is asked to return. The reply
-   equals it without the `claim_id`. With temperature 0.1 and otherwise identical
-   inputs a repeat is likely; the no-progress rule correctly stopped it, but the
-   repair offered no materially different path to a valid value.
-
-**Secondary observations, not yet attributable:**
-
-- **Extraction merged the three hello-world requirements into one claim** in all
-  three post-Phase-1A samples (both probes and this run), against one of the two
-  pre-Phase-1A hello-world runs. The extraction packet grew from 615 to 2,839 bytes
-  because of the policy table (about 320 more input tokens). Five samples cannot
-  attribute this; Phase 2's upstream attribution must measure it, and 1A.2 removes
-  table rows that do not apply to the request.
-- **The description typed `Hello, World!` as prose** rather than inserting it. In an
-  obligation-bearing field that is permitted prose, but it creates no occurrence, so
-  exact-copy coverage would depend on later records. This is the next watch item
-  once the title is admitted.
-- **`admission_escape` reports `unavailable`** rather than measured zero, because one
-  engine-produced reconciliation value has `origin: null` and is counted as
-  unattributed. With zero escapes the metric should be able to report measured zero;
-  this is a harness attribution gap.
-
-**Implication.** The realignment is complete on the admission side of the composition
-contract and incomplete on its presentation side. Admission enforces the field
-policy, but the schema, static guidance, offered choices and repair packet still
-present an insertion-only answer as available, and in places as preferred. Close this
-in Phase 1A.2 (§5.6) before the Phase 2 freeze. Do not add sampling or temperature
-changes, extra repair attempts, a second model, or field-specific code.
+Generation did not recover, because the model-facing presentation contradicted the
+admission rule. The projected schema still offered an insertion-only title, static
+guidance told the model to insert exact copies in every field, exact choices were
+offered to the whole unit, the policy appeared as a generic table, and the repair
+packet echoed the rejected value in the shape the model was asked to return.
+Phase 1A.2 projects all of it from the field registry. The
+[full record](Z_FIX02.md#f11--high-admission-now-stops-the-defect-but-generation-cannot-recover-from-it)
+keeps the call-level evidence and secondary observations, including extraction
+merging the three hello-world requirements into one claim, which remains
+unattributed.
 
 ### F12 — High: descriptive fields recover, but record fields collapse to insertions
 
-**Run.** The [18:58 hello-world diagnostic](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/report.json)
-ran on `54de975` with the Phase 1A.2 code uncommitted (source `fbd52cd8…`,
-`modified: true`) and the GPT-OSS-20B binding. It ended `workflow_failed` with
-`RepairNoProgress` (`unchanged_repair`) at `generate-records-merge-repair`, after
-14 calls and 20,374 tokens. Admission escape was **measured zero** (9 admitted values
-from 7 producers). No review call was made and nothing was published.
+The [18:58 hello-world diagnostic](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/report.json)
+ran Phase 1A.2 on uncommitted code, so it is diagnostic evidence only. Every
+descriptive field whose grammar no longer offers exact copies came back as prose, the
+wire-syntax correction worked, the first rendered story repair succeeded, and
+admission escape was measured zero. The run then failed at record generation, with
+`RepairNoProgress` after 14 calls and 20,374 tokens and before any review:
 
-**What worked:**
+1. **Record fields collapsed into insertions.** Given, When, Then, the functional
+   requirement and the entity name each came back as a single exact-copy insertion:
+   every field the request listed as permitting insertions. That the list and its
+   obligation wording caused the collapse is a hypothesis, confounded by field type,
+   which Phase 1A.3 attributes before any presentation change.
+2. **Field-level repair could not recover a unit-wide collapse.** The Given repair saw
+   neither the record's sibling fields nor its source group, while four of those
+   siblings were also defective. Decision 4(a) therefore routes composition defects to
+   the unit's bounded protocol correction, with the complete request.
+3. **Entity applicability was wrong.** The entity pass declared an entity required for
+   a feature with no business data, and the identity-label exception then admitted
+   its insertion-only name. No native rule can judge applicability; Phase 2 measures
+   it as its own failure class.
 
-| Calls | Unit | Outcome |
-| --- | --- | --- |
-| 2 → 3 | Token classification | Malformed envelope (`{"token{…`), fixed by protocol correction |
-| 8 → 9 | Brief | Title and goal came back as plain prose under their string-only grammar. The description typed insertion syntax inside prose, which was rejected as `EmbeddedInsertionSyntax`; protocol correction, with the complete assignment, produced prose with a real insertion |
-| 10 → 11 | Story | Insertion-only, rejected as `reference_only`. The composition repair with the rendered defect returned prose with an embedded exact copy and was admitted (`changed: true`) |
-| 12 | Entity applicability | Admitted as prose (but see failure 3) |
-| 13 → 14 | Records | Insertion-only in five fields; the repair repeated the value and the run stopped with `unchanged_repair` |
-
-Phase 1A.2's intended effects are therefore visible. Every field whose grammar no
-longer offers exact copies came back as prose (title, goal, entity-applicability
-basis, entity meaning and relationship: five of five), the wire-syntax rule and its
-correction worked, the first rendered composition repair succeeded, and the escape
-metric reports a measured zero.
-
-**What failed:**
-
-1. **Initial record authoring collapsed into insertions.**
-   [Call 13](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000013/model_output.txt)
-   returned `{"fragments":[{"kind":"exact_copy"}]}` for Given, When, Then, the
-   functional requirement and the entity name: every returned field that the request's
-   new `insertion_fields.exact_copy` list named. The unlisted fields (entity meaning
-   and relationship) came back as prose. The pre-Phase-1A records request for the same
-   case ([09:18 run, call 10](../zig-out/e2e-spec/2026-10-15T22-18-35Z-a8740d575019326cb5b63f994c3dc426/evidence/generation/call-000010/model_output.txt))
-   had no such list and returned prose records, typing the literal inline. Across this
-   run, initial outputs in listed fields were insertion-only in six of seven cases
-   (story, Given, When, Then, requirement text, entity name; the description embedded
-   insertion syntax instead), and in none of the five unlisted fields. The records
-   request carried 15 `field_rules` with only three distinct instructions, ten of
-   them identical: "Write nonblank prose describing the behavior or constraint. Exact
-   copies may carry its exact-value obligation inside that prose; use only insertion
-   alternatives listed for this field", plus an 11-path insertion list.
-   **Hypothesis, not yet attributed:** the presentation of where insertions are
-   *permitted*, with obligation wording, is being followed as an instruction to insert.
-   It is confounded by field type, because the listed fields are the obligation-bearing
-   ones most likely to mention the token. It must be attributed before presentation
-   changes.
-2. **Field-level repair cannot recover a collapsed record.** The Given repair
-   ([call 14 request](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000014/request.json))
-   received the rendered defect and field rule, but `source_groups: []`, none of the
-   record's sibling fields, and a field purpose that forbids inventing prerequisites,
-   while four other fields of the same batch were also defective. The successful story
-   repair had its source groups and a narrative purpose. Even had Given succeeded,
-   three more single-field repairs (When, Then, requirement text) would have followed
-   in sequence against the same degenerate siblings. A composition failure spanning a
-   unit is being repaired at field granularity. By contrast, the brief's
-   embedded-syntax failure went through protocol correction with the complete original
-   assignment, and that succeeded.
-3. **Entity applicability was wrong, and the identity-label exception admitted the
-   consequence.** [Call 12](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/evidence/generation/call-000012/model_output.txt)
-   declared an entity "required" for a feature with no business data, justified by an
-   invented need to capture "identity, configuration, and runtime behavior". The
-   records batch then needed an entity, and its insertion-only name `Hello, World!` is
-   admissible under the entity-name exception. Native rules cannot judge
-   applicability; this is a semantic defect that inflates record work and later review.
-
-**Also observed:**
-
-- **Extraction merged the three requirements into one claim** again: four of four
-  samples since Phase 1A, against one of two before it. Records therefore receive one
-  source group carrying every behavior. Still unattributed; include it in the
-  attribution replays.
-- **GPT-OSS envelope-prefix malformation recurred** (`{"token{` here; `{"kind{` and
-  `{"find{` in earlier runs), costing one protocol correction each. The approved
-  normalizer covers only `{"{`; do not widen it without a decision, and count it under
-  mechanical enforcement.
-- **No complete-run cost exists yet.** The run used 20,374 tokens in 14 calls and
-  still did not reach review.
-
-**Implication.** Phase 1A.2 resolved the descriptive-field failure and repaired the
-story. The same failure class now concentrates in obligation-bearing record fields,
-and field-level repair cannot recover a unit-wide collapse. Phase 1A.3 attributes
-the presentation hypothesis and settles the repair granularity before the Phase 2
-freeze. Do not add sampling or temperature changes, extra repair attempts, a second
-model, envelope-normalizer widening or field-specific code.
+Extraction again merged the three requirements into one claim, and the GPT-OSS
+envelope-prefix malformation recurred (`{"token{`). Both are counted, not corrected:
+the approved normalizer is not widened without a decision. The
+[full record](Z_FIX02.md#f12--high-descriptive-fields-recover-but-record-fields-collapse-to-insertions)
+keeps the call-level evidence.
 
 ## 4. Critical feasibility assessment and revised proposal
 
@@ -963,10 +720,10 @@ model-text representation. It is not the request used by the historical panel.
 The generated preparation location and owning build entry are documented in the
 [authoring harness](../test/calibration/authoring-associations/README.md#L60).
 
-The 16 October full-workflow diagnostics (F9) are the first selected-binding
-observations under the current contract. They are not this baseline: loan-renewal
-is outside the panel, the builds were uncommitted and differed between runs, and
-neither run reached publication.
+The 16 October full-workflow diagnostics (F9–F12) are the first selected-binding
+observations under the current contract. They are not this baseline: they cover two
+cases, one of them outside the panel; all but one ran on uncommitted builds that
+differed between runs; and none reached publication.
 
 Historical errors justify selecting development cases; they do not establish
 today's defect rate or an expected improvement. Capture a fresh current baseline
@@ -1118,7 +875,7 @@ production-design gate.
 
 FIX03 recommends whole-collection versus per-group authoring first and explicitly
 calls the alternatives **unselected experiments**.
-[Recommendation](FIX03.md#L1919), [qualification boundary](FIX03.md#L1963).
+[Recommendation](archive/FIX03.md#L1919), [qualification boundary](archive/FIX03.md#L1963).
 That experiment tests the source boundary; this pilot tests output purpose.
 Whole-collection authoring may reduce group fragmentation while increasing mixed
 semantic work. Neither option has established superiority. With the selected
@@ -1386,8 +1143,9 @@ clarification persistence exception.
 The rollout is a sequence of evidence gates, not a commitment to deploy every
 candidate. Each phase produces a reviewable result and an explicit **advance,
 retain baseline, revise, or inconclusive** decision. Writing this plan completes
-none of the phases. Record implementation progress and links to evidence in
-[FIX01](FIX01.md); keep this document as the evaluation and rollout design.
+none of the phases. Track open implementation work in [FIX01](FIX01.md) and
+completed records in [Z_FIX02](Z_FIX02.md); keep this document as the evaluation and
+rollout design.
 
 Use a complete source-backed duty set as the evaluation boundary. At diagnostic
 scope this means the entire assigned record collection, including complementary
@@ -1491,10 +1249,12 @@ For progress decisions, use these proposed rules:
   experiment-wide send and token stops cover and project their demand from actual
   selected-binding usage, including full-workflow review and repair. Freeze the
   per-workflow token budget used by baseline and candidate builds. If the compiled
-  workflow budget cannot complete the panel's full workflows, record that as a
-  required decision (raise it through an explicit engine contract change, reduce
-  measured review or repair cost through its owner, or narrow the qualified scope),
-  not as permission to shrink the panel or treat budget-stopped runs as completions.
+  workflow budget cannot complete the panel's full workflows, or the experiment-wide
+  stops cannot cover the declared scope, record that as a required decision: raise
+  the workflow budget through an explicit engine contract change, revise the
+  experiment stops before freezing with an explicit rationale, reduce measured review
+  or repair cost through its owner, or narrow the qualified scope. It is not
+  permission to shrink the panel or to treat budget-stopped runs as completions.
 
 All dispatched failures, malformed/truncated outputs and exhausted repairs remain
 in the attempted-workload denominator. Genuine-gap cases use their separate
@@ -1508,29 +1268,17 @@ promotion. These rules refine the protocol in §4.7, not production authority.
 
 #### Phase 0 — Make the evaluation executable
 
-**Implementation:** **Complete (offline), 15 October 2026.** The concrete
+**Status: complete offline, 15 October 2026.** The concrete
 [protocol](../test/calibration/semantic-simplicity/protocol.json),
 [source-backed cases](../test/calibration/semantic-simplicity/cases.json),
 [labelled specimens](../test/calibration/semantic-simplicity/specimens.json) and
 [operating/scoring contract](../test/calibration/semantic-simplicity/README.md)
-are implemented. The [retained results](../test/calibration/semantic-simplicity/phase0-results.md)
-and [generated dry-run snapshot](../test/calibration/semantic-simplicity/phase0-dry-run.json)
-record 72 variants, 225 source-backed duty labels, all 144 planned synthetic
-workloads, six required scoring specimens, zero actual sends/tokens and no
-workflow authority. All required offline checks passed.
-
-The prospective freeze now uses **GPT-OSS-20B / Converse / Sydney / low reasoning /
-native JSON Schema / engine-fixed temperature 0.1 / 16,384 requested output
-tokens**. Its closed schema rejects the superseded Luna default-reasoning and
-strict-output fields. The retained snapshot above describes the earlier Luna
-freeze; the canonical offline integration producer regenerates the new model
-and protocol identity under `.zig-cache/semantic-simplicity/phase0/`.
-Eight development and sixteen reserved qualification features each have three variants;
-three repetitions of A/C give **144 development feature workloads**. The labels
-received a separate model-assisted source review, not human approval. The dry run
-exports only 24 development source inputs, excluding expectations, duties and
-native identities. Exact production request bytes and compatible live binding
-remain Phase 1/2 prerequisites before any live comparison.
+are implemented; the [retained results](../test/calibration/semantic-simplicity/phase0-results.md)
+and the [implementation record](Z_FIX02.md#phase-0-implementation) hold the evidence. Eight development
+and sixteen reserved qualification features each have three variants; three
+repetitions of A/C give **144 development feature workloads**. The labels received a
+separate model-assisted source review, not human approval. The prospective freeze
+uses the selected GPT-OSS-20B binding.
 
 The protocol fixes 85% initial fidelity, 75% robust success, 80% Phase 5 useful
 completion, 5% maximum material-harm/false-gap incidence, a 10-point meaningful
@@ -1545,9 +1293,8 @@ limits are 1,000 sends and 2,000,000 actual tokens; `live_authorized` remains fa
 These are proposed experimental gates, not production size limits or dispatch
 approval. Only the selected Bedrock GPT-OSS-20B tuple is permitted for live tests.
 The limits were frozen before any full-workflow cost was observed on the selected
-binding. They have not been reconciled with the 16 October diagnostics, which
-exhausted a 100,000-token workflow budget on one small feature (F9). Phase 2's
-budget-feasibility step (§5.5) must resolve this before dispatch.
+binding and have not been reconciled with F9; the budget and scope decision in §5.5
+must resolve this before dispatch.
 
 **Deliverable:** a frozen comparison protocol, case inventory and scorecard using
 existing calibration/harness owners. Include exact selected model identity/settings,
@@ -1575,20 +1322,14 @@ generation. This phase makes progress measurable; it establishes no model benefi
 
 #### Phase 1 — Establish compatible selected-model execution
 
-**Offline implementation complete; mechanical checks passed, 15 October 2026.**
-Final verification passed **155/155 build steps and 1,786/1,786 tests**; the
-[retained evidence record](../test/calibration/semantic-simplicity/phase1-offline-results.md)
-records exact commands and scope. The later authentic exchange result is recorded
-below and qualifies only the observed request/settings.
-
-The user-authorized development command
-prepares a fresh case through the existing production configuration, compiled
+**Status: offline implementation complete, 15 October 2026; bounded live gate passed,
+16 October 2026, for the observed first request only.** The scenario prepares a
+case's first production model request through the existing configuration, compiled
 workflow, model-request preparation, authorization, Converse transport and capture
-owners. The first model assignment remains unchanged; it depends on the selected
-workflow and normally concerns reference extraction in the supplied Spec case.
-This is not a historical debugger replay or a generation-quality comparison.
-
-After separate explicit approval for the live probe, use:
+owners. It allows at most one physical inference send, with no retry, repair, judge
+or workflow-publication authority, and keeps provider compatibility separate from
+the interrupted workflow outcome. After separate explicit approval for the live
+probe, use:
 
 ```sh
 zig build provider-compatibility -- \
@@ -1596,65 +1337,24 @@ zig build provider-compatibility -- \
 ```
 
 The equivalent launcher is `./scripts/provider-compatibility.sh` with those same
-arguments. There is no default case. `--live` opts into dispatch but cannot supply
-the user approval required by the model-conformance contract. The exact permitted
-binding is **Bedrock `openai.gpt-oss-20b-1:0` / Sydney / Converse / native JSON
-Schema / low reasoning / temperature 0.1**. The GPT-OSS profile supplies its
-registered reasoning control and omits Luna's strict-output field. The request inherits the case's configured
-output allowance and must match Phase 0's frozen 16,384 tokens, as the supplied
-Spec slot does. This is an experiment setting, not an engine size ceiling.
-Configuration preflight checks all slots against the cost policy and requires
-complete trace/debug capture before reading credentials. Production catalogue and
-request authority are validated before transport. No model/mode/settings
-substitution or fallback is admitted.
-
-The transport allows at most **one physical inference send**, charged before the
-attempt; transport failure cannot authorize a replacement. The runner stops
-through a typed cancellation after the exchange while preserving original
-rejections, and rejects any further dispatch. Supplied actual usage is retained
-before the stop, including rejected/stopped candidates.
-There are no retry, repair, judge or workflow-publication calls and no successful
-workflow-completion authority. Provider compatibility and production workflow
-outcome are separate results.
-Typed invocation/step outputs, replacements and side-effect policy reject any
-publication-capable child before execution through `publication_prohibited`,
-including before the first model exchange.
-
-Each run retains `report.json` and `report.md` beneath
-`zig-out/provider-compatibility/<UTC-date-time>-<unique-id>/`, linking available
-immutable request/response captures. The report identifies the revision, exact
-binding/settings, request/response bytes and association, closed schema inspection,
-provider stop, physical sends, actual usage and separately captured provider
-reasoning. Missing, malformed or uncertain evidence cannot close compatibility.
-Unknown actual consumption is `total_actual_tokens: null` with
-`usage_complete: false`; `total_accounted_tokens` explicitly retains native
-accounting. HTTP rejection alone is inconclusive, rather than proof of codec or
-model incompatibility.
-Read-only inspection reconstructs the exact canonical request and joins native
-identities/request-response bytes with the closed trace transport outcome and
-production accounting metadata. HTTP status/request ID come from the transport
-record. Request/response SHA-256 identities retained at the trusted transport
-observation bind external readback to the observed bytes and reject substitutions;
-they are diagnostic byte identities, not engine state or predecessor authority.
-Bodies from interrupted/uncertain delivery remain retained and
-inconclusive without candidate validation or invented usage.
-Reasoning remains diagnostic data, never semantic evidence or publication authority.
-See the [operating contract](../design/harness/e2e.md#test-one-fresh-provider-exchange).
-
-**Authentic exchange: bounded compatibility gate passed, 16 October 2026.**
-The first HTTP-200 exchange exposed the response-decoding defect recorded above.
-After that correction, the separately authorized 07:46 exchange passed candidate,
-schema, usage and request-association checks. It qualifies only the observed
-production request/settings, not every workflow request shape or semantic quality.
-The [Phase 1 offline evidence record](../test/calibration/semantic-simplicity/phase1-offline-results.md)
-records the mechanical checks separately from this live evidence.
+arguments. There is no default case, and `--live` opts into dispatch but cannot
+supply the user approval required by the model-conformance contract. Only the
+selected binding is admitted, with no model, mode or settings substitution. The
+[operating contract](../design/harness/e2e.md#test-one-fresh-provider-exchange)
+defines its reports, and the
+[offline evidence record](../test/calibration/semantic-simplicity/phase1-offline-results.md)
+records the mechanical checks. The first HTTP-200 exchange exposed a
+response-decoding defect, since corrected; the 07:46 exchange then passed candidate,
+schema, usage and request-association checks. That qualifies only the observed
+production request and settings, not every workflow request shape or semantic
+quality. The [implementation record and probe history](Z_FIX02.md#phase-1-implementation-and-live-gate) are retained.
 
 **Deliverable:** the selected binding's trusted registration and any required codec/
 adapter support behind existing ports, with the generation assignment unchanged.
 Verify official request, response, region, schema, reasoning, temperature, output
 allowance, stop and usage contracts. Configure the validated catalogue and slot.
 Any other model requires its own verified binding. Account access and IAM
-permissions are preconditions to confirm outside the probe; 18 of the 20 probes
+permissions are preconditions to confirm outside the probe; 18 of the first 20 probes
 were spent on access rejections (fifteen Luna, three GPT-OSS) that the probe cannot
 diagnose.
 
@@ -1682,233 +1382,114 @@ with generation prompts or a silent fallback model.
 
 #### Phase 1A — Close the representation admission gap before the baseline
 
-**Why it precedes Phase 2.** F10's composition failures are detectable by
-deterministic code, recur in every run that reached generation, and change which
+**Why it preceded Phase 2.** F10's composition failures are detectable by
+deterministic code, recurred in every run that reached generation, and change which
 candidates are admitted. Freezing a baseline before closing them would measure a
 known enforcement gap, and closing them later would leave baseline and candidate
-under different admission contracts. This phase is independent of the A/B/C/D
-choice and adds no assignment, model call or semantic planner.
+under different admission contracts. The phase is independent of the A/B/C/D choice
+and adds no assignment, model call or semantic planner.
 
-**Decisions settled for the authorized implementation — 16 October 2026:**
+**Decided and implemented, 16 October 2026.** The user's implementation instruction
+settled the field inventory, the exact-copy role of each field, the wire-syntax rule
+with its exact-original-source exception, and the shared no-progress repair rule. The
+accepted [composition contract](../design/contracts/text-field-composition.md)
+records them; they amend §§7.1, 17.3 and 22 and ADR 0020. The offline replay rejects
+all 29 captured F10 defects and admits all 50 prose-bearing controls, and full
+verification passed with 156/156 steps and 1,699/1,699 tests.
 
-The explicit Phase 1A implementation instruction authorizes the amendments.
-The accepted [composition contract](../design/contracts/text-field-composition.md)
-records the exact inventory and rules; the items below retain the decision scope.
-
-1. **Field inventory.** For every declared text field in Spec generation, repair,
-   clarification, extraction and reconciliation, whether nonblank prose is required.
-   Nonblank prose is required for every narrative or behavioral field, including
-   title, description, goal, story, Given/When/Then, expected outcomes, requirement
-   and rule text, entity basis and meaning, relationships and clarification
-   questions. Entity names are the explicit optional-prose identity-label
-   exception; their insertions remain incidental and do not satisfy behavioral
-   coverage. There is no fragment-count or repeated-literal special case.
-2. **Exact-copy role per field.** Which fields may carry insertions at all, and in
-   which fields an occurrence satisfies an exact-copy obligation for collection
-   coverage. Only composition-valid behavior/constraint fields are obligation-bearing;
-   the accepted inventory distinguishes incidental descriptive fields and
-   reference fields without exact-copy insertions. This amends ADR 0020.
-3. **Wire-syntax rule.** Rejecting prose that contains the closed insertion grammar,
-   with the exact-original-source-byte exception, as a protocol error through
-   existing bounded correction. Native and stored checks use the same grammar.
-4. **No-progress repair.** The shared definition of a repair that returns the
-   rejected value unchanged for the same defect key, and how it exhausts the existing
-   allowances. Canonically unchanged replacements under the exact current key
-   produce shared `unchanged_repair` exhaustion before the tentative delta applies;
-   actual calls/usage remain charged and no re-review or successful repair follows.
-
-**Deliverable:** the accepted amendments to [§7.1](../design/contracts/07-domain-representations.md#71-shared-types),
-[§17.3](../design/contracts/17-specify.md#173-llm-work), ADR 0020 and the repair
-contract in §22, and one coherent implementation at the owners in F10's table: field
-policy registry, codec, typed-text validator and its callers, coverage, retry owner,
-packet presentation, stored readback and harness reporting. Remove guidance text the
-policy owner now supplies, so that rule and presentation cannot drift.
-
-**Test:** accepted and rejected cases for every consumer that validates typed text:
-initial generation, protocol correction, unit repair, omission repair, coverage
-repair, extraction and reconciliation where the inventory declares a policy, and
-stored readback. Cover fields in unrelated domains, legitimate in-sentence insertions,
-declared lone-insertion fields, wire syntax with and without a source occurrence,
-coverage satisfied only in obligation-bearing fields, and no-progress repair
-exhaustion. Replay the retained captured model outputs from the five runs in F10
-through native admission offline: each listed value must now reject with the
-expected typed issue, and the runs' prose-bearing values must still admit. This
-uses retained evidence and makes no model call. Then run architecture checks and
-`zig build verify --summary all`.
-
-**Exit gate:** all checks pass, the offline replay shows every F10 value rejected at
-its owner and no legitimate value rejected, and the amendments are accepted. One
-separately approved full-workflow diagnostic per development case may then measure
-admission rejections, unit-repair outcomes and downstream review calls. It is
-mechanical evidence about where defects stop, not a quality or completion claim.
-The Phase 2 baseline is frozen afterwards, on a committed revision that includes
-this contract.
-
-**Implementation and offline gate complete — 16 October 2026.**
-[The implementation record](FIX04-phase1a-implementation.md) maps every deliverable
-to its owner and records the settled amendments and validation. The retained
-offline replay rejects all 29 captured defects (10 insertion-only and 19 encoded
-insertions) and admits all 50 prose-bearing controls from five runs and 23
-exchanges. `zig build verify --summary all` passed all 156 steps and 1,699 tests,
-including offline integration, architecture and clean-directory packaging checks.
-No new provider request or live workflow was run; renewed feasibility and live
-quality evidence remain Phase 2 work.
-
-**Live result — 16 October 2026.** On committed `bfec3d7`, the approved hello-world
-diagnostic confirmed the mechanical behavior: the brief's insertion-only title was
-rejected at admission, the unchanged repair exhausted after one execution, and no
-review ran (F11). The defect class persisted and generation did not recover, so the
-live step is satisfied for enforcement but not for recovery. Phase 1A.2 follows.
+**Exit gate: met offline; enforcement confirmed live.** On committed `bfec3d7`, the
+16:20 diagnostic stopped the defect at admission and ran no review (F11). Generation
+did not recover, which Phase 1A.2 addresses. The
+[decisions, deliverable and implementation record](Z_FIX02.md#phase-1a-plan-decisions-and-results) are retained.
 
 #### Phase 1A.2 — Make model-facing presentation consistent with admission
 
-**Why it precedes Phase 2.** F11 shows that admission enforces the composition policy
-while the schema, guidance, offered choices and repair packet contradict it. This is
-the presentation half of the same contract. The composition contract already makes
-the field registry the single owner of presentation; F11 shows that ownership is not
-yet complete. Freezing a baseline now would measure that contradiction.
+**Why it preceded Phase 2.** F11 showed admission enforcing the composition policy
+while the schema, guidance, offered choices and repair packet contradicted it: the
+presentation half of the same contract.
 
-**Remediation.** All of it is projected from the field policy registry, with no
-field-, workflow- or model-specific code:
+**Decided and implemented, 16 October 2026.** Under decision 1, approved by the user,
+descriptive fields whose exact copies cannot satisfy coverage (title, goal,
+entity-applicability basis, entity meaning, relationships, assumption and
+clarification question) take a prohibited exact-copy role, and entity names keep the
+identity-label exception. The decision is recorded in the
+[composition contract](../design/contracts/text-field-composition.md#phase-1a2-amendment--exact-copies-only-where-they-can-carry-an-obligation)
+and [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md).
+Per-field schemas, selected guidance and offered choices are projected from the field
+registry for generation, protocol correction and every repair route, and
+engine-produced values carry a native origin so that admission escape can report
+measured zero. The change is committed as `2e64a31`, and full verification passed
+with 156/156 steps and 1,718/1,718 tests. Its rendered composition-repair
+presentation was later removed by Phase 1A.3.
 
-1. **Decide which insertions are offered, not just tolerated. Decided: approved by
-   the user, 16 October 2026.** Fields whose exact-copy role was `incidental` (title,
-   goal, entity-applicability basis, entity meaning, relationships, assumption,
-   clarification question) change to a `prohibited` exact-copy role and are projected
-   without exact-copy insertion objects. Passive references remain permitted, so
-   prose presence still needs native admission. A literal the model types there is
-   ordinary prose without lineage, which
-   those fields do not need because their occurrences cannot satisfy coverage.
-   Entity names keep their identity-label exception. The amendment is recorded in the
-   [composition contract](../design/contracts/text-field-composition.md#phase-1a2-amendment--exact-copies-only-where-they-can-carry-an-obligation)
-   and [ADR 0020](../design/decisions/0020-derived-exact-reference-lineage.md);
-   its offline implementation is recorded in
-   [the Phase 1A.2 evidence](FIX04-phase1a2-implementation.md).
-2. **Project schemas per field from the registry.** Each field's fragment alternatives
-   list only its permitted insertion kinds, through the shared schema-projection owner,
-   with one rule for generation, protocol correction and every repair route. Where
-   insertions remain permitted, "contains prose" still cannot be expressed in the
-   closed schema profile or provider grammars. Nonblank prose remains a native
-   admission rule for every prose-required field.
-3. **Derive guidance from the registry.** Remove the unconditional `exact_copy`
-   sentence from `generation.context.json`. Present the assigned fields' composition
-   rules in plain, field-specific terms, only for fields in the selected schema; drop
-   rows for fields the request cannot return, such as extraction kinds outside the
-   selected schema. Retain clarification-question rules when the selected schema
-   permits a clarification response, including the brief's current alternative.
-4. **Offer exact-copy choices only where they can be used.** Supply preserved tokens and
-   token-only source groups only with a request containing a field whose policy
-   permits them, and identify which fields may use them.
-5. **Make composition repairs present the defect, not an echoable answer.** For a
-   composition issue, show the rejected value as rendered text with the specific issue
-   and the field's rule, while the exact old value stays native for compare-and-swap.
-   The repair schema uses the same per-field projection. When no insertion
-   alternatives remain, it offers only literal text forms; native admission still
-   enforces nonblank prose.
-6. **Close the reporting gap.** Give engine-produced values a native origin, so
-   admission escape can report measured zero.
-7. **Keep** the no-progress exhaustion, temperature and repair allowances unchanged.
-
-**Offline implementation and checks:** complete, 16 October 2026. Final
-`zig build verify -j2 --summary all` passed **156/156 steps and 1,718/1,718 tests**,
-including the retained F10/F11 replay and native packaging smoke. The registry drives native
-field bindings, selected schema and guidance, insertion catalogues and every repair
-schema. Composition repairs present rendered defects while exact compare-and-swap
-witnesses remain native. Typed native producer proofs close the attribution gap
-without treating missing model receipts as known evidence. See
-[implementation and validation](FIX04-phase1a2-implementation.md).
-
-**Test:** per-field schema projection for every permitted and prohibited insertion kind
-and every consumer; guidance projection with no unconditional exact-copy instruction
-and only the selected fields; repair-packet rendering for each composition issue,
-with the native old value unchanged; native-origin attribution in the audit; the
-retained F10 replay and the F11 captures still rejecting; offline integration; then
-`zig build verify --summary all`.
-
-**Exit gate:** offline checks pass; decision 1 is recorded (16 October 2026). Then one separately
-approved diagnostic each for hello-world and loan-renewal on a committed build. Each
-must either admit the brief and story with prose, or end in a typed composition
-failure after a repair whose presentation differed materially, with admission escape
-reported as measured zero. This is mechanical evidence, not quality.
-
-**Live result — 16 October 2026, uncommitted build.** The 18:58 hello-world
-diagnostic exercised Phase 1A.2 on uncommitted code (F12). The brief and story were
-admitted with prose; the run ended in a typed composition failure (in records) after
-a repair with rendered presentation; and admission escape was measured zero. That
-meets this gate's hello-world criteria in substance, but not on a committed build,
-and the loan-renewal diagnostic has not run. The gate therefore remains open. F12's
-record-field failures are addressed in Phase 1A.3.
-
-**Then, before the Phase 2 freeze:** the budget and scope decision in §5.5, using the
-new cost evidence, and the review and repair contract work identified in F9 and the
-[cost investigation](FIX04-phase2-cost-investigation.md), if the runs now reach review
-and exhaust the budget there.
+**Exit gate: open.** One separately approved diagnostic each for hello-world and
+loan-renewal on a committed build. Each must either admit the brief and story with
+prose, or end in a typed composition failure after a correction whose presentation
+differed materially, with admission escape measured zero. The 18:58 run met the
+hello-world criteria in substance (F12), but on uncommitted code. Phase 1A.3's exit
+gate closes this gate too. This is mechanical evidence, not quality. The
+[full plan and implementation record](Z_FIX02.md#phase-1a2-plan-decisions-and-results) are retained.
 
 #### Phase 1A.3 — Attribute insertion presentation and repair collapsed units as units
 
-**Why it precedes Phase 2.** F12 shows the composition failure now concentrated in
+**Why it precedes Phase 2.** F12 shows the composition failure concentrated in
 obligation-bearing record fields, with a plausible but unattributed presentation
-cause, and a repair granularity that cannot recover a unit-wide collapse. Both
+cause, and a repair granularity that could not recover a unit-wide collapse. Both
 change which candidates are admitted, so the baseline must be frozen after them.
+Under §1.1 this is the last prerequisite sub-phase.
 
 **Steps:**
 
-1. **Commit Phase 1A.2 and rerun its gate on the committed build.** The 18:58 run used
-   uncommitted code and is diagnostic evidence only.
+1. **Commit Phase 1A.2 and rerun its gate on the committed build.** Committed as
+   `2e64a31`; the rerun is part of this phase's exit gate.
 2. **Attribute before changing presentation, through separately approved diagnostic
-   replays.** Using the [single-request debugger](../design/decisions/0019-single-request-debugger.md),
-   replay call 13's exact captured request unchanged and in presentation variants:
-   (a) without `insertion_fields`; (b) with `field_rules` reduced to one entry per
-   distinct instruction; (c) both; and (d) without the "obligation" wording. Keep the
-   model, settings and schema identical, with at least three repetitions per arm.
-   Also replay call 1 (extraction) with and without its field rules and insertion list,
-   to test the claim merging. Record the insertion-only rate per field and arm.
-   Replays carry no workflow authority. Expect about 4,000 tokens per records replay
-   and 16 to 20 sends in total.
+   replays.** **Prepared offline; 21 sends await approval.** The
+   [prepared experiment](../test/calibration/insertion-presentation/README.md) replays
+   the 18:58 run's records request (call 13) unchanged and in four presentation
+   variants: without `insertion_fields`, with `field_rules` grouped by instruction,
+   with both changes, and without the obligation wording. It also replays the
+   extraction request (call 1) with and without its field rules and insertion list,
+   to test the claim merging. Model, settings, evidence and schema stay identical,
+   with three repetitions per arm, and the insertion-only rate is recorded per field
+   and arm. The replays use the
+   [single-request debugger](../design/decisions/0019-single-request-debugger.md) and
+   carry no workflow authority.
 3. **Correct presentation at its owner, as the attribution indicates.** In
    `model_field_presentation.zig`, state the composition rule once (prose is required;
    a permitted exact copy goes inside a sentence and never forms the whole value), list
    fields only where that changes the answer, remove duplicate rules, and describe
    permission without obligation wording. The selected schema stays the authority for
-   what is permitted. No field-, case- or model-specific text.
-4. **Decide the repair granularity for composition failures. Decided: option (a),
-   approved by the user, 16 October 2026.**
-   - **(a) Unit-level correction (approved).** Route `reference_only` through the
-     unit's existing bounded protocol correction, with the complete original
-     assignment, as embedded insertion syntax already is. Composition is a property of
-     the whole response, its defective fields share one cause, and that route succeeded
-     live for the brief.
-   - **(b) Richer field repair (not selected).** Keep unit repair, but give
-     record-field composition repairs the record's sibling values and its source
-     group, and repair all composition defects of one record in one request.
-
-   The amendment is recorded in the
+   what is permitted. No field-, case- or model-specific text. If the attribution shows
+   no presentation effect, record that decision instead of changing the wording.
+4. **Decide the repair granularity for composition failures. Decided and implemented:
+   option (a), approved by the user, 16 October 2026.** Composition rules are checked
+   at response admission for every response type, and one rejection reports every
+   violating field. Correction uses the existing bounded protocol correction with the
+   complete request, and unit repair no longer receives composition defects. The
+   amendment is recorded in the
    [composition contract](../design/contracts/text-field-composition.md#phase-1a3-amendment--composition-defects-are-corrected-as-a-unit)
-   and [§22.4](../design/contracts/22-repair.md#224-repair-request-and-response):
-   composition rules are checked at response admission for every response type, one
-   rejection reports every violating field, correction uses the existing bounded
-   protocol correction with the complete request, and unit repair no longer receives
-   composition defects. Offline implementation and attribution preparation are
-   recorded in [the Phase 1A.3 record](FIX04-phase1a3-implementation.md). Live
-   attribution and the presentation change remain pending.
+   and [§22.4](../design/contracts/22-repair.md#224-repair-request-and-response). It is
+   committed as `6676ad8`; full verification passed with 156/156 steps and
+   1,734/1,734 tests, and the retained replay now includes the 18:58 captures.
 5. **Measure entity applicability as its own failure class.** No native rule can judge
    it. Record false-required applicability and its downstream cost in Phase 2
    attribution, and do not narrow the entity-name exception on this evidence.
 6. **Keep** temperature, retry allowances and the envelope normalizer unchanged, with
    no field- or model-specific code.
 
-**Test:** presentation projection tests for the chosen wording and deduplication;
-routing tests for the chosen repair granularity across generation, protocol
-correction and every repair route; the retained replay extended with the 18:58
-captures, still rejecting every captured defect; offline integration; then
-`zig build verify --summary all`.
+**Test:** presentation projection tests for the chosen wording and deduplication at
+the same owner, then `zig build verify --summary all`. The routing tests and the
+extended replay already pass.
 
-**Exit gate:** offline checks pass; decision 4 is recorded (16 October 2026); the
-change is committed; then one separately approved diagnostic each for hello-world and
-loan-renewal on that committed build. Each must either admit records with prose, or
-end in a typed composition failure after one correction or repair that had complete
-unit context, with admission escape measured zero. This also closes Phase 1A.2's live
-gate. It is mechanical evidence, not quality.
+**Exit gate:** the attribution sends are scored and step 3 is applied or explicitly
+declined; the result is committed with offline checks passing; then one separately
+approved diagnostic each for hello-world and loan-renewal runs on that committed
+build. Each must either admit records with prose, or end in a typed composition
+failure after the bounded protocol correction with the complete request, with
+admission escape measured zero. This also closes Phase 1A.2's live gate. It is
+mechanical evidence, not quality. A run that ends in that typed failure is a baseline
+result under §1.1, not a reason for another prerequisite sub-phase. The
+[full plan and implementation record](Z_FIX02.md#phase-1a3-plan-and-decisions-as-approved) are retained.
 
 #### Phase 2 — Establish baseline quality and failure sensitivity
 
@@ -1920,13 +1501,14 @@ form the baseline. Distinguish controlled-predecessor diagnostics from complete
 production runs using actual predecessors; obtain the required live approvals for
 each scope.
 
-**Prerequisite:** close Phases 1A, 1A.2 and 1A.3, then complete the
-budget-feasibility step in §5.5. With the compiled 100,000-token workflow budget,
-complete production runs ended in budget exhaustion during review (F9), and part of
-that review cost followed defects that native admission now rejects (F10). Since
+**Prerequisite:** close Phases 1A.2 and 1A.3 (§1.1) and record the budget and scope
+decision in §5.5. With the compiled 100,000-token workflow budget, complete
+production runs ended in budget exhaustion during review (F9), and part of that
+review cost followed defects that native admission now rejects (F10). Since
 Phase 1A, runs fail earlier, at generation (F11 and F12), so no complete-run cost has
-yet been observed. Re-measure feasibility after Phase 1A.3; the required budget
-decision belongs to the user and must be recorded before the baseline is frozen.
+yet been observed. The decision belongs to the user, can be made now, and must be
+recorded before the baseline is frozen; re-measure feasibility under it after
+Phase 1A.3.
 
 **Test:** measure every §5.5 outcome, audit material disagreements between evaluation
 and source expectations, and identify reproducible failure classes. Record whether
@@ -1948,22 +1530,18 @@ and there is no meaningful improvement to test, retain it and stop the redesign.
 If the source of failure or scoring is unresolved, investigate that boundary;
 do not start a family scheduler merely because the original panel failed.
 
-**Implementation record — 16 October 2026:** the development-only
-[baseline harness](../test/harness/baseline/cli.zig) now separates offline budget
+**Harness: implemented, 16 October 2026.** The development-only
+[baseline harness](../test/harness/baseline/cli.zig) separates offline budget
 preparation, explicitly approved serial production acquisition and offline
-source-backed assessment. Arm A can be planned/scored without C. Freezing
-requires a committed build, explicit recorded budget decision and sufficient
-native full-workflow cost evidence; the current budget-stopped diagnostics do
-not satisfy that prerequisite. Every physical send, native usage observation,
-original/corrected candidate and unattempted trial remains distinct. Evaluator
-expectations remain outside materialized generation inputs. Qualification uses
-the user's selected complete first-pass fidelity metric. The
+source-backed assessment. The
 [operator guide](../test/calibration/semantic-simplicity/README.md#prepare-acquire-and-assess-phase-2)
-describes the commands and retained evidence. These mechanics do not close this
-phase's live evidence or semantic exit gate.
-The subsequent [implementation completeness audit](FIX04-phase2-audit.md) maps
-each measure to its owner and records the separately approved live diagnostic;
-its failed execution does not close this phase.
+describes its commands and retained evidence. Freezing requires a committed build,
+an explicit recorded budget decision and sufficient native full-workflow cost
+evidence; the current
+[feasibility report](../zig-out/baseline/2026-10-15T22-38-08Z-4ae44015f25ecde96580bc1c4c065da1/budget-feasibility.json)
+is `insufficient`. The [implementation record, audit and cost investigation](Z_FIX02.md#phase-2-harness-implementation)
+are retained. These mechanics do not close this phase's live evidence or semantic
+exit gate.
 
 #### Phase 3 — Select an assignment boundary through diagnostics
 
@@ -2072,7 +1650,8 @@ automatic file rollback or resumable phase checkpoint.
 ### 5.7 Verification commands and phase evidence
 
 Use the repository's registered build steps. This table maps future phase checks;
-§6 and the retained Phase 0 results distinguish actually executed verification:
+[Z_FIX02](Z_FIX02.md#5-fix04--completed-evaluation-foundation-compatibility-and-admission-work-1516-october-2026) and the retained Phase 0 results record the verification
+actually executed:
 
 | Phase/boundary | Existing verification entries |
 | --- | --- |
@@ -2081,6 +1660,7 @@ Use the repository's registered build steps. This table maps future phase checks
 | Provider and request compatibility | `zig build test-provider-conformance`, `zig build test-provider-invocation-validation`, `zig build test-model-request-preparation`, `zig build test-model-request-workflow` |
 | Source packets, generation and response contracts | `zig build test-reference-model-input`, `zig build test-specification-generation`, `zig build test-specification-contract` |
 | Representation admission contract (Phase 1A) | `zig build test-typed-text`, `zig build test-model-envelope`, the source-packet and repair entries in this table, and `zig build test-integration` for the [retained F10 admission replay](../test/calibration/representation-admission/README.md); no model call is made |
+| Composition correction and presentation attribution (Phase 1A.3) | `zig build test-model-envelope`, `zig build test-attribution-replay` and `zig build test-integration`; `zig build attribution-replay --` with `prepare`, `validate` or `score` prepares and scores the [attribution panel](../test/calibration/insertion-presentation/README.md) offline. Its approved sends use the single-request debugger, not this tool |
 | Repair, runner, identity and lifecycle | `zig build test-workflow-repair-retry`, `zig build test-workflow-graph`, `zig build test-pipeline-envelope`, `zig build test-atomic-execution`, `zig build test-architecture` |
 | Completed coordinated implementation | `zig build verify`, including offline integration and clean-directory native packaging checks |
 | Separately approved authentic Phase 1 exchange | `zig build provider-compatibility -- --case <explicit-approved-case-path> --live`; at most one physical inference send, no judge or publication authority |
@@ -2101,36 +1681,6 @@ calls or higher schema admission alone cannot close the semantic rollout.
 
 ## 6. Review delivery and remaining uncertainty
 
-The delivery now includes Phase 0's closed evaluation contracts, fixed offline
-integration scenario and retained fixture/result evidence. The separately
-requested production change replaces provider-specific Bedrock chat serialization with
-shared Converse invocation/count/replay/harness codecs, adds the Luna registration
-(still registered, no longer a live-test selection) and retains optional provider
-reasoning in typed debugger diagnostics.
-The current development live-test policy permits only the selected Bedrock GPT-OSS-20B tuple
-before credentials/network. Canonical live fixtures and the explicit judge
-selection use that same model; judging remains a separately labelled role with
-its own settings/accounting, not independent model evidence. No production
-dependency was added.
-
-The user subsequently requested Phase 1's bounded fresh-request scenario. It
-reuses production owners, limits transport to one physical inference send and
-retains provider compatibility separately from the interrupted workflow outcome.
-The command and launcher require an explicit case and live opt-in; their offline
-tests exercise rejection and failure evidence without connecting to Bedrock.
-The later authentic compatible exchange closed the bounded Phase 1 exchange gate.
-Its operating contract and command are recorded in §5.6; its
-[offline evidence record](../test/calibration/semantic-simplicity/phase1-offline-results.md)
-is separate from the authentic compatibility qualification. Implementation progress remains
-in FIX01.
-Phase 1's offline implementation and mechanical checks are complete: final full
-verification passed **155/155 build steps and 1,786/1,786 tests**, including
-provider/request checks, offline production integration, architecture and native
-clean-directory packaging. The retained evidence record supplies the exact
-registered command. Those offline checks performed no authentic model exchange;
-the later 16 October attempts, decoder correction and compatible exchange are
-recorded above. Full workflow publication and rubric acceptance remain open.
-
 The analysis inspected current assignment, evidence, review, generation and provider
 owners; relevant accepted amendments; historical report/fixture provenance; and
 current primary release/benchmark sources. Older model research is excluded from
@@ -2140,38 +1690,20 @@ were not fully retrievable, and no public experiment was independently reproduce
 Historical model-quality numbers retain their original assessment limitations
 and are not used to select the new architecture.
 
-Verification and retained counts are recorded in the
-[Phase 0 report](../test/calibration/semantic-simplicity/phase0-results.md).
-Targeted checks cover closed fixtures, complete workload denominators, initial
-versus corrected labels, persistent harm, uncertainty/stops, provider controls,
-usage, exact replay, reasoning ownership/display and cost rejection. Required full
-verification includes architecture, offline integration and native clean-directory
-packaging. Phase 0 verification passed **145/145 build steps and 1,671/1,671 tests**:
-`ZIG_GLOBAL_CACHE_DIR=/private/tmp/sdde-zig-global-cache zig build --global-cache-dir
-/private/tmp/sdde-zig-global-cache test-rubric-evaluator verify -j2 --summary all`.
-The rerun used approved sandbox escalation for the nested compiler checks and
-local debugger socket; no model-provider call was made. Bedrock inference routing
-is exhaustively checked as `/converse` for all registered model/region tuples;
-optional token counting is the separate `/count-tokens` operation. The active
-Bedrock runtime, harness and current provider documentation contain no legacy
-inference API endpoint, codec, alias, fallback or obsolete API reference. Generic
-workflow `invoke-model` action names and immutable historical evidence retain
-their separate meanings.
+Delivered so far: Phase 0's closed evaluation contracts and offline scenario; the
+separately requested Bedrock Converse transport, with typed reasoning retention and
+the pre-credential live-test cost policy; Phase 1's bounded compatibility scenario
+and the Converse usage-metadata correction; the Phase 2 baseline harness; and the
+Phase 1A to 1A.3 composition admission, presentation and correction changes. No
+production dependency was added. Each change's verification, its exact commands and
+the live records are in [Z_FIX02](Z_FIX02.md#5-fix04--completed-evaluation-foundation-compatibility-and-admission-work-1516-october-2026). Test counts differ between commands
+and revisions, so they are not comparable.
 
-The Phase 0 and Phase 1 offline verification runs made no model/provider calls.
-Separately authorized live work then ran on 16 October: twenty-two one-send
-compatibility probes, of which three were `compatible` (the last on committed
-`bfec3d7`), and five full-workflow development diagnostics (two loan-renewal, three
-hello-world), none of which published a specification or ran rubric evaluation
-(header and F9–F12). No live debugger replay was performed. Phase 1's bounded
-exchange gate is closed for the observed first request only. Phase 1A's accepted
-contract, implementation and offline gate are complete, and its enforcement is
-confirmed live. Phase 1A.2 is implemented offline and was exercised once live on
-uncommitted code; its exit gate is still open. Phase 1A.3 and Phases 2–6 remain
-open. Phase 2 requires Phases 1A.2 and 1A.3, fresh budget-feasibility evidence, the
-recorded user decision and a committed baseline build. Source labels, review and the
-F9–F12 semantic interpretations remain
-model-assisted or reviewer readings of retained outputs. Phase 1A adds the separate
-mechanical evidence linked above; no semantic
-benefit, reduced brittleness or useful publication is claimed. Historical results
-remain immutable.
+The live work of 15–16 October was separately authorized: twenty-two one-send
+compatibility probes, three of them `compatible`, and five full-workflow development
+diagnostics, none of which published a specification or ran rubric evaluation. No
+live debugger replay has been performed. Source labels, review and the F9–F12
+semantic interpretations remain model-assisted or reviewer readings of retained
+outputs. Phases 1A to 1A.3 add mechanical evidence about where defects stop. No
+semantic benefit, reduced brittleness or useful publication is claimed, and
+historical results remain immutable.

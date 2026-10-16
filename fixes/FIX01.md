@@ -2,34 +2,22 @@
 
 **Critical review:** 11 October 2026, Australia/Melbourne.
 
-**Status:** sole active fix record. §9.20 recommendations 1 and 2 mechanics and R6's
-bounded attribution change are implemented. R6's approved live comparison failed
-its quality gate; semantic acceptance remains open. The subsequent explicit
-source-obligation handoff is implemented and fully verified offline under the
-user's separate request. Its approved 48-call Phase 3 comparison completed but
-failed the semantic gate (baseline 18/24 correct, candidate 20/24 with
-captured-story regression). Semantic acceptance and Phase 4 remain pending.
-The separately approved 60-call isolation comparison also completed and failed
-the unchanged gates: correct labels improved to 24/24, but native rejection left
-correct admitted attribution at 22/24 in both arms. No production split was made.
-Other proposed R6 repair-permission extensions remain unimplemented and
-unapproved by this handoff change.
-The user-approved native-owned assessed-collection amendment is implemented:
-loss responses return judgments, source spans and explanations without a member
-selection. Complete native assignments remain retained under state v12. Its new
-controlled 72-call comparison completed on 11 October and passed the inherited
-diagnostic gates: native admission/correct attribution **22/24 → 24/24**, with
-correct preservation judgments **24/24 in both arms**. One candidate answer still
-omits a required source citation. This qualifies the contract on known isolated
-inputs. The subsequent **76-call** citation comparison passed, improving complete
-citations **36/38 → 38/38**. The **30-call** actual source-review panel then failed:
-only **15/26** faithful omission handoffs, **2/2** supported controls and **0/2**
-genuine-gap controls. Source-review fidelity is now a demonstrated blocker;
-production batching/isolation and E2E publication remain unqualified.
-[Z_FIX01](Z_FIX01.md) now holds completed implementation, executed experiments,
-their approvals and supporting historical reviews. Dated open/proposed statements
-there are historical; the outstanding scope and priorities below govern tracking.
-Accepted design/ADRs remain authority; the overall design remains **Proposed design**.
+**Status:** sole active backlog. R6's bound-attribution mechanics, explicit
+source-obligation handoff, native-owned assessed collections and citation guidance
+are implemented and verified offline. Their executed comparisons are summarized in
+R6 and recorded in [Z_FIX02](Z_FIX02.md#2-fix01-02--from-valid-diagnosis-evidence-to-correct-recovery-1011-october-2026). Semantic acceptance remains open: the
+**30-call** actual source-review panel failed, with only **15/26** faithful omission
+handoffs, **2/2** supported controls and **0/2** genuine-gap controls. Source-review
+fidelity is therefore the demonstrated blocker, and production batching/isolation
+and E2E publication remain unqualified. Other proposed R6 repair-permission
+extensions remain unimplemented and unapproved. [FIX04](FIX04.md) owns the
+generation-assignment evaluation and its gates; the review and repair work it
+depends on is tracked here under R5 and R6.
+[Z_FIX01](Z_FIX01.md) and [Z_FIX02](Z_FIX02.md) hold completed implementation,
+executed experiments, their approvals and supporting historical reviews. Dated
+open/proposed statements there are historical; the outstanding scope and priorities
+below govern tracking. Accepted design/ADRs remain authority; the overall design
+remains **Proposed design**.
 
 ## 1. Verdict and review limits
 
@@ -72,180 +60,11 @@ Their remaining meaning-preservation and workload acceptance is tracked below.
 
 ## 2. Implementation history
 
-The [completed-work index and records](Z_FIX01.md#completed-work-index) contain
-implemented changes, finished experiments and their verification. A failed
-experiment is completed execution, not completed semantic acceptance. Outstanding
-work remains below.
-
-**16 October 2026 — FIX04 Phase 1A.2 live diagnostic and Phase 1A.3 decision:**
-Phase 1A.2 (model-facing presentation from the field registry) is committed as
-`2e64a31`; its offline evidence is in [the Phase 1A.2 record](FIX04-phase1a2-implementation.md).
-The separately approved [18:58 hello-world run](../zig-out/e2e-spec/2026-10-16T07-58-59Z-ec56ff4bc24a21c0082210cf6caa8f31/report.json)
-ran on that code before it was committed, so it is diagnostic evidence only. The
-brief and story were admitted with prose, admission escape was measured zero, and
-the run failed at record generation with `RepairNoProgress` after 14 calls and
-20,374 tokens: record fields collapsed into insertions and the field-level repair
-repeated the value ([FIX04 F12](FIX04.md#f12--high-descriptive-fields-recover-but-record-fields-collapse-to-insertions)).
-The user approved Phase 1A.3 decision 4, option (a): composition defects are rejected
-at response admission and corrected through the existing bounded protocol
-correction, recorded in the
-[composition contract](../design/contracts/text-field-composition.md#phase-1a3-amendment--composition-defects-are-corrected-as-a-unit)
-and §22.4. Decision 4 routing and attribution preparation are now implemented
-offline ([implementation record](FIX04-phase1a3-implementation.md)). The separately
-approved attribution sends and resulting presentation correction in
-[Phase 1A.3](FIX04.md#phase-1a3--attribute-insertion-presentation-and-repair-collapsed-units-as-units)
-remain pending before the Phase 2 baseline freeze.
-
-**16 October 2026 — FIX04 Phase 1A live result and Phase 1A.2 decision:** Phase 1A
-(text-field composition admission) is committed as `bfec3d7`; its implementation
-and offline evidence are in [the Phase 1A record](FIX04-phase1a-implementation.md).
-On that clean build the 16:16 one-send probe was `compatible`, and the separately
-approved [16:20 hello-world run](../zig-out/e2e-spec/2026-10-16T05-20-15Z-44b2ac5e19cbf8d2ade89b149aed73c8/report.json)
-failed with `RepairNoProgress` after 8 calls and 12,896 tokens. Native admission
-rejected the brief's insertion-only title as `reference_only` before any review, and
-the unit repair returned the same value. Enforcement is confirmed live; generation
-did not recover, because schemas, guidance, offered choices and the repair packet
-still present the rejected shape ([FIX04 F11](FIX04.md#f11--high-admission-now-stops-the-defect-but-generation-cannot-recover-from-it)).
-The user approved Phase 1A.2 decision 1: descriptive fields whose exact copies
-cannot satisfy coverage now have a prohibited exact-copy role, recorded in the
-[composition contract](../design/contracts/text-field-composition.md#phase-1a2-amendment--exact-copies-only-where-they-can-carry-an-obligation)
-and ADR 0020. Implementation of [Phase 1A.2](FIX04.md#phase-1a2--make-model-facing-presentation-consistent-with-admission)
-is pending and precedes the Phase 2 baseline freeze.
-
-**16 October 2026 — FIX04 baseline measurement harness:** unchanged arm A now has
-independent planning and scoring, a committed-build/budget-feasibility admission
-gate, authentic production exchange/candidate capture, experiment-wide physical
-send and actual-token accounting, and offline source-backed assessment intake.
-The user selected complete first-pass fidelity for qualification sizing.
-Original, corrected, failed, unknown-usage and unattempted evidence remain
-distinct. Evaluator expectations and qualification sources are excluded from
-generation inputs. [FIX04 Phase 2](FIX04.md#phase-2--establish-baseline-quality-and-failure-sensitivity)
-retains the budget-decision prerequisite and open live/semantic exit gate;
-implementation and offline checks do not establish baseline quality.
-Verification: `zig build test-baseline test-rubric-evaluator build-baseline lint
-test-architecture test-integration --summary all` passed 23/23 steps and 714/714
-tests; `zig build verify --summary all` passed 156/156 steps and 1,625/1,625 tests,
-including native clean-directory smoke checks. Offline preparation with the
-unresolved example plan correctly emitted an insufficient-feasibility report
-with the compiled 100,000-token workflow budget and no freeze or API call.
-
-**16 October 2026 — Phase 2 completeness audit:** the
-[item-by-item audit](FIX04-phase2-audit.md) records additional corrections to
-one-shot experiment admission, receipt retention, evaluator rubric isolation,
-native useful-completion assessment, upstream original judgments, variability
-denominators, finding lineage, cost forecasts and evidence-gated decisions.
-The separately approved Hello World diagnostic exhausted the unchanged workflow
-budget: 41 calls, 101,134/100,000 tokens, no published specification or rubric
-result. This is retained failure evidence; the baseline panel and budget decision
-remain open.
-Final audit verification passed `zig build test-baseline test-rubric-evaluator
---summary all` (535/535 tests) and `zig build verify --summary all` (156/156 steps,
-1,659/1,659 tests). The offline feasibility import accounts all 41 live exchanges
-with exact per-slot controls and correctly blocks freezing under the unresolved
-budget decision; see the audit for exact commands and retained report links.
-
-**16 October 2026 — native reference review subjects:** source, signal, exact-token
-and conflict reviews now resolve the same native subject used by omission
-comparison and localization. Initial and correction packets keep the assigned
-reference's source meaning, use and conditions; authored fields and collections
-retain their own assessments. This removes the broad whole-candidate reference
-fallback. It does not authorize new repair targets or reassess accepted findings.
-Regression coverage includes unrelated source domains, pending and assembled
-candidates, stale/foreign targets and continued refusal of unsafe token repairs.
-
-The separately authorized [07:54 full loan-renewal baseline](../zig-out/e2e-spec/2026-10-15T20-54-21Z-5f6e903390f38938113712b53a359de4/report.json)
-stopped before source review: two record-generation groups emitted competing
-duplicate records. `UnsafeSpecificationRepair` blocked publication after 13 calls
-and 25,508 tokens. Existing per-group association and content-only repair authority
-cannot select, merge or delete those competing owners. Collection-level initial
-record authoring remains a separate design decision under §17.3 and ADR 0020;
-this presentation correction does not enact it.
-
-Offline verification passed `zig build test-specification-generation --summary all`
-(324/324 tests), `zig build lint test-architecture test-integration --summary all`
-(240/240 tests), and `zig build verify --summary all` (149/149 steps,
-1,555/1,555 tests, including clean native packaging smoke).
-The authorized post-fix command was
-`./scripts/e2e-spec.sh --case test/e2e/wf-002-loan-renewal/workflow.case.json`.
-Its [08:09 full run](../zig-out/e2e-spec/2026-10-15T21-09-33Z-3a7ceed77cb237531019300e1005152d/report.json)
-failed with `WorkflowTokenBudgetExceeded`: 37 calls consumed 101,002 tokens
-against the 100,000-token workflow budget. The stop occurred during the third
-entity's business-meaning source review, before native signal/token/conflict
-reviews. The shared reference correction therefore remains unverified live.
-No candidate repair ran, no specification was published, and publication/rubric
-checks were not run. Captured earlier reviews include a rejected literal-only
-story, unsupported entity findings and inconsistent omission judgments; this run
-does not establish semantic quality or justify weakening a gate or raising a
-budget automatically.
-
-**16 October 2026 — observed request compatibility:** the separately authorized
-[07:46 probe](../zig-out/provider-compatibility/2026-10-15T20-46-55Z-cb4fdfbfe3b6aff88bc99e68fa980506/report.json)
-passed the selected first production request's compatibility checks: HTTP 200,
-2,254 accounted tokens, accepted candidate/schema and existing prefix
-normalization. Its intentional one-send cancellation produced no specification
-or rubric grade. This qualifies that exchange, not workflow quality or completion.
-
-**16 October 2026 — Converse usage metadata correction:** the 07:29 Melbourne
-native response returned HTTP 200, but the shared codec rejected the optional
-empty `usage.serverToolUsage` object before token accounting or candidate
-normalization. The codec now explicitly validates this closed empty metadata
-shape; unsupported nested fields and wrong types still reject. Canonical replay
-inspection and compatibility reports retain decoder reasons and field paths.
-Offline regressions use the exact response to check 2,254-token accounting,
-existing approved prefix normalization and selected-schema validation. This
-does not change prompts, correction policy, model settings or publication gates.
-
-**16 October 2026 — user-directed test model switch:** current generation,
-repair, rubric evaluation and diagnostics select Bedrock
-`openai.gpt-oss-20b-1:0` from `ap-southeast-2`. Spec generation, repair and grading
-use low reasoning with registered temperature `0.1`. This supersedes the Luna
-test selection recorded below; retained offline results remain historical evidence
-and no live run is authorized by the switch.
-
-**15 October 2026 — FIX04 evaluation foundation and Converse:** the user-requested
-Phase 0 prepares a frozen current-small-model protocol, 24 source-backed features
-with 72 variants, six labelled specimens and feature-level accounting with no
-publication authority. The associated Bedrock transport change uses shared
-Converse codecs, typed reasoning diagnostics and a pre-credential live-test cost
-policy permitting only Bedrock Luna and excluding Sonnet/Sol/Haiku. Canonical live
-fixtures select `global.openai.gpt-6-luna` with native JSON Schema;
-generation topology and semantic acceptance rules are unchanged.
-[FIX04 §5.6](FIX04.md#56-phased-rollout-and-exit-gates) and its
-[retained Phase 0 report](../test/calibration/semantic-simplicity/phase0-results.md)
-record the completed scope/checks: **Phase 0 complete offline**, with full
-verification at 145/145 build steps and 1,671/1,671 tests. No live
-compatibility, model-quality, brittleness or E2E gate is closed by offline tests.
-
-**15 October 2026 — FIX04 Phase 1 bounded compatibility scenario:** the subsequent
-user-authorized **offline implementation is complete and mechanically verified**.
-Final full verification passed **155/155 build steps and 1,786/1,786 tests**,
-including architecture, offline integration and native clean-directory packaging.
-The implementation prepares the first production model request from an
-explicit case, reusing configuration, compiled workflow, request authorization,
-Converse transport and immutable capture owners. The development command
-`zig build provider-compatibility -- --case <explicit-case-path> --live` and its
-launcher permit only the registered Bedrock global Luna/Sydney native-schema
-binding, with the case's existing output allowance and omitted explicit
-temperature/reasoning controls. A transport-owned bound permits at most one
-physical inference send; usage survives typed cancellation and no replacement
-send, retry, repair, judge or workflow publication is authorized. Retained JSON
-and Markdown reports separate request compatibility from workflow completion and
-semantic quality. Typed invocation/step outputs and side effects block publication
-before child execution, even before the first send. Read-only inspection joins
-canonical bytes/identity, the closed trace transport outcome and production usage;
-transport-observed request/response SHA-256 values reject substituted readback
-without granting engine state/predecessor authority. Unknown actual tokens are
-nullable and distinct from the explicitly retained accounted total; HTTP rejection
-alone remains inconclusive.
-Bodies from interrupted/uncertain delivery remain unvalidated and inconclusive.
-Guard/CLI/report tests belong to `test-provider-compatibility`; fresh production
-runtime scenarios with fake exchanges belong to `test-integration`. See
-[the offline evidence record](../test/calibration/semantic-simplicity/phase1-offline-results.md),
-[FIX04 Phase 1](FIX04.md#phase-1--establish-compatible-selected-model-execution)
-and the [harness operating contract](../design/harness/e2e.md#test-one-fresh-provider-exchange).
-That implementation request authorized offline work/checks, not a live diagnostic
-or E2E run. The later separately authorized 16 October compatibility result is
-recorded above. No generation assignment or semantic acceptance gate changed.
+The completed-work indexes in [Z_FIX01](Z_FIX01.md#completed-work-index) and
+[Z_FIX02](Z_FIX02.md#completed-work-index) contain implemented changes, finished
+experiments and their verification. A failed experiment is completed execution, not
+completed semantic acceptance. The 15–16 October FIX04 entries formerly recorded here
+are kept verbatim in [Z_FIX02 §5.6](Z_FIX02.md#56-fix01-implementation-history-entries-1516-october-2026). Outstanding work remains below.
 
 ## 3. Remaining work and feasibility
 
@@ -364,127 +183,31 @@ that the originating defect or the complete recovery path improved.
 #### Proposed recovery follow-up and implementation order
 
 **Status:** item 1's implementation and lifecycle cutover are complete under
-[FIX01-01 Phase 2](FIX01-01.md#phase-2--complete-the-lifecycle-and-offline-verification):
-395/395 focused tests and 1,454/1,454 full offline tests pass. Semantic comparison
-and live recovery/publication remain Phases 3 and 4. The explicit-obligation
-follow-up below is subsequently implemented; the remaining repair-permission
-recommendations are not implemented. This status does not authorize
-new repair permissions, verdict reassessment or live calls.
+[FIX01-01 Phase 2](archive/FIX01-01.md#phase-2--complete-the-lifecycle-and-offline-verification),
+and the explicit-obligation, native-owned collection and citation follow-ups are
+implemented. Their executed comparisons are summarized below and recorded in
+[Z_FIX02](Z_FIX02.md#21-r6-follow-up-records-formerly-in-fix01). The remaining repair-permission recommendations are not
+implemented. This status does not authorize new repair permissions, verdict
+reassessment or live calls.
 Reuse the current owners; do not introduce a second recovery framework or hardcode
 this source, model, call number or extraction-to-spec sequence in the generic engine.
 
-**Explicit-obligation follow-up — 10 October 2026:** after the context-removal
-pilot failed (baseline 1/6 correct, candidate 2/6 with captured-case regression),
-the user approved implementing a distinct `missing_obligation` handoff and the
-Phase 3 rerun. The existing source reviewer now states the omitted requirement
-separately from the diagnostic explanation. Schema admission, review evidence,
-loss projection, correction, revision binding, repair consumers and persisted
-v11 readback carry that statement unchanged. The loss call assesses complete
-collections against it, retaining surrounding evidence as context. No new verdict,
-repair permission, semantic retry or reviewer was added.
-See [FIX01-02's implementation record](FIX01-02.md#explicit-obligation-follow-up--10-october-2026)
-and the [new calibration package](../test/calibration/source-loss-attribution/bound-preservation/obligation/README.md).
-`zig build verify --summary all -j2` passed **1,461/1,461 tests and 142/142 steps**.
-All approved **48 loss calls** (12 cases × two arms × two repetitions) completed
-on 10 October, 09:59:39Z–10:01:15Z. The
-[results](../test/calibration/source-loss-attribution/bound-preservation/obligation/results.md)
-record baseline **18/24** versus candidate **20/24** correct attribution, native
-admission **24/24 versus 23/24**, and adequate evidence **17/24 versus 19/24**.
-Both arms score 14/16 on the original eight cases and 13/16 on evidence; the
-candidate misses the required improvement, retains two false upstream diagnoses
-and scores only 6/8 candidate-loss cases against the 7/8 minimum. The captured
-story regresses from 2/2 to 0/2, despite improvement from 2/6 to 6/6 on fresh cases.
-The declared semantic gate therefore **failed**. The captured description also
-remains incorrect in both arms and repetitions.
+**Executed follow-ups — completed execution; semantic acceptance open.** Each panel
+had its own bounded approval, now consumed. The full records are in
+[Z_FIX02 §2.1](Z_FIX02.md#21-r6-follow-up-records-formerly-in-fix01) and the linked results.
 
-Usage was **60,910 input + 12,670 output = 73,580 tokens**. The 48-call allowance
-is consumed, separately from the preceding 12-call pilot: 60 diagnostic calls in
-this rollout at that panel's close. No additional live calls or Phase 4 E2E had
-run at that point; its conditional gate remains unmet. The failed pilot is not promoted, and the explicit-obligation
-mechanism is not an accepted semantic fix. Production source-review obligation
-fidelity has only offline mechanical coverage; it needs separate live qualification.
-Fixed supplied obligations cannot establish the full handoff's semantic quality
-or E2E publication acceptance. Review the retained failure before selecting any
-further change; no automatic experiment allowance follows.
+| Follow-up | Calls | Result |
+| --- | ---: | --- |
+| Explicit `missing_obligation` handoff | 48 | Failed: correct attribution 18/24 → 20/24, two false upstream diagnoses retained, and the captured story regressed 2/2 → 0/2 ([results](../test/calibration/source-loss-attribution/bound-preservation/obligation/results.md)) |
+| One comparison per call (isolation) | 60 | Failed: correct labels 22/24 → 24/24, but two native rejections left correct admitted attribution at 22/24 in both arms ([results](../test/calibration/source-loss-attribution/bound-preservation/isolation/results.md)) |
+| Native-owned assessed collections (state v12) | 72 | Passed the inherited diagnostic gates: admission and correct attribution 22/24 → 24/24, with judgments 24/24 in both arms, so an admission gain rather than a judgment gain ([results](../test/calibration/source-loss-attribution/bound-preservation/native-scope/results.md)) |
+| Citation completeness | 76 | Passed: complete citations 36/38 → 38/38, with 26/26 correct admitted attributions in both arms ([results](../test/calibration/source-loss-attribution/bound-preservation/citation-completeness/results.md)) |
+| Actual source-review handoff | 30 | Failed: 15/26 faithful omission handoffs (seven missed, four with an inadequate or wrong target), 2/2 supported controls and 0/2 genuine-gap controls; all thirty passed mechanical admission ([results](../test/calibration/source-loss-attribution/bound-preservation/citation-completeness/handoff-results.md)) |
 
-**Isolation comparison execution — 10 October 2026:** the user subsequently
-approved **60 physical calls**, comprising 24 batched baseline and 36 isolated
-candidate calls, for the [prepared experiment](../test/calibration/source-loss-attribution/bound-preservation/isolation/README.md).
-It reuses all twelve now-known cases and scores 24 complete decisions per arm
-against the unchanged gates. The baseline is the current explicit-obligation
-packet; the candidate assigns one complete comparison per call with unchanged
-guidance, sources, supporting context and settings. All **60/60** calls completed;
-the [results](../test/calibration/source-loss-attribution/bound-preservation/isolation/results.md)
-and [scorecard](../test/calibration/source-loss-attribution/bound-preservation/isolation/scorecard.json)
-retain the failed gate. Correct preservation labels improved **22/24 → 24/24**,
-native admission fell **24/24 → 22/24**, correct admitted attribution stayed
-**22/24**, and adequate evidence improved **21/24 → 22/24**. False upstream
-attributions fell **2 → 0** and the captured story improved **0/2 → 2/2**;
-the captured description was correct in both repetitions of both arms.
-
-Candidate extraction repetition 1 and unresolved-producer repetition 2 had
-correct loss judgments and source citations but returned `members: []` for
-nonempty collections. Both reject with `InvalidPreservationComparison`.
-Original-subset admission and correct attribution fell **16/16 → 14/16**,
-failing the minimum admission, genuine extraction/unresolved and no-regression
-gates. The required two-result improvement is also impossible against that
-perfect subset baseline, but the native failures independently prevent passing.
-No threshold changed. The captured-story benefit does not prove batching is the
-sole cause: the already-single-comparison unresolved control had identical input
-but failed once. Candidate cost rose **37,239 → 55,463 tokens (+48.9%)** and
-24 → 36 calls; total usage was **92,702 tokens**.
-
-The 60-call allowance is consumed, bringing this rollout to 120 diagnostic calls.
-No production split or further live call followed that panel. The user subsequently
-approved removing the redundant model-returned member selection across the shared
-contract. The typed response, schema, admission, correction, persistence, fixtures
-and calibration now agree: comparison IDs bind complete native collections, and
-responses supply only judgments, original-source spans and explanations. State v12
-rejects earlier snapshots; old responses with `members` reject as unknown fields.
-No IDs are supplied to previously rejected answers. Collection freshness,
-comparison completeness, source joins and repair permission remain native checks.
-
-The [new native-scope comparison](../test/calibration/source-loss-attribution/bound-preservation/native-scope/README.md)
-held isolated inputs and model settings fixed in both arms for **72/72** completed
-physical calls. It used the actual frozen prior native owner for baseline admission
-and the current owner for candidate admission; neither reads the other's response
-contract. Retain historical failures unchanged. Measure judgment accuracy,
-explanation adequacy and native admission separately: assigned scope does not prove
-the model considered every member, and removing selected IDs removes one observable
-cross-check. Its new allowance is consumed. The
-[results](../test/calibration/source-loss-attribution/bound-preservation/native-scope/results.md)
-show both arms' judgments correct **24/24**, but baseline empty selections caused
-two rejections; candidate admission and correct attribution reached **24/24**.
-The inherited gates passed, including original-subset attribution **14/16 → 16/16**,
-captured-story **2/2** and the six known family regressions **6/6**. This is an
-admission improvement, not a gain in judgment accuracy. Candidate unresolved
-repetition 2 omits the alarm source citation: explanation/source adequacy fell
-**24/24 → 23/24** despite correct safe attribution. The historical no-case-regression
-gate measures attribution accuracy, separately from its evidence minimum; no
-threshold changed. Do not describe the result as zero semantic regressions.
-Production isolation remains conditional; live source-review fidelity, the actual
-review-to-loss handoff and Phase 4 publication/rubric acceptance remain unqualified.
-
-**Citation-completeness follow-up — 11 October 2026:** the user requested the
-shared evidence clarification and qualification recommendations. The existing
-loss prompt and §22 now distinguish citations establishing the entire original
-obligation from explanations assessing preservation in the assigned collection.
-The schema, native attribution and repair permissions are unchanged. The approved
-76-call comparison passed its frozen gates: complete/relevant citations improved
-**36/38 → 38/38**, with **38/38** correct verdicts and **26/26** correct admitted
-attributions in both arms. Both previously missing alarm citations were complete
-in the candidate. This demonstrates improvement on the supplied-obligation panel;
-the separately approved actual source-review panel then completed and failed its
-frozen gates. Only **15/26** actual omission handoffs were faithful: seven omissions
-were missed and four returned an inadequate or wrong target. Both genuine-gap
-controls invented source obligations; supported controls passed **2/2**. All thirty
-responses passed native mechanical admission, with unchanged actual obligations,
-source IDs and replay lineage. That verifies conversion, not semantics. No
-downstream loss call, repair or E2E ran. See the
-[implementation and qualification record](FIX01-02.md#citation-completeness-and-actual-handoff-follow-up--11-october-2026)
-for the offline mechanics, [citation results](../test/calibration/source-loss-attribution/bound-preservation/citation-completeness/results.md)
-and [actual source-review failures](../test/calibration/source-loss-attribution/bound-preservation/citation-completeness/handoff-results.md).
-The historical native-scope results and acceptance thresholds remain unchanged.
+The explicit-obligation candidate is not an accepted semantic fix, production
+isolation remains conditional, and no downstream loss call, repair or E2E has run on
+the actual review handoff. Native mechanical admission verifies conversion, not
+semantics.
 
 **Next bounded work: review shared source-review direction and semantic coverage.**
 The unchanged reviewer sometimes checks only candidate clauses that match sources,
@@ -520,24 +243,12 @@ unchanged source reviewer and this panel cannot establish reviewer regression.
    inference. Reuse the existing loss call, not an additional judge or a call per
    producer. Associations and routing can be checked natively; preservation remains
    model-assisted and must be tested against the failed R6 baseline.
-   **10 October status:** the contract and recovery mechanics are implemented and
-   verified offline in [FIX01-01](FIX01-01.md). Its first 32-call comparison failed:
-   7/16 candidate responses passed native admission and 2/16 yielded correct
-   admitted attribution, with one false upstream attribution. The shared request
-   projection follow-up removes competing IDs, source coordinates and assessed-subject
-   ambiguity. Its [separately approved 32-call comparison](../test/calibration/source-loss-attribution/bound-preservation/projection/README.md#results--10-october-2026)
-   improved admission to 16/16 and correct attribution to 14/16 (baseline 8/16 and
-   6/16), but still failed two gates: it falsely diagnosed role loss when a business
-   claim expressed the literal without a separate preserved-token member. Separate
-   meaning preservation from canonical representation in the next candidate.
-   That shared presentation follow-up is now implemented: resolved claim meanings
-   omit extraction-category labels, and guidance distinguishes expressed behavior
-   from its representation. Its [32-call comparison](../test/calibration/source-loss-attribution/bound-preservation/meaning/README.md)
-   executed under fresh approval: both arms admitted 16/16 and correctly attributed
-   14/16, repeating the same two false role-loss judgments. Category removal and
-   clarified guidance did not improve outcomes. Semantic acceptance and conditional
-   production E2E remain open. All three diagnostic
-   allowances are consumed. Do not count measured improvement as completion.
+   **Status:** implemented and verified offline under FIX01-01. Its three 32-call
+   comparisons all failed the semantic gate. The best reached 16/16 admission and
+   14/16 correct attribution (baseline 8/16 and 6/16) but repeated two false
+   role-loss judgments, and separating meaning from representation did not improve
+   it. All three allowances are consumed; see [Z_FIX02 §1](Z_FIX02.md#1-fix01-01--bound-preservation-comparisons-10-october-2026). Do not
+   count measured improvement as completion.
 2. **Enable the smallest justified repair while retaining unaffected work.** If
    comparison establishes that the obligation survived upstream, use candidate-local
    repair. An established upstream loss uses its existing producer repair and
@@ -682,6 +393,21 @@ routine invalidation/retirement; do not count every such event as a semantic rep
 **Feasibility:** each evidence fix is bounded at its owner but needs sibling-adapter,
 error-exit and combined-failure tests. None changes semantic outcomes or continuation.
 
+### R11 — Carried forward from the archived FIX02 and FIX03 records
+
+FIX02 and FIX03 were retired on 16 October 2026; their completed work is in
+[Z_FIX02](Z_FIX02.md#completed-work-index). These items remain proposals or
+unfinished gates. This tracking authorizes no implementation or live call.
+
+| Open item | Origin | Owner and next decision |
+| --- | --- | --- |
+| Clarification recovery: 7A decisions, 7B source-driven resolution, 7C fresh answers | [FIX03 Phase 7](archive/FIX03.md#phase-7--complete-clarification-recovery) | R2. Decide the trusted authentication source and the persistence model first. |
+| Workflow-authoring simplification | [FIX03 Phase 8](archive/FIX03.md#phase-8--simplify-workflow-authoring-without-hiding-execution) | §8's architecture-wide audit. A supported no-consolidation decision is a valid outcome. |
+| Assessment-model configuration (`models.slots.assessment`) | [FIX02](archive/FIX02.md) and [FIX03 Phase 9](archive/FIX03.md#phase-9--decouple-assessment-model-configuration-where-justified) | Resolve the proposed ADR 0021/configuration amendment before implementation. The live-test policy permits only the GPT-OSS-20B binding, so a separate assessment model cannot be qualified live without changed scope. |
+| Summary-hierarchy measurement | [FIX03 Phase 10](archive/FIX03.md#phase-10--measure-the-remaining-summary-hierarchy) | §4 item 3 and §9.20. Lower priority than the review and repair workload. |
+| Qualification of each selected change | [FIX03 Phase 11](archive/FIX03.md#phase-11--qualify-and-adopt-each-selected-change) | R7 and §5 for review and repair changes; FIX04 Phases 2–5 for generation-assignment changes. |
+| Live exits of FIX03 Phases 2, 4, 5 and 6 (source-review presentation, batched AC review, the authoring replacement, review retention) | [FIX03 §7](archive/FIX03.md#7-phased-rollout) | R6 and R7 for review. The authoring-boundary comparison is now FIX04's A/C comparison. |
+
 ## 4. Recommended implementation order
 
 1. Prioritize the [R6 recovery follow-up](#proposed-recovery-follow-up-and-implementation-order):
@@ -706,9 +432,15 @@ error-exit and combined-failure tests. None changes semantic outcomes or continu
    or automated quality guarantees. Retain the wider §8 audit without silently
    expanding the immediate implementation.
 
+FIX04 sequences the generation-assignment evaluation separately: Phase 1A.3's
+remaining live items, the budget and scope decision, then the Phase 2 baseline
+([FIX04 §1.1](FIX04.md#11-path-to-the-ac-comparison-and-alignment-safeguards)). R6's
+source-review direction work and R5's review-workload measurement are the review and
+repair contracts that FIX04 depends on, so progress on them serves both records.
+
 This is proposed sequencing, not approval of code changes, policy amendments or
 live invocations. The active record owns open work; completed execution history
-belongs in Z_FIX01.
+belongs in Z_FIX01 and Z_FIX02.
 
 ## 5. Acceptance and feasibility gates
 
@@ -752,6 +484,12 @@ are established by this review.
   allocations, validation/teardown time, cancellation/OOM and dependent rebuilding.
   Current structure motivates measurement but does not establish a leak or authorize
   dropping dependencies.
+- **Direct Anthropic Messages API provider:** [claude_connector.md](claude_connector.md)
+  proposes a second production provider, selected through `.sddtoolkit.json` and
+  `.sddproviders.json` alongside Bedrock. It is a proposal, not accepted or
+  implemented: it needs an accepted ADR and its §10 decisions, and live use needs a
+  changed live-test policy, which currently permits only the Bedrock GPT-OSS-20B
+  binding.
 - Optional provider, reasoning-setting and principle-passage experiments remain
   historical proposals, not current implementation tasks or unused authorizations.
 
