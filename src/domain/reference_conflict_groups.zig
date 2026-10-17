@@ -48,7 +48,8 @@ pub fn issue(items: r.Items, proposal: r.Proposal) ?r.diagnostic.Issue {
         if (group.claim_ids.len < 2) return failure;
         r.unique(r.ClaimId, group.claim_ids) catch return failure;
         for (group.claim_ids) |id| {
-            _ = r.item(items, id) catch return failure;
+            const selected = r.item(items, id) catch return failure;
+            if (selected.claim.content != .model) return failure;
             const conflicting = for (proposal.claim_dispositions) |d| {
                 if (d.claim_id.ordinal == id.ordinal) break d.disposition == .conflicting;
             } else false;

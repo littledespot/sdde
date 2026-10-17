@@ -231,7 +231,10 @@ fn exerciseAssignmentPackets(allocator: std.mem.Allocator, source_text: []const 
         const assignment = parsed.value.object.get("assignment").?.object;
         try std.testing.expectEqual(!std.mem.eql(u8, id, "conflicts"), assignment.contains("summaries"));
         const encoded_rules = try std.json.Stringify.valueAlloc(a, assignment.get("constraints").?, .{});
-        if (std.mem.eql(u8, id, "dispositions")) try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "reciprocal_conflict") != null);
+        if (std.mem.eql(u8, id, "dispositions")) {
+            try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "reciprocal_conflict") != null);
+            try checkSemanticAssignment(a, selected, global.items, null);
+        }
         if (std.mem.eql(u8, id, "signals")) {
             try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "retained_claim_covered") != null);
             try std.testing.expect(std.mem.indexOf(u8, encoded_rules, "Every retained claim must appear") == null);
@@ -301,7 +304,7 @@ test "signal assignments exclude conflicting semantic members while retaining th
     }
 }
 
-test "token-only summary assignments are empty while native construction preserves every occurrence" {
+test "token-only semantic assignments are empty while native construction preserves every occurrence" {
     for ([_][]const u8{ "Display `Hello!` and `Goodbye!`.\n", "Display `Loan renewed!` and `Receipt saved!`.\n" }) |source_text| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
@@ -331,6 +334,24 @@ test "token-only summary assignments are empty while native construction preserv
             try std.testing.expectEqual(.preserved_token, std.meta.activeTag(statement.content));
             try std.testing.expect(native.source.at(.{ .statement = i }, .record) == null);
         }
+        const stage = @import("domain/reference_reconciliation_stage.zig");
+        const global = try reconciliation.summaries(a, try reconciliation.initialize(a, fixture.inputs, extracted, 2), fixture.context());
+        const disposition_packet = try stage.packet(a, .{ .dispositions = global }, fixture.inputs, fixture.text.registry);
+        defer packets.release(disposition_packet);
+        try checkSemanticAssignment(a, disposition_packet, global.items, null);
+        const schema = @import("domain/model_result_schema.zig");
+        var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+        const resource = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/reconciliation.schema.json", a, .unlimited));
+        const narrowed = try schema.restrict(a, resource.select(disposition_packet.resultDefinition().?).?, disposition_packet.excludedVariants(), disposition_packet.integerChoices());
+        defer narrowed.release();
+        const check = @import("model_payload_schema_test.zig").checkDocument;
+        const empty = "{\"claim_dispositions\":[],\"conflict_groups\":[]}";
+        try check(narrowed.selected().modelBytes(), .{ .bytes = empty });
+        try check(narrowed.selected().modelBytes(), .{ .bytes = "{\"claim_dispositions\":[{}],\"conflict_groups\":[]}", .rejection = .array_length, .path = "/claim_dispositions" });
+        try check(narrowed.selected().modelBytes(), .{ .bytes = "{\"claim_dispositions\":[],\"conflict_groups\":[{\"claim_ids\":[1,2]}]}", .rejection = .array_length, .path = "/conflict_groups" });
+        const collected = try stage.collect(a, .{ .dispositions = global }, disposition_packet, empty, .{ .request = .{ .value = 55 }, .attempt = .{ .value = 1 } });
+        try std.testing.expectEqual(@as(usize, 2), (try reconciliation.validate_dispositions.execute(a, collected)).valid.dispositions.len);
+        for (collected.proposal.global.claim_dispositions, 0..) |_, i| try std.testing.expect(collected.source.at(.{ .disposition = i }, .record) == null);
     }
 }
 
@@ -410,7 +431,7 @@ test "summary and signal schemas restrict semantic claim choices while retaining
         const selected = try schema.restrict(std.testing.allocator, schemas.select(disposition_packet.resultDefinition().?).?, disposition_packet.excludedVariants(), disposition_packet.integerChoices());
         defer selected.release();
         const choices = @import("domain/reference_conflict_groups.zig");
-        for ([_]r.ClaimId{ semantic, .{ .ordinal = 999 } }, 0..) |claim, index| {
+        for ([_]r.ClaimId{ semantic, token, .{ .ordinal = 999 } }, 0..) |claim, index| {
             const bytes = try codec.encode(choices.Selection, a, .{ .claim_dispositions = &.{.{ .claim_id = claim, .disposition = .{ .retained = .{} } }}, .conflict_groups = &.{} });
             try check(selected.selected().modelBytes(), .{ .bytes = bytes, .rejection = if (index == 0) null else .enum_mismatch, .path = if (index == 0) null else "/claim_dispositions/0/claim_id" });
         }

@@ -1,16 +1,23 @@
-//! Mechanical classification coverage; semantic preserve/irrelevant choices
-//! remain model candidates. Source authority failures are never repair requests.
+//! Classification coverage and native literal-byte preservation bounds. Token
+//! kinds and unforced relevance remain model candidates. Source authority
+//! failures are never repair requests.
 const std = @import("std");
 const extraction = @import("reference_extraction.zig");
 const tokens = extraction.tokens;
 const evidence = @import("reference_evidence.zig");
+const obligation = @import("exact_token_obligation.zig");
 pub const Issues = struct {
     missing: []const tokens.CandidateId,
     duplicate: []const tokens.CandidateId,
     unknown: []const tokens.CandidateId,
     forbidden: []const tokens.CandidateId,
 };
-pub const Choices = struct { outcome: std.meta.Tag(@FieldType(extraction.TextValidatedResult, "outcome")), decisions: []const std.meta.Tag(tokens.Classification) };
+pub const Choices = struct {
+    outcome: std.meta.Tag(@FieldType(extraction.TextValidatedResult, "outcome")),
+    decisions: []const std.meta.Tag(tokens.Classification),
+    /// These native candidate identities must use preserve; Kind stays semantic.
+    required_preserve: []const tokens.CandidateId = &.{},
+};
 pub fn choices(outcome: std.meta.Tag(@FieldType(extraction.TextValidatedResult, "outcome"))) Choices {
     return .{ .outcome = outcome, .decisions = switch (outcome) {
         .claims => &.{ .preserve, .irrelevant },
@@ -54,6 +61,73 @@ pub fn validScope(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: tok
     return (try check(a, inputs, candidates, parsed, scope)) == .valid;
 }
 
+/// Readback replays native candidate extraction and the same classification
+/// validator. Complete claim/citation counters cannot hide an omitted required
+/// token, an irrelevant decision contradicting canonical prose, or an invented
+/// preserved-token claim. The caller owns the scratch arena.
+pub fn validateStored(a: std.mem.Allocator, inputs: evidence.Inputs, ledger: extraction.Ledger) extraction.Error!void {
+    if (!ledger.state_id.eql(inputs.corpus.state_id)) return error.InvalidReferenceExtraction;
+    const facts = try tokens.extract(a, inputs);
+    const candidates = try tokens.assign(a, inputs, facts);
+    const entries = try a.alloc(extraction.TextValidatedResult, ledger.chunks.len);
+    for (ledger.chunks, entries) |chunk, *entry| {
+        const origins = try a.alloc(?@import("model_candidate_origin.zig").Origin, chunk.token_classifications.len);
+        @memset(origins, null);
+        entry.* = .{
+            .scope = chunk.scope,
+            .token_classifications = chunk.token_classifications,
+            .classification_origins = origins,
+            .outcome = switch (chunk.outcome) {
+                .blocked => return error.InvalidReferenceExtraction,
+                .no_feature_claim => |reason| .{ .no_feature_claim = reason },
+                .claims => |ids| claims: {
+                    var proposals: std.ArrayList(extraction.TextValidatedProposal) = .empty;
+                    for (ids) |id| {
+                        if (id.ordinal == 0 or id.ordinal > ledger.claims.len) return error.InvalidReferenceExtraction;
+                        const claim = ledger.claims[id.ordinal - 1];
+                        if (claim.id.ordinal != id.ordinal or !claim.chunk_id.eql(chunk.scope.chunk_id)) return error.InvalidReferenceExtraction;
+                        if (claim.content == .model) try proposals.append(a, .{ .content = claim.content.model, .citations = &.{}, .citation_origins = &.{} });
+                    }
+                    break :claims .{ .claims = try proposals.toOwnedSlice(a) };
+                },
+            },
+        };
+    }
+    const classified = switch (try validate(a, inputs, candidates, .{ .entries = entries })) {
+        .valid => |value| value,
+        .invalid => return error.InvalidStructuredTokens,
+    };
+    var preserved_count: usize = 0;
+    for (classified.selections) |selection| {
+        if (selection.decision != .preserve) continue;
+        preserved_count += 1;
+        var found: ?extraction.Claim = null;
+        for (ledger.claims) |claim| {
+            if (claim.content != .preserved_token or !std.meta.eql(claim.content.preserved_token.value.candidate_id, selection.candidate.id)) continue;
+            if (found != null) return error.InvalidStructuredTokens;
+            found = claim;
+        }
+        const claim = found orelse return error.InvalidStructuredTokens;
+        const token = claim.content.preserved_token;
+        if (!claim.chunk_id.eql(selection.candidate.fact.scope.chunk_id) or token.value.id.ordinal != preserved_count or
+            token.value.downstream_obligation_id.token_id.ordinal != token.value.id.ordinal or token.value.kind != selection.decision.preserve or
+            !std.mem.eql(u8, token.value.raw_value.bytes, selection.candidate.fact.citation.verbatim.?) or
+            claim.citation_ids.len != 1 or claim.citation_ids[0].ordinal != token.citation_id.ordinal or
+            token.citation_id.ordinal == 0 or token.citation_id.ordinal > ledger.citations.len) return error.InvalidStructuredTokens;
+        const citation = ledger.citations[token.citation_id.ordinal - 1];
+        if (citation.id.ordinal != token.citation_id.ordinal or !tokens.equalFact(.{
+            .scope = selection.candidate.fact.scope,
+            .extractor_id = selection.candidate.fact.extractor_id,
+            .citation = citation.value,
+        }, selection.candidate.fact)) return error.InvalidStructuredTokens;
+    }
+    var actual_count: usize = 0;
+    for (ledger.claims) |claim| if (claim.content == .preserved_token) {
+        actual_count += 1;
+    };
+    if (actual_count != preserved_count) return error.InvalidStructuredTokens;
+}
+
 fn check(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: tokens.Candidates, parsed: extraction.TextValidated, selected_scope: ?evidence.Scope) extraction.Error!Result {
     try tokens.validateCandidates(a, inputs, candidates);
     if (parsed.revision == 0 or parsed.entries.len != inputs.chunks.entries.len) return error.InvalidReferenceExtraction;
@@ -84,8 +158,11 @@ fn check(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: tokens.Candi
         var duplicate: std.ArrayList(tokens.CandidateId) = .empty;
         var unknown: std.ArrayList(tokens.CandidateId) = .empty;
         var forbidden: std.ArrayList(tokens.CandidateId) = .empty;
+        var required_preserve: std.ArrayList(tokens.CandidateId) = .empty;
         for (candidates.entries) |candidate| {
             if (!candidate.fact.scope.chunk_id.eql(entry.scope.chunk_id)) continue;
+            const required = obligation.candidateRequired(entry, candidate);
+            if (required) try required_preserve.append(a, candidate.id);
             var count: usize = 0;
             var decision: tokens.Decision = .blocked;
             for (entry.token_classifications) |classification| {
@@ -95,6 +172,7 @@ fn check(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: tokens.Candi
                     .preserve => |value| .{ .preserve = value.kind },
                     .irrelevant => .irrelevant,
                 };
+                if (required and classification == .irrelevant) try forbidden.append(a, candidate.id);
             }
             if (entry.outcome != .blocked and count == 0) try missing.append(a, candidate.id);
             if (count > 1) try duplicate.append(a, candidate.id);
@@ -118,7 +196,9 @@ fn check(a: std.mem.Allocator, inputs: evidence.Inputs, candidates: tokens.Candi
                 .unknown = try unknown.toOwnedSlice(a),
                 .forbidden = try forbidden.toOwnedSlice(a),
             };
-            return .{ .invalid = .{ .dependencies = try @import("reference_extraction_context.zig").snapshot(a, .{ .inputs = inputs, .candidates = candidates, .candidate = parsed }), .scope = entry.scope, .revision = parsed.revision, .origin = try rejectionOrigin(entry, issues), .observed = entry.token_classifications, .choices = choices(entry.outcome), .issues = issues } };
+            var permitted = choices(entry.outcome);
+            permitted.required_preserve = try required_preserve.toOwnedSlice(a);
+            return .{ .invalid = .{ .dependencies = try @import("reference_extraction_context.zig").snapshot(a, .{ .inputs = inputs, .candidates = candidates, .candidate = parsed }), .scope = entry.scope, .revision = parsed.revision, .origin = try rejectionOrigin(entry, issues), .observed = entry.token_classifications, .choices = permitted, .issues = issues } };
         }
     }
     if (index != selections.len) return error.InvalidStructuredTokens;

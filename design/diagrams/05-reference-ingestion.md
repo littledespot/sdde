@@ -20,14 +20,14 @@ flowchart TD
     TOKENIDS --> PARTS
     PARTS --> ASSEMBLE["Generic native assembly with each producer's provenance;<br/>no LLM prompt or call; validate complete JSON shape"]
     ASSEMBLE --> TEXT
-    TEXT --> CLASSIFY["Validate total chunk-local token classifications;<br/>reject missing, duplicate, foreign or stale candidates"]
+    TEXT --> CLASSIFY["Validate total chunk-local token classifications;<br/>canonical business/scope byte matches force preservation;<br/>kind cannot remove the native exact duty"]
     CLASSIFY --> TOKENS["Assign preserved-token IDs and build deterministic claims;<br/>keep exact bytes and derive obligation identities"]
     TOKENS --> ACCOUNT["Validate and identify all claims and citations;<br/>prove total chunk coverage and one claim per preserved token"]
     ACCOUNT -->|Valid| ITEMS["Retain typed claims, original citations and token references"]
     ITEMS --> WITHIN["Partition within each source in claim order;<br/>explicit YAML group-size"]
     WITHIN --> CROSS["Validate complete summary membership;<br/>group across the selected directory's sources"]
     CROSS --> GLOBAL["Group global summaries recursively;<br/>retain original claim membership and payloads"]
-    GLOBAL --> DISPOSITIONS["Require one retained / superseded / duplicate / conflicting<br/>disposition per original claim; validate every relationship"]
+    GLOBAL --> DISPOSITIONS["Models dispose semantic claims only;<br/>native tokens retain distinct bytes or directly duplicate<br/>their earliest equal-byte original; validate all joins"]
     DISPOSITIONS --> RECORDS["Validate signal / citation / token / conflict joins;<br/>assign engine IDs and validate complete lineage"]
     RECORDS -->|Candidate and conflict evidence| CHECK{"Shared authority gate:<br/>required meaning supported and conflicts resolved?"}
     CHECK -->|Yes| CANDIDATE["Retain validated reference inputs<br/>for subsequent workflow steps"]
@@ -57,5 +57,6 @@ validation and user review. Scanning yields byte spans, not file authority.
 Candidates remain execution-local; permitted clarification state survives reruns.
 
 Contracts and implementation evidence: [Design §16](../design.md#16-reference-ingestion-and-normalization)
-and [F0100 §§3.6–3.9](../features/F0100-SpecWorkflow.md#39-reference-reconciliation-boundary).
+and [F0100 §§3.6–3.9](../features/F0100-SpecWorkflow.md#39-reference-reconciliation-boundary),
+as amended by [ADR 0024](../decisions/0024-native-exact-token-authority.md).
 Scripted verification does not establish live completion or semantic quality.

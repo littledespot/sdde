@@ -93,6 +93,73 @@ const Cost = struct {
     provider_stop: ?[]const u8 = null,
 };
 const CaseState = struct { context: @import("../domain/specification_provenance.zig").Context, seed: session.Session };
+const ExcludedRecordSeed = struct { seed: RecordSeed, reason: enum { preserved_tokens_only } };
+const RecordPopulation = struct {
+    case_id: []const u8,
+    historical_seed_count: usize,
+    scheduled_seed_count: usize,
+    excluded_seed_count: usize,
+    scheduled: []const RecordSeed,
+    excluded: []const ExcludedRecordSeed,
+};
+
+fn recordPopulation(a: std.mem.Allocator, example: Case, current: session.Session, context: @import("../domain/specification_provenance.zig").Context) !RecordPopulation {
+    const records = @import("../domain/reference_support.zig").records(context.references);
+    const available = try binding.catalogue(a, records, .question);
+    defer a.free(available);
+    const scheduled = try a.alloc(RecordSeed, current.record_group_count);
+    for (scheduled, 0..) |*seed, index| {
+        const assigned = (try binding.record(a, records, context.inputs, index)).records;
+        defer a.free(assigned.selection.claim_ids);
+        var found: ?RecordSeed = null;
+        for (example.record_seeds) |historical| if (historical.group_id == assigned.signal.ordinal) {
+            if (found != null) return error.InvalidCalibrationCase;
+            found = historical;
+        };
+        seed.* = found orelse return error.InvalidCalibrationCase;
+    }
+    var excluded: std.ArrayList(ExcludedRecordSeed) = .empty;
+    for (example.record_seeds, 0..) |seed, index| {
+        for (example.record_seeds[0..index]) |prior| if (prior.group_id == seed.group_id) return error.InvalidCalibrationCase;
+        const included = for (scheduled) |active| {
+            if (seed.group_id == active.group_id) break true;
+        } else false;
+        if (included) continue;
+        const active = for (available) |group| {
+            if (group.signal_id.ordinal == seed.group_id) break true;
+        } else false;
+        if (!active) return error.InvalidCalibrationCase;
+        if (!try binding.tokenOnly(records, .{ .ordinal = seed.group_id })) return error.InvalidCalibrationCase;
+        try excluded.append(a, .{ .seed = seed, .reason = .preserved_tokens_only });
+    }
+    try std.testing.expectEqual(example.record_seeds.len, scheduled.len + excluded.items.len);
+    return .{ .case_id = example.id, .historical_seed_count = example.record_seeds.len, .scheduled_seed_count = scheduled.len, .excluded_seed_count = excluded.items.len, .scheduled = scheduled, .excluded = excluded.items };
+}
+
+fn recordPopulationChecks(a: std.mem.Allocator, example: Case, current: session.Session, context: @import("../domain/specification_provenance.zig").Context, population: RecordPopulation) !void {
+    try std.testing.expectEqual(@as(usize, 1), population.excluded.len);
+    var malformed = example;
+    const seeds = try a.dupe(RecordSeed, example.record_seeds);
+    malformed.record_seeds = seeds;
+    seeds[seeds.len - 1].group_id = 999999;
+    try std.testing.expectError(error.InvalidCalibrationCase, recordPopulation(a, malformed, current, context));
+    seeds[seeds.len - 1] = seeds[0];
+    try std.testing.expectError(error.InvalidCalibrationCase, recordPopulation(a, malformed, current, context));
+    malformed.record_seeds = &.{};
+    try std.testing.expectError(error.InvalidCalibrationCase, recordPopulation(a, malformed, current, context));
+    var inactive = context;
+    const r = @import("../domain/reference_reconciliation.zig");
+    const dispositions = try a.dupe(r.ClaimDisposition, @import("../domain/reference_support.zig").records(context.references).dispositions);
+    const excluded = population.excluded[0].seed.group_id;
+    const claims = for (context.references.records.signals) |group| {
+        if (group.id.ordinal == excluded) break group.value.claim_ids;
+    } else return error.InvalidCalibrationCase;
+    for (dispositions) |*entry| if (r.contains(r.ClaimId, claims, entry.claim_id)) {
+        entry.disposition = .superseded;
+    };
+    inactive.references.records.assignments.checked.prior.prior.dispositions = dispositions;
+    try std.testing.expectError(error.InvalidCalibrationCase, recordPopulation(a, example, current, inactive));
+}
 const Observation = struct {
     trial_id: []const u8,
     status: enum { not_run, incomplete, rejected, admitted_content, admitted_clarification },
@@ -120,6 +187,7 @@ pub fn run() !void {
     var owners: std.ArrayList(shared.PreparedContext) = .empty;
     defer for (owners.items) |owner| owner.passive.deinit();
     const states = try a.alloc(CaseState, cases.len);
+    var record_populations: std.ArrayList(RecordPopulation) = .empty;
     var physical_sends: usize = 0;
     for (cases, 0..) |example, index| {
         for (cases[0..index]) |prior| try std.testing.expect(!std.mem.eql(u8, prior.id, example.id));
@@ -131,7 +199,9 @@ pub fn run() !void {
             .ready => |ready| ready,
             .blocked => return error.InvalidCalibrationCase,
         };
-        try std.testing.expectEqual(example.record_seeds.len, current.record_group_count);
+        const population = try recordPopulation(a, example, current, prepared.context);
+        if (index == 0) try recordPopulationChecks(a, example, current, prepared.context, population);
+        try record_populations.append(a, population);
         const ids = try a.alloc(@import("../domain/reference_reconciliation.zig").SignalId, example.groups.len);
         for (example.groups, ids) |id, *group| group.* = .{ .ordinal = id };
         const selected = try binding.resolveGroups(a, @import("../domain/reference_support.zig").records(prepared.context.references), prepared.context.inputs, ids, .content);
@@ -147,7 +217,7 @@ pub fn run() !void {
         }
         var record_requests: std.ArrayList(Request) = .empty;
         const records_start = current;
-        for (example.record_seeds) |seed| {
+        for (population.scheduled) |seed| {
             const assigned = try session.currentBinding(a, current, prepared.context);
             try std.testing.expectEqual(seed.group_id, assigned.records.signal.ordinal);
             try record_requests.append(a, try exportRequest(a, schema, example.id, current, prepared.context));
@@ -205,6 +275,7 @@ pub fn run() !void {
         .downstream = "Native admitted authored associations determine the review subject and evidence. No review model calls or expected-value loss findings are prepared.",
         .parent = .{ .feature = captured_feature, .identity = parent_identity, .description = parent, .wire_preflight = "Current Converse modified bodies rebuilt through existing replay provider prepare; zero sends. A retained request with different wire bytes is ineligible as an exact current parent. Current compiled graph authorization is a separate required preflight." },
         .dependencies = dependencies.items,
+        .record_authoring_population = record_populations.items,
         .trials = trials.items,
     }, .{});
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/preparation.json", .data = preparation });
@@ -242,6 +313,7 @@ pub fn runAssemblyRequirementsComparison() !void {
     var owners: std.ArrayList(shared.PreparedContext) = .empty;
     defer for (owners.items) |owner| owner.passive.deinit();
     const states = try a.alloc(CaseState, cases.items.len);
+    var record_populations: std.ArrayList(RecordPopulation) = .empty;
     var physical_sends: usize = 0;
     for (cases.items, 0..) |example, index| {
         for (cases.items[0..index]) |prior| try std.testing.expect(!std.mem.eql(u8, prior.id, example.id));
@@ -252,7 +324,8 @@ pub fn runAssemblyRequirementsComparison() !void {
             .ready => |ready| ready,
             .blocked => return error.InvalidCalibrationCase,
         };
-        try std.testing.expectEqual(example.record_seeds.len, current.record_group_count);
+        const population = try recordPopulation(a, example, current, prepared.context);
+        try record_populations.append(a, population);
         const ids = try a.alloc(@import("../domain/reference_reconciliation.zig").SignalId, example.groups.len);
         for (example.groups, ids) |id, *group| group.* = .{ .ordinal = id };
         const selected = try binding.resolveGroups(a, @import("../domain/reference_support.zig").records(prepared.context.references), prepared.context.inputs, ids, .content);
@@ -261,7 +334,7 @@ pub fn runAssemblyRequirementsComparison() !void {
         var baseline: std.ArrayList(Request) = .empty;
         var family: std.ArrayList(Request) = .empty;
         var ownership: std.ArrayList(Request) = .empty;
-        for (example.record_seeds) |seed| {
+        for (population.scheduled) |seed| {
             const assigned = try session.currentBinding(a, current, prepared.context);
             try std.testing.expectEqual(seed.group_id, assigned.records.signal.ordinal);
             const original = try exportRequestAt(a, directory, schema, try std.fmt.allocPrint(a, "{s}-baseline", .{example.id}), current, prepared.context, .without_required_entities, old_guidance);
@@ -285,7 +358,7 @@ pub fn runAssemblyRequirementsComparison() !void {
     }
     try std.testing.expectEqual(@as(usize, 5), cases.items.len);
     try std.testing.expectEqual(@as(usize, 30), trials.items.len);
-    try std.testing.expectEqual(@as(usize, 42), physical_sends);
+    try std.testing.expectEqual(@as(usize, 36), physical_sends);
     const parent = try wirePreflight(a, directory, trials.items);
     var dependencies: std.ArrayList(File) = .empty;
     for ([_][]const u8{
@@ -302,6 +375,7 @@ pub fn runAssemblyRequirementsComparison() !void {
         .admission = "Same current native admission applies to all three diagnostic arms; native requirements remain aggregate, and empty individual batches are permitted.",
         .parent = .{ .feature = captured_feature, .identity = parent_identity, .description = parent },
         .dependencies = dependencies.items,
+        .record_authoring_population = record_populations.items,
         .trials = trials.items,
     }, .{});
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = directory ++ "/preparation.json", .data = preparation });

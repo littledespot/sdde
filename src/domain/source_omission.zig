@@ -306,6 +306,7 @@ fn validateLocation(inputs: authority.Inputs, sources: r.evidence.Inputs, subjec
         },
         .reconciliation_disposition => |id| {
             try sourceForClaim(records.items, id, review.source_ids);
+            if ((try r.item(records.items, id)).claim.content != .model) return error.InvalidRequiredAuthority;
             for (records.dispositions) |disposition| if (std.meta.eql(disposition.claim_id, id)) {
                 if (disposition.disposition == .conflicting or disposition.disposition == .retained) return error.InvalidRequiredAuthority;
                 return;

@@ -907,7 +907,7 @@ assessment response under [§22.1](22-repair.md). The derived location must agre
 with re-admission against current canonical facts. Non-omission and principle
 findings carry no comparison. The response supplies judgments, original-source
 spans and explanations; its comparison ID binds the entire native collection.
-The current `specification-state/v16` contract in [§24.1](24-workflow-state.md#241-workflow-state)
+The current `specification-state/v17` contract in [§24.1](24-workflow-state.md#241-workflow-state)
 retains authorized pre-generation comparisons and authored associations. Generated
 source and principle findings instead retain advisory assessment bindings under
 ADR 0023 and reject attached loss-comparison authority. Earlier snapshot contracts

@@ -760,6 +760,21 @@ batch for a group whose claims are all preserved tokens.
 
 This is narrower than the A/C comparison and should come before the baseline.
 
+**Approved implementation — 17 October 2026:** the user approved B5 together
+with B8 under [ADR 0024](../design/decisions/0024-native-exact-token-authority.md).
+The shared binding owner now excludes complete, nonempty all-preserved-token
+groups from record count, dense iteration and direct group binding. Mixed groups
+and every other semantic claim class retain their existing eligibility. Full
+content/question catalogues, original signal IDs, exact recognition scope,
+provenance and aggregate coverage remain intact. Existing obligation-bearing
+narrative or record fields may satisfy an exact duty; incidental fields cannot.
+Missing duties retain the typed `missing_exact_copy` failure. A nonempty token-only
+catalogue blocks with `no_record_authoring_groups`, distinct from `empty_catalogue`;
+it does not manufacture an empty checked unit. Current calibration preparations
+identify scheduled seeds by native signal ID and report excluded historical seeds
+without editing frozen inputs. Owning regressions and the required offline checks
+passed; the B8 verification record below records commands and results.
+
 **Proposal:** compare current per-group records (A) with one complete record
 collection (C). Add a purpose-only acceptance-criterion diagnostic (B) or per-family
 collections (D) only where measured failures justify them. Run it after B2 and B3,
@@ -878,9 +893,83 @@ native code owns preserved-token bookkeeping.
 - The model disposes only business claims.
 - A genuine change of value across sources remains a business-claim conflict.
 
-Before deciding, check the retained captures offline for any run where the model's
-token classification or disposition was both correct and non-trivial, including a
-legitimately irrelevant code span inside a business claim.
+**Required pre-implementation capture audit — 17 October 2026:** the bounded
+offline scan covered 107 captured contexts, 49 project prompt archives and two
+retained calibration bundles. After separating provenance and removing archive
+aliases, it found:
+
+- 13 actual-provider current E2E exchanges containing nine classification decisions
+  (seven `preserve`, two `irrelevant`) and seven token dispositions (four
+  `retained`, two `duplicate`, one `superseded`). Multiple decisions may share one
+  exchange.
+- 17 archived provider-shaped exchanges with unverified live provenance, containing
+  eight `preserve` classifications and nine `retained` dispositions. These are a
+  separate evidence class, not additional verified live runs.
+
+No correct, non-obvious model token decision was found. All recovered values were
+`Hello, World!`, `Loan renewed!` or `Renewal refused.`, and all preserved kinds were
+`business_exact_string`. There was no retained counterexample for legitimately
+irrelevant code/link/fenced material inside a business claim, equal bytes with
+different kinds, Unicode normalization or genuine cross-source value conflict.
+Malformed-response suffixes record intentions only; scripted upstream fixtures and
+semantic-review calls do not establish token-decision correctness. This scan is
+not a population accuracy estimate or proof of universal semantic correctness.
+
+The immutable ignored diagnostics are
+[the inventory](../.zig-cache/b5-b8-capture-audit.json), SHA-256
+`733ef4456f1de384caea8707e56691fc04d81e9314a59fe9efe9f9afd0594217`, and
+[the audit note](../.zig-cache/b5-b8-capture-audit.md), SHA-256
+`782ce2ffd6618cd284685f5fdce54323c8692f659c191ea8b88b56f35166afc3`.
+They retain their pre-decision limitations and grant no runtime authority.
+
+**Approved implementation — 17 October 2026:** the user subsequently settled the
+audit's open boundaries and approved [ADR 0024](../design/decisions/0024-native-exact-token-authority.md):
+
+- Exact captured bytes appearing in a literal run of canonical, already validated
+  business or scope-constraint prose from the same original chunk force
+  preservation. Literal fragments may join; passive/source insertions remain
+  opaque. Case, whitespace and Unicode bytes are significant. This is substring
+  matching of canonical prose after its existing NFC validation, separate from
+  B3's contextual complete-value recognition.
+- The model still selects semantic kind. A native appearance duty survives every
+  kind, so choosing a weaker kind cannot remove required exact coverage or
+  occurrence eligibility. Unmatched candidates keep existing semantic rules.
+- Preserved tokens with identical bytes use the earliest original claim as the
+  retained representative and direct duplicate edges for later occurrences,
+  regardless of source or kind. Every original occurrence, citation and duty
+  remains; a representative cannot weaken a duplicate's obligations. Distinct
+  byte sequences remain retained.
+- The model disposes all existing extracted semantic claim categories
+  (`content.model`), with native token dispositions supplied only as facts.
+  Token subjects, relationship targets and coupled conflict groups are excluded
+  from model authority across initial admission, repair and source-omission paths.
+- Completed and pending state advance to `specification-state/v17`. Readback
+  recomputes candidate/classification/token accounting, native dispositions,
+  duplicate identity and complete original-occurrence coverage. Earlier versions
+  reject without migration or a compatibility reader.
+
+**Offline verification completed — 17 October 2026:**
+
+| Command | Result |
+| --- | --- |
+| `zig build test-specification-generation test-reference-extraction test-structured-tokens test-reference-reconciliation test-reference-model-input lint -j1 --summary all` | 979/979 tests; lint passed. |
+| `zig build test-architecture -j1 --summary all` | 151/151 tests passed. |
+| `zig build test-integration -j1 --summary all` | 122/122 tests passed; main workflow matrix 164/164 scenarios. |
+| `zig build verify -j1 --summary all` | 163/163 steps; 1,826/1,826 tests passed, including clean packaged-executable smoke and offline network guard. |
+| `git diff --check` | Passed. |
+
+The `contract-reviewer` reviewed the complete diff and final fixture corrections;
+no findings remain. Regressions exercise native preservation across every kind,
+canonical literal/reference boundaries, byte-only cross-source duplicates,
+original occurrence/citation duties, representative-only recognition without
+support expansion, sparse record assignments and typed zero-authoring rejection,
+repair boundaries, v16 rejection, full v17 readback and forged/missing obligations.
+Calibration inputs and historical observations remain frozen; current preparation
+records report their actual new admission population and excluded assignments.
+
+No live rerun, budget change, new rewording phase or broad semantic quality claim
+is authorized by this entry. These checks establish offline mechanics. Earlier B3
+counts and live observations remain unchanged.
 
 ### B9. Record output can run away
 
@@ -1241,12 +1330,12 @@ the earlier proposed order for B3, B2, W1 and W2:
 
 The remaining recommendations below are proposals, not additional authorization:
 
-1. **Pause billed reruns until B5 and B8 are decided and implemented.** Hello-world
-   blocks on B5 deterministically, and B2/W1 can't be observed until a run reaches
-   review (§1's post-B2/W1 diagnostics).
-2. Decide B5's token-only batch rule and B8's native token classification and
-   disposition rules. Each is deterministic and evidenced in both post-B3 runs of
-   its case. Measure B7 and B9 on retained captures. Do all of these before the
+1. **Pause billed reruns pending separate approval.** The retained hello-world
+   diagnostics hit B5 deterministically; B2/W1's live effect remains unobserved
+   until a run reaches review (§1's post-B2/W1 diagnostics).
+2. B5's token-only batch rule and B8's native token classification and
+   disposition rules are now approved, implemented and verified offline
+   under ADR 0024. Measure B7 and B9 on retained captures. Do all of these before the
    next reruns and before freezing the Phase 2 baseline.
 3. **Before any rerun that can publish:** decide R8's acceptance policy and refresh
    the rubric calibration. Advisory review lets defective candidates publish (see

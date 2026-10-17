@@ -238,6 +238,22 @@ pub const PreparedContext = struct {
     passive: text.Prepared,
 };
 
+/// Diagnostic current native scope only. Original occurrences and semantic
+/// evidence remain separate from the one eligible equal-byte representative.
+pub fn writeExactScope(a: std.mem.Allocator, directory: []const u8, id: []const u8, prepared: PreparedContext) !void {
+    const records = @import("../domain/reference_support.zig").records(prepared.context.references);
+    const Original = struct { claim: r.extraction.Claim, disposition: r.ClaimDisposition };
+    var originals: std.ArrayList(Original) = .empty;
+    for (records.items.entries, records.dispositions) |item, disposition| if (item.claim.content == .preserved_token) try originals.append(a, .{ .claim = item.claim, .disposition = disposition });
+    try writeAt(a, directory, id, "native-exact-scope.json", try std.json.Stringify.valueAlloc(a, .{
+        .reference_state = records.items.state_id,
+        .original_token_occurrences = originals.items,
+        .eligible_exact_occurrences = try provenance.exactOccurrences(a, records, null),
+        .admitted_brief = prepared.brief,
+        .semantic_evidence = false,
+        .model_calls = @as(usize, 0),
+    }, .{}));
+}
 /// Current diagnostic candidates are admitted through the production owner;
 /// frozen captured text supplies no pre-existing canonical exact authority.
 pub fn admitAttributed(a: std.mem.Allocator, context: provenance.Context, value: spec.AttributedValue, field: @import("../domain/text_field_policy.zig").Field) !spec.AttributedValue {
@@ -653,6 +669,7 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
             continue;
         }
         prepared_cases += 1;
+        try writeExactScope(a, output, example.id, current);
         if (prepared_cases == 1) try currentAssociationChecks(a, example);
         if (authority.assessmentPolicy(current.inputs.projection) == .advisory) {
             advisory_cases += 1;
@@ -720,15 +737,15 @@ fn runCitationCompleteness(a: std.mem.Allocator, schema: *const @import("../doma
             try consumeReviewReceipt(a, schema, example.id, repetition, prepared, review_packet);
         }
     }
-    // Both frozen negatives remain counted: an invented encoded insertion and
-    // competing equal-label identities cannot enter semantic review.
+    // The encoded insertion remains rejected. Equal-byte token identity now
+    // admits dual-ready's brief, but no complete frozen candidate exists, so it
+    // remains explicitly unavailable rather than acquiring fabricated content.
     try std.testing.expectEqualDeep(@as([]const AdmissionRejection, &.{
         .{ .case_id = "captured-description", .reason = .embedded_insertion_syntax },
-        .{ .case_id = "dual-ready", .reason = .ambiguous_exact },
     }), admission_rejections.items);
     try std.testing.expectEqual(@as(usize, 1), advisory_cases);
     try std.testing.expectEqual(@as(usize, 1), pre_generation_cases);
-    try std.testing.expectEqual(@as(usize, 9), unavailable.items.len);
+    try std.testing.expectEqual(@as(usize, 10), unavailable.items.len);
     try std.testing.expectEqual(cases.len, prepared_cases + admission_rejections.items.len + unavailable.items.len);
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/native-admission.json", .data = try std.json.Stringify.valueAlloc(a, .{
         .input_cases = cases.len,

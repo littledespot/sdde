@@ -160,7 +160,7 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             }
             const claim = if (options.brief_text) |texts| texts[1] else try extractedClaim(allocator, chunk.id);
             const citation: @import("../domain/source_selections.zig").Selection = if (options.citation_fault == .unknown) .{ .first = .{ .ordinal = 999 }, .last = .{ .ordinal = 999 } } else @import("../reference_extraction_test.zig").wholeChunk(chunk);
-            const mixed_kinds = options.summary_sequence != null or options.global_sequence != null or options.reconciliation_fault == .mixed_selection;
+            const mixed_kinds = options.summary_sequence != null or options.global_sequence != null or options.disposition_sequence != null or options.reconciliation_fault == .mixed_selection;
             // Empty citations now fail the complete response schema. A protocol
             // correction must provide the full claim again before native repair.
             const body = try @import("../domain/model_candidate_json.zig").encode(@import("../domain/reference_extraction_parser.zig").Response, allocator, .{ .claims = .{ .claims = &.{.{ .content = .{ .business = .{ .segments = &.{.{ .literal = .{ .value = if (options.text_fault) "Invalid\x01text" else claim } }} } }, .citations = if (options.citation_fault == .missing and options.attempt == 1) &.{} else &.{citation} }}, .token_classifications = &.{} } });
@@ -200,10 +200,14 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 }
                 const authorization = try @import("../application/reference_reconciliation_repair_workflow.zig").readAuthorization(&view);
                 if (options.disposition_sequence == .exhaust) {
+                    const subject = switch (authorization.target) {
+                        inline .disposition, .insert_disposition => |target| target.claim,
+                        else => return error.InvalidReconciliationFixture,
+                    };
                     const replacement: repair.Replacement = if (authorization.operation == .insert)
-                        .{ .disposition = .{ .duplicate = .{ .target_claim_id = .{ .ordinal = 1 } } } }
+                        .{ .disposition = .{ .duplicate = .{ .target_claim_id = subject } } }
                     else
-                        .{ .disposition = .{ .superseded = .{ .related_claim_ids = &.{.{ .ordinal = 1 }} } } };
+                        .{ .disposition = .{ .superseded = .{ .related_claim_ids = &.{subject} } } };
                     return @import("reference_reconciliation.zig").repairResponse(allocator, replacement);
                 }
                 if (options.reconciliation_repair_fault) |fault| {
@@ -264,6 +268,10 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
                 return @import("reference_reconciliation.zig").modelWire(allocator, .{ .summary = proposal });
             }
             var proposal = try @import("reference_reconciliation.zig").global(allocator, input);
+            const disposition_claims = try dispositionClaims(allocator, request, input);
+            var semantic_dispositions: std.ArrayList(r.ClaimDispositionProposal) = .empty;
+            for (proposal.claim_dispositions) |entry| if (r.contains(r.ClaimId, disposition_claims, entry.claim_id)) try semantic_dispositions.append(allocator, entry);
+            proposal.claim_dispositions = semantic_dispositions.items;
             const accepted = if (view.contains(.validated_reference_dispositions)) (try native.read(&view, reconciliation.dispositions_schema, .reconciliation_dispositions)).payload().reconciliation_dispositions else null;
             // Later phase responses follow accepted repairs, rather than
             // reintroducing the initial scripted relationship defect.
@@ -290,9 +298,21 @@ fn completeResponse(allocator: std.mem.Allocator, view: data.View, options: Opti
             }
             if (options.global_sequence != null) proposal = try @import("global_protocol_sequence.zig").mixed(allocator, input, proposal);
             if (options.disposition_sequence != null) {
-                const signals = try allocator.dupe(r.SignalProposal, proposal.signals[0..1]);
-                signals[0].claim_ids = try allocator.dupe(r.ClaimId, if (options.attempt == 1) &.{ input.items[0].claim.id, input.items[1].claim.id } else &.{input.items[0].claim.id});
-                proposal.signals = signals;
+                if (disposition_claims.len < 2) return error.InvalidReconciliationFixture;
+                if (options.attempt == 1) {
+                    const token = for (input.progress.plan.layout.items.entries) |item| {
+                        if (item.claim.content == .preserved_token) break item.claim.id;
+                    } else return error.InvalidReconciliationFixture;
+                    const signals = try allocator.dupe(r.SignalProposal, proposal.signals);
+                    const selected = for (signals) |*signal| {
+                        if (signal.content == .model) break signal;
+                    } else return error.InvalidReconciliationFixture;
+                    // Token membership is native, so this initial selector is
+                    // a protocol fault. The correction restores every original
+                    // semantic signal rather than inventing mixed-kind content.
+                    selected.claim_ids = try std.mem.concat(allocator, r.ClaimId, &.{ selected.claim_ids, &.{token} });
+                    proposal.signals = signals;
+                }
                 if (options.attempt > 1) proposal.claim_dispositions = proposal.claim_dispositions[0..1];
                 return @import("reference_reconciliation.zig").modelWire(allocator, .{ .global = proposal });
             }
@@ -962,6 +982,19 @@ fn selection(value: g.spec.Provenance) g.spec.Selection {
 
 fn extractedClaim(allocator: std.mem.Allocator, chunk: r.evidence.identity.ChunkId) ![]const u8 {
     return std.fmt.allocPrint(allocator, "The outcome from reference unit {s} is observable.", .{chunk.bytes});
+}
+
+// Canonical fixture proposals include native token facts. The scripted model
+// chooses only current semantic subjects, before any negative fault is injected.
+fn dispositionClaims(allocator: std.mem.Allocator, request: *const @import("../domain/model_request_handoff.zig").Request, input: r.Input) ![]const r.ClaimId {
+    const packet = request.packet() orelse return error.InvalidReconciliationFixture;
+    const definition = packet.resultDefinition() orelse return error.InvalidReconciliationFixture;
+    if (!std.mem.eql(u8, definition.bytes, "dispositions_assignment")) return @import("../domain/reference_reconciliation_projection.zig").semanticClaimIds(allocator, input.items);
+    const body = try std.json.parseFromSlice(std.json.Value, allocator, packet.body(), .{});
+    const supplied = body.value.object.get("assignment").?.object.get("claim_ids").?.array.items;
+    const result = try allocator.alloc(r.ClaimId, supplied.len);
+    for (supplied, result) |id, *claim| claim.* = .{ .ordinal = std.math.cast(u32, id.integer) orelse return error.InvalidReconciliationFixture };
+    return result;
 }
 
 /// The scripted complete source remains one fixture; each provider call gets

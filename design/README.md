@@ -32,6 +32,7 @@ implementation status and verification records are evidence, not new authority.
 | Model input, response and retry guidance | [Request guidance](reference-notes/model-request-guidance.md) |
 | Generic configured JSON decomposition and prompt-free assembly | [ADR 0016](decisions/0016-configured-json-response-composition.md), [flow](diagrams/20-configured-json-composition.md) |
 | Advisory post-generation source/principle review, whole-unit assignments and source-repair phase guards | [ADR 0023](decisions/0023-advisory-post-generation-review.md) |
+| Native exact-token obligations/dispositions and token-only record scheduling | [ADR 0024](decisions/0024-native-exact-token-authority.md) |
 | Harness operation and recorded validation | [Harness guide](harness/README.md) |
 | Closed document shapes | [Schemas](schemas/) |
 | Example inputs and workflow resources | [Examples](examples/), [workflows](workflows/) |

@@ -3,6 +3,12 @@
 Part of the [proposed design](../design.md#17-specify-stage-design). This section retains the
 baseline's authority and is subject to the accepted amendments in [§32](../design.md#32-accepted-and-deferred-implementation-choices).
 
+The accepted [B5/B8 amendment](../decisions/0024-native-exact-token-authority.md)
+excludes all-preserved-token groups from record scheduling while retaining their
+source/coverage authority. Native exact duties are independent of semantic kind
+and survive equal-byte duplicate grouping; prior conflicting population/kind
+wording below is superseded by that decision.
+
 ### 17.1 Inputs
 
 ```text
@@ -210,15 +216,19 @@ user gap merely by having valid IDs. Shared field purposes describe derivation
 from source-backed behavior, not a demand for prewritten titles, goals or stories.
 Do not invent an actor, benefit or entity to fill a field.
 
-Record authoring binds one complete retained group and may return multiple records
+Record authoring binds one complete retained group containing at least one
+non-token claim and may return multiple records
 or none. Responses remain content-only; every admitted record inherits that group's
 complete selection and exactly one group occurrence. The shared finite native
 iteration contract in §6 fixes the population at three narrative assignments plus
-the actual retained group count and advances once per admitted assignment, even
+the native record-authoring group count and advances once per admitted assignment, even
 for an empty record array. It grants traversal only for committed progress and
 does not enlarge retry limits. Existing aggregate required families, entity
 membership, claim mapping, exact-token coverage and semantic review still apply.
 An empty collection contributes no positive coverage.
+All-preserved-token groups have no record batch, but remain in general source
+catalogues and exact evidence. Zero authorable groups returns a typed binding
+rejection. Mixed groups retain every original member and occurrence identity.
 The model-facing `record_requirements` projects those same native assembly rules:
 AC and FR are required, with entity records also required when the accepted entity
 decision requires them. Its scope is `assembled_specification`; an individual
@@ -277,8 +287,9 @@ For each feature-brief or specification unit, the declared model operation retur
   A preserved-token occurrence retains its cited source context, including the
   source-required use and conditions of that value. Token membership alone neither
   establishes semantic entailment nor requires an empty batch. It does not assign
-  every other duty in the source to that group. No category-based skip or context
-  prohibition is introduced; semantic support remains subject to original-source
+  every other duty in the source to that group. Under ADR 0024, only groups whose
+  complete membership is preserved tokens are omitted from record scheduling;
+  this adds no context prohibition. Semantic support remains subject to original-source
   review. Original sources remain available; citation
   coordinates, extractor metadata and redundant token IDs remain native.
   Exact-value guidance exposes authorized literal/source context through one

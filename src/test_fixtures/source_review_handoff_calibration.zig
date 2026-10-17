@@ -105,6 +105,7 @@ pub fn run() !void {
             continue;
         };
         defer prepared.passive.deinit();
+        try shared.writeExactScope(a, output, example.id, prepared);
         if (example.cohort == .development) prepared_development += 1 else prepared_qualification += 1;
         const target = try selectedTarget(a, prepared, base, example.target_slot);
         const focused = try shared.focus(a, prepared, target);
@@ -123,12 +124,11 @@ pub fn run() !void {
     try std.testing.expectEqual(@as(usize, 1), qualification);
     try std.testing.expectEqualDeep(@as([]const shared.AdmissionRejection, &.{
         .{ .case_id = "captured-description", .reason = .embedded_insertion_syntax },
-        .{ .case_id = "dual-ready", .reason = .ambiguous_exact },
     }), admission_rejections.items);
-    try std.testing.expectEqual(@as(usize, 3), prepared_development);
+    try std.testing.expectEqual(@as(usize, 4), prepared_development);
     try std.testing.expectEqual(@as(usize, 0), prepared_qualification);
     try std.testing.expectEqual(@as(usize, 7), unavailable.items.len);
-    try std.testing.expectEqual(@as(usize, 6), trials.items.len);
+    try std.testing.expectEqual(@as(usize, 8), trials.items.len);
     const dependency_paths = [_][]const u8{
         "src/test_fixtures/source_review_handoff_calibration.zig",
         "src/test_fixtures/source_loss_calibration.zig",

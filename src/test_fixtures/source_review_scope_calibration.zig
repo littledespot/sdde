@@ -100,6 +100,7 @@ pub fn run() !void {
             continue;
         };
         defer prepared.passive.deinit();
+        try shared.writeExactScope(a, output, example.id, prepared);
         if (example.cohort == .development) prepared_development += 1 else prepared_qualification += 1;
         const target = try targetId(example.target);
         const ledger = try authority.build(a, prepared.inputs);
@@ -151,18 +152,15 @@ pub fn run() !void {
     }
     try std.testing.expectEqual(@as(usize, 15), development);
     try std.testing.expectEqual(@as(usize, 9), qualification);
-    try std.testing.expectEqualDeep(@as([]const shared.AdmissionRejection, &.{
-        .{ .case_id = "d5-ready-payer-field", .reason = .ambiguous_exact },
-        .{ .case_id = "d5-ready-fr-other-occurrence", .reason = .ambiguous_exact },
-    }), admission_rejections.items);
+    try std.testing.expectEqual(@as(usize, 0), admission_rejections.items.len);
     try std.testing.expectEqualDeep(@as([]const shared.Unavailable, &.{
         .{ .case_id = "d4-inherited-recording-field" },
         .{ .case_id = "d6-derived-title" },
         .{ .case_id = "d6-derived-goal" },
     }), unavailable.items);
-    try std.testing.expectEqual(@as(usize, 10), prepared_development);
+    try std.testing.expectEqual(@as(usize, 12), prepared_development);
     try std.testing.expectEqual(@as(usize, 9), prepared_qualification);
-    try std.testing.expectEqual(@as(usize, 76), trials.items.len);
+    try std.testing.expectEqual(@as(usize, 84), trials.items.len);
     try taxonomyProbes(a);
     try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = output ++ "/preparation.json", .data = try std.json.Stringify.valueAlloc(a, .{
         .status = "offline_prepared_no_live_dispatch_authority",

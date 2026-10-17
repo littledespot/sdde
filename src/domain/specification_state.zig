@@ -6,7 +6,7 @@ const reference = @import("reference_snapshot.zig");
 const authority = @import("required_authority.zig");
 const clarification = @import("clarification_inputs.zig");
 const ids = @import("specification_identity.zig");
-pub const schema = "specification-state/v16";
+pub const schema = "specification-state/v17";
 pub const max_bytes = 64 * 1024 * 1024;
 pub const State = struct {
     schema: []const u8,

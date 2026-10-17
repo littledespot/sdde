@@ -89,7 +89,10 @@ pub fn global(allocator: std.mem.Allocator, input: r.Input) !r.Proposal {
     for (input.items, dispositions, signals) |item, *disposition, *signal| {
         const ids = try allocator.alloc(r.ClaimId, 1);
         ids[0] = item.claim.id;
-        disposition.* = .{ .claim_id = item.claim.id, .disposition = .{ .retained = .{} } };
+        disposition.* = if (item.claim.content == .preserved_token)
+            try @import("../domain/reference_token_disposition.zig").proposal(input.progress.plan.layout.items, item.claim.id)
+        else
+            .{ .claim_id = item.claim.id, .disposition = .{ .retained = .{} } };
         signal.* = .{ .claim_ids = ids, .content = content(item.claim) };
     }
     return .{ .claim_dispositions = dispositions, .signals = signals, .conflicts = &.{} };

@@ -66,18 +66,34 @@ pub fn checkRecords(allocator: std.mem.Allocator, references: @import("reference
                 .business, .scope_guard => false,
                 .design, .technical, .validation, .implementation_assumption, .open_question => true,
             },
-            .preserved_token => |token| token.value.kind != .business_exact_string,
+            .preserved_token => policy: {
+                const value = @import("specification_exact_tokens.zig").policy(items, item.claim.id) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationCoverage;
+                break :policy !value.mandatory;
+            },
         };
         if (!spec.permitsPositiveMapping(item.claim.content) and targets.items.len != 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .open_question_mapped, .targets = targets.items } };
         if (targets.items.len == 0 and (!context_only or signals.items.len == 0)) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = if (context_only) .missing_context_mapping else .missing_business_mapping, .targets = targets.items } };
         try accounts.append(allocator, .{ .claim_id = item.claim.id, .disposition = if (targets.items.len != 0) .{ .mapped = targets.items } else .{ .context_only = signals.items } });
-        if (item.claim.content == .preserved_token) {
-            const token = item.claim.content.preserved_token;
-            const exact = try exactTargets(allocator, brief, candidate, item.claim.id);
-            if (token.value.kind == .business_exact_string and exact.len == 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .{ .missing_exact_copy = token }, .targets = targets.items } };
-            if (exact.len == 0 and signals.items.len == 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .missing_context_mapping, .targets = targets.items } };
-            try obligations.append(allocator, .{ .claim_id = item.claim.id, .exact_targets = exact, .context_signals = signals.items });
-        }
+    }
+    // A duplicate retains its original obligation and citation identity. Only
+    // the native equal-byte edge permits sharing the representative's witness;
+    // it never adds the duplicate claim to authored S, recognized E or L.
+    for (items.entries) |item| {
+        if (item.claim.content != .preserved_token) continue;
+        const disposition = for (references.dispositions) |value| {
+            if (value.claim_id.ordinal == item.claim.id.ordinal) break value;
+        } else return error.InvalidSpecificationCoverage;
+        if (!(@import("reference_token_disposition.zig").matches(items, disposition) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationCoverage)) return error.InvalidSpecificationCoverage;
+        const policy = @import("specification_exact_tokens.zig").policy(items, item.claim.id) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else error.InvalidSpecificationCoverage;
+        const exact = try exactTargets(allocator, brief, candidate, policy.representative);
+        const targets: []const Key = for (accounts.items) |account| {
+            if (account.claim_id.ordinal == policy.representative.ordinal and account.disposition == .mapped) break account.disposition.mapped;
+        } else &.{};
+        var signals: std.ArrayList(r.SignalId) = .empty;
+        for (references.signals) |signal| if (r.contains(r.ClaimId, signal.value.claim_ids, item.claim.id)) try signals.append(allocator, signal.id);
+        if (policy.mandatory and exact.len == 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .{ .missing_exact_copy = item.claim.content.preserved_token }, .targets = targets } };
+        if (exact.len == 0 and signals.items.len == 0) return .{ .invalid = .{ .claim_id = item.claim.id, .issue = .missing_context_mapping, .targets = &.{} } };
+        try obligations.append(allocator, .{ .claim_id = item.claim.id, .exact_targets = exact, .context_signals = signals.items });
     }
     return .{ .valid = .{ .accounts = accounts.items, .obligations = obligations.items } };
 }

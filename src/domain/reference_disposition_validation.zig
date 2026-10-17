@@ -4,6 +4,7 @@ const std = @import("std");
 const r = @import("reference_reconciliation.zig");
 const v = @import("reference_reconciliation_validation.zig");
 const d = r.diagnostic;
+const tokens = @import("reference_token_disposition.zig");
 
 pub fn validate(allocator: std.mem.Allocator, parsed: r.Parsed) r.Error!d.Result(r.CheckedDispositions) {
     if (@import("reference_conflict_groups.zig").issue(parsed.input.progress.plan.layout.items, parsed.proposal.global)) |group_issue| return r.diagnostic.reject(r.CheckedDispositions, parsed.input, parsed.source, .dispositions, group_issue);
@@ -35,6 +36,7 @@ pub const RepairChoices = struct {
 /// that case leave choices unresolved and retain ordinary bounded repair.
 pub fn repairChoices(a: std.mem.Allocator, items: r.Items, supplied: []const r.ClaimDispositionProposal, index: usize, claim: r.ClaimId) r.Error!?RepairChoices {
     if (index > supplied.len) return error.InvalidReferenceReconciliation;
+    if ((try r.item(items, claim)).claim.content != .model) return error.InvalidReferenceReconciliation;
     var arena: std.heap.ArenaAllocator = .init(a);
     defer arena.deinit();
     const scratch = arena.allocator();
@@ -46,6 +48,7 @@ pub fn repairChoices(a: std.mem.Allocator, items: r.Items, supplied: []const r.C
     var duplicates: std.ArrayList(r.ClaimId) = .empty;
     var superseded: std.ArrayList(r.ClaimId) = .empty;
     for (items.entries) |entry| {
+        if (entry.claim.content != .model) continue;
         selected.related_claim_ids = &.{entry.claim.id};
         selected.disposition = .duplicate;
         if (try permits(scratch, items, values)) try duplicates.append(scratch, entry.claim.id);
@@ -136,17 +139,17 @@ pub fn validClaim(a: std.mem.Allocator, items: r.Items, proposals: []const r.Cla
 
 fn record(items: r.Items, value: r.ClaimDisposition) ?d.Issue {
     const original = r.item(items, value.claim_id) catch return issue(.claim_selection, value, .nonempty_unique_allowed_claims);
+    if (original.claim.content == .preserved_token) {
+        const matches = tokens.matches(items, value) catch return issue(.relationship, value, .native_token_disposition);
+        return if (matches) null else issue(.relationship, value, .native_token_disposition);
+    }
     r.unique(r.ClaimId, value.related_claim_ids) catch return issue(.relationship, value, .unique_nonzero);
     for (value.related_claim_ids) |related| {
         const target = r.item(items, related) catch return issue(.claim_selection, value, .nonempty_unique_allowed_claims);
+        if (target.claim.content != .model) return issue(.relationship, value, .same_content_kind);
         if (related.ordinal == value.claim_id.ordinal) return issue(.relationship, value, .no_self_relation);
         if (value.disposition == .duplicate or value.disposition == .superseded) {
-            if (std.meta.activeTag(original.claim.content) != std.meta.activeTag(target.claim.content)) return issue(.relationship, value, .same_content_kind);
-            switch (original.claim.content) {
-                .model => |model| if (std.meta.activeTag(model) != std.meta.activeTag(target.claim.content.model)) return issue(.relationship, value, .same_content_kind),
-                .preserved_token => |token| if (value.disposition == .duplicate and
-                    (token.value.kind != target.claim.content.preserved_token.value.kind or !std.mem.eql(u8, token.value.raw_value.bytes, target.claim.content.preserved_token.value.raw_value.bytes))) return issue(.relationship, value, .same_token_value),
-            }
+            if (std.meta.activeTag(original.claim.content.model) != std.meta.activeTag(target.claim.content.model)) return issue(.relationship, value, .same_content_kind);
         }
     }
     switch (value.disposition) {

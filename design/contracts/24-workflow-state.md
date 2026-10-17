@@ -37,7 +37,11 @@ clarification-pending state to `specification-state/v14`; the approved 17 Octobe
 native-recognition amendment advanced both variants to `specification-state/v15`.
 The subsequent approved B2/W1 assessment amendment advances both to
 `specification-state/v16` under [ADR 0023](../decisions/0023-advisory-post-generation-review.md).
-It removes persisted presentation roles and stores required `source_group_ids`
+The accepted [B5/B8 amendment](../decisions/0024-native-exact-token-authority.md)
+advances both to `specification-state/v17`, with native token classification,
+dispositions and complete original-occurrence coverage recomputed during readback.
+Earlier versions reject without migration or a compatibility reader.
+The native-association amendment removed persisted presentation roles and stores required `source_group_ids`
 inside attributed values and shared-provenance records, without changing general
 `Selection`/`Provenance` or adding a parallel association registry. Readback resolves
 those exact current captured group occurrences, preserves complete member order
@@ -65,7 +69,7 @@ It contains no content hashes or fingerprints. Preset IDs/versions and artifact 
 
 The [Phase 6 review receipts](22-repair.md#224-repair-request-and-response) exist
 only in one execution's native owners. They are not part of
-`specification-state/v16` and are not restored by state readback. Loading ordinary
+`specification-state/v17` and are not restored by state readback. Loading ordinary
 published review evidence cannot manufacture an accepted call origin or a reusable
 receipt. Candidate-local re-admission does not resume an earlier execution;
 every fresh invocation starts at `start` with empty review history.

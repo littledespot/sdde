@@ -494,6 +494,14 @@ The closed model classifications are:
 - An empty classification collection is valid only for a response whose chunk has no
   candidates.
 - `no_feature_claim` may classify candidates irrelevant, but cannot preserve any.
+- Under [ADR 0024](../decisions/0024-native-exact-token-authority.md), complete
+  original token bytes appearing in a literal run of canonical business or
+  scope-constraint prose from the same chunk force preservation. Matching uses
+  already validated canonical prose, preserves byte distinctions and cannot
+  cross passive/source insertions. The model still chooses kind; a native duty
+  remains mandatory independently of that kind. Unmatched candidates retain
+  their existing relevance/kind rules. Classification repair and stored
+  validation enforce this same native predicate.
 
 Compiled graphs retain a fixed 1,024-step capacity, including expanded subgraph
 instances. Specify reuses model-request/release subgraphs and compact outcome
@@ -637,8 +645,12 @@ revision and exact accepted content; final full validation remains mandatory.
   - One shared constructor derives canonical citations from selected claims in supplied
     order, retaining the first occurrence of each citation ID.
   - Every retained claim is covered.
-  - Every non-conflicting preserved token retains its own reference and obligation,
-    including when its claim is superseded or duplicate.
+  - ADR 0024 assigns preserved-token dispositions natively: earliest equal-byte
+    original retained, later equal-byte originals direct duplicates, every distinct
+    byte sequence retained. Source and semantic kind do not change byte equality;
+    all original identities, citations and obligations survive. Models dispose
+    only `content.model` claims and cannot select token subjects, relation targets
+    or coupled conflict members. Semantic conflicts remain model-assisted.
   - Different exact scalars cannot be declared duplicates.
 - Conflict explanations select an accepted native `group_id`, a closed conflict
   kind and typed `summary`. Native code attaches membership and unresolved status.
@@ -1303,7 +1315,10 @@ mechanical codec is [specification_markdown.zig](../../src/domain/specification_
   The record schema defines each content variant once under one collection envelope.
 - Every retained business claim maps to native content keys; non-spec context remains in
   identified reference signals.
-- Every retained exact business token has an exact-copy target.
+- Every original kind-specific or native appearance exact duty has an
+  obligation-bearing exact-copy target. A validated retained representative may
+  witness its equal-byte originals without adding authored support. A weaker
+  representative kind cannot erase another original's duty.
 - Coverage is mechanical accounting, not semantic proof.
 - Complete validated references with selectable retained claims admit private
   section generation directly. `check-specification-source-readiness` reuses the
@@ -1582,6 +1597,26 @@ membership, are [implemented and verified offline](../../fixes/archive/IMP_001.m
 Shared retained-claim eligibility (C3) remains consolidated in the provenance owner.
 
 **Known implementation gaps**
+
+**Approved B5/B8 delivery — 17 October 2026; verified offline.**
+[ADR 0024](../decisions/0024-native-exact-token-authority.md) amends the earlier
+record-task and exact-kind gates. A shared native binding predicate excludes
+complete all-preserved-token groups from record scheduling while retaining mixed
+groups and every other semantic claim class. Full source catalogues, native exact
+recognition, provenance and aggregate coverage remain available. A nonempty
+catalogue with zero record-authoring groups has its own typed rejection; no empty
+checked unit substitutes for authoring. Native classification/disposition and
+complete original-occurrence coverage also apply on readback, advancing completed
+and clarification-pending state to `specification-state/v17` without a legacy
+reader. The bounded capture scan and frozen hashes are recorded in
+[FIX05 B8](../../fixes/FIX05.md#b8-the-model-classifies-and-disposes-exact-value-tokens);
+it found no correct, non-obvious token decision in its limited hello-world and
+loan-renewal evidence and does not prove general semantic quality. Owning
+regressions passed: 979 targeted tests, 151 architecture tests, 122 integration
+tests (164/164 main workflow scenarios), and complete verification (163 steps,
+1,826 tests), including clean packaged startup. Independent contract review has no
+remaining findings. FIX05 records the exact commands. No new live run or
+rewording phase is implied.
 
 Authenticated answer acceptance and remaining publication/readback assurance remain
 open. [FIX05](../../fixes/FIX05.md) tracks current gaps; the

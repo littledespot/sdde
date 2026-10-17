@@ -1,5 +1,10 @@
 # ADR 0022: Native reference phase handoffs
 
+The approved 17 October [B8 amendment](0024-native-exact-token-authority.md)
+supersedes model-owned preserved-token dispositions and relevance for candidates
+with a native requirement-byte witness. Its shared policy governs phase assembly,
+repair and stored accounting; the other native phase handoffs remain unchanged.
+
 - **Status:** Accepted
 - **Date:** 2026-10-06
 - **Authority:** User approval of all changes in FIX_003.

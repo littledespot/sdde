@@ -21,7 +21,7 @@ pub const Session = struct {
 };
 pub const Error = @import("strict_json.zig").Error || g.Error || packets.Error || binding.Error;
 
-/// One native population covers the narrative units and every retained group.
+/// One native population covers narrative units and record-authoring groups.
 /// Repairs of already completed units do not reopen this authoring pass.
 pub fn iterationProgress(current: Session) Error!struct { limit: usize, position: usize } {
     if (current.record_group_count == 0 or current.completed > unit_count or current.record_cursor > current.record_group_count) return error.InvalidSpecificationUnit;
@@ -204,7 +204,7 @@ pub fn packetForOptions(allocator: std.mem.Allocator, current: Session, context:
         try scopes.append(a, .{ .state_id = all.state_id, .chunk_id = item.claim.chunk_id });
         if (item.claim.content == .preserved_token) {
             const token = item.claim.content.preserved_token;
-            if (p.permitsExactKind(token.value.kind) and (options.exact_claims == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, options.exact_claims.?, item.claim.id))) {
+            if (try @import("specification_exact_tokens.zig").permits(all, item.claim.id) and (options.exact_claims == null or @import("reference_reconciliation.zig").contains(@import("reference_reconciliation.zig").ClaimId, options.exact_claims.?, item.claim.id))) {
                 try exact_choices.append(a, .{ .claim_id = item.claim.id, .value = token.value.raw_value.bytes, .source_id = item.source_id });
             }
         }

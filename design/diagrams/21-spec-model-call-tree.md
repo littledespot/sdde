@@ -63,8 +63,9 @@ no independent presentation-role request or positive-role conversion. Authored
 values select complete current groups while drafting, and native code admits the
 occurrences without judging semantic support. Changed upstream groups retire
 affected authored associations and dependent review/attribution evidence.
-Conflicts select accepted group handles. Native code constructs token
-projections and reciprocal relationships. Summary partitions finish before the
+Conflicts select accepted semantic group handles. Native code constructs token
+projections, byte-only token dispositions and reciprocal semantic relationships.
+Models cannot dispose tokens or select them as relationship targets. Summary partitions finish before the
 global phase handoffs. The YAML sets
 reconciliation `group-size: 8`; the resulting partition count depends on the
 extracted claims and hierarchy.
@@ -86,7 +87,11 @@ same summary validation, identity allocation and construction path. Stale or alt
 children fail; original provider and repair provenance remain on the child in
 history. Final global semantic phases are unchanged. See
 [ADR 0022](../decisions/0022-native-reference-phase-handoffs.md).
-Summary and signal `assignment.claim_ids` contain only eligible semantic claims;
+Under [ADR 0024](../decisions/0024-native-exact-token-authority.md), canonical
+business/scope literal byte matches force preservation and mandatory exact duties
+independently of kind. Equal-byte originals retain all duties and identities;
+only their earliest retained representative is an eligible recognition handle.
+Summary, disposition and signal `assignment.claim_ids` contain only eligible semantic claims;
 the full token/citation evidence remains visible. Conflict explanations receive
 native group handles without a separate claim-selection assignment.
 
@@ -141,7 +146,8 @@ flowchart LR
     class UNIT_REPAIR,SUPPORT_REPAIR repair;
 ```
 
-Record-group assignments enumerate complete active reconciled groups; one group
+Record-group assignments enumerate complete active reconciled groups containing
+at least one non-token claim; one group
 may produce several specification records or none. Empty output advances the native
 cursor but cannot bypass aggregate coverage, required families or review completion. Review subjects come
 from the shared required-authority ledger. Empty principle selection requires no

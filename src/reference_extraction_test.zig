@@ -677,6 +677,41 @@ test "classification repair requests retain the frozen outcome and permitted dec
     }
 }
 
+test "classification repair cannot erase a native literal-byte preservation duty" {
+    const repair = @import("domain/reference_extraction_repair.zig");
+    const classifications = @import("domain/token_classification_validation.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    for ([_][]const u8{ "ACTIVE", "Loan renewed!" }) |bytes| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        var ids: fixture.IdSource = .{};
+        const inputs = try fixture.prepare(a, &ids, try ingest(a, "requirements.md", try std.fmt.allocPrint(a, "Display `{s}`.", .{bytes})));
+        const context = try text_fixture.prepare(a, inputs);
+        defer context.deinit();
+        const available = try token_fixture.candidates(a, inputs);
+        const prose = try std.fmt.allocPrint(a, "The displayed value is {s}.", .{bytes});
+        const candidate = try text_fixture.check(a, inputs, try parse.execute(a, .{ .entries = &.{raw(inputs, 0, try reply(a, inputs.chunks.entries[0], prose))} }));
+        const rejected = (try classifications.validate(a, inputs, available, candidate)).invalid;
+        try std.testing.expectEqualDeep(&[_]extraction.tokens.CandidateId{available.entries[0].id}, rejected.choices.required_preserve);
+        const facts: repair.Facts = .{ .inputs = inputs, .candidates = available, .candidate = candidate };
+        const auth = try repair.authorize(a, facts, .{ .token_classifications = rejected });
+        const packet = try repair.packet(a, inputs, context.registry, available, candidate, auth);
+        defer packets.release(packet);
+        const body = try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{});
+        const required = body.value.object.get("repair").?.object.get("rule").?.object.get("choices").?.object.get("required_preserve").?.array.items;
+        try std.testing.expectEqual(@as(usize, 1), required.len);
+        const canonical = try extraction.text.CanonicalText.fromInputs(a, text_fixture.normalizer, inputs);
+        const forbidden = try repair.merge(a, canonical, facts, auth, .{ .classifications = .{ .token_classifications = &.{.{ .irrelevant = available.entries[0].id }} } }, null);
+        const still_invalid = (try classifications.validate(a, inputs, available, forbidden)).invalid;
+        try std.testing.expectEqualDeep(rejected.choices.required_preserve, still_invalid.issues.forbidden);
+        try std.testing.expectEqualDeep(candidate.entries[0].outcome, forbidden.entries[0].outcome);
+        const fixed = try repair.merge(a, canonical, facts, auth, .{ .classifications = .{ .token_classifications = &.{.{ .preserve = .{ .token_candidate_id = available.entries[0].id, .kind = .code_sample } }} } }, null);
+        try std.testing.expect((try classifications.validate(a, inputs, available, fixed)) == .valid);
+        try std.testing.expectEqualDeep(candidate.entries[0].outcome, fixed.entries[0].outcome);
+    }
+}
+
 test "composed extraction preserves producer attribution and stable native repair identity" {
     const Origin = @import("domain/model_candidate_origin.zig").Origin;
     const text_repair = @import("domain/reference_extraction_text_repair.zig");

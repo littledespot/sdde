@@ -1890,8 +1890,13 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
                 defer readback.deinit();
                 const bytes = try project.dir.readFileAlloc(io, "engine/workflows/features/chosen/state/workflow.json", readback.allocator(), .limited(64 * 1024 * 1024));
                 const state = (try @import("../../src/domain/specification_state.zig").parse(readback.allocator(), bytes, .{ .bytes = "chosen" }, boot.ready.workflows.registry().contractSource())).specified().?;
-                try std.testing.expectEqual(@as(usize, 2), state.reference.dispositions.len);
-                try std.testing.expectEqual(@as(usize, 2), state.reference.signals.len);
+                // Two semantic repair subjects plus the native token remain
+                // fully accounted after the semantic-only disposition repair.
+                try std.testing.expectEqual(@as(usize, 3), state.reference.extraction.claims.len);
+                try std.testing.expectEqual(@as(usize, 3), state.reference.dispositions.len);
+                try std.testing.expectEqual(@as(usize, 3), state.reference.signals.len);
+                try std.testing.expectEqual(@as(usize, 1), state.coverage.obligations.len);
+                try std.testing.expect(state.coverage.obligations[0].exact_targets.len > 0);
                 try std.testing.expectEqual(.all_resolved, state.review.result.continuation);
             } else try std.testing.expectError(error.FileNotFound, project.dir.access(io, "engine/workflows/features/chosen/state/workflow.json", .{}));
         }

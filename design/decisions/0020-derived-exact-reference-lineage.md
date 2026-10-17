@@ -1,5 +1,10 @@
 # ADR 0020: Derive exact-reference lineage from one selected claim
 
+The approved 17 October [B5/B8 amendment](0024-native-exact-token-authority.md)
+supersedes token-only record scheduling and kind-only exact eligibility/coverage.
+It adds native requirement-byte duties and token dispositions while preserving
+original occurrence identities, selected support and the B3 recognition rule.
+
 - **Status:** Accepted
 - **Date:** 2026-09-26
 - **Decision authority:** Explicit user approval of Phase 0.2 in [LLM_REWORK](../../fixes/archive/LLM_REWORK.md).
@@ -153,11 +158,15 @@ in catalogue order, deduplicates legitimate overlaps into `S` and then derives
 exact lineage and citations. Several groups may jointly support one field and one
 group may support several fields. The model supplies no claim list or provenance.
 
-Each record task binds exactly one group natively and may return several records
+Each record task binds exactly one group containing a non-token member natively
+and may return several records
 or an empty array. Its response remains content-only; canonical records inherit
 that group's complete ordered selection and retain exactly one `source_group_ids`
 occurrence. Empty output supplies no positive coverage and cannot bypass aggregate
 record families, entity membership, business mapping, exact coverage or review.
+All-preserved-token groups receive no record task under ADR 0024; their original
+identities and exact obligations remain. Current appearance-based duties and
+equal-byte duplicate duties are independent of the representative's semantic kind.
 
 Generation, source-review and repair responses reject `provenance` in every
 selected schema. Selected initial groups, the current ledger and authorized repair target

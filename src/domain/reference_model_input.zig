@@ -51,11 +51,11 @@ pub fn reconciliationCompositionPacket(allocator: std.mem.Allocator, input: reco
 pub fn reconciliationPhasePacket(allocator: std.mem.Allocator, prior: @import("reference_reconciliation_stage.zig").Prior, inputs: evidence.Inputs, registry: literals.Registry) ReconciliationError!*packets.Packet {
     const current = @import("reference_reconciliation_stage.zig").input(prior);
     const ids = switch (prior) {
-        .dispositions => current.partition.group.claim_ids,
+        .dispositions => try @import("reference_reconciliation_projection.zig").semanticClaimIds(allocator, current.items),
         .signals => |value| try @import("reference_reconciliation_projection.zig").signalClaimIds(allocator, value),
         .conflicts => &.{},
     };
-    defer if (prior == .signals) allocator.free(ids);
+    defer if (prior != .conflicts) allocator.free(ids);
     const assignment: Constraint.Assignment = switch (prior) {
         inline else => |_, tag| @field(Constraint.Assignment, @tagName(tag)),
     };
@@ -82,7 +82,7 @@ fn reconciliationPacketFor(allocator: std.mem.Allocator, input: reconciliation.I
     const hierarchy = .{
         .purpose = input.purpose,
         .level = input.partition.group.level,
-        .member_claim_ids = input.partition.group.claim_ids,
+        .member_claim_ids = try @import("reference_reconciliation_projection.zig").semanticClaimIds(scratch, input.items),
         .member_summary_ids = input.member_summary_ids,
         .summaries = try projection.summaries(scratch, input.summaries),
     };

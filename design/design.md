@@ -1105,6 +1105,7 @@ decision history:
 | [0021](decisions/0021-optional-source-preservation-review.md) | Optional source-preservation review before Spec generation, using shared authority/repair contracts and a dedicated configured candidate-repair model slot. |
 | [0022](decisions/0022-native-reference-phase-handoffs.md) | Validated native reconciliation phases, occurrence-bound role selections, semantic conflict groups, native exact-token projections and forced classifications. |
 | [0023](decisions/0023-advisory-post-generation-review.md) | All post-generation semantic findings remain advice; native assessment completeness is distinct from semantic support, whole units/collections are reviewed together, and upstream source repair requires a current pre-generation witness. |
+| [0024](decisions/0024-native-exact-token-authority.md) | Token-only groups receive no record batch; native canonical-byte evidence forces exact duties independently of semantic kind, and code owns byte-only token dispositions while retaining all original occurrences and obligations. |
 
 Additional accepted feature boundaries:
 

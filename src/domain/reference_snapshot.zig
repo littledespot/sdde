@@ -109,6 +109,7 @@ fn validateRecords(allocator: std.mem.Allocator, value: Snapshot) !void {
     var scratch: std.heap.ArenaAllocator = .init(allocator);
     defer scratch.deinit();
     const a = scratch.allocator();
+    try @import("token_classification_validation.zig").validateStored(a, value.inputs, value.extraction);
     const records = try @import("reference_support.zig").snapshot(a, value);
     const items = records.items;
     const captured: passive.Captured = .{ .records = value.passive_records, .occurrences = value.passive_occurrences };

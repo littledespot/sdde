@@ -15,7 +15,7 @@ pub const Rejection = struct {
     partition_id: r.PartitionId,
     revision: u64,
     origin: ?@import("model_candidate_origin.zig").Origin,
-    reason: enum { empty_catalogue } = .empty_catalogue,
+    reason: enum { empty_catalogue, no_record_authoring_groups } = .empty_catalogue,
     eligible_signals: []const EligibleSignal,
 };
 pub const Unit = union(enum) { brief, primary_user_story, entities, records };
@@ -25,16 +25,19 @@ pub const GuidanceMode = enum { authoring, repair };
 const Requirement = @import("model_evidence.zig").Requirement;
 pub const FieldGuidance = struct { purpose: ?[]const u8 = null };
 pub const GroupGuidance = struct { signal_id: r.SignalId, requirements: []const Requirement };
-/// A presentation fact over native claims, independent of field policy. It
-/// never decides whether a source group establishes the field's meaning.
+/// A native membership fact, independent of field policy or semantic support.
 pub fn tokenOnly(records: refs.Records, id: r.SignalId) Error!bool {
     for (records.signals) |signal| {
         if (signal.id.ordinal != id.ordinal) continue;
-        if (signal.value.claim_ids.len == 0) return error.InvalidSpecificationBinding;
-        for (signal.value.claim_ids) |claim| if ((try r.item(records.items, claim)).claim.content != .preserved_token) return false;
-        return true;
+        return preservedTokensOnly(records, signal.value.claim_ids);
     }
     return error.InvalidSpecificationBinding;
+}
+fn preservedTokensOnly(records: refs.Records, claims: []const r.ClaimId) Error!bool {
+    if (claims.len == 0) return error.InvalidSpecificationBinding;
+    try r.unique(r.ClaimId, claims);
+    for (claims) |claim| if ((try r.item(records.items, claim)).claim.content != .preserved_token) return false;
+    return true;
 }
 pub const Guidance = union(enum) {
     brief: struct { title: FieldGuidance, description: FieldGuidance, primary_goal: FieldGuidance },
@@ -83,7 +86,9 @@ pub fn assigns(value: Guidance, id: r.ClaimId) bool {
     if (value == .records) for (value.records.requirements) |requirement| if (id.ordinal == requirement.claim_id.ordinal) return true;
     return false;
 }
-fn activeSignal(records: refs.Records, signal: r.Signal, mode: Mode) Error!bool {
+fn activeSignal(records: refs.Records, index: usize, mode: Mode) Error!bool {
+    const signal = records.signals[index];
+    for (records.signals[0..index]) |prior| if (prior.id.ordinal == signal.id.ordinal) return error.InvalidSpecificationBinding;
     if (signal.value.claim_ids.len == 0) return error.InvalidSpecificationBinding;
     try r.unique(r.ClaimId, signal.value.claim_ids);
     if (!(refs.eligibleSelection(records.dispositions, signal.value.claim_ids) catch return error.InvalidSpecificationBinding)) return false;
@@ -92,12 +97,15 @@ fn activeSignal(records: refs.Records, signal: r.Signal, mode: Mode) Error!bool 
     };
     return true;
 }
+fn recordSignal(records: refs.Records, index: usize) Error!bool {
+    if (!try activeSignal(records, index, .question)) return false;
+    return !try preservedTokensOnly(records, records.signals[index].value.claim_ids);
+}
 pub fn catalogue(a: std.mem.Allocator, records: refs.Records, mode: Mode) Error![]const EligibleSignal {
     var result: std.ArrayList(EligibleSignal) = .empty;
     errdefer result.deinit(a);
     for (records.signals, 0..) |signal, index| {
-        for (records.signals[0..index]) |prior| if (prior.id.ordinal == signal.id.ordinal) return error.InvalidSpecificationBinding;
-        if (try activeSignal(records, signal, mode)) try result.append(a, .{ .signal_id = signal.id, .claim_ids = signal.value.claim_ids });
+        if (try activeSignal(records, index, mode)) try result.append(a, .{ .signal_id = signal.id, .claim_ids = signal.value.claim_ids });
     }
     return result.toOwnedSlice(a);
 }
@@ -130,15 +138,16 @@ pub fn selectGroups(a: std.mem.Allocator, records: refs.Records, inputs: evidenc
 }
 pub fn recordCount(records: refs.Records) Error!usize {
     var count: usize = 0;
-    for (records.signals) |signal| if (try activeSignal(records, signal, .question)) {
+    for (records.signals, 0..) |_, index| if (try recordSignal(records, index)) {
         count += 1;
     };
     return count;
 }
 pub fn record(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, index: usize) Error!Bound {
+    _ = try recordCount(records);
     var cursor: usize = 0;
-    for (records.signals) |signal| {
-        if (!try activeSignal(records, signal, .question)) continue;
+    for (records.signals, 0..) |signal, signal_index| {
+        if (!try recordSignal(records, signal_index)) continue;
         if (cursor == index) {
             const association = try resolveGroups(a, records, inputs, &.{signal.id}, .question);
             defer a.free(association.source_group_ids);
@@ -149,6 +158,11 @@ pub fn record(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inpu
     return error.InvalidSpecificationBinding;
 }
 pub fn recordForGroup(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inputs, id: r.SignalId) Error!Bound {
+    _ = try recordCount(records);
+    const eligible = for (records.signals, 0..) |signal, index| {
+        if (signal.id.ordinal == id.ordinal) break try recordSignal(records, index);
+    } else false;
+    if (!eligible) return error.InvalidSpecificationBinding;
     const selected = try resolveGroups(a, records, inputs, &.{id}, .question);
     defer a.free(selected.source_group_ids);
     return .{ .records = .{ .signal = id, .selection = selected.selection, .catalogue = .{ .records = records, .inputs = inputs } } };
@@ -164,7 +178,7 @@ pub fn forUnit(a: std.mem.Allocator, records: refs.Records, inputs: evidence.Inp
 }
 pub fn validate(records: refs.Records, inputs: evidence.Inputs) Error!void {
     if (!records.items.state_id.eql(inputs.corpus.state_id) or try recordCount(records) == 0) return error.InvalidSpecificationBinding;
-    for (records.signals) |signal| if (try activeSignal(records, signal, .question)) for (signal.value.claim_ids) |id| {
+    for (records.signals, 0..) |signal, index| if (try activeSignal(records, index, .question)) for (signal.value.claim_ids) |id| {
         const item = try r.item(records.items, id);
         _ = evidence.resolve(inputs, .{ .state_id = records.items.state_id, .chunk_id = item.claim.chunk_id }) catch return error.InvalidSpecificationBinding;
     };
@@ -173,5 +187,6 @@ pub fn rejection(a: std.mem.Allocator, references: r.Accounted) Error!Rejection 
     const records = refs.records(references);
     if (try recordCount(records) != 0) return error.InvalidSpecificationBinding;
     const prior = references.records.assignments.checked.prior.prior;
-    return .{ .state_id = records.items.state_id, .partition_id = prior.input.partition.id, .revision = prior.source.revision, .origin = prior.source.at(.signals, .record), .eligible_signals = try catalogue(a, records, .question) };
+    const available = try catalogue(a, records, .question);
+    return .{ .state_id = records.items.state_id, .partition_id = prior.input.partition.id, .revision = prior.source.revision, .origin = prior.source.at(.signals, .record), .reason = if (available.len == 0) .empty_catalogue else .no_record_authoring_groups, .eligible_signals = available };
 }

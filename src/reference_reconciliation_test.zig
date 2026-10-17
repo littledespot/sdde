@@ -190,7 +190,7 @@ test "summary repair changes only a rejected field then inserts missing membersh
     }
 }
 
-test "disposition insertion ignores response metadata and preserves dependent validation" {
+test "semantic disposition insertion ignores response metadata and preserves dependent validation" {
     const repair = @import("domain/reference_reconciliation_repair.zig");
     const packets = @import("domain/model_input_packet.zig");
     const Origin = @import("domain/model_candidate_origin.zig").Origin;
@@ -204,7 +204,7 @@ test "disposition insertion ignores response metadata and preserves dependent va
         const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
         const good = try f.global(a, input);
         var missing: r.Parsed = .{ .source = .{ .origin = correction }, .input = input, .proposal = .{ .global = good } };
-        missing.proposal.global.claim_dispositions = good.claim_dispositions[0..1];
+        missing.proposal.global.claim_dispositions = good.claim_dispositions[1..];
         const signals = try a.dupe(r.SignalProposal, good.signals);
         signals[0].claim_ids = &.{ input.items[0].claim.id, input.items[1].claim.id };
         missing.proposal.global.signals = signals[0..1];
@@ -217,7 +217,7 @@ test "disposition insertion ignores response metadata and preserves dependent va
         const target = task.get("target").?.object;
         try std.testing.expectEqual(@as(usize, 2), target.count());
         try std.testing.expectEqualStrings("insert_disposition", target.get("unit").?.string);
-        try std.testing.expectEqual(@as(i64, 2), target.get("claim").?.integer);
+        try std.testing.expectEqual(@as(i64, 1), target.get("claim").?.integer);
         try std.testing.expectEqualStrings("repair_disposition", packet.resultDefinition().?.bytes);
         try std.testing.expect(task.get("rule").?.object.get("disposition_choices").?.object.get("retained").?.bool);
         try std.testing.expectEqual(@as(usize, 2), task.get("rule").?.object.count());
@@ -234,8 +234,8 @@ test "disposition insertion ignores response metadata and preserves dependent va
         var rejected_candidate = missing;
         var selected = authorization;
         for ([_][]const u8{
-            "{\"kind\":\"duplicate\",\"target_claim_id\":1}",
-            "{\"kind\":\"superseded\",\"related_claim_ids\":[1]}",
+            "{\"kind\":\"duplicate\",\"target_claim_id\":2}",
+            "{\"kind\":\"superseded\",\"related_claim_ids\":[2]}",
         }, 0..) |bytes, i| {
             const origin: Origin = .{ .request = .{ .value = @intCast(5 + i) }, .attempt = .{ .value = 1 } };
             const request = try repair.packet(a, rejected_candidate, fixture.context(), selected);
@@ -248,7 +248,7 @@ test "disposition insertion ignores response metadata and preserves dependent va
             try std.testing.expect(rejected_candidate.source.last_repair.?.changed);
             try std.testing.expectEqual(@as(usize, 0), rejected_candidate.proposal.global.signals.len);
             try std.testing.expectEqual(.dispositions, rejected_candidate.phase);
-            try std.testing.expectEqualDeep(good.claim_dispositions[0], rejected_candidate.proposal.global.claim_dispositions[0]);
+            try std.testing.expectEqualDeep(good.claim_dispositions[1], rejected_candidate.proposal.global.claim_dispositions[0]);
             selected = (try repair.authorize(a, rejected_candidate, fixture.context(), invalid)).model;
             try std.testing.expect(selected.rule.disposition_choices.?.retainedOnly());
         }
@@ -324,8 +324,9 @@ test "disposition choices reuse canonical graph validation with fixed siblings" 
     try std.testing.expect((try owner.repairChoices(a, items, values, 0, first)).?.retainedOnly());
 }
 
-test "disposition choices distinguish exact values without selecting token semantics" {
+test "native exact token dispositions have no model repair choices" {
     const owner = @import("domain/reference_disposition_validation.zig");
+    const native = @import("domain/reference_token_disposition.zig");
     for ([_][]const u8{ "Display `Approved!`.\n", "Display `Declined!`.\n" }, 0..) |other, scenario| {
         var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
         defer arena.deinit();
@@ -340,11 +341,148 @@ test "disposition choices distinguish exact values without selecting token seman
             if (token_ids.items.len == 0) index = i;
             try token_ids.append(a, item.claim.id);
         };
-        const choices = (try owner.repairChoices(a, input.progress.plan.layout.items, good.claim_dispositions, index, token_ids.items[0])).?;
-        try std.testing.expect(choices.retained);
-        try std.testing.expectEqual(@as(usize, if (scenario == 0) 1 else 0), choices.duplicate_targets.len);
-        try std.testing.expectEqualDeep(token_ids.items[1..], choices.superseded_targets);
-        try std.testing.expectEqual(@as(usize, 0), choices.conflicting_with_all.len);
+        const items = input.progress.plan.layout.items;
+        try std.testing.expectError(error.InvalidReferenceReconciliation, owner.repairChoices(a, items, good.claim_dispositions, index, token_ids.items[0]));
+        try std.testing.expect((try native.expected(items, token_ids.items[0])) == .retained);
+        if (scenario == 0) {
+            try std.testing.expectEqualDeep(native.Expected{ .duplicate = token_ids.items[0] }, try native.expected(items, token_ids.items[1]));
+        } else try std.testing.expect((try native.expected(items, token_ids.items[1])) == .retained);
+        try std.testing.expectEqual(.complete, (try f.finish(a, input, good, fixture.context())).valid.outcome);
+    }
+}
+
+test "native byte duplicates use the earliest original across sources and preserve every occurrence" {
+    const native = @import("domain/reference_token_disposition.zig");
+    const owner = @import("domain/reference_disposition_validation.zig");
+    for ([_][]const u8{ "Hello, World!", "Loan renewed!", "--color=always" }) |value| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const repeated = try std.fmt.allocPrint(a, "Display `{s}`.\n", .{value});
+        const different = try std.fmt.allocPrint(a, "Display `{s}-suffix`.\n", .{value});
+        const fixture = try prepare(a, &.{ repeated, repeated, repeated, different });
+        defer fixture.deinit();
+        const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+        const original = input.progress.plan.layout.items;
+        var ids: std.ArrayList(r.ClaimId) = .empty;
+        for (original.entries) |entry| if (entry.claim.content == .preserved_token) try ids.append(a, entry.claim.id);
+        try std.testing.expectEqual(@as(usize, 4), ids.items.len);
+        const good = try f.global(a, input);
+        const accepted = (try f.finish(a, input, good, fixture.context())).valid;
+        try std.testing.expectEqual(original.entries.len, accepted.records.signals.len);
+        try std.testing.expectEqualDeep(original, accepted.records.assignments.checked.prior.prior.input.progress.plan.layout.items);
+        try std.testing.expectEqualDeep(ids.items[0..3], try native.originals(a, original, ids.items[2]));
+        try std.testing.expect(try native.sameBytes(original, ids.items[0], ids.items[2]));
+        try std.testing.expect(!try native.sameBytes(original, ids.items[0], ids.items[3]));
+        try std.testing.expectEqualDeep(ids.items[0], try native.representative(original, ids.items[2]));
+        try std.testing.expectEqualDeep(ids.items[3], try native.representative(original, ids.items[3]));
+        try std.testing.expectError(error.InvalidReferenceReconciliation, native.expected(original, original.entries[0].claim.id));
+        try std.testing.expectError(error.InvalidReferenceReconciliation, native.expected(original, .{ .ordinal = 999 }));
+
+        const records = try a.alloc(r.ClaimDisposition, good.claim_dispositions.len);
+        for (good.claim_dispositions, records) |proposal, *record| record.* = try proposal.canonical(a);
+        // Token kind cannot choose a survivor. This isolated native contract
+        // test changes that metadata without claiming source readback accepts it.
+        var mixed = original;
+        const entries = try a.dupe(r.Item, original.entries);
+        mixed.entries = entries;
+        entries[ids.items[0].ordinal - 1].claim.content.preserved_token.value.kind = .code_sample;
+        entries[ids.items[1].ordinal - 1].claim.content.preserved_token.value.kind = .business_exact_string;
+        _ = (try owner.check(a, mixed, records)).valid;
+        try std.testing.expectEqualDeep(ids.items[0], try native.representative(mixed, ids.items[2]));
+        for (0..6) |fault| {
+            const broken = try a.dupe(r.ClaimDisposition, records);
+            const selected = &broken[ids.items[2].ordinal - 1];
+            switch (fault) {
+                0 => selected.* = .{ .claim_id = ids.items[2], .disposition = .retained, .related_claim_ids = &.{} },
+                1 => selected.related_claim_ids = ids.items[1..2], // A duplicate chain is not the direct representative.
+                2 => selected.related_claim_ids = ids.items[3..4],
+                3 => selected.disposition = .superseded,
+                4 => selected.disposition = .conflicting,
+                5 => broken[ids.items[0].ordinal - 1] = .{ .claim_id = ids.items[0], .disposition = .duplicate, .related_claim_ids = ids.items[2..3] },
+                else => unreachable,
+            }
+            const rejection = (try owner.check(a, original, broken)).invalid;
+            try std.testing.expectEqual(.native_token_disposition, rejection.issue.expected.constraint);
+            try std.testing.expect(!try native.matches(original, broken[if (fault == 5) ids.items[0].ordinal - 1 else ids.items[2].ordinal - 1]));
+        }
+        var omitted = good;
+        const signals = try a.alloc(r.SignalProposal, good.signals.len - 1);
+        var next: usize = 0;
+        for (good.signals) |signal| {
+            if (r.contains(r.ClaimId, signal.claim_ids, ids.items[1])) continue;
+            signals[next] = signal;
+            next += 1;
+        }
+        omitted.signals = signals;
+        try std.testing.expectEqual(.signal_coverage, (try f.finish(a, input, omitted, fixture.context())).invalid.issue.rule);
+    }
+}
+
+test "disposition phases append native tokens and reject model token subjects targets and conflict members" {
+    const stage = @import("domain/reference_reconciliation_stage.zig");
+    const groups = @import("domain/reference_conflict_groups.zig");
+    const json = @import("domain/model_candidate_json.zig");
+    const projection = @import("domain/reference_reconciliation_projection.zig");
+    const repair = @import("domain/reference_reconciliation_repair.zig");
+    const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 42 }, .attempt = .{ .value = 1 } };
+    for ([_][]const u8{ "Display `Hello, World!`.\n", "Confirm `Loan renewed!`.\n", "Preserve `--color=always`.\n" }) |source| {
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const a = arena.allocator();
+        const fixture = try prepare(a, &.{ source, "Keep the audit record.\n" });
+        defer fixture.deinit();
+        const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
+        const semantic = try projection.semanticClaimIds(a, input.items);
+        const token = input.items[1].claim.id;
+        const choices = try a.alloc(groups.Choice, semantic.len);
+        // Response order is significant and remains ahead of native entries.
+        for (choices, 0..) |*choice, i| choice.* = .{ .claim_id = semantic[semantic.len - i - 1], .disposition = .{ .retained = .{} } };
+        const packet = try stage.packet(a, .{ .dispositions = input }, fixture.inputs, fixture.context().registry);
+        defer @import("domain/model_input_packet.zig").release(packet);
+        const admitted = try stage.collect(a, .{ .dispositions = input }, packet, try json.encode(groups.Selection, a, .{ .claim_dispositions = choices, .conflict_groups = &.{} }), origin);
+        const checked = (try f.validate_dispositions.execute(a, admitted)).valid;
+        try std.testing.expectEqual(input.items.len, checked.dispositions.len);
+        for (choices, admitted.proposal.global.claim_dispositions[0..choices.len], 0..) |choice, actual, i| {
+            try std.testing.expectEqualDeep(choice.claim_id, actual.claim_id);
+            try std.testing.expectEqualDeep(origin, admitted.source.at(.{ .disposition = i }, .record).?);
+        }
+        try std.testing.expectEqualDeep(token, admitted.proposal.global.claim_dispositions[choices.len].claim_id);
+        try std.testing.expect(admitted.source.at(.{ .disposition = choices.len }, .record) == null);
+        const body = (try std.json.parseFromSlice(std.json.Value, a, packet.body(), .{})).value.object;
+        try std.testing.expectEqual(@as(usize, 1), body.get("accepted").?.object.get("token_dispositions").?.array.items.len);
+        const assigned = body.get("assignment").?.object.get("claim_ids").?.array.items;
+        try std.testing.expectEqual(semantic.len, assigned.len);
+        for (assigned) |id| try std.testing.expect(id.integer != token.ordinal);
+        for (packet.integerChoices()) |selection| for (selection.allowed) |id| try std.testing.expect(id != token.ordinal);
+
+        for (0..4) |fault| {
+            const altered = try a.dupe(groups.Choice, choices);
+            var selection: groups.Selection = .{ .claim_dispositions = altered, .conflict_groups = &.{} };
+            switch (fault) {
+                0 => altered[0].claim_id = token,
+                1 => altered[0].disposition = .{ .duplicate = .{ .target_claim_id = token } },
+                2 => altered[0].disposition = .{ .superseded = .{ .related_claim_ids = &.{token} } },
+                3 => {
+                    altered[0].disposition = .{ .conflicting = .{} };
+                    selection.conflict_groups = &.{.{ .claim_ids = &.{ altered[0].claim_id, token } }};
+                },
+                else => unreachable,
+            }
+            const forged = try stage.collect(a, .{ .dispositions = input }, packet, try json.encode(groups.Selection, a, selection), origin);
+            try std.testing.expect((try f.validate_dispositions.execute(a, forged)) == .invalid);
+        }
+        var missing = admitted;
+        missing.proposal.global.claim_dispositions = admitted.proposal.global.claim_dispositions[0..choices.len];
+        const rejection = (try f.validate_dispositions.execute(a, missing)).invalid;
+        try std.testing.expectEqual(.no_independent_target, (try repair.authorize(a, missing, fixture.context(), rejection)).blocked);
+        var forged = admitted;
+        const values = try a.dupe(r.ClaimDispositionProposal, admitted.proposal.global.claim_dispositions);
+        values[choices.len].disposition = .{ .superseded = .{ .related_claim_ids = &.{semantic[0]} } };
+        forged.proposal.global.claim_dispositions = values;
+        const invalid = (try f.validate_dispositions.execute(a, forged)).invalid;
+        try std.testing.expect(invalid.origin == null);
+        try std.testing.expectEqual(.no_independent_target, (try repair.authorize(a, forged, fixture.context(), invalid)).blocked);
     }
 }
 
@@ -474,16 +612,23 @@ test "summary signal and conflict repair packets retain precise shared text issu
                         proposal.signals = signals;
                     } else {
                         const dispositions = try a.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
-                        dispositions[0].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[1].claim_id} } };
-                        dispositions[1].disposition = .{ .conflicting = .{ .related_claim_ids = &.{dispositions[0].claim_id} } };
+                        const semantic = try @import("domain/reference_reconciliation_projection.zig").semanticClaimIds(a, input.items);
+                        try std.testing.expectEqual(@as(usize, 2), semantic.len);
+                        for (dispositions) |*value| {
+                            if (value.claim_id.ordinal == semantic[0].ordinal) value.disposition = .{ .conflicting = .{ .related_claim_ids = semantic[1..2] } };
+                            if (value.claim_id.ordinal == semantic[1].ordinal) value.disposition = .{ .conflicting = .{ .related_claim_ids = semantic[0..1] } };
+                        }
                         proposal.claim_dispositions = dispositions;
-                        proposal.signals = proposal.signals[2..];
+                        var remaining: std.ArrayList(r.SignalProposal) = .empty;
+                        for (proposal.signals) |signal| if (!r.contains(r.ClaimId, semantic, signal.claim_ids[0])) try remaining.append(a, signal);
+                        proposal.signals = try remaining.toOwnedSlice(a);
+                        proposal.conflict_groups = &.{.{ .claim_ids = semantic }};
                         const nodes: []const r.text.ReferenceNode = switch (fault) {
                             2 => &.{.{ .passive = .{ .passive_literal_id = .{ .ordinal = 999 } } }},
                             3 => &.{.{ .source = .{ .source_id = .{ .ordinal = 999 } } }},
                             else => &.{.{ .literal = bad_text.segments[0].literal }},
                         };
-                        proposal.conflicts = &.{.{ .claim_ids = &.{ dispositions[0].claim_id, dispositions[1].claim_id }, .kind = .value_mismatch, .summary = .{ .nodes = nodes } }};
+                        proposal.conflicts = &.{.{ .claim_ids = semantic, .kind = .value_mismatch, .summary = .{ .nodes = nodes } }};
                         replacement = .{ .summary = .{ .nodes = &.{.{ .literal = .{ .value = "The supplied assertions disagree." } }} } };
                     }
                     parsed.proposal = .{ .global = proposal };
@@ -1118,7 +1263,7 @@ test "final lineage rejects removed summaries altered membership and changed can
     }
 }
 
-test "different exact scalars cannot be declared duplicates and token obligations survive supersession" {
+test "different exact scalars cannot be duplicated or superseded and every original signal remains required" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -1129,9 +1274,10 @@ test "different exact scalars cannot be declared duplicates and token obligation
     const dispositions = try a.dupe(r.ClaimDispositionProposal, proposal.claim_dispositions);
     dispositions[1].disposition = .{ .duplicate = .{ .target_claim_id = dispositions[3].claim_id } };
     proposal.claim_dispositions = dispositions;
-    try std.testing.expectEqual(.relationship, (try f.finish(a, input, proposal, fixture.context())).invalid.issue.rule);
+    try std.testing.expectEqual(.native_token_disposition, (try f.finish(a, input, proposal, fixture.context())).invalid.issue.expected.constraint);
     dispositions[1].disposition = .{ .superseded = .{ .related_claim_ids = &.{dispositions[3].claim_id} } };
-    // Supersession retains the original token and obligation as provenance.
+    try std.testing.expectEqual(.native_token_disposition, (try f.finish(a, input, proposal, fixture.context())).invalid.issue.expected.constraint);
+    dispositions[1].disposition = .{ .retained = .{} };
     try std.testing.expectEqual(.complete, ((try f.finish(a, input, proposal, fixture.context())).valid).outcome);
     proposal.signals = &.{ proposal.signals[0], proposal.signals[2], proposal.signals[3] };
     try std.testing.expectEqual(.signal_coverage, (try f.finish(a, input, proposal, fixture.context())).invalid.issue.rule);
@@ -2904,8 +3050,9 @@ test "phase assignments reject premature and stale handoffs and retain conflict 
     defer fixture.deinit();
     const input = try f.summaries(a, try f.initialize(a, fixture.inputs, fixture.extracted, 2), fixture.context());
     const origin: @import("domain/model_candidate_origin.zig").Origin = .{ .request = .{ .value = 13 }, .attempt = .{ .value = 2 } };
-    const choices = try a.alloc(@import("domain/reference_conflict_groups.zig").Choice, input.items.len);
-    for (input.items, choices) |item, *choice| choice.* = .{ .claim_id = item.claim.id, .disposition = .{ .retained = .{} } };
+    const semantic = try @import("domain/reference_reconciliation_projection.zig").semanticClaimIds(a, input.items);
+    const choices = try a.alloc(@import("domain/reference_conflict_groups.zig").Choice, semantic.len);
+    for (semantic, choices) |id, *choice| choice.* = .{ .claim_id = id, .disposition = .{ .retained = .{} } };
     const disposition_packet = try stage.packet(a, .{ .dispositions = input }, fixture.inputs, fixture.context().registry);
     defer @import("domain/model_input_packet.zig").release(disposition_packet);
     const admitted = try stage.collect(a, .{ .dispositions = input }, disposition_packet, try json.encodeSelected(stage.Response, a, .{ .dispositions = .{ .claim_dispositions = choices, .conflict_groups = &.{} } }), origin);

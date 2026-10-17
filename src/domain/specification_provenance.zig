@@ -92,11 +92,11 @@ fn resolveUnitRecords(comptime boundary: spec.Boundary, allocator: std.mem.Alloc
     for (values) |value| for (value.segments) |segment| {
         if (segment != .exact_copy) continue;
         const id = segment.exact_copy.claim_id;
-        const token = @import("reference_support.zig").exact(claims, id) catch {
+        _ = @import("reference_support.zig").exact(claims, id) catch {
             if (boundary == .canonical) return error.InvalidTypedText;
             continue;
         };
-        if (!permitsExactKind(token.value.kind) or !refs.eligibleClaim(dispositionFor(references, id))) {
+        if (!try @import("specification_exact_tokens.zig").permits(claims, id) or !refs.eligibleClaim(dispositionFor(references, id))) {
             if (boundary == .canonical) return error.InvalidTypedText;
             continue;
         }
@@ -194,11 +194,6 @@ pub const ValueChoices = struct {
     }
 };
 
-/// Code examples remain reference context under the business-specification contract.
-pub fn permitsExactKind(kind: r.extraction.tokens.Kind) bool {
-    return kind != .code_sample;
-}
-
 /// The native current occurrence scope owns eligibility. A lexical match may
 /// contribute E, but never changes the authored groups or their explicit S.
 /// Atomic value repairs supply their fixed previous S+E as the optional bound.
@@ -211,7 +206,7 @@ pub fn exactOccurrences(a: std.mem.Allocator, references: refs.Records, fixed: ?
         const item = try r.item(references.items, disposition.claim_id);
         if (item.claim.content != .preserved_token) continue;
         const token = item.claim.content.preserved_token;
-        if (!permitsExactKind(token.value.kind)) continue;
+        if (!try @import("specification_exact_tokens.zig").permits(references.items, item.claim.id)) continue;
         try result.append(a, .{ .claim_id = item.claim.id, .bytes = token.value.raw_value.bytes });
     }
     return result.toOwnedSlice(a);
@@ -418,8 +413,7 @@ fn valueChoices(a: std.mem.Allocator, all: r.Items, claim_ids: []const r.ClaimId
     for (claim_ids) |id| {
         const claim = (try r.item(all, id)).claim;
         if (claim.content == .preserved_token) {
-            const token = claim.content.preserved_token;
-            if (!permitsExactKind(token.value.kind)) continue;
+            if (!try @import("specification_exact_tokens.zig").permits(all, id)) continue;
             try choices.append(a, .{ .claim_id = id });
         }
     }

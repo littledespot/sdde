@@ -101,7 +101,7 @@ fn scalarInScopes(allocator: std.mem.Allocator, context: provenance.Context, val
         .exact_copy => |selected| {
             const items = try provenance.items(context);
             const token = @import("reference_support.zig").exact(items, selected.claim_id) catch return error.InvalidSpecification;
-            if (!provenance.permitsExactKind(token.value.kind)) return error.InvalidSpecification;
+            if (!try @import("specification_exact_tokens.zig").permits(items, selected.claim_id)) return error.InvalidSpecification;
             const raw = token.value.raw_value.bytes;
             const start = bytes.items.len;
             try bytes.appendSlice(allocator, raw);

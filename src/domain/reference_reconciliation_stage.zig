@@ -55,7 +55,7 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     };
     const conflict_catalogue = try @import("reference_conflict_groups.zig").catalogue(scratch, conflict_groups);
     const accepted = switch (prior) {
-        .dispositions => try json.encodeEvidence(r.PartitionId, scratch, current.partition.id),
+        .dispositions => try json.encodeEvidence(struct { token_dispositions: []const r.ClaimDispositionProposal }, scratch, .{ .token_dispositions = try @import("reference_token_disposition.zig").append(scratch, current.progress.plan.layout.items, &.{}) }),
         .signals => |value| try json.encodeEvidence(@TypeOf(.{ .dispositions = value.dispositions, .signals = value.proposal.signals }), scratch, .{ .dispositions = value.dispositions, .signals = value.proposal.signals }),
         .conflicts => |value| try json.encodeEvidence(Facts, scratch, .{ .dispositions = value.prior.dispositions, .signals = accepted_groups, .conflict_groups = conflict_catalogue }),
     };
@@ -75,7 +75,7 @@ pub fn packet(a: std.mem.Allocator, prior: Prior, source: r.evidence.Inputs, reg
     const inherited = try packets.withRestrictions(a, fields, selected.excludedVariants(), selected.integerChoices());
     if (prior == .signals) return inherited;
     defer packets.release(inherited);
-    if (prior == .dispositions) return @import("reference_model_input.zig").withDispositionChoices(a, inherited, current.partition.group.claim_ids, null, true);
+    if (prior == .dispositions) return @import("reference_model_input.zig").withDispositionChoices(a, inherited, try @import("reference_reconciliation_projection.zig").semanticClaimIds(scratch, current.items), null, true);
     const ids = try scratch.alloc(i64, conflict_catalogue.len);
     for (ids, conflict_catalogue) |*id, group| id.* = group.group_id.ordinal;
     return packets.withIntegerChoices(a, inherited, &.{.{ .target = .{ .path = &.{ .{ .property = "conflicts" }, .{ .items = {} }, .{ .property = "group_id" } } }, .definition = result.resultDefinition(), .allowed = ids }});
@@ -97,7 +97,7 @@ pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet,
     switch (value) {
         .dispositions => |v| {
             result.proposal.global.conflict_groups = v.conflict_groups;
-            result.proposal.global.claim_dispositions = try @import("reference_conflict_groups.zig").expand(a, v);
+            result.proposal.global.claim_dispositions = try @import("reference_token_disposition.zig").append(a, current.progress.plan.layout.items, try @import("reference_conflict_groups.zig").expand(a, v));
             result.phase = .dispositions;
         },
         .signals => |v| {
@@ -120,10 +120,14 @@ pub fn collect(a: std.mem.Allocator, prior: Prior, bound: *const packets.Packet,
     for (result.source.fields) |old| {
         if (std.meta.eql(old.unit, unit) and old.field == field) continue;
         if (stage == .signals and old.unit == .signal) continue;
+        if (stage == .dispositions and old.unit == .disposition) continue;
         if (stage == .conflicts and old.unit == .conflict) continue;
         try fields.append(a, old);
     }
     try fields.append(a, .{ .unit = unit, .field = field, .origin = origin });
+    if (stage == .dispositions) for (result.proposal.global.claim_dispositions, 0..) |_, index| {
+        try fields.append(a, .{ .unit = .{ .disposition = index }, .field = .record, .origin = if (index < value.dispositions.claim_dispositions.len) origin else null });
+    };
     if (stage == .signals) for (result.proposal.global.signals, 0..) |signal, index| {
         try fields.append(a, .{ .unit = .{ .signal = index }, .field = .record, .origin = if (index < prior.signals.proposal.signals.len) prior.signals.source.at(.{ .signal = index }, .record) else if (signal.content == .preserved_token) null else origin });
     };
