@@ -758,27 +758,25 @@ test "single-exchange capture requires the frozen native response settings and e
         .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
         .schema = "{}",
         .response_mode = .native_schema,
-        .controls = .{ .temperature = .fixed, .max_output_tokens = .{ .value = 16384 } },
+        .controls = .{ .temperature = .fixed },
         .reasoning_effort = "low",
         .operation_kind = .inference,
     };
     var models: @import("../../../src/domain/config.zig").ModelsConfig = .{ .slots = .{} };
     defer models.slots.deinit(std.testing.allocator);
-    try models.slots.map.put(std.testing.allocator, description.model_slot, .{ .provider = description.provider, .model = description.model, .reasoningEffort = "low", .maxOutputTokens = 16384 });
+    try models.slots.map.put(std.testing.allocator, description.model_slot, .{ .provider = description.provider, .model = description.model, .reasoningEffort = "low" });
     const request = probeWireRequest();
     try frozen_binding.validateDescription(std.testing.allocator, description, request, &models);
-    for (0..9) |fault| {
+    for (0..7) |fault| {
         var invalid = description;
         switch (fault) {
             0 => invalid.response_mode = .prompt_only,
             1 => invalid.reasoning_effort = "medium",
             2 => invalid.controls.temperature = null,
-            3 => invalid.controls.max_output_tokens = null,
-            4 => invalid.controls.max_output_tokens = .{ .value = 4096 },
-            5 => invalid.model = "us.openai.gpt-6-luna",
-            6 => invalid.provider_config.aws_bedrock.region = .@"us-west-2",
-            7 => invalid.operation_kind = .input_token_count,
-            8 => invalid.reasoning_effort = null,
+            3 => invalid.model = "us.openai.gpt-6-luna",
+            4 => invalid.provider_config.aws_bedrock.region = .@"us-west-2",
+            5 => invalid.operation_kind = .input_token_count,
+            6 => invalid.reasoning_effort = null,
             else => unreachable,
         }
         try std.testing.expectError(error.FrozenBindingRejected, frozen_binding.validateDescription(std.testing.allocator, invalid, request, &models));

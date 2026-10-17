@@ -65,11 +65,11 @@ Neither changes engine validation or permits fallback after provider rejection.
 
 The compiled registry supports these exact contracts:
 
-| Exact model | Explicit source region | Converse | CountTokens | Response modes | Registered reasoning policy | Temperature / output allowance |
+| Exact model | Explicit source region | Converse | CountTokens | Response modes | Registered reasoning policy | Temperature |
 | --- | --- | --- | --- | --- | --- | --- |
-| `openai.gpt-oss-20b-1:0` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; native schema projection | OpenAI effort: `low`, `medium`, `high` | Fixed `0.1`; optional output allowance |
-| `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` | Yes | Yes | Prompt-only | None | Fixed `0.1`; no registered output-allowance support |
-| `global.openai.gpt-6-luna` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; native schema with required strict flag | Provider default only; documented medium | Temperature omitted; optional output allowance |
+| `openai.gpt-oss-20b-1:0` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; native schema projection | OpenAI effort: `low`, `medium`, `high` | Fixed `0.1` |
+| `anthropic.claude-3-5-haiku-20241022-v1:0` | `us-west-2` | Yes | Yes | Prompt-only | None | Fixed `0.1` |
+| `global.openai.gpt-6-luna` | `ap-southeast-2` (Sydney) | Yes | No | Prompt-only; native schema with required strict flag | Provider default only; documented medium | Omitted |
 
 The current Luna tuple is an explicitly registered **global inference profile**
 with Sydney as its source region. It may route worldwide and provides no
@@ -164,10 +164,10 @@ accepts the same Converse input where the selected model supports counting.
   supplies the required native JSON strict-format flag and admits no explicit
   reasoning override. `.none` supplies no additional profile fields. Neither the
   project nor a model-name prefix selects the wire contract.
-- Bound `maxOutputTokens` maps unchanged to `inferenceConfig.maxTokens`.
-  An absent allowance omits that field; the API owns its default and maximum.
-  Thinking and final text share the provider output allowance. No local limit,
-  reservation or silent control substitution is introduced.
+- Requests never include `inferenceConfig.maxTokens`, so the API applies the
+  model's own maximum, which thinking and final text share
+  ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
+  No local limit, reservation or silent control substitution is introduced.
 - No streaming, tools, stop sequences or arbitrary request parameters are added.
 - Both response modes add the complete compiled result schema once to guidance.
   Native mode also sends its registered structural projection as a JSON string in
@@ -275,9 +275,8 @@ attempt and lease. The adapter does not back off, refresh, reroute or replay.
 - Wire fixtures cover canonical projection, URI encoding, strict response and
   usage rejection, secret redaction, native projection, unsupported
   counting, status/type agreement and growing HTTP headers.
-- Output-allowance fixtures cover present and omitted fields, exact selected values
-  and CountTokens retaining identical model-visible input without inference/output
-  controls or clamping.
+- Fixtures prove no request carries `maxTokens` and CountTokens retains identical
+  model-visible input without inference controls or clamping.
 - [Concrete HTTP tests](../../src/bedrock_http_test.zig) exercise the actual serializer,
   response reader and deadline race over event-controlled in-memory connections.
 

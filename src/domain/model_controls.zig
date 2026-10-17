@@ -15,26 +15,10 @@ pub const Temperature = enum {
     }
 };
 
-/// An explicitly selected provider output allowance, not an engine capacity.
-pub const OutputTokenAllowance = struct {
-    value: u32,
-
-    pub fn init(value: u32) ?OutputTokenAllowance {
-        return if (value == 0) null else .{ .value = value };
-    }
-
-    pub fn isValid(self: OutputTokenAllowance) bool {
-        return init(self.value) != null;
-    }
-};
-
+/// SDDE never requests an output-token allowance (ADR 0011): the provider's own
+/// model maximum is the only output ceiling, and a stop at it is logged.
 pub const InferenceControls = struct {
     temperature: ?Temperature = null,
-    max_output_tokens: ?OutputTokenAllowance = null,
-
-    pub fn isValid(self: InferenceControls) bool {
-        return if (self.max_output_tokens) |allowance| allowance.isValid() else true;
-    }
 
     pub fn forTemperatureSupport(supported: bool) InferenceControls {
         return .{ .temperature = if (supported) .fixed else null };

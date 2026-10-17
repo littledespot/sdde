@@ -16,14 +16,12 @@
       "spec_generation": {
         "provider": "aws-bedrock",
         "model": "openai.gpt-oss-20b-1:0",
-        "reasoningEffort": "low",
-        "maxOutputTokens": 16384
+        "reasoningEffort": "low"
       },
       "repair": {
         "provider": "aws-bedrock",
         "model": "openai.gpt-oss-20b-1:0",
-        "reasoningEffort": "low",
-        "maxOutputTokens": 2048
+        "reasoningEffort": "low"
       },
       "design_section_generation": {
         "provider": "aws-bedrock",

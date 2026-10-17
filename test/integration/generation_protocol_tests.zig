@@ -77,7 +77,6 @@ test "test.integration.generation_protocol Phase 0 prepares sources and accounts
     try std.testing.expectEqual(.low, protocol.reasoning_effort);
     try std.testing.expectEqual(.native_schema, protocol.response_mode);
     try std.testing.expectEqual(Temperature.fixed.wireValue(), protocol.temperature);
-    try std.testing.expectEqual(@as(u32, 16384), protocol.max_output_tokens);
     try std.testing.expectEqual(@as(usize, 72), inventory.cases.len);
     var development: u32 = 0;
     var qualification: u32 = 0;

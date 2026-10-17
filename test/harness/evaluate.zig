@@ -87,7 +87,7 @@ pub fn run(io: std.Io, a: std.mem.Allocator, port: provider.Port, config: config
             outcome = .{ .evaluator_error = .invalid_response };
             break;
         };
-        const result = judgment.validate(a, &diagnostic, capture, payload) catch |err| {
+        const result = judgment.validate(a, &diagnostic, capture, try modelContent(a, payload)) catch |err| {
             if (err == error.OutOfMemory) return error.OutOfMemory;
             outcome = .{ .evaluator_error = .invalid_judgment };
             break;
@@ -96,4 +96,14 @@ pub fn run(io: std.Io, a: std.mem.Allocator, port: provider.Port, config: config
         break;
     }
     return .{ .capture = capture, .configuration = config, .attempts = try a.dupe(report.Attempt, attempts.items), .outcome = outcome, .judgment_diagnostic = diagnostic, .protocol_sha256 = try @import("packet.zig").protocolSha256(a) };
+}
+
+/// A judge response is model output: it crosses the engine's one model-envelope
+/// decoder, including its approved §22.6 opening-artifact exception. Human
+/// adjudication proposals do not. A rejected envelope keeps the original bytes so
+/// judgment validation reports the original parser diagnostic.
+fn modelContent(a: std.mem.Allocator, payload: []const u8) error{OutOfMemory}![]const u8 {
+    var document = @import("../../src/domain/model_envelope.zig").parseContent(a, payload, null) catch |err| return if (err == error.OutOfMemory) error.OutOfMemory else payload;
+    defer document.deinit();
+    return document.content;
 }

@@ -82,10 +82,8 @@ exists.
   and `validation`;
   fixed records reject missing required, duplicate and unknown members.
 - `models.slots` and `principles.filenameHints` are keyed collections; each model slot has the closed slot shape.
-- A slot may supply positive integer `maxOutputTokens`, representable by the native
-  control type. It requests a provider output allowance; omission delegates the
-  provider default. [ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance)
-  owns its validation, retention and distinction from engine capacity limits.
+- A slot has no output-token allowance: the closed shape rejects `maxOutputTokens`
+  ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
 - The `logs` object contains exactly the F0002 threshold and optional console-mirror boolean.
   The threshold alone selects prompt capture under ADR 0018.
 - File logging is mandatory and has no configuration switch.

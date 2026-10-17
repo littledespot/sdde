@@ -69,12 +69,11 @@ defect requires a new versioned experiment freeze, not silent holdout retuning.
 On 16 October 2026 the user switched the selected test model back to
 **GPT-OSS-20B on Bedrock**. The prospective protocol freezes
 `aws-bedrock / openai.gpt-oss-20b-1:0 / ap-southeast-2`, using Converse, native JSON
-Schema, explicit low reasoning, the engine's fixed temperature `0.1` and a
-provider-requested allowance of 16,384 output tokens on the protocol's explicit
-`generation_slot` (`spec_generation`). Every other role retains the exact model,
-effort and output allowance in the frozen `.sddtoolkit.json`; omitted allowances
-remain omitted. The current `repair` role selects low effort and omits an output
-allowance. Capture, budget-evidence import and scoring validate each request
+Schema, explicit low reasoning and the engine's fixed temperature `0.1` on the
+protocol's explicit `generation_slot` (`spec_generation`). No role requests an
+output-token allowance (ADR 0011, 18 October 2026). Every other role retains the
+exact model and effort in the frozen `.sddtoolkit.json`; the current `repair` role
+selects low effort. Capture, budget-evidence import and scoring validate each request
 against its own configured slot, while retaining the selected cohort's model,
 region, native schema and fixed temperature. They do not copy the generation
 allowance onto other roles. The registered GPT-OSS
@@ -189,7 +188,7 @@ dispute, stop and report the evidence as inconclusive. Record all overshoot and
 unattempted trials. Equality prohibits further sends but a fully observed panel
 that finishes exactly at its limit remains complete evidence; overshoot is
 inconclusive. These experiment-wide stops add no engine-local per-call
-capacity limit or token reservation; the output allowance remains provider-owned.
+capacity limit or token reservation; the model's own output maximum applies.
 The scorer detects supplied unknown/over-budget evidence. The baseline acquisition
 owner enforces these stops immediately before every physical transport send;
 provider usage is reconciled against the exact native origin before another send.

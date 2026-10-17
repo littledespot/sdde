@@ -39,7 +39,7 @@ pub const ProviderModelBindingId = struct {
     pub fn isValid(self: ProviderModelBindingId) bool {
         return self.operation_id.isValid() and
             identity.ModelSlotId.parse(self.slot_id.bytes) != null and
-            self.registry_entry_id.ordinal != 0 and self.controls.isValid() and
+            self.registry_entry_id.ordinal != 0 and
             (self.reasoning_effort == null or
                 (self.reasoning_effort.?.len > 0 and
                     std.unicode.utf8ValidateSlice(self.reasoning_effort.?)));

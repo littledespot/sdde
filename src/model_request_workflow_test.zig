@@ -145,14 +145,14 @@ test "static context rejects missing resources and conflicting resource kinds be
     try std.testing.expectError(error.WorkflowGraphCompileInvalid, fixture.compileWithContext(missing, true));
 }
 
-test "protocol corrections retain static context dynamic input and configured output allowance" {
+test "protocol corrections retain static context dynamic input and registered controls" {
     var fixture: Fixture = undefined;
     try fixture.initWithProvider(std.testing.allocator, 0, true);
     defer fixture.deinit();
     var models: @import("domain/config.zig").ModelsConfig = .{ .slots = .{} };
     defer models.slots.deinit(std.testing.allocator);
     const model = @import("composition/provider_model_contracts.zig").registry.entries[0];
-    try models.slots.map.put(std.testing.allocator, "selected", .{ .provider = model.provider.bytes, .model = model.model.bytes, .maxOutputTokens = 16384 });
+    try models.slots.map.put(std.testing.allocator, "selected", .{ .provider = model.provider.bytes, .model = model.model.bytes });
     const allowlist = @import("domain/repository_model_allowlist.zig");
     const owner = try allowlist.createValidated(std.testing.allocator, &models, fixture.services.registry());
     allowlist.deinitOwner(fixture.services.allowlist_owner);
@@ -166,7 +166,7 @@ test "protocol corrections retain static context dynamic input and configured ou
     try prepareProtocolAttempt(&runner, false);
     const original = (try currentRequest(&runner)).id();
     const original_controls = (try currentRequest(&runner)).prepared().?.controls;
-    try std.testing.expectEqual(@as(u32, 16384), original_controls.max_output_tokens.?.value);
+    try std.testing.expectEqualDeep(model.capabilities.inferenceControls(), original_controls);
     try rejectProtocolResponse(&runner, false);
     try std.testing.expectEqual(.ok, runner.bindings().invokeStep(.{ .bytes = "retry" }).outcome);
     const corrected = try currentRequest(&runner);
@@ -2920,6 +2920,84 @@ test "YAML invocation preserves every stopped outcome and charges its actual usa
         try std.testing.expectEqual(@as(usize, 0), fixture.observer.calls);
         try std.testing.expectEqual(@as(usize, 1), fake.effect_count);
     }
+}
+
+test "runner logs every provider-applied stop with its exact reason and stops on log failure" {
+    const telemetry = @import("domain/telemetry.zig");
+    const Spy = struct {
+        count: usize = 0,
+        fail: bool,
+        expected_code: ?[]const u8,
+        invalid: bool = false,
+        // The immediately preceding event; a stop must follow its own completion.
+        previous: ?telemetry.EventType = null,
+        completed_correlation: [96]u8 = undefined,
+        completed_correlation_len: usize = 0,
+        completed_outcome: ?telemetry.EventOutcome = null,
+        fn process(context: *anyopaque, fact: telemetry.WorkflowTelemetryFact) @import("domain/feature_log_stream.zig").Outcome {
+            const self: *@This() = @ptrCast(@alignCast(context));
+            defer self.previous = fact.fact.event_type;
+            const definition = @import("domain/log_event_registry.zig").validateFact(fact.fact) catch {
+                self.invalid = true;
+                return .{ .blocked = .LOG_SERIALIZATION_FAILURE };
+            };
+            if (fact.fact.event_type == .model_completed) {
+                const correlation = fact.fact.correlation_id.?.bytes;
+                @memcpy(self.completed_correlation[0..correlation.len], correlation);
+                self.completed_correlation_len = correlation.len;
+                self.completed_outcome = fact.fact.fields.outcome;
+            }
+            if (fact.fact.event_type == .model_provider_stopped) {
+                self.count += 1;
+                const fields = fact.fact.fields;
+                if (definition.level != .warning or fact.fact.correlation_id == null or fact.fact.attempt != 1 or self.expected_code == null or
+                    !std.mem.eql(u8, fields.diagnostic_code.?.bytes, self.expected_code.?) or
+                    fields.input_tokens != 8 or fields.output_tokens != 3 or
+                    self.previous != .model_completed or
+                    !std.mem.eql(u8, fact.fact.correlation_id.?.bytes, self.completed_correlation[0..self.completed_correlation_len]) or
+                    fields.outcome == null or !std.meta.eql(fields.outcome, self.completed_outcome)) self.invalid = true;
+                if (self.fail) return .{ .blocked = .LOG_FLUSH_FAILURE };
+            }
+            return .dropped;
+        }
+    };
+    const Reason = provider.ProviderNonCandidateStopReason;
+    const reasons = comptime selected: {
+        var all: [std.enums.values(Reason).len + 1]?Reason = undefined;
+        all[0] = null;
+        for (std.enums.values(Reason), 1..) |reason, index| all[index] = reason;
+        break :selected all;
+    };
+    for ([_]bool{ false, true }) |fail| for (reasons) |selected| {
+        var fixture: Fixture = undefined;
+        try fixture.init(std.testing.allocator);
+        defer fixture.deinit();
+        const graph = try fixture.compile(try invocationYaml(&fixture));
+        var runner = fixture.runner(graph, std.testing.allocator);
+        defer runner.deinit();
+        const directory_schema = @import("application/feature_logging_workflow.zig").directory;
+        runner.envelope.slots[@intFromEnum(directory_schema.key)] = try @import("application/pipeline_values.zig").create(std.testing.allocator, directory_schema, @import("domain/feature_directory.zig").Directory, .{
+            .selector = .{ .feature_id = .{ .bytes = "selected" }, .project_relative_path = "specs/selected" },
+            .root_observation = .absent,
+            .observation = .absent,
+        });
+        var code: [32]u8 = undefined;
+        var spy: Spy = .{ .fail = fail, .expected_code = if (selected) |reason| std.ascii.upperString(&code, @tagName(reason)) else null };
+        runner.barrier = .{ .context = &spy, .process_fn = Spy.process };
+        var fake = invocationProvider(&runner, std.testing.allocator);
+        // A complete response is the control: it records no provider stop.
+        if (selected) |reason| fake.invocation_plan = .{ .stopped = .{ .reason = reason, .input_tokens = 8, .output_tokens = 3 } };
+        fixture.native.invoke_model.action = .{ .provider = fake.interface() };
+        var harness: Harness = .{ .runner = &runner };
+        const result = harness.result();
+        try std.testing.expect(!spy.invalid);
+        try std.testing.expectEqual(@as(usize, if (selected == null) 0 else 1), spy.count);
+        if (selected != null) {
+            if (fail) {
+                try std.testing.expectEqual(.LOG_FLUSH_FAILURE, result.execution_rejected.logging);
+            } else try std.testing.expectEqual(.failed, result.execution);
+        }
+    };
 }
 
 test "YAML invocation preserves failures and blocks further calls when usage is unavailable" {
@@ -8249,7 +8327,7 @@ test "retained semantic assignments require complete current packet request bind
     var changed_schema = selected;
     changed_schema.result = try retentionResource(changed_graph, request.sourceResources().result);
     try std.testing.expect(!try changed_schema.acceptsRetained(std.testing.allocator, ledger, request, origin));
-    for (0..12) |change| {
+    for (0..11) |change| {
         var replay = selected;
         switch (change) {
             0 => replay.prompt.content = .{ .prompt = "Different purpose." },
@@ -8263,7 +8341,6 @@ test "retained semantic assignments require complete current packet request bind
             8 => replay.result_selection = .resource,
             9 => replay.input = .{ .resource = .{ .id = .{ .bytes = "resource-input" }, .content = .{ .data = body } } },
             10 => replay.binding.operation_id.workflow_version += 1,
-            11 => replay.binding.controls.max_output_tokens = .{ .value = 100 },
             else => unreachable,
         }
         try std.testing.expect(!try replay.acceptsRetained(std.testing.allocator, ledger, request, origin));

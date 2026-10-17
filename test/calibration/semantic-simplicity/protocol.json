@@ -8,7 +8,6 @@
   "reasoning_effort": "low",
   "response_mode": "native_schema",
   "temperature": 0.1,
-  "max_output_tokens": 16384,
   "repetitions": 3,
   "arms": [
     "A",

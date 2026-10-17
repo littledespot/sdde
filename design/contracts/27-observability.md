@@ -110,6 +110,15 @@ Correlation identifies the original request/attempt, whose raw response stays in
 decoding succeeds even if subsequent schema validation fails; a separate schema
 event retains that failure. Logging rejection prevents continuation.
 
+Every provider-applied non-candidate stop emits one warning `model.provider_stopped`
+after `model.completed` for the same request and attempt
+([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
+Its diagnostic is the exact closed stop reason (`OUTPUT_LIMIT`, `CONTENT_FILTERED`,
+`UNSUPPORTED_TOOL_REQUEST`, `MALFORMED_OUTPUT` or `CONTEXT_LIMIT`), with the outcome and
+the provider's reported input and output tokens. This applies to required and advisory
+inference alike. The event never retries, reclassifies or excuses the stop, and its
+logging rejection prevents continuation.
+
 Useful metrics:
 
 - model calls and tokens by stage/unit;

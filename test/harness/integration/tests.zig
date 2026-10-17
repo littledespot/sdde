@@ -275,9 +275,8 @@ test "production E2E binding honors configured models and cannot succeed without
             defer model_config.deinit();
             for (model_config.value.object.get("models").?.object.get("slots").?.object.values()) |*slot| {
                 try slot.object.put(a, "model", .{ .string = model });
-                // This registered model supports neither optional control.
+                // This registered model does not support reasoning effort.
                 _ = slot.object.swapRemove("reasoningEffort");
-                _ = slot.object.swapRemove("maxOutputTokens");
             }
             try project.dir.writeFile(io, .{ .sub_path = ".sddtoolkit.json", .data = try std.json.Stringify.valueAlloc(a, model_config.value, .{}) });
             const catalogue = try @import("../files.zig").read(io, a, project.dir, ".sddtoolkit/providers/.sddproviders.json");
@@ -1634,7 +1633,7 @@ const AdviceProductionRun = struct {
                 std.testing.expectEqual(if (projection == .source) @as(std.meta.Tag(owned.Payload), .support_repair) else .principle_support_repair, std.meta.activeTag(owned.payload(repair_state).*)) catch unreachable;
             }
             required_source = projection == null and request.id().purpose == .semantic_review;
-            std.testing.expectEqual(@as(u32, 2048), request.prepared().?.controls.max_output_tokens.?.value) catch unreachable;
+            std.testing.expectEqual(@as(?@import("../../../src/domain/model_controls.zig").Temperature, .fixed), request.prepared().?.controls.temperature) catch unreachable;
             if (projection == .principles) self.principle_attempts += 1;
             var body = if (repair_request) "{}" else @import("../../../src/test_fixtures/spec_generation_responses.zig").build(arena.allocator(), view, .{ .attempt = attempt.value, .entities_required = self.mode == .global_budget }) catch |err| std.debug.panic("offline production candidate: {s}", .{@errorName(err)});
             if (self.injected_findings == 0 and !repair_request and
@@ -1715,6 +1714,24 @@ const AdviceProductionRun = struct {
     }
 };
 
+/// Counts production feature-log event rows containing both fragments.
+fn featureLogRows(io: std.Io, a: std.mem.Allocator, project: std.Io.Dir, event: []const u8, code: []const u8) !usize {
+    var specs = try project.openDir(io, "specs", .{ .iterate = true });
+    defer specs.close(io);
+    var walker = try specs.walk(a);
+    defer walker.deinit();
+    var count: usize = 0;
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".log") or std.mem.indexOf(u8, entry.path, "logs/events/") == null) continue;
+        const bytes = try entry.dir.readFileAlloc(io, entry.basename, a, .limited(64 * 1024 * 1024));
+        var lines = std.mem.splitScalar(u8, bytes, '\n');
+        while (lines.next()) |line| {
+            if (std.mem.indexOf(u8, line, event) != null and std.mem.indexOf(u8, line, code) != null) count += 1;
+        }
+    }
+    return count;
+}
+
 test "production workflow retains typed advice stops and enforces one global token budget" {
     const Runtime = @import("../../../src/composition/root.zig").Runtime;
     const Mode = AdviceProductionRun.Mode;
@@ -1762,6 +1779,13 @@ test "production workflow retains typed advice stops and enforces one global tok
         var scripted: AdviceProductionRun = .{ .allocator = a, .runner = runner, .base = bindings, .fake = &fake, .tracker = &tracker, .mode = mode };
         const outcome = @import("../../../src/application/workflow_engine_orchestrator.zig").run(scripted.bindings());
         if (scripted.failure) |err| return err;
+        // ADR 0011: every provider-applied stop, required or advisory, reaches the
+        // production feature log with its exact reason; nothing else emits it.
+        const provider_stops = try featureLogRows(io, a, project.dir, "|model.provider_stopped|", "|OUTPUT_LIMIT|");
+        switch (mode) {
+            .source_output_limit, .advisory_repair_output_limit, .required_output_limit, .required_source_output_limit => try std.testing.expect(provider_stops >= 1),
+            .global_budget, .malformed_source_protocol, .advisory_repair_protocol => try std.testing.expectEqual(@as(usize, 0), provider_stops),
+        }
         const audit = tracker.snapshot(true);
         try admission.validate(a, audit, scripted.exchanges.items);
         const escaped = try admission.measure(audit, scripted.exchanges.items);

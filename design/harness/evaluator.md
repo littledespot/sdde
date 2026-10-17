@@ -146,6 +146,15 @@ The internal test environment supplies the evaluation selection:
 - Complete local judgment validation still owns criterion coverage, score bounds,
   dispositions and exact source/specification evidence. Native schema requests do
   not authorize accepting malformed or unsupported judgments.
+- Approved by the user on 18 October 2026: a judge response is model output.
+  - It first crosses the engine's shared model-envelope decoder, including the
+    [§22.6 opening-artifact exception](../contracts/22-repair.md#226-unparseable-output),
+    and judgment validation then reads the decoder-consumed bytes.
+  - A rejected envelope keeps the original bytes, so the report carries the original
+    parser diagnostic.
+  - Human adjudication proposals are not model output and stay strictly parsed.
+  - Raw `model_output.txt` evidence is unchanged. The evaluation report adds no
+    separate normalization fact.
 - The evaluator supplies no output allowance, so its requests omit
   `inferenceConfig.maxTokens`. No tools, truncation or provider-specific retry policy is added.
 - Stopped and malformed output never becomes a grade; validated usage is retained even

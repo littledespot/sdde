@@ -364,6 +364,7 @@ Logging-internal nodes are not recursively observed.
 | `model.protocol_failed` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | — |
 | `model.schema_failed` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | — |
 | `model.response_normalized` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code` | — |
+| `model.provider_stopped` | `warning` | `model_operation_id`, `model_slot_id`, `diagnostic_code`, `outcome` | `input_tokens`, `output_tokens` |
 | `validation.completed` | `debug` | `validator_id`, `outcome` | `count`, `duration_ms` |
 | `validation.failed` | `warning` | `validator_id`, `diagnostic_code`, `outcome` | `count` |
 | `repair.requested` | `debug` | `repair_unit_kind` | — |

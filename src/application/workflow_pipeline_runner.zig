@@ -475,11 +475,15 @@ pub const Runner = struct {
         if (calls_model) {
             const invoked = call.?;
             const rejection = if (calls_count) model_invocation.validateCount(invoked, &candidate) else model_invocation.reconcile(&self.token_accounting, token_revision, invoked, .{ .candidate = &candidate });
+            var provider_stop: ?ProviderStop = null;
             if (!calls_count) {
                 const retained = values.read(&.{ .slots = candidate.delta.data_writes }, @import("model_invocation_workflow.zig").schema, @import("../domain/model_invocation_result.zig").For(.inference).Result) catch return .{ .rejected = .authority };
                 if (retained.accountingStop() != null) candidate.outcome = .failed;
+                provider_stop = providerStop(retained);
             }
-            if (self.logModelCompletion(id, invoked, if (rejection) |reason| reason.status() else candidate.outcome)) |failure| return .{ .rejected = self.captureRejectionWithLogging(failure) };
+            const status = if (rejection) |reason| reason.status() else candidate.outcome;
+            if (self.logModelCompletion(id, invoked, status)) |failure| return .{ .rejected = self.captureRejectionWithLogging(failure) };
+            if (provider_stop) |stop| if (self.logProviderStop(id, invoked, status, stop)) |failure| return .{ .rejected = self.captureRejectionWithLogging(failure) };
             if (self.captureRejection()) |reason| return .{ .rejected = reason };
             if (rejection) |reason| return .{ .rejected = reason };
             if (candidate.outcome != .cancelled) authorization_binding.checkDeadline(self.provider_clock.?, self.runtime, authorization_deadline.?) catch |err| return authorizationRejected(err);
@@ -512,6 +516,30 @@ pub const Runner = struct {
             if (accounted.id.eql(call.operation_id) and accounted.reconciliation == .exact_usage) usage = accounted.reconciliation.exact_usage;
         }
         return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .model_completed, status, null, usage);
+    }
+
+    const ProviderStop = struct { reason: provider.ProviderNonCandidateStopReason, usage: provider.ProviderUsage };
+
+    fn providerStop(result: *const @import("../domain/model_invocation_result.zig").For(.inference).Result) ?ProviderStop {
+        const raw = result.outcome() orelse return null;
+        return switch (raw.*) {
+            .observation => |observation| switch (observation) {
+                .completed => |completed| switch (completed.raw_result) {
+                    .stopped => |stopped| .{ .reason = stopped.reason, .usage = stopped.usage },
+                    .rejected, .complete => null,
+                },
+                .failed => null,
+            },
+            .cancelled, .allocation_failed, .logging_blocked_before_send => null,
+        };
+    }
+
+    /// Every provider-applied stop, including its own output maximum, is logged at
+    /// warning level with its exact closed reason; usage alone never implies it.
+    fn logProviderStop(self: *Runner, id: workflow.WorkflowStepId, call: invocation_validation.Call, status: workflow.OutcomeTag, stop: ProviderStop) ?@import("../domain/feature_log_stream.zig").FailureCode {
+        if (!self.eventsActive()) return null;
+        const origin = @import("../domain/model_candidate_origin.zig").Origin.from(identity.ledger(self.model_accounting.?.requests), call.operation_id) orelse return .LOG_SERIALIZATION_FAILURE;
+        return self.events().model(id, .{ .origin = origin, .binding = call.provider_binding.* }, .model_provider_stopped, status, @tagName(stop.reason), stop.usage);
     }
 
     fn captureRejection(self: *const Runner) ?execution.Rejection {

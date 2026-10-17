@@ -97,8 +97,7 @@ The selected model must resolve through the selected run's retained provider
 catalogue and the current registered model-binding contracts. The diagnostic
 creates an ephemeral in-memory binding:
 it inherits the captured provider and takes the selected model's region from the
-catalogue. Captured response mode and other inference controls, including an
-optional output allowance, are preserved. Unsupported combinations reject before
+catalogue. Captured response mode and other inference controls are preserved. Unsupported combinations reject before
 dispatch; no model, response mode or control silently falls back. The effective
 binding must also pass the live cost policy before the credential is read.
 A current GPT-OSS-20B capture with compatible temperature/reasoning controls is
@@ -175,11 +174,10 @@ credential access. Production preparation validates the catalogue and selected r
 the send boundary independently checks the frozen binding/settings before
 transport. The allowed binding is
 `aws-bedrock / openai.gpt-oss-20b-1:0 / ap-southeast-2`, with native JSON Schema,
-low reasoning and registered temperature `0.1`. The request inherits its configured
-provider-requested output allowance, which must equal the frozen experiment binding
-of 16,384 tokens. This is an experiment setting, not an engine size ceiling. The
-shipped wf-001/wf-002 configuration requests 2,048 tokens (ADR 0011, B9), so
-preflight rejects those cases with `FrozenBindingRejected`. Any supplied reasoning remains separately captured diagnostic data.
+low reasoning and registered temperature `0.1`. No request carries an output-token
+allowance ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
+The shipped wf-001/wf-002 configuration selects exactly these slot controls and
+passes preflight; a drifted slot control rejects with `FrozenBindingRejected`. Any supplied reasoning remains separately captured diagnostic data.
 No historical request is retargeted and no alternative model or response mode
 is substituted.
 
@@ -296,17 +294,17 @@ credentials. No model answer means no evidence yet about schema conformance.
   total-budget settings; no provider or model is selected by a fallback.
 - Judge settings and credentials are validated before generation starts.
 
-- Generation retains the selected slot's optional output allowance under
-  [ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance).
-  The evaluator supplies no output allowance and delegates the provider default.
+- Neither generation nor the evaluator requests an output-token allowance; the
+  model's own maximum applies, and every provider stop is logged with its reason
+  ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
 - The engine accounts every inference, including post-generation advice and
   correction, once against one execution budget. The evaluator has its own
   cumulative budget.
 - Provider-owned response limits still apply and are reported as provider stops.
 - Bedrock generation, grading and diagnostics share the Converse codec. GPT-OSS-20B's
   registered profile supplies native JSON Schema, the selected reasoning effort
-  and temperature `0.1`, and projects any configured output allowance to
-  `inferenceConfig.maxTokens`. Provider reasoning counts toward output usage;
+  and temperature `0.1`, and never sends `inferenceConfig.maxTokens`. Provider
+  reasoning counts toward output usage;
   the engine accounts actual reported tokens separately from provider quotas.
   The separate registered Luna profile retains its strict JSON flag and omitted
   temperature/reasoning overrides. Its production capability contract remains

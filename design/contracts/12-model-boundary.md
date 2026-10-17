@@ -257,8 +257,8 @@ not acquire it merely because the API exists.
 
 The user-selected small-model test binding is `openai.gpt-oss-20b-1:0` from
 `ap-southeast-2`, using native JSON Schema, low reasoning for Spec generation,
-repair and grading, registered temperature `0.1`, and an optional provider output
-allowance. The separately registered Luna profile retains its strict-output field, omitted
+repair and grading, registered temperature `0.1`, and no output-token allowance
+([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)). The separately registered Luna profile retains its strict-output field, omitted
 temperature/reasoning controls and unavailable CountTokens capability.
 This is mechanical support, not a live compatibility or semantic-quality claim.
 The test cost policy is development-only; it cannot change production authority.
@@ -386,9 +386,9 @@ findings. Only complete native collection validation permits authority advanceme
   compilation or run preparation before provider I/O.
 - Provider APIs own request, response and context-size limits under ADR 0011.
 - The engine, operation, slot and model contract add no engine-enforced byte/token
-  capacity ceilings, intersections or size-fit gates. Optional slot `maxOutputTokens`
-  is instead a retained provider-request control under
-  [ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance).
+  capacity ceilings, intersections or size-fit gates, and no request carries an
+  output-token allowance. A provider-applied stop is logged with its reason under
+  [ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance).
 
 - Model-operation identity is the compiled `(workflowId, workflowVersion,
   originatingWorkflowStepId)` tuple retained across consumer steps.
@@ -1083,6 +1083,6 @@ facts and its original schema; it cannot acquire a fresh occurrence scope from
 its rejected body. Admission recognizes raw prose before NFC and validates the
 derived composition through the shared owner. Ambiguous eligible spans reject the
 complete field through existing bounded correction, not a new retry route.
-`model-request-debug/v6` retains native scope for diagnostic replay; request logs
+`model-request-debug/v7` retains native scope for diagnostic replay; request logs
 never become workflow or persistence authority. Missing historical native scope
 stays unavailable rather than reconstructed from a visible token catalogue.

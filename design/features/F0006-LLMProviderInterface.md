@@ -252,8 +252,7 @@ ProviderModelDefinition {
 - There are no common provider-catalogue `endpoint`, `contextWindow`, `maxOutputTokens`,
   `supportsTemperature`, `structuredOutput`, `tokenizer`, or wire-parameter fields.
 - Endpoint and supported-control facts come from the compiled contracts in Section 4.
-  The optional slot `maxOutputTokens` request control is separate from catalogue
-  configuration and provider capacity facts; Section 6 owns its binding.
+  No slot, binding or request carries an output-token allowance ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
 - The provider catalogue may declare only a known provider, known model, explicit `json` selection, and the fields
   permitted by that provider's closed `config` variant.
 - Catalogue membership alone does not make that model repository-authorized.
@@ -471,7 +470,7 @@ outcome through runner-owned child bindings:
    compiled model contract, without storing a concrete adapter;
 3. its provider-specific configuration, target, source region, destination
    policy and selected operation support are valid; counting support is optional;
-4. every selected option, including `reasoningEffort` and `maxOutputTokens`, is
+4. every selected option, including `reasoningEffort`, is
    explicitly supported and representable rather than silently ignored;
 5. the request retains the complete compiled result schema under ADR 0006;
    native generation constraints derive from it through the registered profile.
@@ -502,11 +501,9 @@ Resources and outcomes remain in the existing concise workflow structure.
   size estimates.
 - Retired `input-bytes`, `output-bytes`, `input-tokens` and `output-tokens` parameters
   reject; do not replace them with another engine capacity limit.
-- The optional slot `maxOutputTokens` allowance follows
-  [ADR 0011](../decisions/0011-provider-owned-request-limits.md#optional-provider-request-output-allowance).
-  Its exact presence/value flows through validated slot options, binding, request
-  controls and authorization, including correction, capture and replay. Omission
-  adds no local default or fit check.
+- No request carries an output-token allowance, so the model's own maximum applies.
+  A provider stop at that maximum, or for any other non-candidate reason, is logged
+  as `model.provider_stopped` with its reason ([ADR 0011](../decisions/0011-provider-owned-request-limits.md#no-output-token-allowance)).
 - The runner checks identity, slot, schema, response mode and supported controls against
   the compiled contract and retains those facts for exact single-use authorization.
 - Providers report oversized requests, output stops and context errors through the
@@ -1216,8 +1213,8 @@ F0006 does not:
       reservations.
     - Reject retired size parameters.
     - Provider APIs own their size limits and the engine propagates their errors/stops.
-    - Optional slot output allowances are validated supported controls, sent unchanged
-      or omitted, never capacity estimates, reservations or budget-derived limits.
+    - No slot or request carries an output-token allowance; a provider stop is logged
+      with its reason.
     - Model-request IDs are engine-assigned from one immutable run-local ledger by exact
       revision; execution, originating compiled step, unit/purpose authority where
       required, and ordinal validate before construction.
@@ -1417,8 +1414,9 @@ Implementation evidence must cover:
 - one invalid slot rejecting the complete allowlist
 - unauthorized unreferenced models
 - unsupported options, targets, data policy and structured schemas
-- omitted and positive output allowances, unsupported selections and altered controls
-  across binding, authorization, correction, capture and replay
+- a configured `maxOutputTokens` rejection, no request `maxTokens`, unsupported
+  selections and altered controls across binding, authorization, correction, capture
+  and replay, and a logged reason for every provider stop
 - registration without capacity fields
 - rejected legacy size parameters
 - exact serialization and complete valid responses beyond former byte ceilings

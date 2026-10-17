@@ -600,6 +600,18 @@ test "evidence write failure prevents a new evaluator call" {
     try std.testing.expect(trace.failure != null);
 }
 
+test "judgment validation stays strict; only the model grader boundary decodes opening artifacts" {
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const inputs = try capture(a);
+    var diagnostic: ?judgment.Diagnostic = null;
+    try std.testing.expectError(error.InvalidEvaluationContract, judgment.validate(a, &diagnostic, inputs, "{\"" ++ good));
+    try std.testing.expectEqual(.json, diagnostic.?.reason);
+    _ = try judgment.validate(a, &diagnostic, inputs, good);
+    try std.testing.expect(diagnostic == null);
+}
+
 test "Bedrock native schema output retains complete judgment validation and exact accounting" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
@@ -612,6 +624,11 @@ test "Bedrock native schema output retains complete judgment validation and exac
         .{ .text = "{\"results\":\"invalid\"}", .reason = .invalid_shape },
         .{ .text = try std.mem.replaceOwned(u8, a, good, "Store the message.", "Invented source."), .reason = .quote_not_found },
         .{ .text = good, .reason = null },
+        // The shared §22.6 decoder admits exactly the approved opening artifacts.
+        .{ .text = "{\"" ++ good, .reason = null },
+        .{ .text = "{\"results" ++ good, .reason = null },
+        .{ .text = "{\"resu" ++ good, .reason = .json },
+        .{ .text = "{\"{\"" ++ good, .reason = .json },
     }) |case| {
         var observation = try bedrock.response(a, .{ .received = .{ .status = 200, .body = try bedrockResponseBytes(a, "end_turn", case.text) } });
         observation.identity = .{ .bedrock_target = .{ .model = config.model, .region = config.region.? } };

@@ -20,13 +20,13 @@ fn valueSchema(a: std.mem.Allocator, schema: []const u8) ![]const u8 {
     return std.fmt.allocPrint(a, "{{\"type\":\"object\",\"properties\":{{\"value\":{s}}},\"required\":[\"value\"],\"additionalProperties\":false}}", .{schema});
 }
 fn measure(a: std.mem.Allocator, output: []const u8, field: policy.Field) !corpus.Measurement {
-    return measureContract(a, output, field, .current_v6);
+    return measureContract(a, output, field, .current_v7);
 }
 fn measureContract(a: std.mem.Allocator, output: []const u8, field: policy.Field, contract: corpus.MetadataContract) !corpus.Measurement {
     return corpus.measure(a, .{
         .packet = packet,
         .output = try valueOutput(a, output),
-        .schema = if (contract == .current_v6) root_schema else "{\"type\":\"object\",\"properties\":{\"value\":" ++ historical_text_schema ++ "},\"required\":[\"value\"],\"additionalProperties\":false}",
+        .schema = if (contract == .current_v7) root_schema else "{\"type\":\"object\",\"properties\":{\"value\":" ++ historical_text_schema ++ "},\"required\":[\"value\"],\"additionalProperties\":false}",
         .metadata_contract = contract,
         .field_policies = &.{.{ .field = field, .path = &.{.{ .property = "value" }} }},
         .original_sources = &.{},

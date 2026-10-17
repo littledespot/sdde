@@ -332,7 +332,6 @@ test "current Bedrock model policy comes only from registered contracts" {
         try std.testing.expectEqual(.native_schema, entry.responseMode());
         try std.testing.expectEqual(contracts.BedrockRegion.@"ap-southeast-2", entry.config.aws_bedrock.region);
         try std.testing.expect(!entry.capabilities.temperature and !entry.capabilities.input_token_count);
-        try std.testing.expect(entry.capabilities.supports_max_output_tokens);
         try std.testing.expect(contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, null));
         try std.testing.expect(!contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, "medium"));
         try std.testing.expect(!contracts.supportsReasoningEffort(entry.supported_reasoning_efforts, "low"));

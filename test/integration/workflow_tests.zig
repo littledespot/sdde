@@ -1211,6 +1211,8 @@ fn testSpecificationWorkflows(workflow_cases: enum { existing, source_preservati
         .{ .stage = .support, .shape = .review_moving, .repetition = .persistent },
         .{ .stage = .support, .shape = .review_dropped, .repetition = .{ .first_request = 2 } },
         .{ .stage = .support, .shape = .review_changed, .repetition = .{ .first_request = 2 } },
+        .{ .stage = .candidate_review, .shape = .review_empty_applicability, .repetition = .{ .first_request = 1 } },
+        .{ .stage = .candidate_review, .shape = .review_empty_applicability, .repetition = .persistent },
     };
     const classification_repair_start = 14 + faults.len;
     const citation_repair_start = classification_repair_start + 3;
@@ -2899,7 +2901,7 @@ fn verifyAuthoringDiagnosticParent(io: std.Io, allocator: std.mem.Allocator, pro
     try std.testing.expectEqualStrings(configured.provider, binding.registry_entry.provider.bytes);
     try std.testing.expectEqualStrings(configured.model, binding.registry_entry.model.bytes);
     try std.testing.expect(@import("../../src/domain/request_debugger.zig").sameOptional(configured.reasoningEffort, binding.reasoning_effort));
-    try std.testing.expectEqual(configured.maxOutputTokens, if (binding.controls.max_output_tokens) |value| value.value else null);
+    try std.testing.expectEqualDeep(binding.registry_entry.capabilities.inferenceControls(), binding.controls);
     var digest: [32]u8 = undefined;
     std.crypto.hash.sha2.Sha256.hash(graph.source.?.content, &digest, .{});
     const observed = .{

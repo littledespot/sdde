@@ -36,7 +36,6 @@ pub const Adapter = struct {
             },
             .schema_name = "sdde_model_envelope_v1",
             .temperature = description.controls.temperature,
-            .max_output_tokens = description.controls.max_output_tokens,
             .reasoning_effort = request.reasoningEffort(description.reasoning_effort) catch return error.InvalidReplay,
             .request_profile = request_profile,
         }, .inference) catch return error.InvalidReplay;

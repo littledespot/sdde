@@ -190,9 +190,9 @@ engine fixes them:
       ID, not the old form bytes.
     - Section 23.2 owns rerun replacement and protection.
 32. Provider APIs own model-call size limits; SDDE adds no byte/token capacity
-    ceilings ([ADR 0011](decisions/0011-provider-owned-request-limits.md)). An
-    optional slot `maxOutputTokens` requests a provider-enforced output allowance;
-    omission delegates the provider default. Actual input plus output tokens count
+    ceilings ([ADR 0011](decisions/0011-provider-owned-request-limits.md)). SDDE
+    never requests an output-token allowance, so the model's own maximum applies,
+    and every provider-applied stop is logged with its reason. Actual input plus output tokens count
     against one total-token budget per execution, shared by all inference,
     including advice. No call starts at or above it, and budget rejection is fatal
     for every inference purpose. Retries remain explicitly local.
@@ -846,9 +846,9 @@ The new engine is ready for production evaluation when all of the following are 
       complete raw-fallback rules are never truncated.
     - Provider APIs own model-call size limits; no engine/operation/slot byte ceilings, size
       estimates or static-capacity checks gate calls.
-    - Optional positive slot output allowances retain their exact presence/value through
-      binding, request authorization, correction, capture and replay; omission delegates
-      the provider default. Unsupported or substituted controls reject without clamping.
+    - No configuration, binding, request, correction, capture or replay carries an
+      output-token allowance; the model's own maximum applies. Every provider-applied
+      stop is logged at warning level with its exact reason (ADR 0011).
     - Actual reported input/output usage is retained even on budget overshoot, and no subsequent
       call is allowed at or above the execution budget. Prove this across generation,
       review and correction without partitioning usage. A global-budget rejection
@@ -1051,7 +1051,7 @@ naming) was superseded by 0010 and removed.
 | [0007](decisions/0007-unicode-normalization.md) | Pinned utf8proc NFC, statically packaged Unicode data and license notices. |
 | [0009](decisions/0009-atomic-workflow-execution.md) | Whole-execution validation, fresh reruns, protected clarifications and explicit publication-failure semantics; no recovery transactions. |
 | [0010](decisions/0010-explicit-feature-directory.md) | The supplied validated directory identifies the feature. |
-| [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned limits, optional requested output allowances and actual execution-token accounting. |
+| [0011](decisions/0011-provider-owned-request-limits.md) | Provider-owned limits, no requested output allowance, logged provider stops and actual execution-token accounting. |
 | [0012](decisions/0012-workflow-owned-model-request.md) | Retain one execution-owned request/binding/resource identity across explicit YAML operations. |
 | [0013](decisions/0013-workflow-input-reuse.md) | Local subgraphs, local schema reuse and shared lossless input projections. |
 | [0014](decisions/0014-universal-response-format-guidance.md) | One shared JSON framing instruction for every serialized model request. |

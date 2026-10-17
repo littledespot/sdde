@@ -14,7 +14,7 @@ const description: @import("../../../src/domain/request_debugger.zig").Descripti
     .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
     .schema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
     .response_mode = .native_schema,
-    .controls = .{ .temperature = null, .max_output_tokens = .{ .value = 16384 } },
+    .controls = .{ .temperature = null },
     .reasoning_effort = null,
     .operation_kind = .inference,
 };
@@ -70,7 +70,7 @@ test "compatibility classification requires exact usage capture and an incomplet
     try std.testing.expectEqual(.incompatible, result.status);
     result = valid;
     result.validation.extraction = .invalid;
-    result.validation.reason = "max_output_tokens";
+    result.validation.reason = "output_limit";
     inspection.classify(probe, workflow, &result);
     try std.testing.expectEqual(.incompatible, result.status);
     for ([_]u16{ 401, 403, 429, 503 }) |status| {
@@ -141,11 +141,9 @@ test "compatibility preflight rejects unpermitted slots and incomplete capture s
     const config = @embedFile("../../integration/fixtures/baseline/protocol.sddtoolkit.json");
     const preflight = @import("cli.zig").preflight;
     try preflight(a, config);
-    const shipped = @embedFile("../../e2e/wf-001-hello-world/.sddtoolkit.json");
-    try std.testing.expectError(error.FrozenBindingRejected, preflight(a, shipped));
-    var current = try (@import("../../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, shipped);
-    defer current.deinit();
-    try std.testing.expectEqual(@as(?u32, 2048), current.value().models.slots.map.get("spec_generation").?.maxOutputTokens);
+    // The shipped cases now select the frozen protocol's exact slot controls.
+    try preflight(a, @embedFile("../../e2e/wf-001-hello-world/.sddtoolkit.json"));
+    try std.testing.expectError(error.FrozenBindingRejected, preflight(a, @embedFile("../../integration/fixtures/baseline/drifted.sddtoolkit.json")));
     const disallowed = try std.mem.replaceOwned(u8, a, config, "openai.gpt-oss-20b-1:0", "unpermitted-model");
     try std.testing.expectError(error.DisallowedTestModel, preflight(a, disallowed));
     const metadata_only = try std.mem.replaceOwned(u8, a, config, "\"level\": \"debug\"", "\"level\": \"info\"");

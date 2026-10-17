@@ -2327,7 +2327,7 @@ const Fixture = struct {
             entry.* = .{ .scope = .{ .state_id = inputs.corpus.state_id, .chunk_id = chunk.id }, .result = .{ .response = reply } };
         }
         const parsed = try @import("domain/reference_extraction_parser.zig").parse(a, .{ .entries = raw });
-        const extracted_text = try text.check(a, inputs, parsed);
+        const extracted_text = try passive.check(a, inputs, parsed);
         const extracted = try extraction.finishText(a, inputs, extracted_text);
         const context: references.Context = .{ .inputs = inputs, .registry = passive.registry, .current = text.safety.value(passive.owner) };
         const global = try references.summaries(a, try references.initialize(a, inputs, extracted, 2), context);
@@ -6210,6 +6210,101 @@ test "source review scopes distinguish field coverage and joint record condition
         const admitted = try support.collectFocused(a, inputs, fixture.context, null, assignment, try assignmentWire(support, a, inputs, fixture.context, field_id, good), null);
         try std.testing.expect(admitted == .pending);
         try std.testing.expectEqualDeep(good.entries[0].value, admitted.pending.review.entries[0].value);
+    }
+}
+
+test "source review offers not_applicable only where native applicability permits it" {
+    const authority = @import("domain/required_authority.zig");
+    const support = @import("domain/specification_support.zig").Source;
+    const model = @import("domain/specification_support_model.zig");
+    const codec = @import("domain/model_candidate_json.zig");
+    const packets = @import("domain/model_input_packet.zig");
+    const envelope = @import("domain/model_envelope.zig");
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parser: @import("adapters/parsers/model_result_schemas.zig").Adapter = .{};
+    const schemas = try parser.compiler().compile(a, try std.Io.Dir.cwd().readFileAlloc(std.testing.io, "design/workflows/spec/support.schema.json", a, .unlimited));
+    const positive: @FieldType(model.Value, "supported") = .{ .source_ids = &.{.{ .ordinal = 1 }}, .detail = "MOCK structural schema probe; no semantic judgment." };
+    for ([_][]const u8{ "On startup display `MOCK Hello, World!`.", "After renewal display `MOCK Loan renewed!` and label the deadline `Return by`." }) |source| {
+        var fixture = try Fixture.init(a, source);
+        defer fixture.deinit();
+
+        // Before authoring, unresolved entity applicability alone permits the verdict.
+        const readiness = try @import("domain/specification_authority.zig").project(a, fixture.context.inputs.corpus.feature_id, fixture.context.references, null, null);
+        var permitted: usize = 0;
+        for ((try authority.build(a, readiness)).requirements) |requirement| {
+            const id = requirement.seed.id;
+            const permits = (try authority.applicability(readiness, id)) == .review;
+            if (permits) {
+                try std.testing.expectEqual(authority.Kind.entity_applicability, id.kind);
+                permitted += 1;
+            }
+            const packet = try support.packetFor(a, readiness, fixture.context, support.assignmentScope(readiness, id));
+            defer packets.release(packet);
+            try std.testing.expectEqualStrings(if (permits) "applicability_finding" else "finding", packet.resultDefinition().?.bytes);
+            const body = (try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{})).object;
+            try std.testing.expectEqual(permits, body.get("evidence_rules").?.object.contains("not_applicable"));
+            try std.testing.expectEqual(permits, body.get("requirements").?.array.items[0].object.contains("permitted_not_applicable"));
+            if (permits) {
+                // A one-member assignment keeps the permitted verdict in the shared batch schema.
+                const assignment = try support.packetFor(a, readiness, fixture.context, .{ .assignment = id });
+                defer packets.release(assignment);
+                try std.testing.expectEqual(@as(usize, 0), assignment.excludedVariants().len);
+                const restricted = try @import("domain/model_result_schema.zig").restrict(a, schemas.select(assignment.resultDefinition().?).?, assignment.excludedVariants(), assignment.integerChoices());
+                defer restricted.release();
+                const ordinal: u32 = @intCast((try std.json.parseFromSliceLeaky(std.json.Value, a, assignment.body(), .{})).object.get("requirements").?.array.items[0].object.get("ordinal").?.integer);
+                var document = try envelope.parseContent(a, try codec.encode(model.Batch, a, .{ .findings = &.{.{ .requirement_ordinal = ordinal, .value = .{ .not_applicable = positive } }} }), null);
+                defer document.deinit();
+                try std.testing.expect(@import("domain/model_payload_schema.zig").validateValue(envelope.value(&document.parsed.value), restricted.selected().root()) == null);
+            }
+        }
+        try std.testing.expectEqual(@as(usize, 1), permitted);
+
+        // After authoring, the candidate fixes applicability for every advisory assignment.
+        const current = try completedFixture(&fixture, false);
+        var content = (try @import("domain/specification_session.zig").assemble(a, text.validator, fixture.context, current)).content;
+        for ([_]@TypeOf(content.entities.disposition){ .not_applicable, .required }) |disposition| {
+            content.entities.disposition = disposition;
+            const inputs = try @import("domain/specification_authority.zig").project(a, current.feature, fixture.context.references, content, current.units[0].?.response.content.brief);
+            const ledger = try authority.build(a, inputs);
+            var kinds: std.EnumSet(authority.Kind) = .initEmpty();
+            var position: usize = 0;
+            while (position < ledger.requirements.len) {
+                const id = ledger.requirements[position].seed.id;
+                const assigned = try support.assignmentSubjects(a, inputs, id);
+                try std.testing.expect(support.assignmentScope(inputs, id) == .assignment);
+                const packet = try support.packetFor(a, inputs, fixture.context, support.assignmentScope(inputs, id));
+                defer packets.release(packet);
+                try std.testing.expectEqualStrings("assignment_findings", packet.resultDefinition().?.bytes);
+                var excluded = false;
+                for (packet.excludedVariants()) |variant| excluded = excluded or std.mem.eql(u8, variant.kind, "not_applicable");
+                try std.testing.expect(excluded);
+                const body = (try std.json.parseFromSliceLeaky(std.json.Value, a, packet.body(), .{})).object;
+                for (body.get("requirements").?.array.items) |requirement| {
+                    try std.testing.expect(!requirement.object.contains("permitted_not_applicable"));
+                    try std.testing.expect(!requirement.object.get("evidence_rules").?.object.contains("not_applicable"));
+                }
+                const restricted = try @import("domain/model_result_schema.zig").restrict(a, schemas.select(packet.resultDefinition().?).?, packet.excludedVariants(), packet.integerChoices());
+                defer restricted.release();
+                for ([_]bool{ false, true }) |forbidden| {
+                    const findings = try a.alloc(model.BatchFinding, assigned.len);
+                    for (findings, 0..) |*finding, index| finding.* = .{
+                        .requirement_ordinal = @intCast(position + index + 1),
+                        .value = if (forbidden and index + 1 == assigned.len) .{ .not_applicable = positive } else .{ .supported = positive },
+                    };
+                    var document = try envelope.parseContent(a, try codec.encode(model.Batch, a, .{ .findings = findings }), null);
+                    defer document.deinit();
+                    const invalid = @import("domain/model_payload_schema.zig").validateValue(envelope.value(&document.parsed.value), restricted.selected().root());
+                    try std.testing.expectEqual(forbidden, invalid != null);
+                    if (invalid) |diagnostic| try std.testing.expectEqual(.unknown_variant, diagnostic.reason);
+                }
+                for (assigned) |member| kinds.insert(member.kind);
+                position += assigned.len;
+            }
+            // Unrelated subject kinds share the one native restriction.
+            for ([_]authority.Kind{ .feature_intent, .entity_applicability, .reference_meaning, .preservation }) |kind| try std.testing.expect(kinds.contains(kind));
+        }
     }
 }
 

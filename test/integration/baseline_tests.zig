@@ -53,7 +53,7 @@ test "test.integration.baseline current preparation requires a new freeze and re
     try std.testing.expectError(error.BaselineNotFrozen, frozen_inputs.requireExecutable(a, frozen));
 }
 
-test "test.integration.baseline current shipped output allowance cannot silently change the frozen protocol" {
+test "test.integration.baseline drifted slot controls cannot silently change the frozen protocol" {
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
@@ -64,13 +64,14 @@ test "test.integration.baseline current shipped output allowance cannot silently
         .rubric = paths.rubric,
     };
     const template_bytes = try files.read(std.testing.io, a, .cwd(), current_paths.template_case);
-    const template = try @import("../harness/e2e/contracts.zig").parse(a, template_bytes);
+    var template = try @import("../harness/e2e/contracts.zig").parse(a, template_bytes);
+    template.config = @import("frozen_protocol_fixture.zig").drifted_config_source;
     const captured = try fixture.capture(std.testing.io, a, .cwd(), template);
     const path_policy = try @import("../../src/adapters/filesystem/workspace_path_policy.zig").Resolver.init(std.testing.io, .cwd()).resolve(a);
     try std.testing.expectError(error.FrozenBindingRejected, frozen_inputs.create(a, build, try files.read(std.testing.io, a, .cwd(), paths.protocol), try files.read(std.testing.io, a, .cwd(), paths.cases), template_bytes, try files.read(std.testing.io, a, .cwd(), paths.rubric), captured, current_paths, path_policy));
     var current = try (@import("../../src/actions/config/decode_sddtoolkit_config.zig").Action{}).execute(a, captured.config);
     defer current.deinit();
-    try std.testing.expectEqual(@as(?u32, 2048), current.value().models.slots.map.get("spec_generation").?.maxOutputTokens);
+    try std.testing.expectEqualStrings("medium", current.value().models.slots.map.get("spec_generation").?.reasoningEffort.?);
     try fixture.verifySources(std.testing.io, a, .cwd(), captured);
 }
 

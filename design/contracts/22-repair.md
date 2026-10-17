@@ -537,6 +537,8 @@ This exception changes neither provider-wire/configuration/persistence parsing
 nor request, retry, token or publication authority. It is a workaround for the
 observed Bedrock prefix, applied consistently to complete model responses without
 a provider/model/workflow branch; it does not establish a provider-side fix.
+The development rubric evaluator reuses this decoder for judge responses
+([evaluator](../harness/evaluator.md)); that grants the judge no production authority.
 
 For [configured response parts](../decisions/0016-configured-json-response-composition.md),
 the response/schema below is the complete assigned part. Corrections retain its

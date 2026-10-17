@@ -142,6 +142,12 @@ pub fn Contract(comptime purpose: Purpose) type {
         /// Requests, admission, repair and readback use the registered owner.
         pub const applicability = a.applicability;
 
+        /// Only unresolved native applicability permits a `not_applicable` source
+        /// verdict. Request schemas, guidance, admission and readback share this rule.
+        pub fn permitsNotApplicable(required: Applicability) bool {
+            return required == .review;
+        }
+
         pub const Scope = union(enum) { finding: a.Id, correction: a.Id, assignment: a.Id };
 
         pub fn assignmentScope(inputs: a.Inputs, id: a.Id) Scope {
@@ -223,7 +229,15 @@ pub fn Contract(comptime purpose: Purpose) type {
             var assigned: std.ArrayList(std.json.Value) = .empty;
             const ordinals = try scratch.alloc(i64, selected.len);
             var sources: std.ArrayList(i64) = .empty;
+            // The shared batch envelope lists every source verdict; native
+            // applicability narrows it, and one assignment has one restriction.
+            var permits_not_applicable: ?bool = null;
             for (selected, ordinals) |target, *ordinal| {
+                if (purpose == .source) {
+                    const permits = permitsNotApplicable(try applicability(inputs, target));
+                    if (permits_not_applicable) |prior| if (prior != permits) return error.InvalidRequiredAuthority;
+                    permits_not_applicable = permits;
+                }
                 const single = if (purpose == .source) try packetForContext(scratch, inputs, context, .{ .finding = target }) else try principles.packet(scratch, inputs, context, .{ .finding = target });
                 defer packets.release(single);
                 var parsed = try @import("strict_json.zig").decode(std.json.Value, scratch, single.body(), .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
@@ -266,7 +280,14 @@ pub fn Contract(comptime purpose: Purpose) type {
             const slot = try std.fmt.allocPrint(scratch, "{s}-assignment", .{try reviewSlot(scratch, inputs, id)});
             const state = (try p.items(context)).state_id;
             const definition = assignmentDefinition();
-            const base = try reviewPacket(allocator, inputs, state, try std.json.Stringify.valueAlloc(scratch, payload, .{}), slot, definition);
+            const reviewed = try reviewPacket(allocator, inputs, state, try std.json.Stringify.valueAlloc(scratch, payload, .{}), slot, definition);
+            defer packets.release(reviewed);
+            const base: *const packets.Packet = if (purpose == .source and !permits_not_applicable.?) excluded: {
+                const excluded = try scratch.alloc(@import("model_result_schema.zig").ExcludedVariant, reviewed.excludedVariants().len + 1);
+                @memcpy(excluded[0..reviewed.excludedVariants().len], reviewed.excludedVariants());
+                excluded[excluded.len - 1] = .{ .kind = @tagName(Decision.not_applicable) };
+                break :excluded try packets.withExcludedVariants(allocator, reviewed, excluded);
+            } else try packets.retain(reviewed);
             defer packets.release(base);
             const ordinal_choice: @import("model_result_schema.zig").IntegerChoice = .{ .target = .{ .path = &.{ .{ .property = "findings" }, .items, .{ .property = "requirement_ordinal" } } }, .definition = definition, .allowed = ordinals };
             const selected_packet = if (purpose == .source) try packets.withIntegerChoices(allocator, base, &.{
@@ -295,7 +316,7 @@ pub fn Contract(comptime purpose: Purpose) type {
             } else return error.InvalidRequiredAuthority;
             const required = try applicability(inputs, target);
             const evidence_rule = try admission.requirements(scratch, inputs, context.inputs, target);
-            const assigned = [_]Requirement{.{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, target), .permitted_not_applicable = if (required == .review) required.review else null, .evidence = evidence_rule.guidance() }};
+            const assigned = [_]Requirement{.{ .ordinal = try r.ordinal(index), .task = try @import("required_authority_description.zig").task(scratch, target), .permitted_not_applicable = if (permitsNotApplicable(required)) required.review else null, .evidence = evidence_rule.guidance() }};
             const projected = try @import("model_evidence.zig").project(scratch, all.entries);
             const sources = try @import("model_evidence.zig").sources(scratch, context.inputs);
             const subject = try subjects.project(scratch, inputs, context, target);
@@ -304,10 +325,12 @@ pub fn Contract(comptime purpose: Purpose) type {
                 .reference => |reference| reference != .signal,
                 .source_preservation, .collection, .entity_applicability => true,
             };
-            const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(subject), .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
+            const payload = .{ .subject = subject, .assessment_scope = @import("required_authority_description.zig").sourceReviewScope(subject), .evidence_rules = .{ .instruction = admission.selection_instruction, .eligible_source_ids = evidence_rule.eligible_source_ids, .supported = evidence_rule.rule(.supported, .{ .unlocalized = .{} }).minimum, .not_applicable = if (permitsNotApplicable(required)) evidence_rule.rule(Decision.not_applicable.finding(), .{ .unlocalized = .{} }).minimum else null, .candidate_omission = evidence_rule.rule(.candidate_omission, .{ .unlocalized = .{} }).minimum, .candidate_invalid = evidence_rule.rule(.candidate_invalid, .{ .unlocalized = .{} }).minimum, .negative = evidence_rule.rule(.unsupported, .{ .unlocalized = .{} }).minimum }, .requirements = @as([]const Requirement, &assigned), .sources = sources, .extraction = if (reconstruction) try @import("model_evidence.zig").extractionReview(scratch, context.inputs, all.extraction) else null, .dispositions = if (reconstruction) records.dispositions else null, .claims = projected.claims, .citations = projected.citations, .preserved_tokens = projected.preserved_tokens, .signals = if (reconstruction) try @import("model_evidence.zig").signals(scratch, records.signals) else null, .conflicts = if (reconstruction) try @import("model_evidence.zig").conflicts(scratch, records.conflicts) else null };
             const encoded = try @import("model_candidate_json.zig").encodeEvidence(@TypeOf(payload), scratch, payload);
             var projected_input = try @import("strict_json.zig").decode(std.json.Value, scratch, encoded, .{ .maximum_depth = @import("model_result_schema.zig").max_json_depth });
             packets.omitAbsent(&projected_input);
+            // Guidance offers only verdicts native applicability permits.
+            packets.omitAbsent(projected_input.object.getPtr("evidence_rules").?);
             for (projected_input.object.getPtr("requirements").?.array.items) |*requirement| {
                 packets.omitAbsent(requirement.object.getPtr("evidence").?);
                 packets.omitAbsent(requirement);
@@ -321,12 +344,11 @@ pub fn Contract(comptime purpose: Purpose) type {
             if (scope == .correction) _ = projected_input.object.orderedRemove("evidence_rules");
             if (inputs.projection == .source_preservation and scope == .finding) {
                 const rules = &projected_input.object.getPtr("evidence_rules").?.object;
-                _ = rules.orderedRemove("not_applicable");
                 _ = rules.orderedRemove("negative");
             }
             const body = try std.json.Stringify.valueAlloc(scratch, projected_input, .{});
             const slot = try reviewSlot(scratch, inputs, target);
-            const definition: ?@import("model_result_schema.zig").DefinitionId = .{ .bytes = if (inputs.projection == .source_preservation) "preservation_finding" else if (required == .review) "applicability_finding" else "finding" };
+            const definition: ?@import("model_result_schema.zig").DefinitionId = .{ .bytes = if (inputs.projection == .source_preservation) "preservation_finding" else if (permitsNotApplicable(required)) "applicability_finding" else "finding" };
             const packet = try reviewPacket(allocator, inputs, all.state_id, body, slot, definition);
             defer packets.release(packet);
             const ids = try scratch.alloc(i64, evidence_rule.eligible_source_ids.len);
@@ -701,7 +723,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                     if (finding.requirement_ordinal != ordinal) continue;
                     found = true;
                     const before = diagnostics.items.len;
-                    if (purpose == .source) if (decisionOf(finding.value) == .not_applicable and required != .review) try diagnostics.append(allocator, diagnostic(proposed, .invalid_decision, requirement.seed.id, ordinal, position));
+                    if (purpose == .source) if (decisionOf(finding.value) == .not_applicable and !permitsNotApplicable(required)) try diagnostics.append(allocator, diagnostic(proposed, .invalid_decision, requirement.seed.id, ordinal, position));
                     const semantic = decisionOf(finding.value).finding();
                     var reviewed = if (purpose == .principles) try principles.admit(allocator, inputs, requirement.seed.id, finding.value) else try admission.admit(allocator, inputs, sources, requirement.seed.id, semantic, finding.value.provenance, finding.value.source_ids, finding.value.detail, finding.value.missing_obligation, finding.value.loss, finding.value.preservation, finding.value.authority_gap);
                     const rejection: ?Diagnostic = if (reviewed == .rejected) rejected: {
@@ -807,7 +829,7 @@ pub fn Contract(comptime purpose: Purpose) type {
                 try evidence_admission.validate(allocator, inputs, sources, evidence);
                 const review = evidence.review.?;
                 const required = try applicability(inputs, requirement.seed.id);
-                const decision = if (purpose == .source and required == .review and (evidence.resolution == .not_applicable or (evidence.resolution == .assessment and evidence.resolution.assessment.not_applicable != null))) blk: {
+                const decision = if (purpose == .source and permitsNotApplicable(required) and (evidence.resolution == .not_applicable or (evidence.resolution == .assessment and evidence.resolution.assessment.not_applicable != null))) blk: {
                     if (evidence.finding != .supported) return error.InvalidRequiredAuthority;
                     break :blk Decision.not_applicable;
                 } else try Decision.fromFinding(evidence.finding);

@@ -510,7 +510,6 @@ fn encodeEdit(a: std.mem.Allocator, edit: std.json.Value) ![]const u8 {
         .schema = .{ .native = .{ .guidance = compiled.modelBytes(), .structure = try @import("../domain/model_schema_projection.zig").render(a, compiled, .bedrock) } },
         .schema_name = "sdde_model_envelope_v1",
         .temperature = .fixed,
-        .max_output_tokens = .{ .value = 16384 },
         .reasoning_effort = .low,
         .request_profile = .openai_oss,
     }, .inference);

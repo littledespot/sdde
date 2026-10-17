@@ -559,13 +559,13 @@ test "budget usage proof binds actual wire controls to the canonical prepared re
         .protocol_prompt = @import("../../../src/domain/model_controls.zig").response_format_guidance,
         .schema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}",
         .response_mode = .native_schema,
-        .controls = .{ .temperature = .fixed, .max_output_tokens = .{ .value = 16384 } },
+        .controls = .{ .temperature = .fixed },
         .reasoning_effort = "low",
         .operation_kind = .inference,
     };
     const original = try preparedWire(a, description);
     try std.testing.expect(std.mem.indexOf(u8, original, "\"temperature\":0.1") != null);
-    const altered = try std.mem.replaceOwned(u8, a, original, "\"maxTokens\":16384", "\"maxTokens\":1000");
+    const altered = try std.mem.replaceOwned(u8, a, original, "\"temperature\":0.1", "\"temperature\":0.2");
     try std.testing.expect(!std.mem.eql(u8, try preparedWire(a, description), altered));
     var wrong = description;
     wrong.protocol_prompt = "Unregistered protocol";

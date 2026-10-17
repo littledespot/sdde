@@ -411,7 +411,8 @@ pub const Driver = struct {
                 if (matches_stage and (fault.shape == .review_empty_claims or fault.shape == .review_empty_applicability) and attempt > 1) {
                     const correction = std.json.parseFromSlice(std.json.Value, arena.allocator(), content[base.len + 1].guidance, .{}) catch unreachable;
                     const path = correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("path").?.string;
-                    const forbidden_applicability = fault.shape == .review_empty_applicability and authorityInputs(&view).specification != null and std.mem.indexOf(u8, body, "\"findings\"") == null;
+                    // A current specification fixes applicability for single findings and whole assignments alike.
+                    const forbidden_applicability = fault.shape == .review_empty_applicability and authorityInputs(&view).specification != null;
                     std.testing.expect(std.mem.endsWith(u8, path, if (forbidden_applicability) "/kind" else if (std.mem.indexOf(u8, body, "\"provenance\"") == null) "/provenance" else "/provenance/claim_ids")) catch unreachable;
                     if (forbidden_applicability) std.testing.expectEqualStrings("unknown_variant", correction.value.object.get("diagnostic").?.object.get("schema").?.object.get("reason").?.string) catch unreachable;
                     const prior = std.json.parseFromSlice(struct { rejected_response: []const u8 }, arena.allocator(), content[content.len - 1].evidence, .{}) catch unreachable;
@@ -849,7 +850,8 @@ fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specificat
         try std.testing.expectEqualStrings(try @import("../domain/model_candidate_json.zig").encodeEvidence(@TypeOf(guidance), allocator, guidance), try std.json.Stringify.valueAlloc(allocator, input.object.get("principles").?, .{}));
     }
     const owner = try @import("../domain/specification_review_subject.zig").assignmentUnit(allocator, inputs, first);
-    for (assigned, requirements) |id, requirement| {
+    var permits_applicability = false;
+    for (assigned, requirements, 0..) |id, requirement, member| {
         try std.testing.expectEqualDeep(owner, try @import("../domain/specification_review_subject.zig").assignmentUnit(allocator, inputs, id));
         const ordinal = for (ledger.requirements, 0..) |native, index| {
             if (std.meta.eql(native.seed.id, id)) break index + 1;
@@ -858,6 +860,11 @@ fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specificat
         try std.testing.expect(requirement.object.contains("task") and requirement.object.contains("subject"));
         if (purpose == .source) {
             try std.testing.expect(requirement.object.contains("evidence") and requirement.object.contains("assessment_scope") and requirement.object.contains("evidence_rules"));
+            const permits = (try @import("../domain/required_authority.zig").applicability(inputs, id)) == .review;
+            if (member != 0) try std.testing.expectEqual(permits_applicability, permits);
+            permits_applicability = permits;
+            try std.testing.expectEqual(permits, requirement.object.contains("permitted_not_applicable"));
+            try std.testing.expectEqual(permits, requirement.object.get("evidence_rules").?.object.contains("not_applicable"));
         }
         const subject = requirement.object.get("subject").?.object;
         if (purpose == .source) try std.testing.expect(!subject.contains("record"));
@@ -868,9 +875,9 @@ fn assertAssignmentReviewRequest(comptime purpose: @import("../domain/specificat
     const finding_schema = properties.get("findings").?.object.get("items").?.object;
     try std.testing.expect(finding_schema.get("properties").?.object.contains("requirement_ordinal"));
     if (purpose == .source) {
-        // Generic units share the closed eight-variant value schema; native
-        // member admission still enforces applicability for each assigned subject.
-        try assertReviewShape(finding_schema.get("properties").?.object.get("value").?, true, false);
+        // Native applicability narrows the shared value schema for the whole
+        // assignment; member admission still enforces it independently.
+        try assertReviewShape(finding_schema.get("properties").?.object.get("value").?, permits_applicability, false);
     } else {
         const value = finding_schema.get("properties").?.object.get("value").?.object.get("properties").?.object;
         try std.testing.expectEqual(@as(usize, 3), value.count());

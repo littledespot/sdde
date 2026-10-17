@@ -63,7 +63,6 @@ pub const Protocol = struct {
     reasoning_effort: enum { low },
     response_mode: enum { native_schema },
     temperature: f64,
-    max_output_tokens: u32,
     repetitions: u32,
     arms: []const Arm,
     development_features: u32,
@@ -435,7 +434,7 @@ pub fn validateProtocol(protocol: Protocol) Error!void {
     _ = identity.ModelSlotId.parse(protocol.generation_slot) orelse return error.InvalidComparisonContract;
     cost_policy.require(provider, model) catch return error.InvalidComparisonContract;
     if (protocol.schema != 1 or !std.mem.eql(u8, protocol.region, "ap-southeast-2") or
-        protocol.live_authorized or protocol.temperature != Temperature.fixed.wireValue() or protocol.max_output_tokens != 16384 or
+        protocol.live_authorized or protocol.temperature != Temperature.fixed.wireValue() or
         protocol.repetitions < 3 or protocol.development_features == 0 or protocol.arms.len != 2 or
         protocol.arms[0] != .A or protocol.arms[1] != .C or protocol.limits.maximum_sends == 0 or
         protocol.limits.maximum_actual_tokens == 0) return error.InvalidComparisonContract;
@@ -1096,7 +1095,7 @@ fn exampleCase() Case {
     return .{ .id = "example-base", .feature_id = "example", .partition = .development, .variant = .base, .domain = "loans", .size = .small, .risk_tags = &.{"condition"}, .sources = &.{.{ .id = "source", .path = "reference/loan.md", .text = "Return loans within 30 days unless extended." }}, .duties = &.{.{ .id = "return", .description = "Retain loan deadline and extension exception.", .source_refs = &.{.{ .source_id = "source", .quote = "Return loans within 30 days unless extended." }}, .exact_values = &.{"30 days"} }}, .expected_terminal = .completed, .expected_questions = &.{}, .permissible_alternatives = &.{"The deadline can be expressed as thirty days."}, .forbidden_additions = &.{"Charge a late fee."} };
 }
 fn exampleProtocol() Protocol {
-    return .{ .schema = 1, .cohort = .small, .provider = "aws-bedrock", .api = .converse, .model = "openai.gpt-oss-20b-1:0", .generation_slot = "spec_generation", .region = "ap-southeast-2", .reasoning_effort = .low, .response_mode = .native_schema, .temperature = Temperature.fixed.wireValue(), .max_output_tokens = 16384, .repetitions = 3, .arms = &.{ .A, .C }, .development_features = 8, .qualification = .{ .metric = .first_pass_fidelity, .minimum_features = 8, .maximum_features = 16, .confidence = 0.95, .precision = 0.15 }, .analysis = .{ .method = .paired_feature_bootstrap, .resamples = 10000, .seed = 20261015, .minimum_effect_lower_bound = 0, .primary_brittleness = .representation_sensitivity }, .thresholds = .{ .minimum_fidelity = 0.85, .minimum_robust_success = 0.75, .minimum_useful_completion = 0.80, .maximum_material_harm = 0.05, .maximum_false_gap = 0.05, .minimum_effect = 0.10, .minimum_brittleness_reduction = 0.10, .minimum_common_original_success = 6, .maximum_token_ratio = 1.25, .maximum_latency_ratio = 1.5 }, .limits = .{ .maximum_sends = 1000, .maximum_actual_tokens = 2000000 }, .live_authorized = false };
+    return .{ .schema = 1, .cohort = .small, .provider = "aws-bedrock", .api = .converse, .model = "openai.gpt-oss-20b-1:0", .generation_slot = "spec_generation", .region = "ap-southeast-2", .reasoning_effort = .low, .response_mode = .native_schema, .temperature = Temperature.fixed.wireValue(), .repetitions = 3, .arms = &.{ .A, .C }, .development_features = 8, .qualification = .{ .metric = .first_pass_fidelity, .minimum_features = 8, .maximum_features = 16, .confidence = 0.95, .precision = 0.15 }, .analysis = .{ .method = .paired_feature_bootstrap, .resamples = 10000, .seed = 20261015, .minimum_effect_lower_bound = 0, .primary_brittleness = .representation_sensitivity }, .thresholds = .{ .minimum_fidelity = 0.85, .minimum_robust_success = 0.75, .minimum_useful_completion = 0.80, .maximum_material_harm = 0.05, .maximum_false_gap = 0.05, .minimum_effect = 0.10, .minimum_brittleness_reduction = 0.10, .minimum_common_original_success = 6, .maximum_token_ratio = 1.25, .maximum_latency_ratio = 1.5 }, .limits = .{ .maximum_sends = 1000, .maximum_actual_tokens = 2000000 }, .live_authorized = false };
 }
 fn miniatureInventory(a: std.mem.Allocator) Error!Inventory {
     const cases = try a.alloc(Case, 6);
@@ -1160,9 +1159,6 @@ test "comparison contracts reject malformed closed data and unfrozen controls" {
     bad.temperature = 0;
     try std.testing.expectError(error.InvalidComparisonContract, validateProtocol(bad));
     bad = protocol;
-    bad.max_output_tokens = 16385;
-    try std.testing.expectError(error.InvalidComparisonContract, validateProtocol(bad));
-    bad = protocol;
     bad.generation_slot = "";
     try std.testing.expectError(error.InvalidComparisonContract, validateProtocol(bad));
     bad.generation_slot = "\xff";
@@ -1198,7 +1194,7 @@ test "comparison protocol freezes the selected GPT-OSS binding and rejects super
         .{ .old = "\"response_mode\":\"native_schema\"", .replacement = "\"response_mode\":\"prompt_only\"" },
         .{ .old = "\"temperature\":0.1", .replacement = "\"temperature\":null" },
         .{ .old = "\"temperature\":0.1", .replacement = "\"temperature\":0.2" },
-        .{ .old = "\"max_output_tokens\":16384", .replacement = "\"max_output_tokens\":8192" },
+        .{ .old = "\"schema\":1", .replacement = "\"schema\":1,\"max_output_tokens\":16384" },
         .{ .old = "\"schema\":1", .replacement = "\"schema\":1,\"native_json_strict\":true" },
         .{ .old = "\"schema\":1", .replacement = "\"schema\":1,\"reasoning_mode\":\"provider_default\"" },
         .{ .old = "\"schema\":1", .replacement = "\"schema\":1,\"documented_default_effort\":\"medium\"" },
